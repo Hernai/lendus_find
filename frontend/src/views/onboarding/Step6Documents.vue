@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useApplicationStore } from '@/stores'
+import { useOnboardingStore } from '@/stores'
 import { AppButton } from '@/components/common'
 
 const router = useRouter()
-const applicationStore = useApplicationStore()
+const onboardingStore = useOnboardingStore()
 
 interface DocumentUpload {
   id: string
@@ -57,6 +57,35 @@ const documents = reactive<DocumentUpload[]>([
 ])
 
 const error = ref('')
+
+// Sync from store on mount
+onMounted(async () => {
+  await onboardingStore.init()
+
+  // Restore uploaded status from store
+  const step6 = onboardingStore.data.step6
+  if (step6.documents_uploaded && step6.documents_uploaded.length > 0) {
+    documents.forEach(doc => {
+      if (step6.documents_uploaded.includes(doc.id)) {
+        doc.status = 'uploaded'
+      }
+    })
+  }
+})
+
+// Auto-save to store when document status changes
+watch(
+  () => documents.map(d => ({ id: d.id, status: d.status })),
+  () => {
+    const uploadedIds = documents
+      .filter(d => d.status === 'uploaded')
+      .map(d => d.id)
+    onboardingStore.updateStepData('step6', {
+      documents_uploaded: uploadedIds
+    })
+  },
+  { deep: true }
+)
 
 const allRequiredUploaded = computed(() => {
   return documents
@@ -120,18 +149,22 @@ const handleSubmit = async () => {
     return
   }
 
-  await applicationStore.saveStepData({
-    step6: {
-      documents: documents.map(doc => ({
-        id: doc.id,
-        name: doc.name,
-        uploaded: doc.status === 'uploaded',
-        file_name: doc.file?.name || null
-      }))
-    }
-  })
+  try {
+    // Update store with final document list
+    const uploadedIds = documents
+      .filter(d => d.status === 'uploaded')
+      .map(d => d.id)
+    onboardingStore.updateStepData('step6', {
+      documents_uploaded: uploadedIds
+    })
 
-  router.push('/solicitud/paso-7')
+    // Save step 6 explicitly
+    await onboardingStore.completeStep(6)
+    router.push('/solicitud/paso-7')
+  } catch (e) {
+    console.error('Failed to save step 6:', e)
+    error.value = 'Error al guardar. Intenta de nuevo.'
+  }
 }
 
 const prevStep = () => router.push('/solicitud/paso-5')
@@ -143,18 +176,24 @@ const prevStep = () => router.push('/solicitud/paso-5')
       <h1 class="text-2xl font-bold text-gray-900 mb-2">Sube tus documentos</h1>
       <p class="text-gray-500 mb-6">Necesitamos verificar tu identidad e información.</p>
 
-      <div class="space-y-4">
-        <div
-          v-for="doc in documents"
-          :key="doc.id"
-          class="bg-white rounded-xl border p-4"
-          :class="{
-            'border-gray-200': doc.status === 'pending',
-            'border-primary-500 bg-primary-50/30': doc.status === 'uploading',
-            'border-green-500 bg-green-50/30': doc.status === 'uploaded',
-            'border-red-500 bg-red-50/30': doc.status === 'error'
-          }"
-        >
+      <!-- Loading state -->
+      <div v-if="onboardingStore.isLoading" class="flex justify-center py-8">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+
+      <div v-else>
+        <div class="space-y-4">
+          <div
+            v-for="doc in documents"
+            :key="doc.id"
+            class="bg-white rounded-xl border p-4"
+            :class="{
+              'border-gray-200': doc.status === 'pending',
+              'border-primary-500 bg-primary-50/30': doc.status === 'uploading',
+              'border-green-500 bg-green-50/30': doc.status === 'uploaded',
+              'border-red-500 bg-red-50/30': doc.status === 'error'
+            }"
+          >
           <div class="flex items-start gap-4">
             <!-- Preview / Icon -->
             <div class="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -219,49 +258,55 @@ const prevStep = () => router.push('/solicitud/paso-5')
             </div>
           </div>
         </div>
-      </div>
-
-      <p v-if="error" class="mt-4 text-sm text-red-500 text-center">
-        {{ error }}
-      </p>
-
-      <div class="mt-6 bg-yellow-50 rounded-xl p-4 flex gap-3">
-        <svg class="w-6 h-6 text-yellow-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-        </svg>
-        <div class="text-sm text-yellow-800">
-          <p class="font-medium">Consejos para mejores resultados:</p>
-          <ul class="mt-1 list-disc list-inside text-yellow-700">
-            <li>Usa buena iluminación</li>
-            <li>Asegúrate de que el texto sea legible</li>
-            <li>Evita reflejos y sombras</li>
-          </ul>
         </div>
-      </div>
 
-      <!-- Sticky Footer -->
-      <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
-        <div class="max-w-md mx-auto flex gap-3">
-          <AppButton
-            type="button"
-            variant="outline"
-            size="lg"
-            class="flex-1"
-            @click="prevStep"
-          >
-            ← Anterior
-          </AppButton>
-          <AppButton
-            type="button"
-            variant="primary"
-            size="lg"
-            class="flex-1"
-            :disabled="!allRequiredUploaded"
-            :loading="applicationStore.isSaving"
-            @click="handleSubmit"
-          >
-            Continuar →
-          </AppButton>
+        <p v-if="error" class="mt-4 text-sm text-red-500 text-center">
+          {{ error }}
+        </p>
+
+        <div class="mt-6 bg-yellow-50 rounded-xl p-4 flex gap-3">
+          <svg class="w-6 h-6 text-yellow-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div class="text-sm text-yellow-800">
+            <p class="font-medium">Consejos para mejores resultados:</p>
+            <ul class="mt-1 list-disc list-inside text-yellow-700">
+              <li>Usa buena iluminación</li>
+              <li>Asegúrate de que el texto sea legible</li>
+              <li>Evita reflejos y sombras</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Auto-save indicator -->
+        <div v-if="onboardingStore.lastSavedAt" class="text-xs text-gray-400 text-right mt-4">
+          Guardado automáticamente
+        </div>
+
+        <!-- Sticky Footer -->
+        <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+          <div class="max-w-md mx-auto flex gap-3">
+            <AppButton
+              type="button"
+              variant="outline"
+              size="lg"
+              class="flex-1"
+              @click="prevStep"
+            >
+              ← Anterior
+            </AppButton>
+            <AppButton
+              type="button"
+              variant="primary"
+              size="lg"
+              class="flex-1"
+              :disabled="!allRequiredUploaded"
+              :loading="onboardingStore.isSaving"
+              @click="handleSubmit"
+            >
+              Continuar →
+            </AppButton>
+          </div>
         </div>
       </div>
     </div>

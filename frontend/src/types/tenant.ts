@@ -66,14 +66,16 @@ export interface ProductRules {
   max_term_months: number
   annual_rate: number
   opening_commission: number
-  amortization_type: 'FRENCH' | 'GERMAN' | 'AMERICAN'
+  amortization_type: AmortizationType
   payment_frequencies: PaymentFrequency[]
   min_age: number
   max_age: number
   min_income: number
 }
 
-export type PaymentFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'
+export type AmortizationType = 'FRENCH' | 'GERMAN' | 'AMERICAN' | 'BULLET'
+
+export type PaymentFrequency = 'WEEKLY' | 'BIWEEKLY' | 'QUINCENAL' | 'MONTHLY' | 'MENSUAL'
 
 export interface RequiredDocument {
   type: DocumentType
@@ -86,8 +88,14 @@ export type DocumentType =
   | 'INE_BACK'
   | 'CURP'
   | 'RFC_CSF'
+  | 'RFC_CONSTANCIA'
   | 'PROOF_ADDRESS'
   | 'PROOF_INCOME'
+  | 'PAYROLL_STUBS'
+  | 'BANK_STATEMENTS'
+  | 'ACTA_CONSTITUTIVA'
+  | 'COTIZACION'
+  | 'FACTURAS'
   | 'SIGNATURE'
 
 export interface DynamicField {

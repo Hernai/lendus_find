@@ -85,7 +85,7 @@ const handleClick = (event: MouseEvent) => {
       />
     </svg>
 
-    <span :class="{ 'opacity-0': loading }">
+    <span :class="['inline-flex items-center', { 'opacity-0': loading }]">
       <slot />
     </span>
   </button>

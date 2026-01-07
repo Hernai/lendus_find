@@ -1,6 +1,37 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { api } from '@/services/api'
 import type { User, OtpMethod, SendOtpResponse, VerifyOtpResponse } from '@/types'
+
+interface RequestOtpApiResponse {
+  success: boolean
+  message: string
+  channel: string
+  code?: string // Only in dev mode
+}
+
+interface VerifyOtpApiResponse {
+  success: boolean
+  token: string
+  user: {
+    id: string
+    phone: string | null
+    email: string | null
+    type: string
+    is_admin: boolean
+  }
+}
+
+interface MeApiResponse {
+  user: {
+    id: string
+    phone: string | null
+    email: string | null
+    type: string
+    is_admin: boolean
+    applicant?: unknown
+  }
+}
 
 export const useAuthStore = defineStore('auth', () => {
   // State
@@ -17,26 +48,52 @@ export const useAuthStore = defineStore('auth', () => {
   const isAnalyst = computed(() => user.value?.role === 'ANALYST')
   const isAdmin = computed(() => user.value?.role === 'ADMIN')
 
+  // Helper to map backend user type to frontend role
+  const mapUserType = (type: string, isAdmin: boolean): User['role'] => {
+    if (isAdmin) return 'ADMIN'
+    if (type === 'ANALYST') return 'ANALYST'
+    return 'APPLICANT'
+  }
+
   // Actions
   const sendOtp = async (destination: string, method: OtpMethod): Promise<SendOtpResponse> => {
     isLoading.value = true
 
     try {
-      // TODO: Replace with actual API call
-      // const response = await api.post<SendOtpResponse>('/api/auth/otp/send', { destination, method })
+      // Clean phone number (remove formatting)
+      const cleanPhone = destination.replace(/\D/g, '')
 
-      // Mock response
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
-      otpDestination.value = destination
-      otpMethod.value = method
-      otpExpiresAt.value = new Date(Date.now() + 5 * 60 * 1000) // 5 minutes
-
-      return {
-        success: true,
-        expires_at: otpExpiresAt.value.toISOString(),
-        method
+      // Map method to backend channel
+      const channelMap: Record<OtpMethod, string> = {
+        sms: 'SMS',
+        whatsapp: 'WHATSAPP',
+        email: 'EMAIL'
       }
+
+      const payload = method === 'email'
+        ? { email: destination, channel: channelMap[method] }
+        : { phone: cleanPhone, channel: channelMap[method] }
+
+      const response = await api.post<RequestOtpApiResponse>('/auth/otp/request', payload)
+
+      if (response.data.success) {
+        otpDestination.value = method === 'email' ? destination : cleanPhone
+        otpMethod.value = method
+        otpExpiresAt.value = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+
+        // Log dev code if available
+        if (response.data.code) {
+          console.log('🔐 Dev OTP Code:', response.data.code)
+        }
+
+        return {
+          success: true,
+          expires_at: otpExpiresAt.value.toISOString(),
+          method
+        }
+      }
+
+      throw new Error('Failed to send OTP')
     } catch (error) {
       console.error('Failed to send OTP:', error)
       throw error
@@ -53,49 +110,52 @@ export const useAuthStore = defineStore('auth', () => {
     isLoading.value = true
 
     try {
-      // TODO: Replace with actual API call
-      // const response = await api.post<VerifyOtpResponse>('/api/auth/otp/verify', {
-      //   destination: otpDestination.value,
-      //   code
-      // })
+      const payload = otpMethod.value === 'email'
+        ? { email: otpDestination.value, code }
+        : { phone: otpDestination.value, code }
 
-      // Mock response - accept any 6-digit code for development
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const response = await api.post<VerifyOtpApiResponse>('/auth/otp/verify', payload)
 
-      if (code.length !== 6) {
-        return { success: false, error: 'INVALID_CODE', attempts_remaining: 2 }
+      if (response.data.success) {
+        const apiUser = response.data.user
+
+        // Map backend user to frontend User type
+        const mappedUser: User = {
+          id: apiUser.id,
+          tenant_id: '', // Will be set by backend context
+          phone: apiUser.phone || '',
+          email: apiUser.email,
+          role: mapUserType(apiUser.type, apiUser.is_admin),
+          phone_verified_at: apiUser.phone ? new Date().toISOString() : null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+
+        user.value = mappedUser
+        token.value = response.data.token
+        localStorage.setItem('auth_token', response.data.token)
+
+        // Clear OTP state
+        otpDestination.value = null
+        otpMethod.value = null
+        otpExpiresAt.value = null
+
+        return {
+          success: true,
+          token: response.data.token,
+          user: mappedUser
+        }
       }
 
-      // Mock successful authentication
-      const mockUser: User = {
-        id: 'user-001',
-        tenant_id: 'tenant-001',
-        phone: otpDestination.value,
-        email: null,
-        role: 'APPLICANT',
-        phone_verified_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-
-      const mockToken = 'mock-jwt-token-' + Date.now()
-
-      user.value = mockUser
-      token.value = mockToken
-      localStorage.setItem('auth_token', mockToken)
-
-      // Clear OTP state
-      otpDestination.value = null
-      otpMethod.value = null
-      otpExpiresAt.value = null
-
-      return {
-        success: true,
-        token: mockToken,
-        user: mockUser
-      }
-    } catch (error) {
+      return { success: false, error: 'INVALID_CODE' }
+    } catch (error: unknown) {
       console.error('Failed to verify OTP:', error)
+
+      // Handle 401 - invalid code
+      if ((error as { response?: { status?: number } })?.response?.status === 401) {
+        return { success: false, error: 'INVALID_CODE', attempts_remaining: 4 }
+      }
+
       throw error
     } finally {
       isLoading.value = false
@@ -110,40 +170,57 @@ export const useAuthStore = defineStore('auth', () => {
     return sendOtp(otpDestination.value, method ?? otpMethod.value ?? 'sms')
   }
 
-  const logout = () => {
-    user.value = null
-    token.value = null
-    localStorage.removeItem('auth_token')
-    otpDestination.value = null
-    otpMethod.value = null
-    otpExpiresAt.value = null
+  const logout = async () => {
+    try {
+      if (token.value) {
+        await api.post('/auth/logout')
+      }
+    } catch (error) {
+      console.error('Logout API error:', error)
+    } finally {
+      user.value = null
+      token.value = null
+      localStorage.removeItem('auth_token')
+      otpDestination.value = null
+      otpMethod.value = null
+      otpExpiresAt.value = null
+    }
   }
 
-  const checkAuth = async () => {
+  const checkAuth = async (targetPath?: string) => {
     if (!token.value) return false
 
     try {
-      // TODO: Replace with actual API call to validate token
-      // const response = await api.get<User>('/api/auth/me')
-      // user.value = response.data
+      const response = await api.get<MeApiResponse>('/me')
+      const apiUser = response.data.user
 
-      // Mock - for development, assume token is valid
-      if (!user.value) {
-        user.value = {
-          id: 'user-001',
-          tenant_id: 'tenant-001',
-          phone: '5512345678',
-          email: null,
-          role: 'APPLICANT',
-          phone_verified_at: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
+      // Map backend user to frontend User type
+      user.value = {
+        id: apiUser.id,
+        tenant_id: '',
+        phone: apiUser.phone || '',
+        email: apiUser.email,
+        role: mapUserType(apiUser.type, apiUser.is_admin),
+        phone_verified_at: apiUser.phone ? new Date().toISOString() : null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+
+      // Check if user has access to target route
+      const pathToCheck = targetPath || window.location.pathname
+      const isAdminRoute = pathToCheck.startsWith('/admin')
+
+      if (isAdminRoute && !apiUser.is_admin) {
+        // User doesn't have admin access
+        return false
       }
 
       return true
     } catch {
-      logout()
+      // Token is invalid, clear auth state
+      user.value = null
+      token.value = null
+      localStorage.removeItem('auth_token')
       return false
     }
   }

@@ -13,6 +13,12 @@ export interface Application {
   approved_amount: number | null
   term_months: number
   payment_frequency: PaymentFrequency
+  interest_rate: number
+  opening_commission: number
+  monthly_payment: number
+  total_to_pay: number
+  purpose: string | null
+  purpose_description: string | null
   dynamic_data: Record<string, any>
   simulation_data: SimulationResult | null
   submitted_at: string | null
@@ -20,6 +26,11 @@ export interface Application {
   webhook_sent_at: string | null
   created_at: string
   updated_at: string
+  product?: {
+    id: string
+    name: string
+    type: string
+  }
 }
 
 export type ApplicationStatus =
@@ -94,4 +105,6 @@ export interface UpdateApplicationParams {
   requested_amount?: number
   term_months?: number
   payment_frequency?: PaymentFrequency
+  purpose?: string
+  purpose_description?: string
 }

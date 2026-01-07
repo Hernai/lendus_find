@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { reactive, computed, onMounted } from 'vue'
+import { reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useApplicationStore } from '@/stores'
-import { AppButton, AppSelect, AppRadioGroup } from '@/components/common'
+import { useOnboardingStore, useApplicationStore } from '@/stores'
+import { AppButton, AppSelect } from '@/components/common'
 
 const router = useRouter()
+const onboardingStore = useOnboardingStore()
 const applicationStore = useApplicationStore()
 
 const form = reactive({
   purpose: '' as string,
-  confirm_amount: true
+  confirmed_simulation: false
 })
 
 const errors = reactive({
@@ -17,6 +18,37 @@ const errors = reactive({
 })
 
 const simulation = computed(() => applicationStore.simulation)
+
+// Sync form from store on mount
+onMounted(async () => {
+  await onboardingStore.init()
+
+  // Check if we have a valid application
+  const appId = applicationStore.currentApplication?.id
+  if (!appId || appId === 'null' || appId === 'undefined') {
+    console.warn('⚠️ Step5: No valid application found, redirecting to home')
+    router.push('/')
+    return
+  }
+
+  const step5 = onboardingStore.data.step5
+  form.purpose = step5.purpose || ''
+  form.confirmed_simulation = step5.confirmed_simulation || false
+
+  // If no simulation exists, redirect to simulator
+  if (!simulation.value) {
+    console.warn('⚠️ Step5: No simulation found, redirecting to home')
+    router.push('/')
+  }
+})
+
+// Auto-save to store when form changes
+watch(form, () => {
+  onboardingStore.updateStepData('step5', {
+    purpose: form.purpose,
+    confirmed_simulation: form.confirmed_simulation
+  })
+}, { deep: true })
 
 const purposeOptions = [
   { value: 'PERSONAL', label: 'Gastos personales' },
@@ -60,34 +92,22 @@ const validate = () => {
 const handleSubmit = async () => {
   if (!validate()) return
 
-  await applicationStore.saveStepData({
-    step5: {
+  try {
+    // Mark simulation as confirmed
+    onboardingStore.updateStepData('step5', {
       purpose: form.purpose,
       confirmed_simulation: true
-    }
-  })
+    })
 
-  router.push('/solicitud/paso-6')
+    // Save step 5 explicitly
+    await onboardingStore.completeStep(5)
+    router.push('/solicitud/paso-6')
+  } catch (e) {
+    console.error('Failed to save step 5:', e)
+  }
 }
 
 const prevStep = () => router.push('/solicitud/paso-4')
-
-onMounted(async () => {
-  // If no simulation exists
-  if (!simulation.value) {
-    // In DEV mode, create a mock simulation
-    if (import.meta.env.DEV) {
-      await applicationStore.runSimulation({
-        amount: 25000,
-        term_months: 12,
-        payment_frequency: 'BIWEEKLY'
-      })
-    } else {
-      // In production, redirect to simulator
-      router.push('/simulador')
-    }
-  }
-})
 </script>
 
 <template>
@@ -96,7 +116,12 @@ onMounted(async () => {
       <h1 class="text-2xl font-bold text-gray-900 mb-2">Confirma tu crédito</h1>
       <p class="text-gray-500 mb-6">Revisa los detalles de tu solicitud.</p>
 
-      <form class="space-y-6" @submit.prevent="handleSubmit">
+      <!-- Loading state -->
+      <div v-if="onboardingStore.isLoading" class="flex justify-center py-8">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+
+      <form v-else class="space-y-6" @submit.prevent="handleSubmit">
         <!-- Loan Summary Card -->
         <div v-if="simulation" class="bg-gradient-to-br from-primary-600 to-primary-700 rounded-2xl p-6 text-white">
           <div class="text-center mb-4">
@@ -165,6 +190,11 @@ onMounted(async () => {
           </p>
         </div>
 
+        <!-- Auto-save indicator -->
+        <div v-if="onboardingStore.lastSavedAt" class="text-xs text-gray-400 text-right">
+          Guardado automáticamente
+        </div>
+
         <!-- Sticky Footer -->
         <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
           <div class="max-w-md mx-auto flex gap-3">
@@ -182,7 +212,7 @@ onMounted(async () => {
               variant="primary"
               size="lg"
               class="flex-1"
-              :loading="applicationStore.isSaving"
+              :loading="onboardingStore.isSaving"
             >
               Continuar →
             </AppButton>

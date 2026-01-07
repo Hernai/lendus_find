@@ -1,0 +1,311 @@
+<?php
+
+namespace App\Models;
+
+use App\Traits\HasTenant;
+use App\Traits\HasUuid;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
+
+class Application extends Model
+{
+    use HasFactory, HasUuid, HasTenant, SoftDeletes;
+
+    protected $fillable = [
+        'tenant_id',
+        'applicant_id',
+        'product_id',
+        'folio',
+        'requested_amount',
+        'approved_amount',
+        'term_months',
+        'payment_frequency',
+        'interest_rate',
+        'opening_commission',
+        'monthly_payment',
+        'total_to_pay',
+        'cat',
+        'purpose',
+        'purpose_description',
+        'status',
+        'status_history',
+        'assigned_to',
+        'assigned_at',
+        'rejection_reason',
+        'internal_notes',
+        'scoring_data',
+        'risk_score',
+        'risk_level',
+        'approved_at',
+        'disbursed_at',
+        'disbursement_reference',
+        'extra_data',
+    ];
+
+    protected $casts = [
+        'requested_amount' => 'decimal:2',
+        'approved_amount' => 'decimal:2',
+        'interest_rate' => 'decimal:2',
+        'opening_commission' => 'decimal:2',
+        'monthly_payment' => 'decimal:2',
+        'total_to_pay' => 'decimal:2',
+        'cat' => 'decimal:2',
+        'status_history' => 'array',
+        'scoring_data' => 'array',
+        'extra_data' => 'array',
+        'assigned_at' => 'datetime',
+        'approved_at' => 'datetime',
+        'disbursed_at' => 'datetime',
+    ];
+
+    /**
+     * Application statuses.
+     */
+    public const STATUS_DRAFT = 'DRAFT';
+    public const STATUS_SUBMITTED = 'SUBMITTED';
+    public const STATUS_IN_REVIEW = 'IN_REVIEW';
+    public const STATUS_DOCS_PENDING = 'DOCS_PENDING';
+    public const STATUS_COUNTER_OFFERED = 'COUNTER_OFFERED';
+    public const STATUS_APPROVED = 'APPROVED';
+    public const STATUS_REJECTED = 'REJECTED';
+    public const STATUS_CANCELLED = 'CANCELLED';
+    public const STATUS_DISBURSED = 'DISBURSED';
+    public const STATUS_ACTIVE = 'ACTIVE';
+    public const STATUS_COMPLETED = 'COMPLETED';
+    public const STATUS_DEFAULT = 'DEFAULT';
+
+    /**
+     * Boot the model.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Generate folio on create
+        static::creating(function ($application) {
+            if (empty($application->folio)) {
+                $application->folio = static::generateFolio($application->tenant_id);
+            }
+        });
+    }
+
+    /**
+     * Generate a unique folio for the application.
+     */
+    public static function generateFolio(?string $tenantId): string
+    {
+        $prefix = 'LEN'; // Can be customized per tenant
+        $year = date('Y');
+
+        // Get the highest sequence number for this year by parsing the folio
+        $lastFolio = static::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('folio', 'LIKE', "{$prefix}-{$year}-%")
+            ->orderByDesc('created_at')
+            ->value('folio');
+
+        if ($lastFolio) {
+            preg_match('/(\d+)$/', $lastFolio, $matches);
+            $sequence = isset($matches[1]) ? intval($matches[1]) + 1 : 1;
+        } else {
+            $sequence = 1;
+        }
+
+        // Add randomness to prevent collisions
+        $attempts = 0;
+        $maxAttempts = 10;
+
+        do {
+            $folio = sprintf('%s-%s-%05d', $prefix, $year, $sequence);
+
+            // Check if folio already exists
+            $exists = static::withoutGlobalScopes()
+                ->where('folio', $folio)
+                ->exists();
+
+            if (!$exists) {
+                return $folio;
+            }
+
+            $sequence++;
+            $attempts++;
+        } while ($attempts < $maxAttempts);
+
+        // Fallback: add timestamp to guarantee uniqueness
+        return sprintf('%s-%s-%05d-%s', $prefix, $year, $sequence, substr(uniqid(), -4));
+    }
+
+    /**
+     * Get the applicant.
+     */
+    public function applicant(): BelongsTo
+    {
+        return $this->belongsTo(Applicant::class);
+    }
+
+    /**
+     * Get the product.
+     */
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    /**
+     * Get the assigned agent.
+     */
+    public function assignedAgent(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    /**
+     * Get the documents for this application.
+     */
+    public function documents(): HasMany
+    {
+        return $this->hasMany(Document::class);
+    }
+
+    /**
+     * Get the references for this application.
+     */
+    public function references(): HasMany
+    {
+        return $this->hasMany(Reference::class);
+    }
+
+    /**
+     * Get the notes for this application.
+     */
+    public function notes(): HasMany
+    {
+        return $this->hasMany(ApplicationNote::class)->orderByDesc('created_at');
+    }
+
+    /**
+     * Change the status and record in history.
+     */
+    public function changeStatus(string $status, ?string $reason = null, ?int $userId = null): void
+    {
+        $history = $this->status_history ?? [];
+
+        $history[] = [
+            'from' => $this->status,
+            'to' => $status,
+            'reason' => $reason,
+            'user_id' => $userId,
+            'timestamp' => now()->toIso8601String(),
+        ];
+
+        $this->status = $status;
+        $this->status_history = $history;
+
+        if ($status === self::STATUS_APPROVED) {
+            $this->approved_at = now();
+        } elseif ($status === self::STATUS_REJECTED && $reason) {
+            $this->rejection_reason = $reason;
+        } elseif ($status === self::STATUS_DISBURSED) {
+            $this->disbursed_at = now();
+        }
+
+        $this->save();
+    }
+
+    /**
+     * Check if the application can be edited.
+     */
+    public function isEditable(): bool
+    {
+        return in_array($this->status, [
+            self::STATUS_DRAFT,
+            self::STATUS_DOCS_PENDING,
+        ]);
+    }
+
+    /**
+     * Scope to filter by status.
+     */
+    public function scopeStatus($query, string $status)
+    {
+        return $query->where('status', $status);
+    }
+
+    /**
+     * Scope to pending applications.
+     */
+    public function scopePending($query)
+    {
+        return $query->whereIn('status', [
+            self::STATUS_SUBMITTED,
+            self::STATUS_IN_REVIEW,
+            self::STATUS_DOCS_PENDING,
+            self::STATUS_COUNTER_OFFERED,
+        ]);
+    }
+
+    /**
+     * Create a counter-offer.
+     */
+    public function createCounterOffer(
+        float $amount,
+        int $termMonths,
+        float $interestRate,
+        string $paymentFrequency,
+        ?string $reason = null,
+        ?int $userId = null
+    ): void {
+        $this->approved_amount = $amount;
+        $this->term_months = $termMonths;
+        $this->interest_rate = $interestRate;
+        $this->payment_frequency = $paymentFrequency;
+
+        // Recalculate payment
+        $periodsPerYear = match ($paymentFrequency) {
+            'WEEKLY' => 52,
+            'BIWEEKLY', 'QUINCENAL' => 26,
+            default => 12,
+        };
+
+        $totalPeriods = match ($paymentFrequency) {
+            'WEEKLY' => $termMonths * 4.33,
+            'BIWEEKLY', 'QUINCENAL' => $termMonths * 2.17,
+            default => $termMonths,
+        };
+
+        $totalPeriods = (int) round($totalPeriods);
+        $periodRate = ($interestRate / 100) / $periodsPerYear;
+
+        if ($periodRate > 0) {
+            $payment = $amount * ($periodRate * pow(1 + $periodRate, $totalPeriods)) /
+                (pow(1 + $periodRate, $totalPeriods) - 1);
+        } else {
+            $payment = $amount / $totalPeriods;
+        }
+
+        $this->monthly_payment = round($payment, 2);
+        $this->total_to_pay = round($payment * $totalPeriods, 2);
+
+        $this->changeStatus(self::STATUS_COUNTER_OFFERED, $reason, $userId);
+    }
+
+    /**
+     * Accept counter-offer.
+     */
+    public function acceptCounterOffer(?int $userId = null): void
+    {
+        $this->changeStatus(self::STATUS_APPROVED, 'Contraoferta aceptada', $userId);
+    }
+
+    /**
+     * Reject counter-offer.
+     */
+    public function rejectCounterOffer(?string $reason = null, ?int $userId = null): void
+    {
+        $this->changeStatus(self::STATUS_CANCELLED, $reason ?? 'Contraoferta rechazada', $userId);
+    }
+}

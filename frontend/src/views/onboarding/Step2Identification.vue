@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { reactive, computed, watch } from 'vue'
+import { reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useApplicantStore, useApplicationStore } from '@/stores'
+import { useOnboardingStore } from '@/stores'
 import { AppButton, AppInput, AppRadioGroup } from '@/components/common'
 
 const router = useRouter()
-const applicantStore = useApplicantStore()
-const applicationStore = useApplicationStore()
+const onboardingStore = useOnboardingStore()
 
 const form = reactive({
   id_type: 'INE' as 'INE' | 'PASSPORT',
@@ -76,6 +75,37 @@ const validatePassportNumber = (passport: string): boolean => {
   // Formato antiguo: 9-10 caracteres alfanuméricos
   return /^[A-Z]\d{8}$/.test(passport.toUpperCase()) || /^[A-Z0-9]{9,10}$/.test(passport.toUpperCase())
 }
+
+// Sync form from store on mount
+onMounted(async () => {
+  await onboardingStore.init()
+
+  const step2 = onboardingStore.data.step2
+  form.id_type = step2.id_type || 'INE'
+  form.curp = step2.curp
+  form.rfc = step2.rfc
+  form.clave_elector = step2.clave_elector
+  form.numero_ocr = step2.numero_ocr
+  form.folio_ine = step2.folio_ine
+  form.passport_number = step2.passport_number
+  form.passport_issue_date = step2.passport_issue_date
+  form.passport_expiry_date = step2.passport_expiry_date
+})
+
+// Auto-save to store when form changes
+watch(form, () => {
+  onboardingStore.updateStepData('step2', {
+    id_type: form.id_type,
+    curp: form.curp,
+    rfc: form.rfc,
+    clave_elector: form.clave_elector,
+    numero_ocr: form.numero_ocr,
+    folio_ine: form.folio_ine,
+    passport_number: form.passport_number,
+    passport_issue_date: form.passport_issue_date,
+    passport_expiry_date: form.passport_expiry_date
+  })
+}, { deep: true })
 
 // Validar que la fecha de expiración sea futura
 const isDateFuture = (dateStr: string): boolean => {
@@ -184,34 +214,26 @@ const validate = () => {
 const handleSubmit = async () => {
   if (!validate()) return
 
-  await applicantStore.updateIdentification(
-    form.rfc.toUpperCase(),
-    form.curp.toUpperCase()
-  )
+  try {
+    // Normalize to uppercase before saving
+    onboardingStore.updateStepData('step2', {
+      id_type: form.id_type,
+      curp: form.curp.toUpperCase(),
+      rfc: form.rfc.toUpperCase(),
+      clave_elector: form.clave_elector.toUpperCase(),
+      numero_ocr: form.numero_ocr,
+      folio_ine: form.folio_ine,
+      passport_number: form.passport_number.toUpperCase(),
+      passport_issue_date: form.passport_issue_date,
+      passport_expiry_date: form.passport_expiry_date
+    })
 
-  const stepData: Record<string, any> = {
-    id_type: form.id_type,
-    curp: form.curp.toUpperCase(),
-    rfc: form.rfc.toUpperCase()
+    // Save step 2 explicitly
+    await onboardingStore.completeStep(2)
+    router.push('/solicitud/paso-3')
+  } catch (e) {
+    console.error('Failed to save step 2:', e)
   }
-
-  // Agregar campos de INE si aplica
-  if (form.id_type === 'INE') {
-    stepData.clave_elector = form.clave_elector.toUpperCase()
-    stepData.numero_ocr = form.numero_ocr
-    stepData.folio_ine = form.folio_ine
-  }
-
-  // Agregar campos de Pasaporte si aplica
-  if (form.id_type === 'PASSPORT') {
-    stepData.passport_number = form.passport_number.toUpperCase()
-    stepData.passport_issue_date = form.passport_issue_date
-    stepData.passport_expiry_date = form.passport_expiry_date
-  }
-
-  await applicationStore.saveStepData({ step2: stepData })
-
-  router.push('/solicitud/paso-3')
 }
 
 const prevStep = () => router.push('/solicitud/paso-1')
@@ -223,7 +245,12 @@ const prevStep = () => router.push('/solicitud/paso-1')
       <h1 class="text-2xl font-bold text-gray-900 mb-2">Tu identificación</h1>
       <p class="text-gray-500 mb-6">Necesitamos estos datos para verificar tu identidad.</p>
 
-      <form class="space-y-5" @submit.prevent="handleSubmit">
+      <!-- Loading state -->
+      <div v-if="onboardingStore.isLoading" class="flex justify-center py-8">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+
+      <form v-else class="space-y-5" @submit.prevent="handleSubmit">
         <AppRadioGroup
           v-model="form.id_type"
           :options="idTypeOptions"
@@ -423,6 +450,11 @@ const prevStep = () => router.push('/solicitud/paso-1')
           </div>
         </template>
 
+        <!-- Auto-save indicator -->
+        <div v-if="onboardingStore.lastSavedAt" class="text-xs text-gray-400 text-right">
+          Guardado automáticamente
+        </div>
+
         <!-- Sticky Footer -->
         <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
           <div class="max-w-md mx-auto flex gap-3">
@@ -440,7 +472,7 @@ const prevStep = () => router.push('/solicitud/paso-1')
               variant="primary"
               size="lg"
               class="flex-1"
-              :loading="applicantStore.isSaving"
+              :loading="onboardingStore.isSaving"
             >
               Continuar →
             </AppButton>

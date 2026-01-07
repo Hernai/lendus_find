@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useApplicationStore, useTenantStore } from '@/stores'
+import { useApplicationStore, useTenantStore, useAuthStore } from '@/stores'
 import { AppButton, AppSlider } from '@/components/common'
 import type { PaymentFrequency, Product } from '@/types'
 
@@ -18,6 +18,7 @@ const props = withDefaults(defineProps<Props>(), {
 const router = useRouter()
 const applicationStore = useApplicationStore()
 const tenantStore = useTenantStore()
+const authStore = useAuthStore()
 
 // Product rules (from prop or tenant config defaults)
 const activeProduct = computed(() => props.product || tenantStore.activeProducts[0])
@@ -27,26 +28,66 @@ const minTerm = computed(() => activeProduct.value?.rules.min_term_months ?? 3)
 const maxTerm = computed(() => activeProduct.value?.rules.max_term_months ?? 48)
 const availableFrequencies = computed(() => activeProduct.value?.rules.payment_frequencies ?? ['WEEKLY', 'BIWEEKLY', 'MONTHLY'])
 
-// Generate term options based on product rules
-const termOptions = computed(() => {
-  const terms = [3, 6, 12, 18, 24, 36, 48, 60]
-  return terms.filter(t => t >= minTerm.value && t <= maxTerm.value)
+// Conversion factors: payments per month
+const frequencyMultiplier: Record<PaymentFrequency, number> = {
+  WEEKLY: 4.33,
+  BIWEEKLY: 2,
+  QUINCENAL: 2,
+  MONTHLY: 1,
+  MENSUAL: 1
+}
+
+// Generate payment count options based on frequency and term limits
+const paymentCountOptions = computed(() => {
+  const multiplier = frequencyMultiplier[paymentFrequency.value]
+  const minPayments = Math.round(minTerm.value * multiplier)
+  const maxPayments = Math.round(maxTerm.value * multiplier)
+
+  // Generate sensible payment options based on frequency
+  let options: number[] = []
+  if (paymentFrequency.value === 'WEEKLY') {
+    options = [13, 26, 39, 52, 78, 104, 156, 208]
+  } else if (paymentFrequency.value === 'BIWEEKLY') {
+    options = [6, 12, 18, 24, 36, 48, 72, 96]
+  } else {
+    options = [3, 6, 12, 18, 24, 36, 48, 60]
+  }
+
+  return options.filter(p => p >= minPayments && p <= maxPayments)
 })
 
 // Form state - initialize with middle values
 const amount = ref(50000)
-const termMonths = ref(18)
+const selectedPayments = ref(12)
 const paymentFrequency = ref<PaymentFrequency>('MONTHLY')
+
+// Convert selected payments to months for API
+const termMonths = computed(() => {
+  const multiplier = frequencyMultiplier[paymentFrequency.value]
+  return Math.round(selectedPayments.value / multiplier)
+})
 
 // Initialize values based on product
 onMounted(() => {
   // Set initial amount to middle of range
   amount.value = Math.round((minAmount.value + maxAmount.value) / 2 / 1000) * 1000
-  // Set initial term to middle option
-  const terms = termOptions.value
-  termMonths.value = terms[Math.floor(terms.length / 2)] || 12
   // Set initial frequency to first available
   paymentFrequency.value = (availableFrequencies.value[0] as PaymentFrequency) || 'MONTHLY'
+  // Set initial payment count to middle option
+  const options = paymentCountOptions.value
+  selectedPayments.value = options[Math.floor(options.length / 2)] || 12
+})
+
+// When frequency changes, adjust selected payments to closest valid option
+watch(paymentFrequency, () => {
+  const options = paymentCountOptions.value
+  if (!options.includes(selectedPayments.value)) {
+    // Find closest option
+    const closest = options.reduce((prev, curr) =>
+      Math.abs(curr - selectedPayments.value) < Math.abs(prev - selectedPayments.value) ? curr : prev
+    )
+    selectedPayments.value = closest
+  }
 })
 
 // Simulation result
@@ -54,7 +95,7 @@ const simulation = computed(() => applicationStore.simulation)
 const isLoading = computed(() => applicationStore.isLoading)
 
 // Auto-run simulation on changes
-watch([amount, termMonths, paymentFrequency, activeProduct], async () => {
+watch([amount, selectedPayments, paymentFrequency, activeProduct], async () => {
   if (activeProduct.value) {
     await applicationStore.runSimulation({
       product_id: activeProduct.value.id,
@@ -86,22 +127,51 @@ const formatCurrencyDecimals = (value: number) => {
 
 // Request credit
 const handleRequestCredit = async () => {
-  if (!activeProduct.value) return
+  console.log('🚀 handleRequestCredit called')
+  console.log('📦 activeProduct:', activeProduct.value?.id || 'NULL')
 
-  await applicationStore.createApplication({
+  if (!activeProduct.value) {
+    console.error('❌ No active product!')
+    return
+  }
+
+  // Store the selected product for use after authentication
+  applicationStore.setSelectedProduct(activeProduct.value)
+
+  // Save simulation params to localStorage for use after auth
+  const pendingData = {
     product_id: activeProduct.value.id,
     requested_amount: amount.value,
     term_months: termMonths.value,
     payment_frequency: paymentFrequency.value
-  })
+  }
+  console.log('💾 Saving pending_application:', pendingData)
+  localStorage.setItem('pending_application', JSON.stringify(pendingData))
 
-  router.push('/auth')
+  // Verify it was saved
+  const saved = localStorage.getItem('pending_application')
+  console.log('✅ Verified saved:', saved ? 'YES' : 'NO')
+
+  // Check if user is already authenticated
+  console.log('🔐 isAuthenticated:', authStore.isAuthenticated)
+
+  if (authStore.isAuthenticated) {
+    // Go directly to onboarding - application will be created there
+    console.log('➡️ Navigating to /solicitud')
+    router.push('/solicitud')
+  } else {
+    // Redirect to auth - application will be created after successful login
+    console.log('➡️ Navigating to /auth')
+    router.push('/auth')
+  }
 }
 
 const frequencyLabels: Record<PaymentFrequency, string> = {
   WEEKLY: 'Semanal',
   BIWEEKLY: 'Quincenal',
-  MONTHLY: 'Mensual'
+  QUINCENAL: 'Quincenal',
+  MONTHLY: 'Mensual',
+  MENSUAL: 'Mensual'
 }
 
 const paymentLabel = computed(() => {
@@ -128,29 +198,7 @@ const paymentLabel = computed(() => {
       />
     </div>
 
-    <!-- Term selection -->
-    <div class="mb-6">
-      <label class="block text-sm font-medium text-gray-700 mb-3">
-        ¿En cuánto tiempo? (meses)
-      </label>
-      <div class="flex flex-wrap gap-2">
-        <button
-          v-for="term in termOptions"
-          :key="term"
-          :class="[
-            'px-4 py-3 rounded-xl text-sm font-medium transition-colors',
-            termMonths === term
-              ? 'bg-primary-600 text-white'
-              : 'border border-gray-200 text-gray-600 hover:border-primary-300'
-          ]"
-          @click="termMonths = term"
-        >
-          {{ term }}
-        </button>
-      </div>
-    </div>
-
-    <!-- Payment frequency -->
+    <!-- Payment frequency (shown first when multiple options) -->
     <div v-if="availableFrequencies.length > 1" class="mb-6">
       <label class="block text-sm font-medium text-gray-700 mb-3">
         ¿Cada cuándo pagas?
@@ -168,6 +216,28 @@ const paymentLabel = computed(() => {
           @click="paymentFrequency = freq"
         >
           {{ frequencyLabels[freq] }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Payment count selection -->
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-gray-700 mb-2">
+        ¿En cuántos pagos?
+      </label>
+      <div class="flex flex-wrap gap-2">
+        <button
+          v-for="count in paymentCountOptions"
+          :key="count"
+          :class="[
+            'px-4 py-3 rounded-xl text-sm font-medium transition-colors',
+            selectedPayments === count
+              ? 'bg-primary-600 text-white'
+              : 'border border-gray-200 text-gray-600 hover:border-primary-300'
+          ]"
+          @click="selectedPayments = count"
+        >
+          {{ count }}
         </button>
       </div>
     </div>

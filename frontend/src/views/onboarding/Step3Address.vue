@@ -1,24 +1,24 @@
 <script setup lang="ts">
-import { reactive, ref, watch, computed } from 'vue'
+import { reactive, ref, watch, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useApplicantStore, useApplicationStore } from '@/stores'
+import { useOnboardingStore } from '@/stores'
 import { AppButton, AppInput, AppSelect } from '@/components/common'
 
 const router = useRouter()
-const applicantStore = useApplicantStore()
-const applicationStore = useApplicationStore()
+const onboardingStore = useOnboardingStore()
 
 const form = reactive({
   postal_code: '',
   state: '',
   municipality: '',
+  city: '',
   neighborhood: '',
   street: '',
-  exterior_number: '',
-  interior_number: '',
+  ext_number: '',
+  int_number: '',
   housing_type: '',
-  residence_years: '',
-  residence_months: ''
+  years_at_address: 0,
+  months_at_address: 0
 })
 
 const errors = reactive({
@@ -27,19 +27,73 @@ const errors = reactive({
   municipality: '',
   neighborhood: '',
   street: '',
-  exterior_number: '',
+  ext_number: '',
   housing_type: '',
   residence_time: ''
 })
 
 const housingTypeOptions = [
-  { value: 'PROPIA', label: 'Propia' },
+  { value: 'PROPIA_PAGADA', label: 'Propia pagada' },
+  { value: 'PROPIA_HIPOTECA', label: 'Propia con hipoteca' },
   { value: 'RENTADA', label: 'Rentada' },
   { value: 'FAMILIAR', label: 'Familiar' },
-  { value: 'HIPOTECADA', label: 'Hipotecada' }
+  { value: 'PRESTADA', label: 'Prestada' },
+  { value: 'OTRO', label: 'Otro' }
 ]
 
 const neighborhoods = ref<{ value: string; label: string }[]>([])
+
+// Sync form from store on mount
+onMounted(async () => {
+  await onboardingStore.init()
+
+  const step3 = onboardingStore.data.step3
+  form.postal_code = step3.postal_code || ''
+  form.state = step3.state || ''
+  form.municipality = step3.municipality || ''
+  form.city = step3.city || ''
+  form.neighborhood = step3.neighborhood || ''
+  form.street = step3.street || ''
+  form.ext_number = step3.ext_number || ''
+  form.int_number = step3.int_number || ''
+  form.housing_type = step3.housing_type || ''
+  form.years_at_address = step3.years_at_address || 0
+  form.months_at_address = step3.months_at_address || 0
+
+  // Trigger postal code lookup if we have data
+  if (form.postal_code.length === 5) {
+    postalCodeLookedUp.value = true
+    postalCodeFound.value = !!form.state
+  }
+})
+
+// Auto-save to store when form changes (except postal_code which triggers lookup)
+watch([
+  () => form.state,
+  () => form.municipality,
+  () => form.city,
+  () => form.neighborhood,
+  () => form.street,
+  () => form.ext_number,
+  () => form.int_number,
+  () => form.housing_type,
+  () => form.years_at_address,
+  () => form.months_at_address
+], () => {
+  onboardingStore.updateStepData('step3', {
+    postal_code: form.postal_code,
+    street: form.street,
+    ext_number: form.ext_number,
+    int_number: form.int_number,
+    neighborhood: form.neighborhood,
+    city: form.city || form.municipality,
+    state: form.state,
+    municipality: form.municipality,
+    housing_type: form.housing_type,
+    years_at_address: form.years_at_address,
+    months_at_address: form.months_at_address
+  })
+})
 const isLoadingPostalCode = ref(false)
 const postalCodeLookedUp = ref(false)
 const postalCodeFound = ref(false)
@@ -156,12 +210,6 @@ const stateOptions = [
   { value: 'ZACATECAS', label: 'Zacatecas' }
 ]
 
-// Validar que los meses estén entre 0 y 11
-const validateMonths = (value: string): boolean => {
-  const num = parseInt(value)
-  return !isNaN(num) && num >= 0 && num <= 11
-}
-
 const validate = () => {
   let isValid = true
 
@@ -200,11 +248,11 @@ const validate = () => {
     errors.street = ''
   }
 
-  if (!form.exterior_number.trim()) {
-    errors.exterior_number = 'El número exterior es requerido'
+  if (!form.ext_number.trim()) {
+    errors.ext_number = 'El número exterior es requerido'
     isValid = false
   } else {
-    errors.exterior_number = ''
+    errors.ext_number = ''
   }
 
   if (!form.housing_type) {
@@ -215,13 +263,13 @@ const validate = () => {
   }
 
   // Validar tiempo de residencia
-  const years = parseInt(form.residence_years)
-  const months = parseInt(form.residence_months)
+  const years = form.years_at_address
+  const months = form.months_at_address
 
-  if (form.residence_years === '' || isNaN(years) || years < 0) {
+  if (years < 0) {
     errors.residence_time = 'Indica los años en tu domicilio'
     isValid = false
-  } else if (form.residence_months === '' || isNaN(months) || months < 0 || months > 11) {
+  } else if (months < 0 || months > 11) {
     errors.residence_time = 'Los meses deben ser entre 0 y 11'
     isValid = false
   } else {
@@ -234,43 +282,28 @@ const validate = () => {
 const handleSubmit = async () => {
   if (!validate()) return
 
-  const years = parseInt(form.residence_years) || 0
-  const months = parseInt(form.residence_months) || 0
-  const totalMonths = (years * 12) + months
-
-  await applicantStore.updateAddress({
-    street: form.street.toUpperCase(),
-    ext_number: form.exterior_number,
-    int_number: form.interior_number || undefined,
-    neighborhood: form.neighborhood.toUpperCase(),
-    postal_code: form.postal_code,
-    municipality: form.municipality.toUpperCase(),
-    city: form.municipality.toUpperCase(),
-    state: form.state,
-    country: 'MEX',
-    housing_type: form.housing_type,
-    years_living: years,
-    months_living: months,
-    total_months_living: totalMonths
-  })
-
-  await applicationStore.saveStepData({
-    step3: {
+  try {
+    // Normalize data to uppercase before saving
+    onboardingStore.updateStepData('step3', {
+      street: form.street.toUpperCase(),
+      ext_number: form.ext_number,
+      int_number: form.int_number || '',
+      neighborhood: form.neighborhood.toUpperCase(),
       postal_code: form.postal_code,
+      city: form.city || form.municipality.toUpperCase(),
       state: form.state,
-      municipality: form.municipality,
-      neighborhood: form.neighborhood,
-      street: form.street,
-      exterior_number: form.exterior_number,
-      interior_number: form.interior_number,
+      municipality: form.municipality.toUpperCase(),
       housing_type: form.housing_type,
-      residence_years: years,
-      residence_months: months,
-      total_months: totalMonths
-    }
-  })
+      years_at_address: form.years_at_address,
+      months_at_address: form.months_at_address
+    })
 
-  router.push('/solicitud/paso-4')
+    // Save step 3 explicitly
+    await onboardingStore.completeStep(3)
+    router.push('/solicitud/paso-4')
+  } catch (e) {
+    console.error('Failed to save step 3:', e)
+  }
 }
 
 const prevStep = () => router.push('/solicitud/paso-2')
@@ -282,7 +315,12 @@ const prevStep = () => router.push('/solicitud/paso-2')
       <h1 class="text-2xl font-bold text-gray-900 mb-2">¿Dónde vives?</h1>
       <p class="text-gray-500 mb-6">Ingresa tu código postal para autocompletar.</p>
 
-      <form class="space-y-4" @submit.prevent="handleSubmit">
+      <!-- Loading state -->
+      <div v-if="onboardingStore.isLoading" class="flex justify-center py-8">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+
+      <form v-else class="space-y-4" @submit.prevent="handleSubmit">
         <AppInput
           v-model="form.postal_code"
           type="tel"
@@ -378,14 +416,14 @@ const prevStep = () => router.push('/solicitud/paso-2')
 
           <div class="grid grid-cols-2 gap-3">
             <AppInput
-              v-model="form.exterior_number"
+              v-model="form.ext_number"
               label="Núm. Exterior"
               placeholder="123"
-              :error="errors.exterior_number"
+              :error="errors.ext_number"
               required
             />
             <AppInput
-              v-model="form.interior_number"
+              v-model="form.int_number"
               label="Núm. Interior"
               placeholder="A (opcional)"
             />
@@ -409,7 +447,7 @@ const prevStep = () => router.push('/solicitud/paso-2')
               <div>
                 <div class="relative">
                   <input
-                    v-model="form.residence_years"
+                    v-model.number="form.years_at_address"
                     type="number"
                     min="0"
                     max="99"
@@ -423,7 +461,7 @@ const prevStep = () => router.push('/solicitud/paso-2')
               <div>
                 <div class="relative">
                   <input
-                    v-model="form.residence_months"
+                    v-model.number="form.months_at_address"
                     type="number"
                     min="0"
                     max="11"
@@ -441,6 +479,11 @@ const prevStep = () => router.push('/solicitud/paso-2')
             <p v-else class="mt-1 text-xs text-gray-500">
               Ej: 2 años y 6 meses
             </p>
+          </div>
+
+          <!-- Auto-save indicator -->
+          <div v-if="onboardingStore.lastSavedAt" class="text-xs text-gray-400 text-right">
+            Guardado automáticamente
           </div>
         </template>
 
@@ -461,7 +504,7 @@ const prevStep = () => router.push('/solicitud/paso-2')
               variant="primary"
               size="lg"
               class="flex-1"
-              :loading="applicantStore.isSaving"
+              :loading="onboardingStore.isSaving"
             >
               Continuar →
             </AppButton>

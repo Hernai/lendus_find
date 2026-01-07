@@ -1,13 +1,40 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { api } from '@/services/api'
 import type {
   Application,
   SimulationResult,
   SimulationParams,
   CreateApplicationParams,
-  PaymentFrequency,
   Product
 } from '@/types'
+
+interface SimulatorResponse {
+  simulation: {
+    product_id: string
+    product_name: string
+    requested_amount: number
+    term_months: number
+    payment_frequency: string
+    annual_rate: number
+    opening_commission_rate: number
+    payment_amount: number
+    total_periods: number
+    total_to_pay: number
+    total_interest: number
+    opening_commission: number
+    net_amount: number
+    cat: number
+  }
+}
+
+interface ApplicationResponse {
+  data: Application
+}
+
+interface ApplicationListResponse {
+  data: Application[]
+}
 
 export const useApplicationStore = defineStore('application', () => {
   // State
@@ -49,91 +76,76 @@ export const useApplicationStore = defineStore('application', () => {
     isLoading.value = true
 
     try {
-      // TODO: Replace with actual API call
-      // const response = await api.post<SimulationResult>('/api/simulator', params)
-      // simulation.value = response.data
+      const response = await api.post<SimulatorResponse>('/simulator/calculate', {
+        product_id: params.product_id,
+        amount: params.amount,
+        term_months: params.term_months,
+        payment_frequency: params.payment_frequency
+      })
 
-      // Mock calculation (French amortization)
-      await new Promise(resolve => setTimeout(resolve, 500))
+      const data = response.data.simulation
 
-      const { amount, term_months, payment_frequency } = params
-      // Use product rates if available, otherwise defaults
-      const annualRate = (selectedProduct.value?.rules.annual_rate || 45) / 100
-      const openingCommissionRate = (selectedProduct.value?.rules.opening_commission || 2.5) / 100
-
-      const periodsPerYear = payment_frequency === 'WEEKLY' ? 52 : payment_frequency === 'BIWEEKLY' ? 26 : 12
-      const totalPeriods = payment_frequency === 'WEEKLY'
-        ? Math.round(term_months * 4.33)
-        : payment_frequency === 'BIWEEKLY'
-          ? term_months * 2
-          : term_months
-
-      const periodicRate = annualRate / periodsPerYear
-      const openingCommission = amount * openingCommissionRate
-
-      // French amortization formula
-      const periodicPayment = amount * (periodicRate * Math.pow(1 + periodicRate, totalPeriods)) /
-                             (Math.pow(1 + periodicRate, totalPeriods) - 1)
-
-      // Generate amortization table
-      const amortizationTable = []
-      let balance = amount
-      const startDate = new Date()
-      startDate.setMonth(startDate.getMonth() + 1)
-
-      for (let i = 1; i <= totalPeriods; i++) {
-        const interest = balance * periodicRate
-        const principal = periodicPayment - interest
-        const iva = interest * 0.16
-        const newBalance = Math.max(0, balance - principal)
-
-        const paymentDate = new Date(startDate)
-        if (payment_frequency === 'WEEKLY') {
-          paymentDate.setDate(paymentDate.getDate() + (i - 1) * 7)
-        } else if (payment_frequency === 'BIWEEKLY') {
-          paymentDate.setDate(paymentDate.getDate() + (i - 1) * 14)
-        } else {
-          paymentDate.setMonth(paymentDate.getMonth() + (i - 1))
-        }
-
-        const dateStr = paymentDate.toISOString().split('T')[0] ?? ''
-
-        amortizationTable.push({
-          number: i,
-          date: dateStr,
-          opening_balance: Math.round(balance * 100) / 100,
-          principal: Math.round(principal * 100) / 100,
-          interest: Math.round(interest * 100) / 100,
-          iva: Math.round(iva * 100) / 100,
-          payment: Math.round((periodicPayment + iva) * 100) / 100,
-          closing_balance: Math.round(newBalance * 100) / 100
-        })
-
-        balance = newBalance
-      }
-
-      const totalInterest = amortizationTable.reduce((sum, row) => sum + row.interest, 0)
-      const totalAmount = amount + totalInterest + openingCommission
-
-      // CAT calculation (simplified)
-      const cat = (Math.pow(totalAmount / amount, 1 / (term_months / 12)) - 1) * 100
-
+      // Map API response to frontend SimulationResult format
       simulation.value = {
-        requested_amount: amount,
-        term_months,
-        payment_frequency,
-        total_periods: totalPeriods,
-        annual_rate: annualRate * 100,
-        periodic_rate: Math.round(periodicRate * 10000) / 100,
-        opening_commission: Math.round(openingCommission * 100) / 100,
-        periodic_payment: Math.round(periodicPayment * 100) / 100,
-        total_interest: Math.round(totalInterest * 100) / 100,
-        total_amount: Math.round(totalAmount * 100) / 100,
-        cat: Math.round(cat * 10) / 10,
-        amortization_table: amortizationTable
+        requested_amount: data.requested_amount,
+        term_months: data.term_months,
+        payment_frequency: data.payment_frequency as 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY',
+        total_periods: data.total_periods,
+        annual_rate: data.annual_rate,
+        periodic_rate: data.annual_rate / (data.payment_frequency === 'WEEKLY' ? 52 : data.payment_frequency === 'BIWEEKLY' ? 26 : 12),
+        opening_commission: data.opening_commission,
+        periodic_payment: data.payment_amount,
+        total_interest: data.total_interest,
+        total_amount: data.total_to_pay,
+        cat: data.cat,
+        amortization_table: [] // Can be loaded separately if needed
       }
 
       return simulation.value
+    } catch (error) {
+      console.error('Error running simulation:', error)
+      throw error
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const loadApplications = async (): Promise<Application[]> => {
+    isLoading.value = true
+    try {
+      const response = await api.get<ApplicationListResponse>('/applications')
+      return response.data.data
+    } catch (error) {
+      console.error('Error loading applications:', error)
+      return []
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const loadApplication = async (id: string): Promise<Application | null> => {
+    // Validate ID before making API call
+    if (!id || id === 'null' || id === 'undefined') {
+      console.error('❌ loadApplication: Invalid ID:', id)
+      return null
+    }
+
+    isLoading.value = true
+    try {
+      const response = await api.get<ApplicationResponse>(`/applications/${id}`)
+      const app = response.data.data
+
+      // Validate the response has a valid ID
+      if (!app?.id || app.id === 'null') {
+        console.error('❌ loadApplication: API returned invalid application ID')
+        return null
+      }
+
+      currentApplication.value = app
+      return currentApplication.value
+    } catch (error) {
+      console.error('Error loading application:', error)
+      return null
     } finally {
       isLoading.value = false
     }
@@ -143,71 +155,95 @@ export const useApplicationStore = defineStore('application', () => {
     isLoading.value = true
 
     try {
-      // TODO: Replace with actual API call
-      // const response = await api.post<Application>('/api/applications', params)
-      // currentApplication.value = response.data
-
-      // Mock application
-      await new Promise(resolve => setTimeout(resolve, 500))
-
-      const now = new Date().toISOString()
-      const folio = `LEN-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 100000)).padStart(5, '0')}`
-
-      currentApplication.value = {
-        id: 'app-' + Date.now(),
-        tenant_id: 'tenant-001',
-        applicant_id: '',
+      console.log('📤 POST /applications with:', params)
+      const response = await api.post<ApplicationResponse>('/applications', {
         product_id: params.product_id,
-        folio,
-        status: 'DRAFT',
         requested_amount: params.requested_amount,
-        approved_amount: null,
         term_months: params.term_months,
         payment_frequency: params.payment_frequency,
-        dynamic_data: {},
-        simulation_data: simulation.value,
-        submitted_at: null,
-        approved_at: null,
-        webhook_sent_at: null,
-        created_at: now,
-        updated_at: now
+        simulation_data: simulation.value
+      })
+
+      console.log('📥 Response status:', response.status)
+      console.log('📥 Response data:', response.data)
+      console.log('📥 Response data.data:', response.data.data)
+      console.log('📥 Response data.data.id:', response.data.data?.id)
+
+      currentApplication.value = response.data.data
+
+      console.log('✅ currentApplication set to:', currentApplication.value?.id)
+
+      // Save to localStorage for persistence
+      if (currentApplication.value?.id) {
+        localStorage.setItem('current_application_id', currentApplication.value.id)
+        console.log('💾 Saved application ID to localStorage:', currentApplication.value.id)
       }
 
       // Reset step to 1
       currentStep.value = 1
 
       return currentApplication.value
+    } catch (error) {
+      console.error('❌ Error creating application:', error)
+      throw error
     } finally {
       isLoading.value = false
     }
   }
 
   const updateApplication = async (data: Partial<Application>) => {
-    if (!currentApplication.value) return
+    console.log('📝 updateApplication called, currentApplication:', currentApplication.value?.id || 'NULL')
+
+    if (!currentApplication.value) {
+      console.warn('⚠️ updateApplication: No currentApplication')
+      return
+    }
+
+    // Validate ID is not null, undefined, or the string "null"
+    const appId = currentApplication.value.id
+    if (!appId || appId === 'null' || appId === 'undefined') {
+      console.error('❌ updateApplication: currentApplication has invalid ID:', appId)
+      console.error('❌ currentApplication:', JSON.stringify(currentApplication.value))
+
+      // Try to recover from localStorage
+      const savedId = localStorage.getItem('current_application_id')
+      if (savedId && savedId !== 'null' && savedId !== 'undefined') {
+        console.log('🔄 Attempting to reload application from saved ID:', savedId)
+        const loaded = await loadApplication(savedId)
+        if (!loaded?.id) {
+          localStorage.removeItem('current_application_id')
+          throw new Error('Application ID is missing and recovery failed')
+        }
+        // Now currentApplication should have a valid ID, retry
+      } else {
+        throw new Error('Application ID is missing')
+      }
+    }
 
     isSaving.value = true
 
     try {
-      // TODO: Replace with actual API call
-      // await api.patch(`/api/applications/${currentApplication.value.id}`, data)
+      console.log('📤 PUT /applications/' + currentApplication.value!.id, data)
+      const response = await api.put<ApplicationResponse>(
+        `/applications/${currentApplication.value!.id}`,
+        data
+      )
 
-      await new Promise(resolve => setTimeout(resolve, 300))
-
-      currentApplication.value = {
-        ...currentApplication.value,
-        ...data,
-        updated_at: new Date().toISOString()
-      }
+      currentApplication.value = response.data.data
+      console.log('✅ Application updated:', currentApplication.value?.id)
+    } catch (error) {
+      console.error('❌ Error updating application:', error)
+      throw error
     } finally {
       isSaving.value = false
     }
   }
 
-  const saveStepData = async (stepData: Record<string, any>) => {
+  const saveStepData = async (stepData: Record<string, unknown>) => {
     // Create application if it doesn't exist
     if (!currentApplication.value) {
       await createApplication({
-        product_id: 'default-product',
+        product_id: selectedProduct.value?.id || 'default-product',
         requested_amount: simulation.value?.requested_amount || 10000,
         term_months: simulation.value?.term_months || 12,
         payment_frequency: simulation.value?.payment_frequency || 'MONTHLY'
@@ -228,20 +264,37 @@ export const useApplicationStore = defineStore('application', () => {
     isLoading.value = true
 
     try {
-      // TODO: Replace with actual API call
-      // const response = await api.post(`/api/applications/${currentApplication.value.id}/submit`)
-      // currentApplication.value = response.data
+      const response = await api.post<ApplicationResponse>(
+        `/applications/${currentApplication.value.id}/submit`
+      )
 
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
-      currentApplication.value = {
-        ...currentApplication.value,
-        status: 'SUBMITTED',
-        submitted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
+      currentApplication.value = response.data.data
 
       return currentApplication.value
+    } catch (error) {
+      console.error('Error submitting application:', error)
+      throw error
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const cancelApplication = async (): Promise<Application | null> => {
+    if (!currentApplication.value) return null
+
+    isLoading.value = true
+
+    try {
+      const response = await api.post<ApplicationResponse>(
+        `/applications/${currentApplication.value.id}/cancel`
+      )
+
+      currentApplication.value = response.data.data
+
+      return currentApplication.value
+    } catch (error) {
+      console.error('Error canceling application:', error)
+      throw error
     } finally {
       isLoading.value = false
     }
@@ -309,10 +362,13 @@ export const useApplicationStore = defineStore('application', () => {
     // Actions
     setSelectedProduct,
     runSimulation,
+    loadApplications,
+    loadApplication,
     createApplication,
     updateApplication,
     saveStepData,
     submitApplication,
+    cancelApplication,
     nextStep,
     prevStep,
     goToStep,

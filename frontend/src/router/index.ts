@@ -31,6 +31,7 @@ const ApplicationStatusView = () => import('@/views/dashboard/ApplicationStatusV
 const AdminLayout = () => import('@/views/admin/AdminLayout.vue')
 const AdminDashboard = () => import('@/views/admin/AdminDashboard.vue')
 const AdminApplications = () => import('@/views/admin/AdminApplications.vue')
+const AdminApplicationDetail = () => import('@/views/admin/AdminApplicationDetail.vue')
 
 const routes: RouteRecordRaw[] = [
   // Public routes
@@ -163,6 +164,11 @@ const routes: RouteRecordRaw[] = [
         path: 'solicitudes',
         name: 'admin-applications',
         component: AdminApplications
+      },
+      {
+        path: 'solicitudes/:id',
+        name: 'admin-application-detail',
+        component: AdminApplicationDetail
       }
     ]
   },
@@ -196,9 +202,12 @@ router.beforeEach(async (to, from, next) => {
 
   // DEV MODE: Auto-authenticate for development
   // This allows navigating directly to any step without logging in
-  if (import.meta.env.DEV && requiresAuth && !authStore.isAuthenticated) {
-    localStorage.setItem('auth_token', 'dev-token-' + Date.now())
-    await authStore.checkAuth()
+  if (import.meta.env.DEV && requiresAuth) {
+    if (!localStorage.getItem('auth_token')) {
+      localStorage.setItem('auth_token', 'dev-token-' + Date.now())
+    }
+    // Always re-check to update role based on current route context (admin vs user)
+    await authStore.checkAuth(to.path)
   }
 
   // If authenticated and trying to access guest-only page (like login)

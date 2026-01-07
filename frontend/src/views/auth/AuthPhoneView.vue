@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore, useTenantStore } from '@/stores'
 import { AppButton, AppInput } from '@/components/common'
@@ -13,13 +13,15 @@ const tenantStore = useTenantStore()
 const tenantName = computed(() => tenantStore.name || 'LendusFind')
 const method = computed<OtpMethod>(() => (route.query.method as OtpMethod) || 'sms')
 
+const phoneInput = ref<HTMLInputElement | null>(null)
 const phone = ref('')
 const error = ref('')
 
+const digitCount = computed(() => phone.value.replace(/\D/g, '').length)
+
 const isValidPhone = computed(() => {
   // Mexican phone: 10 digits
-  const cleaned = phone.value.replace(/\D/g, '')
-  return cleaned.length === 10
+  return digitCount.value === 10
 })
 
 const formatPhone = (value: string) => {
@@ -30,8 +32,17 @@ const formatPhone = (value: string) => {
   return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`
 }
 
-const handlePhoneInput = (value: string | number) => {
-  phone.value = formatPhone(String(value))
+const handlePhoneInput = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const formatted = formatPhone(input.value)
+  phone.value = formatted
+
+  // Force the input value to match the formatted value
+  nextTick(() => {
+    if (phoneInput.value) {
+      phoneInput.value.value = formatted
+    }
+  })
 }
 
 const handleSubmit = async () => {
@@ -96,14 +107,21 @@ const handleSubmit = async () => {
                 <span class="text-gray-600 font-medium">+52</span>
               </div>
               <input
+                ref="phoneInput"
                 type="tel"
                 :value="phone"
                 placeholder="(55) 1234-5678"
                 class="flex-1 px-4 py-4 text-lg focus:outline-none"
-                @input="handlePhoneInput(($event.target as HTMLInputElement).value)"
+                @input="handlePhoneInput"
               />
             </div>
             <p v-if="error" class="mt-2 text-sm text-red-600">{{ error }}</p>
+            <p v-else-if="digitCount > 0 && digitCount < 10" class="mt-2 text-sm text-gray-500">
+              {{ digitCount }}/10 dígitos
+            </p>
+            <p v-else-if="digitCount === 10" class="mt-2 text-sm text-green-600">
+              ✓ Número válido
+            </p>
           </div>
 
           <!-- Submit Button -->

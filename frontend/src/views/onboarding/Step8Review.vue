@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useApplicationStore, useApplicantStore } from '@/stores'
+import { useOnboardingStore, useApplicationStore } from '@/stores'
 import { AppButton, AppSignaturePad } from '@/components/common'
+import { api } from '@/services/api'
 
 const router = useRouter()
+const onboardingStore = useOnboardingStore()
 const applicationStore = useApplicationStore()
-const applicantStore = useApplicantStore()
+
+// Sync from store on mount
+onMounted(async () => {
+  await onboardingStore.init()
+})
 
 const isSubmitting = ref(false)
 const acceptTerms = ref(false)
@@ -16,10 +22,11 @@ const signature = ref<string | null>(null)
 const error = ref('')
 
 const simulation = computed(() => applicationStore.simulation)
-const applicant = computed(() => applicantStore.applicant)
-const application = computed(() => applicationStore.currentApplication)
+
+const hasApplication = computed(() => !!applicationStore.currentApplication)
 
 const canSubmit = computed(() =>
+  hasApplication.value &&
   acceptTerms.value &&
   acceptPrivacy.value &&
   acceptBuro.value &&
@@ -51,29 +58,61 @@ const handleSubmit = async () => {
     return
   }
 
+  // Ensure we have an application loaded
+  if (!applicationStore.currentApplication) {
+    error.value = 'No se encontró la solicitud. Por favor, regresa al inicio y vuelve a intentar.'
+    return
+  }
+
   isSubmitting.value = true
   error.value = ''
 
   try {
-    await applicationStore.saveStepData({
-      step8: {
-        accepted_terms: true,
-        accepted_privacy: true,
-        accepted_buro: true,
-        signature: signature.value,
-        accepted_at: new Date().toISOString()
+    // 1. Save signature to applicant (required for hasSigned() validation)
+    await api.post('/applicant/signature', {
+      signature: signature.value
+    })
+    console.log('✅ Signature saved to applicant')
+
+    // 2. Update application with consent data
+    await applicationStore.updateApplication({
+      dynamic_data: {
+        ...applicationStore.currentApplication.dynamic_data,
+        step8: {
+          accepted_terms: true,
+          accepted_privacy: true,
+          accepted_buro: true,
+          accepted_at: new Date().toISOString()
+        }
       }
     })
 
+    // 3. Submit the application
     const result = await applicationStore.submitApplication()
 
     if (result) {
+      // Clear onboarding data and saved application ID after successful submission
+      onboardingStore.reset()
+      localStorage.removeItem('current_application_id')
       router.push(`/solicitud/${result.id}/estado`)
     } else {
       error.value = 'Error al enviar la solicitud. Intenta de nuevo.'
     }
-  } catch (e) {
-    error.value = 'Error al enviar la solicitud. Intenta de nuevo.'
+  } catch (e: any) {
+    console.error('Failed to submit application:', e)
+    // Show detailed error if available
+    const errorMsg = e.response?.data?.message || e.response?.data?.errors
+    if (errorMsg) {
+      if (typeof errorMsg === 'object') {
+        // Format validation errors
+        const messages = Object.values(errorMsg).flat().join(', ')
+        error.value = messages || 'Error al enviar la solicitud'
+      } else {
+        error.value = errorMsg
+      }
+    } else {
+      error.value = 'Error al enviar la solicitud. Intenta de nuevo.'
+    }
   } finally {
     isSubmitting.value = false
   }
@@ -81,39 +120,47 @@ const handleSubmit = async () => {
 
 const prevStep = () => router.push('/solicitud/paso-7')
 
-const sections = computed(() => [
-  {
-    title: 'Datos personales',
-    items: [
-      { label: 'Nombre', value: applicant.value?.personal_data?.first_name ? `${applicant.value.personal_data.first_name} ${applicant.value.personal_data.last_name}` : '-' },
-      { label: 'CURP', value: applicant.value?.curp || '-' },
-      { label: 'RFC', value: applicant.value?.rfc || '-' }
-    ]
-  },
-  {
-    title: 'Domicilio',
-    items: [
-      { label: 'Dirección', value: applicant.value?.address ? `${applicant.value.address.street} ${applicant.value.address.ext_number}` : '-' },
-      { label: 'Colonia', value: applicant.value?.address?.neighborhood || '-' },
-      { label: 'C.P.', value: applicant.value?.address?.postal_code || '-' }
-    ]
-  },
-  {
-    title: 'Empleo',
-    items: [
-      { label: 'Ocupación', value: applicant.value?.employment_info?.employment_status || '-' },
-      { label: 'Ingreso mensual', value: applicant.value?.employment_info?.monthly_income ? formatMoney(applicant.value.employment_info.monthly_income) : '-' }
-    ]
-  },
-  {
-    title: 'Crédito',
-    items: [
-      { label: 'Monto', value: simulation.value ? formatMoney(simulation.value.requested_amount) : '-' },
-      { label: 'Plazo', value: simulation.value ? `${simulation.value.term_months} meses` : '-' },
-      { label: 'Pago', value: simulation.value ? `${formatMoney(simulation.value.periodic_payment)} ${frequencyLabels[simulation.value.payment_frequency]}` : '-' }
-    ]
-  }
-])
+const sections = computed(() => {
+  const data = onboardingStore.data
+  const step1 = data.step1
+  const step2 = data.step2
+  const step3 = data.step3
+  const step4 = data.step4
+
+  return [
+    {
+      title: 'Datos personales',
+      items: [
+        { label: 'Nombre', value: step1.first_name ? `${step1.first_name} ${step1.last_name} ${step1.second_last_name}`.trim() : '-' },
+        { label: 'CURP', value: step2.curp || '-' },
+        { label: 'RFC', value: step2.rfc || '-' }
+      ]
+    },
+    {
+      title: 'Domicilio',
+      items: [
+        { label: 'Dirección', value: step3.street ? `${step3.street} ${step3.ext_number}` : '-' },
+        { label: 'Colonia', value: step3.neighborhood || '-' },
+        { label: 'C.P.', value: step3.postal_code || '-' }
+      ]
+    },
+    {
+      title: 'Empleo',
+      items: [
+        { label: 'Ocupación', value: step4.employment_type || '-' },
+        { label: 'Ingreso mensual', value: step4.monthly_income ? formatMoney(step4.monthly_income) : '-' }
+      ]
+    },
+    {
+      title: 'Crédito',
+      items: [
+        { label: 'Monto', value: simulation.value ? formatMoney(simulation.value.requested_amount) : '-' },
+        { label: 'Plazo', value: simulation.value ? `${simulation.value.term_months} meses` : '-' },
+        { label: 'Pago', value: simulation.value ? `${formatMoney(simulation.value.periodic_payment)} ${frequencyLabels[simulation.value.payment_frequency]}` : '-' }
+      ]
+    }
+  ]
+})
 </script>
 
 <template>
@@ -122,7 +169,25 @@ const sections = computed(() => [
       <h1 class="text-2xl font-bold text-gray-900 mb-2">Revisa y envía</h1>
       <p class="text-gray-500 mb-6">Confirma que toda tu información es correcta.</p>
 
-      <div class="space-y-4">
+      <!-- Loading state -->
+      <div v-if="onboardingStore.isLoading" class="flex justify-center py-8">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+
+      <div v-else class="space-y-4">
+        <!-- Warning if no application loaded -->
+        <div v-if="!hasApplication" class="bg-yellow-50 rounded-xl p-4 flex gap-3 mb-4">
+          <svg class="w-6 h-6 text-yellow-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div class="text-sm text-yellow-800">
+            <p class="font-medium">No se encontró la solicitud</p>
+            <p class="text-yellow-700 mt-1">
+              Por favor, regresa al <router-link to="/" class="underline font-medium">inicio</router-link> y vuelve a simular tu crédito.
+            </p>
+          </div>
+        </div>
+
         <!-- Summary sections -->
         <div
           v-for="section in sections"

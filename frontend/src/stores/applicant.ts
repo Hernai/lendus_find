@@ -1,13 +1,33 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { api } from '@/services/api'
 import type {
   Applicant,
-  PersonalData,
-  ContactInfo,
   Address,
-  EmploymentInfo,
+  EmploymentRecord,
+  BankAccount,
   Reference
 } from '@/types'
+
+interface ApplicantResponse {
+  data: Applicant
+}
+
+interface AddressResponse {
+  data: Address
+}
+
+interface AddressListResponse {
+  data: Address[]
+}
+
+interface BankAccountResponse {
+  data: BankAccount
+}
+
+interface BankAccountListResponse {
+  data: BankAccount[]
+}
 
 export const useApplicantStore = defineStore('applicant', () => {
   // State
@@ -18,16 +38,16 @@ export const useApplicantStore = defineStore('applicant', () => {
 
   // Getters
   const fullName = computed(() => {
-    if (!applicant.value?.personal_data) return ''
-    const { first_name, middle_name, last_name, second_last_name } = applicant.value.personal_data
-    return [first_name, middle_name, last_name, second_last_name].filter(Boolean).join(' ')
+    if (!applicant.value) return ''
+    return applicant.value.full_name || `${applicant.value.first_name} ${applicant.value.last_name_1} ${applicant.value.last_name_2 || ''}`.trim()
   })
 
   const isKycVerified = computed(() => applicant.value?.kyc_status === 'VERIFIED')
 
   const hasMinimumReferences = computed(() => {
-    const familyRef = references.value.some(r => r.relationship === 'FAMILY')
-    const nonFamilyRef = references.value.some(r => r.relationship !== 'FAMILY')
+    const familyTypes = ['PADRE_MADRE', 'HERMANO', 'CONYUGE', 'HIJO', 'TIO', 'PRIMO', 'ABUELO']
+    const familyRef = references.value.some(r => familyTypes.includes(r.relationship))
+    const nonFamilyRef = references.value.some(r => !familyTypes.includes(r.relationship))
     return familyRef && nonFamilyRef && references.value.length >= 2
   })
 
@@ -36,148 +56,239 @@ export const useApplicantStore = defineStore('applicant', () => {
     isLoading.value = true
 
     try {
-      // TODO: Replace with actual API call
-      // const response = await api.get<Applicant>('/api/applicants/me')
-      // applicant.value = response.data
-
-      // Mock - no applicant data initially
+      const response = await api.get<ApplicantResponse>('/applicant')
+      applicant.value = response.data.data
+    } catch (error: unknown) {
+      // 404 means no applicant exists yet - that's ok
+      if ((error as { response?: { status?: number } })?.response?.status !== 404) {
+        console.error('Failed to load applicant:', error)
+      }
       applicant.value = null
-    } catch (error) {
-      console.error('Failed to load applicant:', error)
     } finally {
       isLoading.value = false
     }
   }
 
-  const updatePersonalData = async (data: PersonalData) => {
+  const createApplicant = async (data: Partial<Applicant>) => {
     isSaving.value = true
 
     try {
-      // TODO: Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 300))
-
-      if (!applicant.value) {
-        applicant.value = {
-          id: 'applicant-' + Date.now(),
-          tenant_id: 'tenant-001',
-          user_id: 'user-001',
-          type: 'PERSONA_FISICA',
-          rfc: '',
-          curp: null,
-          personal_data: data,
-          contact_info: { phone: '', email: '' },
-          address: {
-            street: '',
-            ext_number: '',
-            neighborhood: '',
-            postal_code: '',
-            municipality: '',
-            city: '',
-            state: '',
-            country: 'MX',
-            housing_type: 'RENTADA',
-            years_living: 0
-          },
-          employment_info: {
-            employment_status: 'EMPLEADO',
-            monthly_income: 0
-          },
-          kyc_status: 'PENDING',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-      } else {
-        applicant.value.personal_data = data
-        applicant.value.updated_at = new Date().toISOString()
-      }
+      const response = await api.post<ApplicantResponse>('/applicant', data)
+      applicant.value = response.data.data
+      return applicant.value
+    } catch (error) {
+      console.error('Failed to create applicant:', error)
+      throw error
     } finally {
       isSaving.value = false
     }
   }
 
-  const updateContactInfo = async (data: ContactInfo) => {
-    if (!applicant.value) return
-
+  const updateApplicant = async (data: Partial<Applicant>) => {
     isSaving.value = true
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 300))
-      applicant.value.contact_info = data
-      applicant.value.updated_at = new Date().toISOString()
+      const response = await api.put<ApplicantResponse>('/applicant', data)
+      applicant.value = response.data.data
+      return applicant.value
+    } catch (error) {
+      console.error('Failed to update applicant:', error)
+      throw error
     } finally {
       isSaving.value = false
     }
   }
 
-  const updateAddress = async (data: Address) => {
-    if (!applicant.value) return
-
+  const updatePersonalData = async (data: {
+    first_name: string
+    last_name_1: string
+    last_name_2?: string
+    birth_date: string
+    gender: 'M' | 'F'
+    nationality: string
+    marital_status: string
+    curp?: string
+    rfc?: string
+  }) => {
     isSaving.value = true
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 300))
-      applicant.value.address = data
-      applicant.value.updated_at = new Date().toISOString()
+      const response = await api.put<ApplicantResponse>('/applicant/personal-data', data)
+      applicant.value = response.data.data
+      return applicant.value
+    } catch (error) {
+      console.error('Failed to update personal data:', error)
+      throw error
     } finally {
       isSaving.value = false
     }
   }
 
-  const updateEmploymentInfo = async (data: EmploymentInfo) => {
-    if (!applicant.value) return
-
+  const updateAddress = async (data: Partial<Address>) => {
     isSaving.value = true
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 300))
-      applicant.value.employment_info = data
-      applicant.value.updated_at = new Date().toISOString()
+      const response = await api.put<ApplicantResponse>('/applicant/address', data)
+      applicant.value = response.data.data
+      return applicant.value
+    } catch (error) {
+      console.error('Failed to update address:', error)
+      throw error
     } finally {
       isSaving.value = false
     }
   }
 
-  const updateIdentification = async (rfc: string, curp: string) => {
-    if (!applicant.value) return
-
-    isSaving.value = true
-
+  const loadAddresses = async (): Promise<Address[]> => {
     try {
-      await new Promise(resolve => setTimeout(resolve, 300))
-      applicant.value.rfc = rfc
-      applicant.value.curp = curp
-      applicant.value.updated_at = new Date().toISOString()
+      const response = await api.get<AddressListResponse>('/applicant/addresses')
+      return response.data.data
+    } catch (error) {
+      console.error('Failed to load addresses:', error)
+      return []
+    }
+  }
+
+  const createAddress = async (data: Partial<Address>): Promise<Address> => {
+    isSaving.value = true
+    try {
+      const response = await api.post<AddressResponse>('/applicant/addresses', data)
+      return response.data.data
+    } catch (error) {
+      console.error('Failed to create address:', error)
+      throw error
     } finally {
       isSaving.value = false
     }
   }
 
-  const addReference = async (reference: Omit<Reference, 'id' | 'applicant_id'>) => {
+  const updateEmployment = async (data: Partial<EmploymentRecord>) => {
     isSaving.value = true
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 300))
-
-      const newReference: Reference = {
-        id: 'ref-' + Date.now(),
-        applicant_id: applicant.value?.id ?? '',
-        ...reference
-      }
-
-      references.value.push(newReference)
+      const response = await api.put<ApplicantResponse>('/applicant/employment', data)
+      applicant.value = response.data.data
+      return applicant.value
+    } catch (error) {
+      console.error('Failed to update employment:', error)
+      throw error
     } finally {
       isSaving.value = false
     }
   }
 
-  const removeReference = async (id: string) => {
+  const updateBankAccount = async (data: Partial<BankAccount>) => {
     isSaving.value = true
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 300))
-      references.value = references.value.filter(r => r.id !== id)
+      const response = await api.put<ApplicantResponse>('/applicant/bank-account', data)
+      applicant.value = response.data.data
+      return applicant.value
+    } catch (error) {
+      console.error('Failed to update bank account:', error)
+      throw error
     } finally {
       isSaving.value = false
+    }
+  }
+
+  const loadBankAccounts = async (): Promise<BankAccount[]> => {
+    try {
+      const response = await api.get<BankAccountListResponse>('/applicant/bank-accounts')
+      return response.data.data
+    } catch (error) {
+      console.error('Failed to load bank accounts:', error)
+      return []
+    }
+  }
+
+  const createBankAccount = async (data: Partial<BankAccount>): Promise<BankAccount> => {
+    isSaving.value = true
+    try {
+      const response = await api.post<BankAccountResponse>('/applicant/bank-accounts', data)
+      return response.data.data
+    } catch (error) {
+      console.error('Failed to create bank account:', error)
+      throw error
+    } finally {
+      isSaving.value = false
+    }
+  }
+
+  const validateClabe = async (clabe: string): Promise<{ valid: boolean; bank_name?: string; error?: string }> => {
+    try {
+      const response = await api.post<{ data: { valid: boolean; bank_name?: string; error?: string } }>(
+        '/applicant/validate-clabe',
+        { clabe }
+      )
+      return response.data.data
+    } catch (error) {
+      console.error('Failed to validate CLABE:', error)
+      return { valid: false, error: 'Error validando CLABE' }
+    }
+  }
+
+  const updateIdentification = async (rfc: string, curp: string, extraData?: Record<string, unknown>) => {
+    isSaving.value = true
+
+    try {
+      const response = await api.put<ApplicantResponse>('/applicant/personal-data', {
+        // Only send identification fields (personal-data is flexible)
+        curp,
+        rfc,
+        // Include any extra INE/passport data
+        ...extraData
+      })
+      applicant.value = response.data.data
+      return applicant.value
+    } catch (error) {
+      console.error('Failed to update identification:', error)
+      throw error
+    } finally {
+      isSaving.value = false
+    }
+  }
+
+  const saveSignature = async (signatureData: string) => {
+    isSaving.value = true
+
+    try {
+      const response = await api.post<ApplicantResponse>('/applicant/signature', {
+        signature: signatureData
+      })
+      applicant.value = response.data.data
+      return applicant.value
+    } catch (error) {
+      console.error('Failed to save signature:', error)
+      throw error
+    } finally {
+      isSaving.value = false
+    }
+  }
+
+  const addReference = async (applicationId: string, reference: Omit<Reference, 'id' | 'applicant_id' | 'application_id'>) => {
+    isSaving.value = true
+
+    try {
+      const response = await api.post<{ data: Reference }>(`/applications/${applicationId}/references`, reference)
+      references.value.push(response.data.data)
+      return response.data.data
+    } catch (error) {
+      console.error('Failed to add reference:', error)
+      throw error
+    } finally {
+      isSaving.value = false
+    }
+  }
+
+  const loadReferences = async (applicationId: string) => {
+    try {
+      const response = await api.get<{ data: Reference[] }>(`/applications/${applicationId}/references`)
+      references.value = response.data.data
+      return references.value
+    } catch (error) {
+      console.error('Failed to load references:', error)
+      return []
     }
   }
 
@@ -200,13 +311,21 @@ export const useApplicantStore = defineStore('applicant', () => {
     hasMinimumReferences,
     // Actions
     loadApplicant,
+    createApplicant,
+    updateApplicant,
     updatePersonalData,
-    updateContactInfo,
     updateAddress,
-    updateEmploymentInfo,
+    loadAddresses,
+    createAddress,
+    updateEmployment,
+    updateBankAccount,
+    loadBankAccounts,
+    createBankAccount,
+    validateClabe,
     updateIdentification,
+    saveSignature,
     addReference,
-    removeReference,
+    loadReferences,
     reset
   }
 })

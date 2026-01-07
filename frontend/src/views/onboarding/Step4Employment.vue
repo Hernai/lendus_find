@@ -1,108 +1,122 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useApplicantStore, useApplicationStore } from '@/stores'
+import { useOnboardingStore } from '@/stores'
 import { AppButton, AppInput, AppSelect, AppRadioGroup } from '@/components/common'
 
 const router = useRouter()
-const applicantStore = useApplicantStore()
-const applicationStore = useApplicationStore()
+const onboardingStore = useOnboardingStore()
 
 const form = reactive({
-  occupation_type: '' as 'EMPLEADO' | 'INDEPENDIENTE' | 'EMPRESARIO' | 'JUBILADO' | 'OTRO' | '',
+  employment_type: '' as 'EMPLEADO' | 'INDEPENDIENTE' | 'EMPRESARIO' | 'PENSIONADO' | 'ESTUDIANTE' | 'HOGAR' | 'DESEMPLEADO' | 'OTRO' | '',
   company_name: '',
   job_title: '',
-  work_phone: '',
-  monthly_income: '',
-  income_frequency: '' as 'SEMANAL' | 'QUINCENAL' | 'MENSUAL' | '',
-  years_employed: ''
+  company_phone: '',
+  company_address: '',
+  monthly_income: 0,
+  seniority_years: 0
 })
 
 const errors = reactive({
-  occupation_type: '',
+  employment_type: '',
   company_name: '',
   job_title: '',
   monthly_income: '',
-  income_frequency: '',
-  years_employed: ''
+  seniority_years: ''
 })
 
-const occupationOptions = [
+const employmentTypeOptions = [
   { value: 'EMPLEADO', label: 'Empleado' },
   { value: 'INDEPENDIENTE', label: 'Trabajador independiente' },
   { value: 'EMPRESARIO', label: 'Dueño de negocio' },
-  { value: 'JUBILADO', label: 'Jubilado/Pensionado' },
+  { value: 'PENSIONADO', label: 'Jubilado/Pensionado' },
+  { value: 'ESTUDIANTE', label: 'Estudiante' },
+  { value: 'HOGAR', label: 'Ama de casa' },
+  { value: 'DESEMPLEADO', label: 'Desempleado' },
   { value: 'OTRO', label: 'Otro' }
 ]
 
-const incomeFrequencyOptions = [
-  { value: 'SEMANAL', label: 'Semanal' },
-  { value: 'QUINCENAL', label: 'Quincenal' },
-  { value: 'MENSUAL', label: 'Mensual' }
+const seniorityOptions = [
+  { value: 0, label: 'Menos de 1 año' },
+  { value: 1, label: '1 año' },
+  { value: 2, label: '2 años' },
+  { value: 3, label: '3 años' },
+  { value: 5, label: '5 años' },
+  { value: 10, label: '10+ años' }
 ]
 
-const yearsOptions = [
-  { value: '1', label: 'Menos de 1 año' },
-  { value: '2', label: '1-2 años' },
-  { value: '5', label: '2-5 años' },
-  { value: '10', label: '5-10 años' },
-  { value: '11', label: 'Más de 10 años' }
-]
+// Sync form from store on mount
+onMounted(async () => {
+  await onboardingStore.init()
 
-const formatCurrency = (value: string): string => {
-  const num = value.replace(/\D/g, '')
-  return num ? parseInt(num).toLocaleString('es-MX') : ''
+  const step4 = onboardingStore.data.step4
+  form.employment_type = (step4.employment_type || '') as typeof form.employment_type
+  form.company_name = step4.company_name || ''
+  form.job_title = step4.job_title || ''
+  form.company_phone = step4.company_phone || ''
+  form.company_address = step4.company_address || ''
+  form.monthly_income = step4.monthly_income || 0
+  form.seniority_years = step4.seniority_years || 0
+})
+
+// Auto-save to store when form changes
+watch(form, () => {
+  onboardingStore.updateStepData('step4', {
+    employment_type: form.employment_type,
+    company_name: form.company_name,
+    job_title: form.job_title,
+    company_phone: form.company_phone,
+    company_address: form.company_address,
+    monthly_income: form.monthly_income,
+    seniority_years: form.seniority_years
+  })
+}, { deep: true })
+
+const formattedIncome = () => {
+  return form.monthly_income ? form.monthly_income.toLocaleString('es-MX') : ''
 }
 
 const handleIncomeInput = (event: Event) => {
   const target = event.target as HTMLInputElement
-  form.monthly_income = formatCurrency(target.value)
+  const num = target.value.replace(/\D/g, '')
+  form.monthly_income = num ? parseInt(num) : 0
 }
 
 const validate = () => {
   let isValid = true
 
-  if (!form.occupation_type) {
-    errors.occupation_type = 'Selecciona tu ocupación'
+  if (!form.employment_type) {
+    errors.employment_type = 'Selecciona tu ocupación'
     isValid = false
   } else {
-    errors.occupation_type = ''
+    errors.employment_type = ''
   }
 
-  if (form.occupation_type === 'EMPLEADO' && !form.company_name.trim()) {
-    errors.company_name = 'El nombre de la empresa es requerido'
-    isValid = false
+  // Only require company details for employed workers
+  if (form.employment_type === 'EMPLEADO') {
+    if (!form.company_name.trim()) {
+      errors.company_name = 'El nombre de la empresa es requerido'
+      isValid = false
+    } else {
+      errors.company_name = ''
+    }
+
+    if (!form.job_title.trim()) {
+      errors.job_title = 'El puesto es requerido'
+      isValid = false
+    } else {
+      errors.job_title = ''
+    }
   } else {
     errors.company_name = ''
-  }
-
-  if (form.occupation_type === 'EMPLEADO' && !form.job_title.trim()) {
-    errors.job_title = 'El puesto es requerido'
-    isValid = false
-  } else {
     errors.job_title = ''
   }
 
-  const income = parseInt(form.monthly_income.replace(/\D/g, ''))
-  if (!income || income < 1000) {
+  if (form.monthly_income < 1000) {
     errors.monthly_income = 'Ingresa un ingreso válido (mínimo $1,000)'
     isValid = false
   } else {
     errors.monthly_income = ''
-  }
-
-  if (!form.income_frequency) {
-    errors.income_frequency = 'Selecciona la frecuencia de tus ingresos'
-    isValid = false
-  } else {
-    errors.income_frequency = ''
-  }
-
-  if (form.occupation_type === 'EMPLEADO' && !form.years_employed) {
-    errors.years_employed = 'Selecciona el tiempo en tu empleo actual'
-    isValid = false
-  } else {
-    errors.years_employed = ''
   }
 
   return isValid
@@ -111,37 +125,24 @@ const validate = () => {
 const handleSubmit = async () => {
   if (!validate()) return
 
-  const income = parseInt(form.monthly_income.replace(/\D/g, ''))
+  try {
+    // Normalize data to uppercase before saving
+    onboardingStore.updateStepData('step4', {
+      employment_type: form.employment_type,
+      company_name: form.company_name.toUpperCase(),
+      job_title: form.job_title.toUpperCase(),
+      company_phone: form.company_phone,
+      company_address: form.company_address,
+      monthly_income: form.monthly_income,
+      seniority_years: form.seniority_years
+    })
 
-  const employmentStatusMap: Record<string, 'EMPLEADO' | 'INDEPENDIENTE' | 'JUBILADO' | 'SIN_EMPLEO'> = {
-    'EMPLEADO': 'EMPLEADO',
-    'INDEPENDIENTE': 'INDEPENDIENTE',
-    'EMPRESARIO': 'INDEPENDIENTE',
-    'JUBILADO': 'JUBILADO',
-    'OTRO': 'SIN_EMPLEO'
+    // Save step 4 explicitly
+    await onboardingStore.completeStep(4)
+    router.push('/solicitud/paso-5')
+  } catch (e) {
+    console.error('Failed to save step 4:', e)
   }
-
-  await applicantStore.updateEmploymentInfo({
-    employment_status: employmentStatusMap[form.occupation_type] || 'EMPLEADO',
-    company_name: form.company_name?.toUpperCase(),
-    position: form.job_title?.toUpperCase(),
-    company_phone: form.work_phone || undefined,
-    monthly_income: income,
-    seniority_months: (parseInt(form.years_employed) || 0) * 12
-  })
-
-  await applicationStore.saveStepData({
-    step4: {
-      occupation_type: form.occupation_type,
-      company_name: form.company_name,
-      job_title: form.job_title,
-      monthly_income: income,
-      income_frequency: form.income_frequency,
-      years_employed: parseInt(form.years_employed) || null
-    }
-  })
-
-  router.push('/solicitud/paso-5')
 }
 
 const prevStep = () => router.push('/solicitud/paso-3')
@@ -153,17 +154,22 @@ const prevStep = () => router.push('/solicitud/paso-3')
       <h1 class="text-2xl font-bold text-gray-900 mb-2">¿A qué te dedicas?</h1>
       <p class="text-gray-500 mb-6">Cuéntanos sobre tu fuente de ingresos.</p>
 
-      <form class="space-y-4" @submit.prevent="handleSubmit">
+      <!-- Loading state -->
+      <div v-if="onboardingStore.isLoading" class="flex justify-center py-8">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+
+      <form v-else class="space-y-4" @submit.prevent="handleSubmit">
         <AppSelect
-          v-model="form.occupation_type"
-          :options="occupationOptions"
+          v-model="form.employment_type"
+          :options="employmentTypeOptions"
           label="Tipo de ocupación"
           placeholder="Selecciona"
-          :error="errors.occupation_type"
+          :error="errors.employment_type"
           required
         />
 
-        <template v-if="form.occupation_type === 'EMPLEADO'">
+        <template v-if="form.employment_type === 'EMPLEADO'">
           <AppInput
             v-model="form.company_name"
             label="Nombre de la empresa"
@@ -183,7 +189,7 @@ const prevStep = () => router.push('/solicitud/paso-3')
           />
 
           <AppInput
-            v-model="form.work_phone"
+            v-model="form.company_phone"
             type="tel"
             label="Teléfono de trabajo (opcional)"
             placeholder="55 1234 5678"
@@ -191,55 +197,48 @@ const prevStep = () => router.push('/solicitud/paso-3')
           />
 
           <AppSelect
-            v-model="form.years_employed"
-            :options="yearsOptions"
+            v-model.number="form.seniority_years"
+            :options="seniorityOptions"
             label="Antigüedad en empleo actual"
             placeholder="Selecciona"
-            :error="errors.years_employed"
-            required
+            :error="errors.seniority_years"
           />
         </template>
 
-        <template v-else-if="form.occupation_type === 'INDEPENDIENTE' || form.occupation_type === 'EMPRESARIO'">
+        <template v-else-if="form.employment_type === 'INDEPENDIENTE' || form.employment_type === 'EMPRESARIO'">
           <AppInput
             v-model="form.company_name"
-            :label="form.occupation_type === 'EMPRESARIO' ? 'Nombre del negocio' : 'Descripción de actividad'"
-            :placeholder="form.occupation_type === 'EMPRESARIO' ? 'MI NEGOCIO S.A.' : 'SERVICIOS PROFESIONALES'"
+            :label="form.employment_type === 'EMPRESARIO' ? 'Nombre del negocio' : 'Descripción de actividad'"
+            :placeholder="form.employment_type === 'EMPRESARIO' ? 'MI NEGOCIO S.A.' : 'SERVICIOS PROFESIONALES'"
             uppercase
           />
         </template>
 
-        <AppRadioGroup
-          v-model="form.income_frequency"
-          :options="incomeFrequencyOptions"
-          label="¿Cada cuándo recibes tu ingreso?"
-          :error="errors.income_frequency"
-          required
-        />
-
         <div class="relative">
           <label class="block text-sm font-medium text-gray-700 mb-1">
-            ¿Cuánto recibes? <span class="text-red-500">*</span>
+            ¿Cuánto ganas al mes? <span class="text-red-500">*</span>
           </label>
           <div class="relative">
             <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
             <input
-              :value="form.monthly_income"
+              :value="formattedIncome()"
               type="text"
               inputmode="numeric"
               placeholder="15,000"
-              class="w-full pl-7 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              class="w-full pl-7 pr-16 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               :class="{ 'border-red-500': errors.monthly_income }"
               @input="handleIncomeInput"
             >
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">MXN</span>
+            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">MXN/mes</span>
           </div>
-          <p v-if="form.income_frequency && !errors.monthly_income" class="mt-1 text-xs text-gray-500">
-            Ingreso {{ form.income_frequency === 'SEMANAL' ? 'semanal' : form.income_frequency === 'QUINCENAL' ? 'quincenal' : 'mensual' }}
-          </p>
           <p v-if="errors.monthly_income" class="mt-1 text-sm text-red-500">
             {{ errors.monthly_income }}
           </p>
+        </div>
+
+        <!-- Auto-save indicator -->
+        <div v-if="onboardingStore.lastSavedAt" class="text-xs text-gray-400 text-right">
+          Guardado automáticamente
         </div>
 
         <!-- Sticky Footer -->
@@ -259,7 +258,7 @@ const prevStep = () => router.push('/solicitud/paso-3')
               variant="primary"
               size="lg"
               class="flex-1"
-              :loading="applicantStore.isSaving"
+              :loading="onboardingStore.isSaving"
             >
               Continuar →
             </AppButton>

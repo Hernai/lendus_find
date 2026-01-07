@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useApplicationStore } from '@/stores'
+import { useOnboardingStore, useApplicationStore } from '@/stores'
 import { AppButton, AppInput, AppSelect } from '@/components/common'
+import { api } from '@/services/api'
 
 const router = useRouter()
+const onboardingStore = useOnboardingStore()
 const applicationStore = useApplicationStore()
+const isSaving = ref(false)
 
 interface Reference {
   first_name: string
@@ -21,6 +24,41 @@ const references = reactive<Reference[]>([
 ])
 
 const errors = reactive<{ [key: string]: string }>({})
+
+// Sync from store on mount
+onMounted(async () => {
+  await onboardingStore.init()
+
+  const step7 = onboardingStore.data.step7
+  if (step7.references && step7.references.length > 0) {
+    step7.references.forEach((ref, index) => {
+      if (references[index]) {
+        references[index].first_name = ref.first_name || ''
+        references[index].last_name_1 = ref.last_name_1 || ''
+        references[index].last_name_2 = ref.last_name_2 || ''
+        references[index].relationship = ref.relationship || ''
+        references[index].phone = ref.phone || ''
+      }
+    })
+  }
+})
+
+// Auto-save to store when references change
+watch(
+  () => references.map(r => ({ ...r })),
+  () => {
+    onboardingStore.updateStepData('step7', {
+      references: references.map(ref => ({
+        first_name: ref.first_name,
+        last_name_1: ref.last_name_1,
+        last_name_2: ref.last_name_2,
+        phone: ref.phone,
+        relationship: ref.relationship
+      }))
+    })
+  },
+  { deep: true }
+)
 
 const familyRelationshipOptions = [
   { value: 'PADRE_MADRE', label: 'Padre/Madre' },
@@ -128,21 +166,54 @@ const handleSubmit = async () => {
 
   if (!validate()) return
 
-  await applicationStore.saveStepData({
-    step7: {
+  // Verify we have an application
+  const appId = applicationStore.currentApplication?.id
+  if (!appId || appId === 'null' || appId === 'undefined') {
+    errors['general'] = 'No se encontró la solicitud. Por favor, regresa al inicio.'
+    return
+  }
+
+  isSaving.value = true
+
+  try {
+    // Save each reference to backend via API
+    for (const ref of references) {
+      const fullName = [
+        ref.first_name.toUpperCase(),
+        ref.last_name_1.toUpperCase(),
+        ref.last_name_2.toUpperCase()
+      ].filter(Boolean).join(' ')
+
+      await api.post(`/applications/${appId}/references`, {
+        full_name: fullName,
+        relationship: ref.relationship,
+        phone: ref.phone.replace(/\D/g, '')
+      })
+    }
+
+    // Update store with normalized data
+    onboardingStore.updateStepData('step7', {
       references: references.map(ref => ({
         first_name: ref.first_name.toUpperCase(),
         last_name_1: ref.last_name_1.toUpperCase(),
         last_name_2: ref.last_name_2.toUpperCase(),
-        full_name: `${ref.first_name} ${ref.last_name_1} ${ref.last_name_2}`.toUpperCase().trim(),
-        relationship: ref.relationship,
-        type: getTypeFromRelationship(ref.relationship),
-        phone: ref.phone.replace(/\D/g, '')
+        phone: ref.phone.replace(/\D/g, ''),
+        relationship: ref.relationship
       }))
-    }
-  })
+    })
 
-  router.push('/solicitud/paso-8')
+    // Mark step as completed in store
+    if (!onboardingStore.completedSteps.includes(7)) {
+      onboardingStore.completedSteps.push(7)
+    }
+
+    router.push('/solicitud/paso-8')
+  } catch (e: any) {
+    console.error('Failed to save step 7:', e)
+    errors['general'] = e.response?.data?.message || 'Error al guardar las referencias'
+  } finally {
+    isSaving.value = false
+  }
 }
 
 const prevStep = () => router.push('/solicitud/paso-6')
@@ -154,12 +225,18 @@ const prevStep = () => router.push('/solicitud/paso-6')
       <h1 class="text-2xl font-bold text-gray-900 mb-2">Referencias personales</h1>
       <p class="text-gray-500 mb-6">Proporciona 2 referencias: 1 familiar y 1 no familiar que no vivan contigo.</p>
 
-      <!-- Error general -->
-      <div v-if="errors['general']" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl">
-        <p class="text-sm text-red-600">{{ errors['general'] }}</p>
+      <!-- Loading state -->
+      <div v-if="onboardingStore.isLoading" class="flex justify-center py-8">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
       </div>
 
-      <form class="space-y-8" @submit.prevent="handleSubmit">
+      <template v-else>
+        <!-- Error general -->
+        <div v-if="errors['general']" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl">
+          <p class="text-sm text-red-600">{{ errors['general'] }}</p>
+        </div>
+
+        <form class="space-y-8" @submit.prevent="handleSubmit">
         <div
           v-for="(ref, index) in references"
           :key="index"
@@ -249,6 +326,11 @@ const prevStep = () => router.push('/solicitud/paso-6')
           </p>
         </div>
 
+        <!-- Auto-save indicator -->
+        <div v-if="onboardingStore.lastSavedAt" class="text-xs text-gray-400 text-right">
+          Guardado automáticamente
+        </div>
+
         <!-- Sticky Footer -->
         <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
           <div class="max-w-md mx-auto flex gap-3">
@@ -266,13 +348,14 @@ const prevStep = () => router.push('/solicitud/paso-6')
               variant="primary"
               size="lg"
               class="flex-1"
-              :loading="applicationStore.isSaving"
+              :loading="isSaving"
             >
               Continuar →
             </AppButton>
           </div>
         </div>
       </form>
+      </template>
     </div>
   </div>
 </template>

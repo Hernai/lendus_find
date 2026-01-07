@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useApplicantStore } from '@/stores'
+import { useOnboardingStore } from '@/stores'
 import { AppButton, AppInput, AppRadioGroup, AppSelect } from '@/components/common'
 
 const router = useRouter()
-const applicantStore = useApplicantStore()
+const onboardingStore = useOnboardingStore()
 
+// Local form state (reactive copy from store)
 const form = reactive({
   first_name: '',
-  middle_name: '',
   last_name: '',
   second_last_name: '',
   birth_date: '',
@@ -28,6 +28,41 @@ const errors = reactive({
   birth_state: '',
   nationality: ''
 })
+
+// Sync form from store on mount
+onMounted(async () => {
+  await onboardingStore.init()
+
+  const step1 = onboardingStore.data.step1
+  form.first_name = step1.first_name
+  form.last_name = step1.last_name
+  form.second_last_name = step1.second_last_name
+  form.birth_date = step1.birth_date
+  form.gender = step1.gender
+  form.birth_state = step1.birth_state
+  form.nationality = step1.nationality
+
+  // Determine if mexican based on nationality
+  if (step1.nationality === 'MX' || step1.nationality === '') {
+    form.is_mexican = step1.first_name ? 'SI' : ''
+  } else {
+    form.is_mexican = 'NO'
+  }
+})
+
+// Auto-save to store when form changes (debounced via watch)
+watch(form, () => {
+  onboardingStore.updateStepData('step1', {
+    first_name: form.first_name,
+    last_name: form.last_name,
+    second_last_name: form.second_last_name,
+    birth_date: form.birth_date,
+    birth_state: form.birth_state,
+    gender: form.gender,
+    nationality: form.is_mexican === 'SI' ? 'MX' : form.nationality,
+    marital_status: onboardingStore.data.step1.marital_status || 'SOLTERO'
+  })
+}, { deep: true })
 
 const genderOptions = [
   { value: 'M', label: 'Masculino' },
@@ -166,19 +201,13 @@ const validate = () => {
 const handleSubmit = async () => {
   if (!validate()) return
 
-  await applicantStore.updatePersonalData({
-    first_name: form.first_name.toUpperCase(),
-    middle_name: form.middle_name?.toUpperCase(),
-    last_name: form.last_name.toUpperCase(),
-    second_last_name: form.second_last_name?.toUpperCase(),
-    birth_date: form.birth_date,
-    birth_state: isMexican.value ? form.birth_state : 'EXTRANJERO',
-    gender: form.gender as 'M' | 'F',
-    nationality: isMexican.value ? 'MX' : form.nationality,
-    marital_status: 'SOLTERO'
-  })
-
-  router.push('/solicitud/paso-2')
+  try {
+    // Save step 1 explicitly (not using nextStep to avoid currentStep sync issues)
+    await onboardingStore.completeStep(1)
+    router.push('/solicitud/paso-2')
+  } catch (e) {
+    console.error('Failed to save step 1:', e)
+  }
 }
 </script>
 
@@ -187,7 +216,12 @@ const handleSubmit = async () => {
     <div class="max-w-md mx-auto">
       <h1 class="text-2xl font-bold text-gray-900 mb-6">¿Cómo te llamas?</h1>
 
-      <form class="space-y-4" @submit.prevent="handleSubmit">
+      <!-- Loading state -->
+      <div v-if="onboardingStore.isLoading" class="flex justify-center py-8">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+
+      <form v-else class="space-y-4" @submit.prevent="handleSubmit">
         <AppInput
           v-model="form.first_name"
           label="Nombre(s)"
@@ -274,6 +308,11 @@ const handleSubmit = async () => {
           </div>
         </div>
 
+        <!-- Auto-save indicator -->
+        <div v-if="onboardingStore.lastSavedAt" class="text-xs text-gray-400 text-right">
+          Guardado automáticamente
+        </div>
+
         <!-- Sticky Footer -->
         <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
           <div class="max-w-md mx-auto">
@@ -282,7 +321,7 @@ const handleSubmit = async () => {
               variant="primary"
               size="lg"
               full-width
-              :loading="applicantStore.isSaving"
+              :loading="onboardingStore.isSaving"
             >
               Continuar →
             </AppButton>
