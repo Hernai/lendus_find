@@ -48,6 +48,7 @@ const AdminLayout = () => import('@/views/admin/panel/AdminLayout.vue')
 const AdminDashboard = () => import('@/views/admin/panel/AdminDashboard.vue')
 const AdminApplications = () => import('@/views/admin/panel/AdminApplications.vue')
 const AdminApplicationDetail = () => import('@/views/admin/panel/AdminApplicationDetail.vue')
+const AdminUnderConstruction = () => import('@/views/admin/panel/AdminUnderConstruction.vue')
 
 const routes: RouteRecordRaw[] = [
   // Public routes
@@ -211,6 +212,21 @@ const routes: RouteRecordRaw[] = [
         path: 'solicitudes/:id',
         name: 'admin-application-detail',
         component: AdminApplicationDetail
+      },
+      {
+        path: 'productos',
+        name: 'admin-products',
+        component: AdminUnderConstruction
+      },
+      {
+        path: 'usuarios',
+        name: 'admin-users',
+        component: AdminUnderConstruction
+      },
+      {
+        path: 'reportes',
+        name: 'admin-reports',
+        component: AdminUnderConstruction
       }
     ]
   },

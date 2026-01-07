@@ -41,8 +41,10 @@ class Applicant extends Model
         'birth_country',
         // Contact Info
         'phone',
+        'phone_verified_at',
         'phone_secondary',
         'email',
+        'email_verified_at',
         // Additional Info
         'education_level',
         'dependents_count',
@@ -50,6 +52,9 @@ class Applicant extends Model
         'kyc_status',
         'kyc_data',
         'kyc_verified_at',
+        // Identity Verification
+        'identity_verified_at',
+        'identity_verified_by',
         // Signature
         'signature_base64',
         'signature_date',
@@ -63,6 +68,9 @@ class Applicant extends Model
         'dependents_count' => 'integer',
         'kyc_data' => 'array',
         'kyc_verified_at' => 'datetime',
+        'phone_verified_at' => 'datetime',
+        'email_verified_at' => 'datetime',
+        'identity_verified_at' => 'datetime',
         'signature_date' => 'datetime',
     ];
 
@@ -160,6 +168,14 @@ class Applicant extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(Document::class);
+    }
+
+    /**
+     * Get all data verifications for this applicant.
+     */
+    public function dataVerifications(): HasMany
+    {
+        return $this->hasMany(DataVerification::class);
     }
 
     /**

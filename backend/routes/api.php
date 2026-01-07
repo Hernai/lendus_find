@@ -166,6 +166,10 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff'])->prefix('a
         // Reference verification - requires canVerifyReferences (analyst+)
         Route::put('/{application}/references/{reference}/verify', [AdminApplicationController::class, 'verifyReference'])
             ->middleware('permission:canVerifyReferences');
+
+        // Data verification - requires canVerifyReferences (analyst+)
+        Route::put('/{application}/verify-data', [AdminApplicationController::class, 'verifyData'])
+            ->middleware('permission:canVerifyReferences');
     });
 
     // =============================================

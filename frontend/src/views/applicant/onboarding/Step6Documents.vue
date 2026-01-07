@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore } from '@/stores'
+import { useOnboardingStore, useApplicationStore, useTenantStore } from '@/stores'
 import { AppButton } from '@/components/common'
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
+const applicationStore = useApplicationStore()
+const tenantStore = useTenantStore()
 
 interface DocumentUpload {
   id: string
@@ -17,50 +19,67 @@ interface DocumentUpload {
   status: 'pending' | 'uploading' | 'uploaded' | 'error'
 }
 
-const documents = reactive<DocumentUpload[]>([
-  {
-    id: 'ine_front',
-    name: 'INE Frente',
-    description: 'Foto clara del frente de tu INE/IFE',
-    required: true,
-    file: null,
-    preview: null,
-    status: 'pending'
-  },
-  {
-    id: 'ine_back',
-    name: 'INE Reverso',
-    description: 'Foto clara del reverso de tu INE/IFE',
-    required: true,
-    file: null,
-    preview: null,
-    status: 'pending'
-  },
-  {
-    id: 'proof_address',
-    name: 'Comprobante de domicilio',
-    description: 'Recibo de luz, agua, teléfono (máximo 3 meses)',
-    required: true,
-    file: null,
-    preview: null,
-    status: 'pending'
-  },
-  {
-    id: 'proof_income',
-    name: 'Comprobante de ingresos',
-    description: 'Recibo de nómina, estado de cuenta o declaración fiscal',
-    required: false,
-    file: null,
-    preview: null,
-    status: 'pending'
+// Document labels for display (maps type codes to human-readable names)
+const documentLabels: Record<string, { name: string; description: string }> = {
+  'INE_FRONT': { name: 'INE Frente', description: 'Foto clara del frente de tu INE/IFE' },
+  'INE_BACK': { name: 'INE Reverso', description: 'Foto clara del reverso de tu INE/IFE' },
+  'PROOF_ADDRESS': { name: 'Comprobante de domicilio', description: 'Recibo de luz, agua, teléfono (máximo 3 meses)' },
+  'PROOF_INCOME': { name: 'Comprobante de ingresos', description: 'Recibo de nómina, estado de cuenta o declaración fiscal' },
+  'PAYSLIP_1': { name: 'Recibo de nómina 1', description: 'Recibo de nómina reciente (mes actual)' },
+  'PAYSLIP_2': { name: 'Recibo de nómina 2', description: 'Recibo de nómina (mes anterior)' },
+  'PAYSLIP_3': { name: 'Recibo de nómina 3', description: 'Recibo de nómina (hace 2 meses)' },
+  'BANK_STATEMENT': { name: 'Estado de cuenta', description: 'Estado de cuenta bancario (máximo 3 meses)' },
+  'VEHICLE_INVOICE': { name: 'Factura del vehículo', description: 'Factura original del vehículo' },
+  'RFC_CONSTANCIA': { name: 'Constancia RFC', description: 'Constancia de situación fiscal' },
+  'CURP': { name: 'CURP', description: 'Clave Única de Registro de Población' },
+  'SELFIE': { name: 'Selfie con INE', description: 'Foto tuya sosteniendo tu INE' },
+}
+
+// Get document list from product, fallback to defaults
+const getRequiredDocuments = (): DocumentUpload[] => {
+  const product = applicationStore.selectedProduct
+  const productFromConfig = tenantStore.currentConfig?.products?.find(
+    p => p.id === product?.id
+  )
+
+  // Get required_docs from product (either selected or from config)
+  const requiredDocs = productFromConfig?.required_docs ?? product?.required_docs ?? []
+
+  if (requiredDocs.length > 0) {
+    return requiredDocs.map((doc: { type: string; required: boolean; description?: string } | string) => {
+      const docType = typeof doc === 'string' ? doc : doc.type
+      const isRequired = typeof doc === 'string' ? true : (doc.required ?? true)
+      const docInfo = documentLabels[docType] || { name: docType, description: '' }
+
+      return {
+        id: docType.toLowerCase(),
+        name: docInfo.name,
+        description: typeof doc === 'object' && doc.description ? doc.description : docInfo.description,
+        required: isRequired,
+        file: null,
+        preview: null,
+        status: 'pending' as const
+      }
+    })
   }
-])
+
+  // Fallback to basic documents if no product info available
+  return [
+    { id: 'ine_front', name: 'INE Frente', description: 'Foto clara del frente de tu INE/IFE', required: true, file: null, preview: null, status: 'pending' as const },
+    { id: 'ine_back', name: 'INE Reverso', description: 'Foto clara del reverso de tu INE/IFE', required: true, file: null, preview: null, status: 'pending' as const },
+    { id: 'proof_address', name: 'Comprobante de domicilio', description: 'Recibo de luz, agua, teléfono (máximo 3 meses)', required: true, file: null, preview: null, status: 'pending' as const },
+  ]
+}
+
+const documents = reactive<DocumentUpload[]>([])
 
 const error = ref('')
 
-// Sync from store on mount
-onMounted(async () => {
-  await onboardingStore.init()
+// Initialize documents from product on mount
+const initDocuments = () => {
+  const requiredDocs = getRequiredDocuments()
+  documents.length = 0 // Clear array
+  documents.push(...requiredDocs)
 
   // Restore uploaded status from store
   const step6 = onboardingStore.data.step6
@@ -71,6 +90,12 @@ onMounted(async () => {
       }
     })
   }
+}
+
+// Sync from store on mount
+onMounted(async () => {
+  await onboardingStore.init()
+  initDocuments()
 })
 
 // Auto-save to store when document status changes

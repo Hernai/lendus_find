@@ -96,6 +96,29 @@ interface Application {
   references: Reference[]
   notes: { id: string; text: string; author: string; created_at: string }[]
   timeline: { id: string; action: string; description: string; author: string; created_at: string }[]
+  signature?: {
+    has_signed: boolean
+    signature_base64?: string
+    signature_date?: string
+    signature_ip?: string
+  }
+  verification?: {
+    phone_verified: boolean
+    phone_verified_at?: string
+    email_verified: boolean
+    email_verified_at?: string
+    identity_verified: boolean
+    identity_verified_at?: string
+    address_verified: boolean
+    employment_verified: boolean
+  }
+  field_verifications?: Record<string, {
+    verified: boolean
+    method: string
+    verified_at?: string
+    verified_by?: string
+    notes?: string
+  }>
 }
 
 const application = ref<Application | null>(null)
@@ -228,21 +251,29 @@ const fetchApplication = async () => {
       updated_at: data.updated_at,
       assigned_to: data.assigned_to,
       required_documents: data.required_documents || [],
-      completeness: data.completeness || {
-        personal_data: !!data.applicant,
-        address: !!data.address,
-        employment: !!data.employment,
-        documents: {
-          uploaded: data.documents?.length || 0,
-          required: 5,
-          approved: data.documents?.filter((d: Document) => d.status === 'APPROVED').length || 0
-        },
-        references: {
-          count: data.references?.length || 0,
-          verified: data.references?.filter((r: Reference) => r.verified).length || 0
-        },
-        signature: true
-      },
+      completeness: (() => {
+        // Calculate approved documents that are in the required list
+        const requiredTypes = new Set(data.required_documents || [])
+        const approvedRequiredCount = data.documents?.filter((d: Document) =>
+          d.status === 'APPROVED' && requiredTypes.has(d.type)
+        ).length || 0
+
+        return data.completeness || {
+          personal_data: !!data.applicant,
+          address: !!data.address,
+          employment: !!data.employment,
+          documents: {
+            uploaded: data.documents?.length || 0,
+            required: data.required_documents?.length || 0,
+            approved: approvedRequiredCount
+          },
+          references: {
+            count: data.references?.length || 0,
+            verified: data.references?.filter((r: Reference) => r.verified).length || 0
+          },
+          signature: data.signature?.has_signed ?? false
+        }
+      })(),
       applicant: data.applicant || {
         id: '',
         full_name: '',
@@ -304,7 +335,24 @@ const fetchApplication = async () => {
         verified_at: r.verified_at
       })),
       notes: data.notes || [],
-      timeline: data.timeline || []
+      timeline: data.timeline || [],
+      signature: data.signature || {
+        has_signed: false,
+        signature_base64: undefined,
+        signature_date: undefined,
+        signature_ip: undefined
+      },
+      verification: data.verification || {
+        phone_verified: false,
+        phone_verified_at: undefined,
+        email_verified: false,
+        email_verified_at: undefined,
+        identity_verified: false,
+        identity_verified_at: undefined,
+        address_verified: false,
+        employment_verified: false
+      },
+      field_verifications: data.field_verifications || {}
     }
   } catch (e) {
     console.error('Failed to fetch application:', e)
@@ -367,6 +415,17 @@ const formatDateTime = (dateStr: string) => {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+// Format Mexican phone number: 5512345678 -> (55) 1234-5678
+const formatPhone = (phone: string | null | undefined): string => {
+  if (!phone) return '—'
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  }
+  // If not 10 digits, return as-is with basic formatting
+  return phone
 }
 
 const getStatusBadge = (status: string) => {
@@ -675,6 +734,75 @@ const confirmVerifyReference = async () => {
   }
 }
 
+// Verify data (field-level verification)
+const isVerifyingData = ref(false)
+type VerifiableField = 'first_name' | 'last_name_1' | 'last_name_2' | 'curp' | 'rfc' | 'ine_clave' | 'birth_date' | 'phone' | 'email' | 'address' | 'employment'
+
+// Helper to check if a field is verified
+const isFieldVerified = (field: string): boolean => {
+  return application.value?.field_verifications?.[field]?.verified ?? false
+}
+
+// Helper to get field verification details
+const getFieldVerification = (field: string) => {
+  return application.value?.field_verifications?.[field]
+}
+
+const verifyData = async (field: VerifiableField, verified: boolean, method: string = 'MANUAL') => {
+  if (!application.value) return
+
+  isVerifyingData.value = true
+
+  try {
+    await api.put(`/admin/applications/${application.value.id}/verify-data`, {
+      field,
+      verified,
+      method
+    })
+
+    // Update local state for field_verifications
+    if (!application.value.field_verifications) {
+      application.value.field_verifications = {}
+    }
+
+    if (verified) {
+      application.value.field_verifications[field] = {
+        verified: true,
+        method,
+        verified_at: new Date().toISOString()
+      }
+    } else {
+      delete application.value.field_verifications[field]
+    }
+
+    // Also update legacy verification for backwards compatibility
+    if (application.value.verification) {
+      switch (field) {
+        case 'phone':
+          application.value.verification.phone_verified = verified
+          break
+        case 'email':
+          application.value.verification.email_verified = verified
+          break
+        case 'address':
+          application.value.verification.address_verified = verified
+          break
+        case 'employment':
+          application.value.verification.employment_verified = verified
+          break
+      }
+    }
+
+    // Refresh to get updated timeline
+    await fetchApplication()
+  } catch (e) {
+    console.error('Failed to verify data:', e)
+    alert('Error al verificar los datos')
+  } finally {
+    isVerifyingData.value = false
+  }
+}
+
 const openCounterOfferModal = () => {
   if (application.value) {
     // Pre-fill with current loan values
@@ -729,28 +857,27 @@ const addNote = async () => {
 
   isAddingNote.value = true
 
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 500))
+  try {
+    const response = await api.post<{ data: { id: string; content: string; author: string; created_at: string } }>(
+      `/admin/applications/${application.value.id}/notes`,
+      { content: newNoteText.value.trim() }
+    )
 
-  // Add note to the beginning of the list
-  application.value.notes.unshift({
-    id: String(Date.now()),
-    text: newNoteText.value.trim(),
-    author: 'Admin',
-    created_at: new Date().toISOString()
-  })
+    // Add note to the beginning of the list
+    application.value.notes.unshift({
+      id: response.data.data.id,
+      text: response.data.data.content,
+      author: response.data.data.author,
+      created_at: response.data.data.created_at
+    })
 
-  // Add to timeline
-  application.value.timeline.push({
-    id: String(Date.now()),
-    action: 'NOTE_ADDED',
-    description: 'Nota agregada',
-    author: 'Admin',
-    created_at: new Date().toISOString()
-  })
-
-  newNoteText.value = ''
-  isAddingNote.value = false
+    newNoteText.value = ''
+  } catch (e) {
+    console.error('Failed to add note:', e)
+    alert('Error al agregar la nota')
+  } finally {
+    isAddingNote.value = false
+  }
 }
 </script>
 
@@ -815,53 +942,56 @@ const addNote = async () => {
         </div>
       </div>
 
-      <!-- Completeness Card -->
-      <div class="bg-white rounded-xl shadow-sm p-5 mb-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Avance del Expediente</h3>
+      <!-- Completeness Card - Compact design -->
+      <div class="bg-white rounded-xl shadow-sm p-4 mb-5">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Avance del Expediente</h3>
           <div class="flex items-center gap-2">
-            <span :class="['text-2xl font-bold', completenessColor.text]">{{ completenessPercent }}%</span>
+            <span :class="['text-lg font-bold', completenessColor.text]">{{ completenessPercent }}%</span>
             <span
               v-if="completenessPercent >= 100"
-              class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full"
+              class="px-1.5 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded"
             >
               Completo
             </span>
           </div>
         </div>
 
-        <!-- Progress Bar -->
-        <div class="w-full h-3 bg-gray-200 rounded-full overflow-hidden mb-4">
+        <!-- Progress Bar (thinner for cleaner look) -->
+        <div class="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden mb-3">
           <div
             :class="['h-full rounded-full transition-all duration-500', completenessColor.bg]"
             :style="{ width: completenessPercent + '%' }"
           />
         </div>
 
-        <!-- Checklist -->
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <!-- Checklist - Compact design -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
           <div
             v-for="item in completenessItems"
             :key="item.label"
             :class="[
-              'flex items-center gap-2 p-2 rounded-lg text-sm',
-              item.complete ? 'bg-green-50' : item.partial ? 'bg-yellow-50' : 'bg-gray-50'
+              'flex items-center gap-1.5 px-2 py-1.5 rounded text-xs',
+              item.complete ? 'bg-green-50 border border-green-200' : item.partial ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50 border border-gray-200'
             ]"
           >
             <div
               :class="[
-                'w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0',
+                'w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0',
                 item.complete ? 'bg-green-500' : item.partial ? 'bg-yellow-500' : 'bg-gray-300'
               ]"
             >
-              <svg v-if="item.complete" class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <svg v-if="item.complete" class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
               </svg>
-              <svg v-else-if="item.partial" class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <svg v-else-if="item.partial" class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
               </svg>
             </div>
-            <span :class="item.complete ? 'text-green-800' : item.partial ? 'text-yellow-800' : 'text-gray-500'">
+            <span :class="[
+              'font-medium truncate',
+              item.complete ? 'text-green-700' : item.partial ? 'text-yellow-700' : 'text-gray-500'
+            ]">
               {{ item.label }}
             </span>
           </div>
@@ -912,35 +1042,181 @@ const addNote = async () => {
               </div>
             </div>
 
-            <!-- Applicant Info -->
+            <!-- Applicant Info - Improved UI with completion/verification distinction -->
             <div class="border border-gray-200 rounded-lg">
-              <div class="bg-gray-50 px-3 py-2 border-b border-gray-200">
+              <div class="bg-gray-50 px-3 py-2 border-b border-gray-200 flex items-center justify-between">
                 <h3 class="text-sm font-semibold text-gray-900">Datos del Solicitante</h3>
+                <div class="flex items-center gap-3 text-xs text-gray-500">
+                  <span class="flex items-center gap-1">
+                    <span class="w-2 h-2 rounded-full bg-gray-300"></span>
+                    Vacío
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                    Completado
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                    Verificado
+                  </span>
+                </div>
               </div>
               <div class="p-3">
-                <div class="grid grid-cols-3 gap-3 text-sm">
-                  <div>
-                    <p class="text-xs text-gray-500">Nombre</p>
-                    <p class="font-medium text-gray-900">{{ application.applicant.full_name || '—' }}</p>
+                <div class="grid grid-cols-3 gap-x-4 gap-y-3 text-sm">
+                  <!-- Nombre -->
+                  <div class="group relative">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span
+                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
+                        :class="isFieldVerified('first_name') ? 'bg-green-500' : application.applicant.full_name ? 'bg-blue-500' : 'bg-gray-300'"
+                      ></span>
+                      <span class="text-xs text-gray-500">Nombre</span>
+                      <button
+                        v-if="application.applicant.full_name"
+                        class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto p-0.5 rounded hover:bg-gray-100"
+                        :class="isFieldVerified('first_name') ? 'text-green-600' : 'text-gray-400 hover:text-blue-600'"
+                        :disabled="isVerifyingData"
+                        :title="isFieldVerified('first_name') ? 'Quitar verificación' : 'Verificar dato'"
+                        @click="verifyData('first_name', !isFieldVerified('first_name'))"
+                      >
+                        <svg v-if="isFieldVerified('first_name')" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                        </svg>
+                        <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
+                    </div>
+                    <p class="font-medium text-gray-900 truncate">{{ application.applicant.full_name || '—' }}</p>
                   </div>
-                  <div>
-                    <p class="text-xs text-gray-500">Email</p>
-                    <p class="font-medium text-gray-900">{{ application.applicant.email || '—' }}</p>
+                  <!-- Email -->
+                  <div class="group relative">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span
+                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
+                        :class="isFieldVerified('email') ? 'bg-green-500' : application.applicant.email ? 'bg-blue-500' : 'bg-gray-300'"
+                      ></span>
+                      <span class="text-xs text-gray-500">Email</span>
+                      <button
+                        v-if="application.applicant.email"
+                        class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto p-0.5 rounded hover:bg-gray-100"
+                        :class="isFieldVerified('email') ? 'text-green-600' : 'text-gray-400 hover:text-blue-600'"
+                        :disabled="isVerifyingData"
+                        :title="isFieldVerified('email') ? 'Quitar verificación' : 'Verificar dato'"
+                        @click="verifyData('email', !isFieldVerified('email'))"
+                      >
+                        <svg v-if="isFieldVerified('email')" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                        </svg>
+                        <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
+                    </div>
+                    <p class="font-medium text-gray-900 truncate">{{ application.applicant.email || '—' }}</p>
                   </div>
-                  <div>
-                    <p class="text-xs text-gray-500">Teléfono</p>
-                    <p class="font-medium text-gray-900">{{ application.applicant.phone || '—' }}</p>
+                  <!-- Teléfono -->
+                  <div class="group relative">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span
+                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
+                        :class="isFieldVerified('phone') ? 'bg-green-500' : application.applicant.phone ? 'bg-blue-500' : 'bg-gray-300'"
+                      ></span>
+                      <span class="text-xs text-gray-500">Teléfono</span>
+                      <button
+                        v-if="application.applicant.phone"
+                        class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto p-0.5 rounded hover:bg-gray-100"
+                        :class="isFieldVerified('phone') ? 'text-green-600' : 'text-gray-400 hover:text-blue-600'"
+                        :disabled="isVerifyingData"
+                        :title="isFieldVerified('phone') ? 'Quitar verificación' : 'Verificar dato'"
+                        @click="verifyData('phone', !isFieldVerified('phone'))"
+                      >
+                        <svg v-if="isFieldVerified('phone')" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                        </svg>
+                        <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
+                    </div>
+                    <p class="font-medium text-gray-900">{{ formatPhone(application.applicant.phone) }}</p>
                   </div>
-                  <div>
-                    <p class="text-xs text-gray-500">CURP</p>
+                  <!-- CURP -->
+                  <div class="group relative">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span
+                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
+                        :class="isFieldVerified('curp') ? 'bg-green-500' : application.applicant.curp ? 'bg-blue-500' : 'bg-gray-300'"
+                      ></span>
+                      <span class="text-xs text-gray-500">CURP</span>
+                      <button
+                        v-if="application.applicant.curp"
+                        class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto p-0.5 rounded hover:bg-gray-100"
+                        :class="isFieldVerified('curp') ? 'text-green-600' : 'text-gray-400 hover:text-blue-600'"
+                        :disabled="isVerifyingData"
+                        :title="isFieldVerified('curp') ? 'Quitar verificación' : 'Verificar dato'"
+                        @click="verifyData('curp', !isFieldVerified('curp'))"
+                      >
+                        <svg v-if="isFieldVerified('curp')" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                        </svg>
+                        <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
+                    </div>
                     <p class="font-mono text-sm text-gray-900">{{ application.applicant.curp || '—' }}</p>
                   </div>
-                  <div>
-                    <p class="text-xs text-gray-500">RFC</p>
+                  <!-- RFC -->
+                  <div class="group relative">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span
+                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
+                        :class="isFieldVerified('rfc') ? 'bg-green-500' : application.applicant.rfc ? 'bg-blue-500' : 'bg-gray-300'"
+                      ></span>
+                      <span class="text-xs text-gray-500">RFC</span>
+                      <button
+                        v-if="application.applicant.rfc"
+                        class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto p-0.5 rounded hover:bg-gray-100"
+                        :class="isFieldVerified('rfc') ? 'text-green-600' : 'text-gray-400 hover:text-blue-600'"
+                        :disabled="isVerifyingData"
+                        :title="isFieldVerified('rfc') ? 'Quitar verificación' : 'Verificar dato'"
+                        @click="verifyData('rfc', !isFieldVerified('rfc'))"
+                      >
+                        <svg v-if="isFieldVerified('rfc')" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                        </svg>
+                        <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
+                    </div>
                     <p class="font-mono text-sm text-gray-900">{{ application.applicant.rfc || '—' }}</p>
                   </div>
-                  <div>
-                    <p class="text-xs text-gray-500">Fecha Nacimiento</p>
+                  <!-- Fecha Nacimiento -->
+                  <div class="group relative">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span
+                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
+                        :class="isFieldVerified('birth_date') ? 'bg-green-500' : application.applicant.birth_date ? 'bg-blue-500' : 'bg-gray-300'"
+                      ></span>
+                      <span class="text-xs text-gray-500">Fecha Nacimiento</span>
+                      <button
+                        v-if="application.applicant.birth_date"
+                        class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto p-0.5 rounded hover:bg-gray-100"
+                        :class="isFieldVerified('birth_date') ? 'text-green-600' : 'text-gray-400 hover:text-blue-600'"
+                        :disabled="isVerifyingData"
+                        :title="isFieldVerified('birth_date') ? 'Quitar verificación' : 'Verificar dato'"
+                        @click="verifyData('birth_date', !isFieldVerified('birth_date'))"
+                      >
+                        <svg v-if="isFieldVerified('birth_date')" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                        </svg>
+                        <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
+                    </div>
                     <p class="font-medium text-gray-900">{{ application.applicant.birth_date ? formatDate(application.applicant.birth_date) : '—' }}</p>
                   </div>
                 </div>
@@ -951,11 +1227,32 @@ const addNote = async () => {
             <div class="grid grid-cols-2 gap-4">
               <!-- Address -->
               <div class="border border-gray-200 rounded-lg">
-                <div class="bg-gray-50 px-3 py-2 border-b border-gray-200">
-                  <h3 class="text-sm font-semibold text-gray-900">Domicilio</h3>
+                <div class="bg-gray-50 px-3 py-1.5 border-b border-gray-200 flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="w-2 h-2 rounded-full flex-shrink-0"
+                      :class="isFieldVerified('address') ? 'bg-green-500' : application.address.street ? 'bg-blue-500' : 'bg-gray-300'"
+                    ></span>
+                    <h3 class="text-sm font-semibold text-gray-900">Domicilio</h3>
+                  </div>
+                  <button
+                    class="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors"
+                    :class="isFieldVerified('address') ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-200'"
+                    :disabled="isVerifyingData"
+                    :title="isFieldVerified('address') ? 'Quitar verificación' : 'Marcar como verificado'"
+                    @click="verifyData('address', !isFieldVerified('address'))"
+                  >
+                    <svg v-if="isFieldVerified('address')" class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                    <svg v-else class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{{ isFieldVerified('address') ? 'Verificado' : 'Verificar' }}</span>
+                  </button>
                 </div>
                 <div class="p-3">
-                  <div class="grid grid-cols-2 gap-3 text-sm">
+                  <div class="grid grid-cols-2 gap-2 text-sm">
                     <div class="col-span-2">
                       <p class="text-xs text-gray-500">Dirección</p>
                       <p class="font-medium text-gray-900">
@@ -985,11 +1282,32 @@ const addNote = async () => {
 
               <!-- Employment -->
               <div class="border border-gray-200 rounded-lg">
-                <div class="bg-gray-50 px-3 py-2 border-b border-gray-200">
-                  <h3 class="text-sm font-semibold text-gray-900">Información Laboral</h3>
+                <div class="bg-gray-50 px-3 py-1.5 border-b border-gray-200 flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="w-2 h-2 rounded-full flex-shrink-0"
+                      :class="isFieldVerified('employment') ? 'bg-green-500' : application.employment.type ? 'bg-blue-500' : 'bg-gray-300'"
+                    ></span>
+                    <h3 class="text-sm font-semibold text-gray-900">Información Laboral</h3>
+                  </div>
+                  <button
+                    class="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors"
+                    :class="isFieldVerified('employment') ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-200'"
+                    :disabled="isVerifyingData"
+                    :title="isFieldVerified('employment') ? 'Quitar verificación' : 'Marcar como verificado'"
+                    @click="verifyData('employment', !isFieldVerified('employment'))"
+                  >
+                    <svg v-if="isFieldVerified('employment')" class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                    <svg v-else class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{{ isFieldVerified('employment') ? 'Verificado' : 'Verificar' }}</span>
+                  </button>
                 </div>
                 <div class="p-3">
-                  <div class="grid grid-cols-2 gap-3 text-sm">
+                  <div class="grid grid-cols-2 gap-2 text-sm">
                     <div>
                       <p class="text-xs text-gray-500">Tipo</p>
                       <p class="font-medium text-gray-900">{{ getEmploymentType(application.employment.type) || '—' }}</p>
@@ -1054,6 +1372,48 @@ const addNote = async () => {
                     <p class="text-xs text-gray-500">Destino</p>
                     <p class="font-medium text-gray-900">{{ getPurpose(application.loan.purpose) || '—' }}</p>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Signature -->
+            <div class="border border-gray-200 rounded-lg">
+              <div class="bg-gray-50 px-3 py-2 border-b border-gray-200">
+                <h3 class="text-sm font-semibold text-gray-900">Firma Digital</h3>
+              </div>
+              <div class="p-3">
+                <div v-if="application.signature?.has_signed" class="flex items-start gap-4">
+                  <div class="flex-shrink-0">
+                    <img
+                      v-if="application.signature.signature_base64"
+                      :src="application.signature.signature_base64.startsWith('data:') ? application.signature.signature_base64 : `data:image/png;base64,${application.signature.signature_base64}`"
+                      alt="Firma del solicitante"
+                      class="w-48 h-24 object-contain border border-gray-200 rounded bg-white"
+                    >
+                    <div v-else class="w-48 h-24 flex items-center justify-center border border-gray-200 rounded bg-gray-50 text-gray-400 text-sm">
+                      Firma no disponible
+                    </div>
+                  </div>
+                  <div class="text-sm">
+                    <div class="flex items-center gap-2 text-green-600 mb-1">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span class="font-medium">Firmado digitalmente</span>
+                    </div>
+                    <p v-if="application.signature.signature_date" class="text-xs text-gray-500">
+                      Fecha: {{ formatDateTime(application.signature.signature_date) }}
+                    </p>
+                    <p v-if="application.signature.signature_ip" class="text-xs text-gray-500">
+                      IP: {{ application.signature.signature_ip }}
+                    </p>
+                  </div>
+                </div>
+                <div v-else class="flex items-center gap-2 text-amber-600">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <span class="text-sm">Pendiente de firma</span>
                 </div>
               </div>
             </div>
@@ -1210,7 +1570,7 @@ const addNote = async () => {
                   </div>
                   <div>
                     <span class="text-sm font-medium text-gray-900">{{ ref.full_name }}</span>
-                    <span class="text-xs text-gray-500 ml-2">{{ ref.relationship }} · {{ ref.phone }}</span>
+                    <span class="text-xs text-gray-500 ml-2">{{ ref.relationship }} · {{ formatPhone(ref.phone) }}</span>
                   </div>
                 </div>
 
@@ -1553,7 +1913,7 @@ const addNote = async () => {
         <h3 class="text-lg font-semibold text-gray-900 mb-2">Verificar Referencia</h3>
         <div class="bg-gray-50 rounded-lg p-3 mb-4">
           <p class="font-medium">{{ selectedReference.full_name }}</p>
-          <p class="text-sm text-gray-500">{{ selectedReference.relationship }} · {{ selectedReference.phone }}</p>
+          <p class="text-sm text-gray-500">{{ selectedReference.relationship }} · {{ formatPhone(selectedReference.phone) }}</p>
         </div>
 
         <div class="space-y-4">

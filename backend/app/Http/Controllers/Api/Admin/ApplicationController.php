@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\ApplicationNote;
+use App\Models\DataVerification;
 use App\Models\Document;
 use App\Models\Reference;
 use Illuminate\Http\JsonResponse;
@@ -285,6 +286,18 @@ class ApplicationController extends Controller
             'content' => $request->content,
             'is_internal' => $request->input('is_internal', true),
         ]);
+
+        // Add to application timeline
+        $history = $application->status_history ?? [];
+        $history[] = [
+            'action' => 'NOTE_ADDED',
+            'note_preview' => mb_substr($request->content, 0, 50) . (mb_strlen($request->content) > 50 ? '...' : ''),
+            'is_internal' => $request->input('is_internal', true),
+            'user_id' => $request->user()->id,
+            'timestamp' => now()->toIso8601String(),
+        ];
+        $application->status_history = $history;
+        $application->save();
 
         return response()->json([
             'message' => 'Note added',
@@ -621,6 +634,37 @@ class ApplicationController extends Controller
                 'data' => $application->scoring_data,
             ],
 
+            // Signature data
+            'signature' => $applicant ? [
+                'has_signed' => $applicant->hasSigned(),
+                'signature_base64' => $applicant->signature_base64,
+                'signature_date' => $applicant->signature_date?->toIso8601String(),
+                'signature_ip' => $applicant->signature_ip,
+            ] : null,
+
+            // Field-level verifications
+            'field_verifications' => $applicant?->dataVerifications?->mapWithKeys(fn($v) => [
+                $v->field_name => [
+                    'verified' => $v->is_verified,
+                    'method' => $v->method,
+                    'verified_at' => $v->created_at?->toIso8601String(),
+                    'verified_by' => $v->verifier?->name,
+                    'notes' => $v->notes,
+                ]
+            ]) ?? [],
+
+            // Legacy verification status (for backwards compatibility)
+            'verification' => [
+                'phone_verified' => $applicant?->phone_verified_at !== null,
+                'phone_verified_at' => $applicant?->phone_verified_at?->toIso8601String(),
+                'email_verified' => $applicant?->email_verified_at !== null,
+                'email_verified_at' => $applicant?->email_verified_at?->toIso8601String(),
+                'identity_verified' => $applicant?->identity_verified_at !== null,
+                'identity_verified_at' => $applicant?->identity_verified_at?->toIso8601String(),
+                'address_verified' => $primaryAddress?->is_verified ?? false,
+                'employment_verified' => $currentEmployment?->is_verified ?? false,
+            ],
+
             // Required documents from product
             'required_documents' => $application->product?->required_docs ?? [],
 
@@ -751,10 +795,127 @@ class ApplicationController extends Controller
                 ($historyEntry['reason'] ? ' - ' . $historyEntry['reason'] : ''),
             'REF_VERIFIED' => 'Referencia verificada: ' . ($historyEntry['reference'] ?? '') .
                 ' (' . ($historyEntry['result'] ?? '') . ')',
+            'NOTE_ADDED' => 'Nota agregada: ' . ($historyEntry['note_preview'] ?? ''),
+            'DATA_VERIFIED' => ($historyEntry['verified'] ?? true)
+                ? 'Dato verificado: ' . ($historyEntry['field_label'] ?? $historyEntry['field'] ?? '')
+                : 'Verificación removida: ' . ($historyEntry['field_label'] ?? $historyEntry['field'] ?? ''),
             default => isset($historyEntry['to']) ?
                 'Estado cambiado a ' . $historyEntry['to'] .
                     ($historyEntry['reason'] ? ': ' . $historyEntry['reason'] : '') :
                 ($historyEntry['reason'] ?? 'Actualización')
         };
+    }
+
+    /**
+     * Verify applicant data field.
+     */
+    public function verifyData(Request $request, Application $application): JsonResponse
+    {
+        $tenant = $request->attributes->get('tenant');
+
+        if ($application->tenant_id !== $tenant->id) {
+            return response()->json(['message' => 'Application not found'], 404);
+        }
+
+        $validFields = [
+            'first_name', 'last_name_1', 'last_name_2', 'curp', 'rfc', 'ine_clave',
+            'birth_date', 'phone', 'email', 'address', 'employment'
+        ];
+
+        $validator = Validator::make($request->all(), [
+            'field' => 'required|in:' . implode(',', $validFields),
+            'verified' => 'required|boolean',
+            'method' => 'sometimes|in:MANUAL,OTP,API,DOCUMENT,BUREAU',
+            'notes' => 'sometimes|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation error',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $field = $request->field;
+        $verified = $request->verified;
+        $method = $request->input('method', 'MANUAL');
+        $notes = $request->notes;
+        $applicant = $application->applicant;
+
+        if (!$applicant) {
+            return response()->json(['message' => 'Applicant not found'], 404);
+        }
+
+        // Get the field value being verified
+        $fieldValue = match ($field) {
+            'address' => $applicant->primaryAddress?->full_address,
+            'employment' => $applicant->currentEmployment?->company_name,
+            default => $applicant->{$field} ?? null
+        };
+
+        if ($verified) {
+            // Create or update verification record
+            $verification = DataVerification::updateOrCreate(
+                [
+                    'applicant_id' => $applicant->id,
+                    'field_name' => $field,
+                ],
+                [
+                    'tenant_id' => $tenant->id,
+                    'field_value' => $fieldValue,
+                    'method' => $method,
+                    'is_verified' => true,
+                    'notes' => $notes,
+                    'verified_by' => $request->user()->id,
+                ]
+            );
+        } else {
+            // Remove verification
+            DataVerification::where('applicant_id', $applicant->id)
+                ->where('field_name', $field)
+                ->delete();
+        }
+
+        // Also update legacy fields for backwards compatibility
+        $verifiedAt = $verified ? now() : null;
+        switch ($field) {
+            case 'phone':
+                $applicant->update(['phone_verified_at' => $verifiedAt]);
+                break;
+            case 'email':
+                $applicant->update(['email_verified_at' => $verifiedAt]);
+                break;
+            case 'address':
+                $address = $applicant->primaryAddress;
+                if ($address) {
+                    $address->update(['is_verified' => $verified]);
+                }
+                break;
+        }
+
+        // Add to status history
+        $history = $application->status_history ?? [];
+        $history[] = [
+            'action' => 'DATA_VERIFIED',
+            'field' => $field,
+            'field_label' => DataVerification::getFieldLabel($field),
+            'method' => $method,
+            'verified' => $verified,
+            'timestamp' => now()->toIso8601String(),
+            'user_id' => $request->user()->id,
+        ];
+        $application->update(['status_history' => $history]);
+
+        return response()->json([
+            'message' => $verified
+                ? DataVerification::getFieldLabel($field) . ' verificado'
+                : 'Verificación de ' . DataVerification::getFieldLabel($field) . ' removida',
+            'data' => [
+                'field' => $field,
+                'verified' => $verified,
+                'method' => $method,
+                'verified_at' => $verified ? now()->toIso8601String() : null,
+            ]
+        ]);
     }
 }
