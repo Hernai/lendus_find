@@ -526,6 +526,19 @@ class ApplicationController extends Controller
             'uploaded_at' => $doc->created_at->toIso8601String(),
         ]);
 
+        // Pending documents (required but not uploaded)
+        $requiredDocs = $application->product->required_docs ?? $application->product->required_documents ?? [];
+        $uploadedTypes = $application->documents->pluck('type')->toArray();
+        $data['pending_documents'] = collect($requiredDocs)
+            ->filter(fn($type) => !in_array($type, $uploadedTypes))
+            ->map(fn($type) => [
+                'type' => $type,
+                'label' => $this->getDocumentLabel($type),
+                'description' => $this->getDocumentDescription($type),
+                'required' => true,
+            ])
+            ->values();
+
         // References
         $data['references'] = $application->references->map(fn($ref) => [
             'id' => $ref->id,
@@ -542,5 +555,49 @@ class ApplicationController extends Controller
         ]);
 
         return $data;
+    }
+
+    /**
+     * Get human-readable label for a document type.
+     */
+    private function getDocumentLabel(string $type): string
+    {
+        return match ($type) {
+            'INE_FRONT' => 'INE (Frente)',
+            'INE_BACK' => 'INE (Reverso)',
+            'PROOF_ADDRESS' => 'Comprobante de domicilio',
+            'PROOF_INCOME' => 'Comprobante de ingresos',
+            'PAYSLIP_1' => 'Recibo de nómina 1',
+            'PAYSLIP_2' => 'Recibo de nómina 2',
+            'PAYSLIP_3' => 'Recibo de nómina 3',
+            'BANK_STATEMENT' => 'Estado de cuenta bancario',
+            'VEHICLE_INVOICE' => 'Factura del vehículo',
+            'RFC_CONSTANCY' => 'Constancia de RFC',
+            'CURP' => 'CURP',
+            'SELFIE' => 'Selfie con INE',
+            default => ucwords(str_replace('_', ' ', strtolower($type))),
+        };
+    }
+
+    /**
+     * Get description for a document type.
+     */
+    private function getDocumentDescription(string $type): string
+    {
+        return match ($type) {
+            'INE_FRONT' => 'Foto clara del frente de tu INE/IFE vigente',
+            'INE_BACK' => 'Foto clara del reverso de tu INE/IFE vigente',
+            'PROOF_ADDRESS' => 'Recibo de luz, agua, teléfono o estado de cuenta bancario (no mayor a 3 meses)',
+            'PROOF_INCOME' => 'Recibo de nómina, declaración de impuestos o constancia de ingresos',
+            'PAYSLIP_1' => 'Recibo de nómina del mes actual',
+            'PAYSLIP_2' => 'Recibo de nómina del mes anterior',
+            'PAYSLIP_3' => 'Recibo de nómina de hace 2 meses',
+            'BANK_STATEMENT' => 'Estado de cuenta bancario de los últimos 3 meses',
+            'VEHICLE_INVOICE' => 'Factura original del vehículo a arrendar',
+            'RFC_CONSTANCY' => 'Constancia de situación fiscal del SAT',
+            'CURP' => 'Clave Única de Registro de Población',
+            'SELFIE' => 'Foto de tu rostro sosteniendo tu INE junto a tu cara',
+            default => 'Documento requerido para tu solicitud',
+        };
     }
 }

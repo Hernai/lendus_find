@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore, useTenantStore, useApplicantStore } from '@/stores'
 import { AppButton } from '@/components/common'
+import applicationService, { type Application as ApiApplication } from '@/services/application.service'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -23,7 +24,22 @@ interface Application {
 }
 
 const isLoading = ref(true)
+const isCanceling = ref(false)
+const showCancelConfirm = ref(false)
+const showCancelled = ref(false)
+const applicationToCancel = ref<Application | null>(null)
 const applications = ref<Application[]>([])
+
+const filteredApplications = computed(() => {
+  if (showCancelled.value) {
+    return applications.value
+  }
+  return applications.value.filter(app => app.status !== 'CANCELLED')
+})
+
+const cancelledCount = computed(() => {
+  return applications.value.filter(app => app.status === 'CANCELLED').length
+})
 
 // Load data on mount
 onMounted(async () => {
@@ -32,27 +48,43 @@ onMounted(async () => {
   // Load applicant data to get the user's name
   await applicantStore.loadApplicant()
 
-  // Simulate API call for applications
-  await new Promise(resolve => setTimeout(resolve, 500))
-
-  // Mock applications for demo
-  applications.value = [
-    {
-      id: '1',
-      folio: 'LEN-2026-00042',
-      status: 'DOCS_PENDING',
-      product_name: 'Crédito Personal',
-      requested_amount: 85000,
-      term_months: 12,
-      created_at: new Date(Date.now() - 2 * 24 * 3600000).toISOString(),
-      updated_at: new Date(Date.now() - 6 * 3600000).toISOString(),
-      next_action: 'Subir comprobante de domicilio',
-      pending_docs: ['Comprobante de domicilio', 'Estado de cuenta']
-    }
-  ]
+  // Load real applications from API
+  try {
+    const response = await applicationService.list()
+    applications.value = response.data.map((app: ApiApplication) => ({
+      id: app.id,
+      folio: app.folio,
+      status: app.status,
+      product_name: app.product?.name || 'Crédito',
+      requested_amount: app.requested_amount,
+      term_months: app.term_months,
+      created_at: app.created_at,
+      updated_at: app.updated_at,
+      next_action: getNextAction(app.status),
+      pending_docs: app.status === 'DOCS_PENDING' ? ['Documentos pendientes'] : undefined
+    }))
+  } catch (e) {
+    console.error('Failed to load applications:', e)
+    applications.value = []
+  }
 
   isLoading.value = false
 })
+
+const getNextAction = (status: string): string | undefined => {
+  switch (status) {
+    case 'DRAFT':
+      return 'Completa tu solicitud'
+    case 'DOCS_PENDING':
+      return 'Subir documentos faltantes'
+    case 'SUBMITTED':
+      return 'Esperando revisión'
+    case 'IN_REVIEW':
+      return 'En análisis por un asesor'
+    default:
+      return undefined
+  }
+}
 
 const userName = computed(() => {
   // First try applicant's first name
@@ -138,6 +170,13 @@ const getStatusInfo = (status: string) => {
       bg: 'bg-purple-100',
       icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z',
       description: 'El dinero ha sido depositado en tu cuenta'
+    },
+    CANCELLED: {
+      label: 'Cancelada',
+      color: 'text-red-500',
+      bg: 'bg-red-50',
+      icon: 'M6 18L18 6M6 6l12 12',
+      description: 'Esta solicitud fue cancelada'
     }
   }
   return statusMap[status] || statusMap.SUBMITTED
@@ -158,6 +197,38 @@ const startNewApplication = () => {
 
 const uploadDocs = (app: Application) => {
   router.push(`/solicitud/${app.id}/documentos`)
+}
+
+const canCancel = (status: string) => {
+  return ['DRAFT', 'SUBMITTED', 'IN_REVIEW', 'DOCS_PENDING'].includes(status)
+}
+
+const confirmCancel = (app: Application) => {
+  applicationToCancel.value = app
+  showCancelConfirm.value = true
+}
+
+const handleCancelApplication = async () => {
+  if (!applicationToCancel.value) return
+
+  isCanceling.value = true
+
+  try {
+    await applicationService.cancel(applicationToCancel.value.id, 'Cancelado por el solicitante')
+    // Update status in the list
+    const app = applications.value.find(a => a.id === applicationToCancel.value?.id)
+    if (app) {
+      app.status = 'CANCELLED'
+      app.next_action = undefined
+      app.pending_docs = undefined
+    }
+    showCancelConfirm.value = false
+    applicationToCancel.value = null
+  } catch (e) {
+    console.error('Failed to cancel application:', e)
+  } finally {
+    isCanceling.value = false
+  }
 }
 </script>
 
@@ -186,9 +257,29 @@ const uploadDocs = (app: Application) => {
           </button>
         </div>
 
-        <div class="text-white">
-          <p class="text-primary-200 mb-1">Hola,</p>
-          <h1 class="text-2xl font-bold">{{ userName }}</h1>
+        <div class="flex items-end justify-between">
+          <div class="text-white">
+            <p class="text-primary-200 mb-1">Hola,</p>
+            <h1 class="text-2xl font-bold">{{ userName }}</h1>
+          </div>
+          <!-- Toggle Cancelled (in header) -->
+          <button
+            v-if="cancelledCount > 0"
+            :class="[
+              'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+              showCancelled
+                ? 'bg-red-500/20 text-red-200 hover:bg-red-500/30'
+                : 'bg-white/10 text-white/80 hover:bg-white/20'
+            ]"
+            @click="showCancelled = !showCancelled"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path v-if="showCancelled" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+              <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path v-if="!showCancelled" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            {{ showCancelled ? 'Ocultar' : 'Ver' }} canceladas ({{ cancelledCount }})
+          </button>
         </div>
       </div>
     </header>
@@ -204,10 +295,10 @@ const uploadDocs = (app: Application) => {
       <!-- Applications List -->
       <template v-else>
         <!-- Has Applications -->
-        <template v-if="applications.length > 0">
+        <template v-if="filteredApplications.length > 0 || cancelledCount > 0">
           <div class="space-y-4">
             <div
-              v-for="app in applications"
+              v-for="app in filteredApplications"
               :key="app.id"
               class="bg-white rounded-2xl shadow-lg overflow-hidden"
             >
@@ -291,6 +382,16 @@ const uploadDocs = (app: Application) => {
                   >
                     Ver Detalle
                   </AppButton>
+                </div>
+
+                <!-- Cancel Button -->
+                <div v-if="canCancel(app.status)" class="mt-3">
+                  <button
+                    class="w-full py-2.5 px-4 border border-red-200 rounded-xl text-red-600 text-sm font-medium hover:bg-red-50 hover:border-red-300 transition-colors"
+                    @click="confirmCancel(app)"
+                  >
+                    Cancelar solicitud
+                  </button>
                 </div>
               </div>
             </div>
@@ -395,5 +496,46 @@ const uploadDocs = (app: Application) => {
         </div>
       </div>
     </main>
+
+    <!-- Cancel Confirmation Modal -->
+    <div
+      v-if="showCancelConfirm"
+      class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+      @click.self="showCancelConfirm = false"
+    >
+      <div class="bg-white rounded-2xl max-w-sm w-full p-6">
+        <div class="text-center mb-6">
+          <div class="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg class="w-7 h-7 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-gray-900">¿Cancelar solicitud?</h3>
+          <p v-if="applicationToCancel" class="text-sm text-gray-500 mt-1">{{ applicationToCancel.folio }}</p>
+          <p class="text-gray-500 mt-2">
+            Esta acción no se puede deshacer. Tu solicitud será cancelada permanentemente.
+          </p>
+        </div>
+        <div class="space-y-3">
+          <AppButton
+            variant="primary"
+            full-width
+            class="!bg-red-600 hover:!bg-red-700"
+            :loading="isCanceling"
+            @click="handleCancelApplication"
+          >
+            Sí, cancelar solicitud
+          </AppButton>
+          <AppButton
+            variant="outline"
+            full-width
+            :disabled="isCanceling"
+            @click="showCancelConfirm = false"
+          >
+            No, continuar
+          </AppButton>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

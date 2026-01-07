@@ -22,6 +22,7 @@ export interface Application {
   rejection_reason?: string
   assigned_to?: string
   documents?: ApplicationDocument[]
+  pending_documents?: PendingDocument[]
   references?: ApplicationReference[]
   status_history?: { status: string; timestamp: string }[]
   created_at: string
@@ -34,9 +35,16 @@ export interface ApplicationDocument {
   name: string
   status: 'PENDING' | 'APPROVED' | 'REJECTED'
   rejection_reason?: string
-  mime_type: string
-  size: number
+  mime_type?: string
+  size?: number
   uploaded_at: string
+}
+
+export interface PendingDocument {
+  type: string
+  label: string
+  description: string
+  required: boolean
 }
 
 export interface ApplicationReference {

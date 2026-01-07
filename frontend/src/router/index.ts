@@ -28,6 +28,7 @@ const Step8Review = () => import('@/views/onboarding/Step8Review.vue')
 // Dashboard views
 const DashboardView = () => import('@/views/dashboard/DashboardView.vue')
 const ApplicationStatusView = () => import('@/views/dashboard/ApplicationStatusView.vue')
+const DocumentsUploadView = () => import('@/views/dashboard/DocumentsUploadView.vue')
 
 // Admin views
 const AdminLayout = () => import('@/views/admin/AdminLayout.vue')
@@ -160,6 +161,12 @@ const routes: RouteRecordRaw[] = [
     path: '/solicitud/:id/estado',
     name: 'application-status',
     component: ApplicationStatusView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/solicitud/:id/documentos',
+    name: 'application-documents',
+    component: DocumentsUploadView,
     meta: { requiresAuth: true }
   },
 
