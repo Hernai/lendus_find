@@ -15,12 +15,23 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable;
 
     /**
-     * User types.
+     * User types/roles.
      */
     public const TYPE_APPLICANT = 'APPLICANT';
-    public const TYPE_ADMIN = 'ADMIN';
-    public const TYPE_AGENT = 'AGENT';
-    public const TYPE_SUPER_ADMIN = 'SUPER_ADMIN';
+    public const TYPE_AGENT = 'AGENT';         // Promotor - solo ve sus asignadas
+    public const TYPE_ANALYST = 'ANALYST';     // Analista - revisa documentos y referencias
+    public const TYPE_ADMIN = 'ADMIN';         // Admin - aprueba/rechaza, gestiona
+    public const TYPE_SUPER_ADMIN = 'SUPER_ADMIN'; // Super Admin - configura tenant
+
+    /**
+     * Staff roles (can access admin panel).
+     */
+    public const STAFF_ROLES = [
+        self::TYPE_AGENT,
+        self::TYPE_ANALYST,
+        self::TYPE_ADMIN,
+        self::TYPE_SUPER_ADMIN,
+    ];
 
     /**
      * The attributes that are mass assignable.
@@ -114,7 +125,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Check if user is an admin.
+     * Check if user is an admin (can approve/reject, manage).
      */
     public function isAdmin(): bool
     {
@@ -122,7 +133,15 @@ class User extends Authenticatable
     }
 
     /**
-     * Check if user is an agent.
+     * Check if user is an analyst (can review docs, verify refs).
+     */
+    public function isAnalyst(): bool
+    {
+        return $this->type === self::TYPE_ANALYST;
+    }
+
+    /**
+     * Check if user is an agent (promotor).
      */
     public function isAgent(): bool
     {
@@ -143,6 +162,112 @@ class User extends Authenticatable
     public function isSuperAdmin(): bool
     {
         return $this->type === self::TYPE_SUPER_ADMIN;
+    }
+
+    /**
+     * Check if user is staff (can access admin panel).
+     */
+    public function isStaff(): bool
+    {
+        return in_array($this->type, self::STAFF_ROLES);
+    }
+
+    /**
+     * Check if user has at least analyst level (analyst, admin, super_admin).
+     */
+    public function isAtLeastAnalyst(): bool
+    {
+        return in_array($this->type, [
+            self::TYPE_ANALYST,
+            self::TYPE_ADMIN,
+            self::TYPE_SUPER_ADMIN,
+        ]);
+    }
+
+    // ==========================================
+    // PERMISSION METHODS
+    // ==========================================
+
+    /**
+     * Can view all applications (not just assigned).
+     */
+    public function canViewAllApplications(): bool
+    {
+        return $this->isAtLeastAnalyst();
+    }
+
+    /**
+     * Can review documents (approve/reject).
+     * Agents can review docs for their assigned applications.
+     */
+    public function canReviewDocuments(): bool
+    {
+        return $this->isStaff(); // All staff including agents
+    }
+
+    /**
+     * Can verify references.
+     * Agents are typically the ones calling references.
+     */
+    public function canVerifyReferences(): bool
+    {
+        return $this->isStaff(); // All staff including agents
+    }
+
+    /**
+     * Can change application status (in_review, docs_pending).
+     */
+    public function canChangeApplicationStatus(): bool
+    {
+        return $this->isAtLeastAnalyst();
+    }
+
+    /**
+     * Can approve or reject applications (final decision).
+     */
+    public function canApproveRejectApplications(): bool
+    {
+        return $this->isAdmin();
+    }
+
+    /**
+     * Can assign applications to agents.
+     */
+    public function canAssignApplications(): bool
+    {
+        return $this->isAdmin();
+    }
+
+    /**
+     * Can manage products (CRUD).
+     */
+    public function canManageProducts(): bool
+    {
+        return $this->isAdmin();
+    }
+
+    /**
+     * Can manage users (CRUD).
+     */
+    public function canManageUsers(): bool
+    {
+        return $this->isAdmin();
+    }
+
+    /**
+     * Can view reports.
+     */
+    public function canViewReports(): bool
+    {
+        return $this->isAtLeastAnalyst();
+    }
+
+    /**
+     * Can configure tenant settings.
+     */
+    public function canConfigureTenant(): bool
+    {
+        return $this->isSuperAdmin();
     }
 
     /**

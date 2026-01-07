@@ -43,6 +43,31 @@ interface PinLoginApiResponse {
   }
 }
 
+interface UserPermissions {
+  canViewAllApplications: boolean
+  canReviewDocuments: boolean
+  canVerifyReferences: boolean
+  canChangeApplicationStatus: boolean
+  canApproveRejectApplications: boolean
+  canAssignApplications: boolean
+  canManageProducts: boolean
+  canManageUsers: boolean
+  canViewReports: boolean
+}
+
+interface PasswordLoginApiResponse {
+  success: boolean
+  token: string
+  user: {
+    id: string
+    name: string
+    email: string
+    role: string  // AGENT, ANALYST, ADMIN, SUPER_ADMIN
+    is_staff: boolean
+    permissions: UserPermissions
+  }
+}
+
 interface MeApiResponse {
   user: {
     id: string
@@ -50,7 +75,9 @@ interface MeApiResponse {
     email: string | null
     type: string
     is_admin: boolean
+    is_staff: boolean
     applicant?: unknown
+    permissions?: UserPermissions
   }
 }
 
@@ -68,11 +95,16 @@ export const useAuthStore = defineStore('auth', () => {
   const needsPinSetup = ref(false)
   const pinLockoutMinutes = ref(0)
 
+  // Permissions state (for staff users)
+  const permissions = ref<UserPermissions | null>(null)
+
   // Getters
   const isAuthenticated = computed(() => !!token.value && !!user.value)
   const isApplicant = computed(() => user.value?.role === 'APPLICANT')
+  const isAgent = computed(() => user.value?.role === 'AGENT')
   const isAnalyst = computed(() => user.value?.role === 'ANALYST')
-  const isAdmin = computed(() => user.value?.role === 'ADMIN')
+  const isAdmin = computed(() => ['ADMIN', 'SUPER_ADMIN'].includes(user.value?.role || ''))
+  const isStaff = computed(() => ['AGENT', 'ANALYST', 'ADMIN', 'SUPER_ADMIN'].includes(user.value?.role || ''))
 
   // Helper to map backend user type to frontend role
   const mapUserType = (type: string, isAdmin: boolean): User['role'] => {
@@ -211,6 +243,7 @@ export const useAuthStore = defineStore('auth', () => {
     } finally {
       user.value = null
       token.value = null
+      permissions.value = null
       localStorage.removeItem('auth_token')
       otpDestination.value = null
       otpMethod.value = null
@@ -226,23 +259,35 @@ export const useAuthStore = defineStore('auth', () => {
       const apiUser = response.data.user
 
       // Map backend user to frontend User type
+      // For staff users, use the backend type directly
+      const userRole = apiUser.is_staff
+        ? apiUser.type as User['role']
+        : mapUserType(apiUser.type, apiUser.is_admin)
+
       user.value = {
         id: apiUser.id,
         tenant_id: '',
         phone: apiUser.phone || '',
         email: apiUser.email,
-        role: mapUserType(apiUser.type, apiUser.is_admin),
+        role: userRole,
         phone_verified_at: apiUser.phone ? new Date().toISOString() : null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
+      }
+
+      // Store permissions for staff users
+      if (apiUser.permissions) {
+        permissions.value = apiUser.permissions
+      } else {
+        permissions.value = null
       }
 
       // Check if user has access to target route
       const pathToCheck = targetPath || window.location.pathname
       const isAdminRoute = pathToCheck.startsWith('/admin')
 
-      if (isAdminRoute && !apiUser.is_admin) {
-        // User doesn't have admin access
+      if (isAdminRoute && !apiUser.is_staff) {
+        // User doesn't have staff access
         return false
       }
 
@@ -251,6 +296,7 @@ export const useAuthStore = defineStore('auth', () => {
       // Token is invalid, clear auth state
       user.value = null
       token.value = null
+      permissions.value = null
       localStorage.removeItem('auth_token')
       return false
     }
@@ -372,6 +418,58 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  const loginWithPassword = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    isLoading.value = true
+    try {
+      const response = await api.post<PasswordLoginApiResponse>('/admin/auth/login', { email, password })
+
+      if (response.data.success) {
+        const apiUser = response.data.user
+
+        user.value = {
+          id: apiUser.id,
+          tenant_id: '',
+          phone: '',  // Staff users may not have phone
+          email: apiUser.email,
+          role: apiUser.role as User['role'],
+          phone_verified_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+
+        // Store permissions for staff users
+        if (apiUser.permissions) {
+          permissions.value = apiUser.permissions
+        }
+
+        token.value = response.data.token
+        localStorage.setItem('auth_token', response.data.token)
+
+        return { success: true }
+      }
+
+      return { success: false, error: 'LOGIN_FAILED' }
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { status?: number; data?: { message?: string } } }
+
+      if (axiosError.response?.status === 401) {
+        return { success: false, error: 'INVALID_CREDENTIALS' }
+      }
+
+      if (axiosError.response?.status === 403) {
+        return { success: false, error: 'UNAUTHORIZED_METHOD' }
+      }
+
+      if (axiosError.response?.status === 404) {
+        return { success: false, error: 'USER_NOT_FOUND' }
+      }
+
+      return { success: false, error: axiosError.response?.data?.message || 'LOGIN_FAILED' }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   const resetPinWithOtp = async (phone: string, code: string, newPin: string): Promise<{ success: boolean; error?: string }> => {
     isLoading.value = true
     try {
@@ -436,6 +534,10 @@ export const useAuthStore = defineStore('auth', () => {
     isApplicant,
     isAnalyst,
     isAdmin,
+    isAgent,
+    isStaff,
+    // Permissions
+    permissions,
     // Actions
     sendOtp,
     verifyOtp,
@@ -447,6 +549,8 @@ export const useAuthStore = defineStore('auth', () => {
     loginWithPin,
     setupPin,
     changePin,
-    resetPinWithOtp
+    resetPinWithOtp,
+    // Password Actions
+    loginWithPassword
   }
 })

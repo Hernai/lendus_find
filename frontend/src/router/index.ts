@@ -2,39 +2,52 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
-// Lazy load views
-const LandingView = () => import('@/views/LandingView.vue')
-const SimulatorView = () => import('@/views/SimulatorView.vue')
+// ==============================================
+// PUBLIC VIEWS (no authentication required)
+// ==============================================
+const LandingView = () => import('@/views/public/LandingView.vue')
+const SimulatorView = () => import('@/views/public/SimulatorView.vue')
 
-// Auth views
-const AuthMethodView = () => import('@/views/auth/AuthMethodView.vue')
-const AuthPhoneView = () => import('@/views/auth/AuthPhoneView.vue')
-const AuthEmailView = () => import('@/views/auth/AuthEmailView.vue')
-const AuthOtpView = () => import('@/views/auth/AuthOtpView.vue')
-const AuthPinSetupView = () => import('@/views/auth/AuthPinSetupView.vue')
-const AuthPinLoginView = () => import('@/views/auth/AuthPinLoginView.vue')
+// ==============================================
+// APPLICANT VIEWS (solicitantes de crédito)
+// ==============================================
 
-// Onboarding views
-const OnboardingLayout = () => import('@/views/onboarding/OnboardingLayout.vue')
-const Step1PersonalData = () => import('@/views/onboarding/Step1PersonalData.vue')
-const Step2Identification = () => import('@/views/onboarding/Step2Identification.vue')
-const Step3Address = () => import('@/views/onboarding/Step3Address.vue')
-const Step4Employment = () => import('@/views/onboarding/Step4Employment.vue')
-const Step5LoanDetails = () => import('@/views/onboarding/Step5LoanDetails.vue')
-const Step6Documents = () => import('@/views/onboarding/Step6Documents.vue')
-const Step7References = () => import('@/views/onboarding/Step7References.vue')
-const Step8Review = () => import('@/views/onboarding/Step8Review.vue')
+// Applicant Auth (OTP, PIN)
+const AuthMethodView = () => import('@/views/applicant/auth/AuthMethodView.vue')
+const AuthPhoneView = () => import('@/views/applicant/auth/AuthPhoneView.vue')
+const AuthEmailView = () => import('@/views/applicant/auth/AuthEmailView.vue')
+const AuthOtpView = () => import('@/views/applicant/auth/AuthOtpView.vue')
+const AuthPinSetupView = () => import('@/views/applicant/auth/AuthPinSetupView.vue')
+const AuthPinLoginView = () => import('@/views/applicant/auth/AuthPinLoginView.vue')
 
-// Dashboard views
-const DashboardView = () => import('@/views/dashboard/DashboardView.vue')
-const ApplicationStatusView = () => import('@/views/dashboard/ApplicationStatusView.vue')
-const DocumentsUploadView = () => import('@/views/dashboard/DocumentsUploadView.vue')
+// Applicant Onboarding (8-step wizard)
+const OnboardingLayout = () => import('@/views/applicant/onboarding/OnboardingLayout.vue')
+const Step1PersonalData = () => import('@/views/applicant/onboarding/Step1PersonalData.vue')
+const Step2Identification = () => import('@/views/applicant/onboarding/Step2Identification.vue')
+const Step3Address = () => import('@/views/applicant/onboarding/Step3Address.vue')
+const Step4Employment = () => import('@/views/applicant/onboarding/Step4Employment.vue')
+const Step5LoanDetails = () => import('@/views/applicant/onboarding/Step5LoanDetails.vue')
+const Step6Documents = () => import('@/views/applicant/onboarding/Step6Documents.vue')
+const Step7References = () => import('@/views/applicant/onboarding/Step7References.vue')
+const Step8Review = () => import('@/views/applicant/onboarding/Step8Review.vue')
 
-// Admin views
-const AdminLayout = () => import('@/views/admin/AdminLayout.vue')
-const AdminDashboard = () => import('@/views/admin/AdminDashboard.vue')
-const AdminApplications = () => import('@/views/admin/AdminApplications.vue')
-const AdminApplicationDetail = () => import('@/views/admin/AdminApplicationDetail.vue')
+// Applicant Dashboard
+const DashboardView = () => import('@/views/applicant/dashboard/DashboardView.vue')
+const ApplicationStatusView = () => import('@/views/applicant/dashboard/ApplicationStatusView.vue')
+const DocumentsUploadView = () => import('@/views/applicant/dashboard/DocumentsUploadView.vue')
+
+// ==============================================
+// ADMIN VIEWS (staff: agents, analysts, admins)
+// ==============================================
+
+// Admin Auth (email/password)
+const AdminLoginView = () => import('@/views/admin/auth/AdminLoginView.vue')
+
+// Admin Panel
+const AdminLayout = () => import('@/views/admin/panel/AdminLayout.vue')
+const AdminDashboard = () => import('@/views/admin/panel/AdminDashboard.vue')
+const AdminApplications = () => import('@/views/admin/panel/AdminApplications.vue')
+const AdminApplicationDetail = () => import('@/views/admin/panel/AdminApplicationDetail.vue')
 
 const routes: RouteRecordRaw[] = [
   // Public routes
@@ -170,11 +183,19 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true }
   },
 
-  // Admin routes (protected, admin only)
+  // Admin login (public, guest only)
+  {
+    path: '/admin/login',
+    name: 'admin-login',
+    component: AdminLoginView,
+    meta: { public: true, guest: true, adminGuest: true }
+  },
+
+  // Admin routes (protected, staff only - agents, analysts, admins)
   {
     path: '/admin',
     component: AdminLayout,
-    meta: { requiresAuth: true, requiresAdmin: true },
+    meta: { requiresAuth: true, requiresStaff: true },
     children: [
       {
         path: '',
@@ -218,12 +239,14 @@ router.beforeEach(async (to, from, next) => {
 
   // Check if route requires authentication
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
-  const requiresAdmin = to.matched.some(record => record.meta.requiresAdmin)
+  const requiresStaff = to.matched.some(record => record.meta.requiresStaff)
   const isGuestOnly = to.matched.some(record => record.meta.guest)
+  const isAdminGuest = to.matched.some(record => record.meta.adminGuest)
 
   // DEV MODE: Auto-authenticate for development
   // This allows navigating directly to any step without logging in
-  if (import.meta.env.DEV && requiresAuth) {
+  // DISABLED for admin routes to test real login flow
+  if (import.meta.env.DEV && requiresAuth && !requiresStaff) {
     if (!localStorage.getItem('auth_token')) {
       localStorage.setItem('auth_token', 'dev-token-' + Date.now())
     }
@@ -231,8 +254,13 @@ router.beforeEach(async (to, from, next) => {
     await authStore.checkAuth(to.path)
   }
 
-  // If authenticated and trying to access guest-only page (like login)
-  if (isGuestOnly && authStore.isAuthenticated) {
+  // If authenticated staff trying to access admin-guest page (admin login)
+  if (isAdminGuest && authStore.isAuthenticated && authStore.isStaff) {
+    return next({ name: 'admin-dashboard' })
+  }
+
+  // If authenticated regular user trying to access guest-only page (like login)
+  if (isGuestOnly && !isAdminGuest && authStore.isAuthenticated) {
     return next({ name: 'dashboard' })
   }
 
@@ -243,12 +271,17 @@ router.beforeEach(async (to, from, next) => {
       // Try to check auth status (e.g., validate stored token)
       const isValid = await authStore.checkAuth()
       if (!isValid) {
+        // Redirect to admin login if trying to access admin routes
+        if (requiresStaff) {
+          return next({ name: 'admin-login', query: { redirect: to.fullPath } })
+        }
         return next({ name: 'auth', query: { redirect: to.fullPath } })
       }
     }
 
-    // Check admin requirement
-    if (requiresAdmin && !authStore.isAdmin) {
+    // Check staff requirement (agents, analysts, admins can access admin panel)
+    if (requiresStaff && !authStore.isStaff) {
+      // User is logged in but not staff - redirect to user dashboard
       return next({ name: 'dashboard' })
     }
   }

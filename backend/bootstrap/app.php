@@ -18,6 +18,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant' => \App\Http\Middleware\IdentifyTenant::class,
             'tenant.user' => \App\Http\Middleware\EnsureUserBelongsToTenant::class,
             'admin' => \App\Http\Middleware\RequireAdmin::class,
+            'staff' => \App\Http\Middleware\RequireStaff::class,
+            'permission' => \App\Http\Middleware\RequirePermission::class,
         ]);
 
         // Apply tenant middleware to API routes

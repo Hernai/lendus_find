@@ -104,7 +104,7 @@ erDiagram
         string phone UK
         string email
         string password_hash
-        enum role "APPLICANT,ANALYST,ADMIN"
+        enum type "APPLICANT,AGENT,ANALYST,ADMIN,SUPER_ADMIN"
         timestamp phone_verified_at
         timestamps
     }
@@ -2218,6 +2218,47 @@ Incluye resumen de:
 - Validación de listas negras (integración PLD)
 - Comentarios internos
 - Botones: [Solicitar Docs] [Rechazar] [Aprobar]
+
+### Roles y Permisos del Panel Administrativo
+
+**Tipos de Usuario Staff:**
+
+| Rol | Descripción |
+|-----|-------------|
+| `AGENT` | Promotor/Agente de campo. Trabaja con solicitudes asignadas. |
+| `ANALYST` | Analista de crédito. Revisa todas las solicitudes. |
+| `ADMIN` | Administrador. Aprueba/rechaza y gestiona el sistema. |
+| `SUPER_ADMIN` | Super Administrador. Configura el tenant. |
+
+**Matriz de Permisos:**
+
+| Permiso | AGENT | ANALYST | ADMIN | SUPER_ADMIN |
+|---------|-------|---------|-------|-------------|
+| Ver solicitudes | Solo asignadas | Todas | Todas | Todas |
+| Revisar documentos (aprobar/rechazar) | ✅ | ✅ | ✅ | ✅ |
+| Verificar referencias | ✅ | ✅ | ✅ | ✅ |
+| Cambiar status de solicitud | ❌ | ✅ | ✅ | ✅ |
+| Aprobar/Rechazar solicitudes | ❌ | ❌ | ✅ | ✅ |
+| Asignar solicitudes a agentes | ❌ | ❌ | ✅ | ✅ |
+| Gestionar productos (CRUD) | ❌ | ❌ | ✅ | ✅ |
+| Gestionar usuarios (CRUD) | ❌ | ❌ | ✅ | ✅ |
+| Ver reportes | ❌ | ✅ | ✅ | ✅ |
+| Configurar tenant | ❌ | ❌ | ❌ | ✅ |
+
+**Implementación Técnica:**
+
+- Backend: Middlewares `staff` y `permission:methodName` en `routes/api.php`
+- Backend: Métodos de permiso en `User.php` (`canReviewDocuments()`, `canVerifyReferences()`, etc.)
+- Frontend: Store `auth.ts` expone `isStaff`, `permissions`
+- Frontend: `AdminLayout.vue` filtra navegación según permisos
+
+**Credenciales de Prueba (después de seed):**
+
+| Rol | Email | Password |
+|-----|-------|----------|
+| Admin | admin@lendus.mx | password |
+| Analista | patricia.moreno@lendus.mx | password |
+| Agente | carlos.ramirez@lendus.mx | password |
 
 ---
 

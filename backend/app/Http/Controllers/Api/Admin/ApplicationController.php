@@ -15,10 +15,12 @@ class ApplicationController extends Controller
 {
     /**
      * List all applications with filters.
+     * Agents only see applications assigned to them.
      */
     public function index(Request $request): JsonResponse
     {
         $tenant = $request->attributes->get('tenant');
+        $user = $request->user();
 
         $query = Application::where('tenant_id', $tenant->id)
             ->with([
@@ -26,6 +28,11 @@ class ApplicationController extends Controller
                 'product:id,name,type',
                 'assignedAgent:id,name',
             ]);
+
+        // Agents only see assigned applications
+        if ($user->isAgent() && !$user->canViewAllApplications()) {
+            $query->where('assigned_to', $user->id);
+        }
 
         // Filters
         if ($status = $request->input('status')) {
@@ -69,7 +76,7 @@ class ApplicationController extends Controller
         $applications = $query->paginate($perPage);
 
         return response()->json([
-            'data' => $applications->items()->map(fn($app) => $this->formatApplication($app)),
+            'data' => collect($applications->items())->map(fn($app) => $this->formatApplication($app)),
             'meta' => [
                 'current_page' => $applications->currentPage(),
                 'last_page' => $applications->lastPage(),

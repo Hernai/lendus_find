@@ -275,6 +275,164 @@ class AuthController extends Controller
     }
 
     /**
+     * Login with email + password (for admin/staff users).
+     */
+    public function loginWithPassword(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'password' => 'required|string|min:6',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $user = User::where('email', $request->email)
+            ->where('tenant_id', app('tenant.id'))
+            ->first();
+
+        if (!$user) {
+            return response()->json([
+                'error' => 'User not found',
+                'message' => 'No existe una cuenta con este correo electrónico',
+            ], 404);
+        }
+
+        // Only allow staff users to login with password
+        if (!$user->isStaff()) {
+            return response()->json([
+                'error' => 'Unauthorized',
+                'message' => 'Este método de autenticación no está disponible para tu cuenta',
+            ], 403);
+        }
+
+        if (!$user->password || !\Hash::check($request->password, $user->password)) {
+            return response()->json([
+                'error' => 'Invalid credentials',
+                'message' => 'Correo o contraseña incorrectos',
+            ], 401);
+        }
+
+        // Record login
+        $user->recordLogin();
+
+        // Create token
+        $token = $user->createToken('auth-token')->plainTextToken;
+
+        return response()->json([
+            'success' => true,
+            'token' => $token,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'phone' => $user->phone,
+                'email' => $user->email,
+                'type' => $user->type,
+                'role' => $user->type, // Alias for frontend compatibility
+                'is_admin' => $user->isAdmin(),
+                'is_staff' => $user->isStaff(),
+                'permissions' => [
+                    'canViewAllApplications' => $user->canViewAllApplications(),
+                    'canReviewDocuments' => $user->canReviewDocuments(),
+                    'canVerifyReferences' => $user->canVerifyReferences(),
+                    'canChangeApplicationStatus' => $user->canChangeApplicationStatus(),
+                    'canApproveRejectApplications' => $user->canApproveRejectApplications(),
+                    'canAssignApplications' => $user->canAssignApplications(),
+                    'canManageProducts' => $user->canManageProducts(),
+                    'canManageUsers' => $user->canManageUsers(),
+                    'canViewReports' => $user->canViewReports(),
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * Admin/Staff Login (email + password).
+     * Specific endpoint for admin panel authentication.
+     */
+    public function adminLogin(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'password' => 'required|string|min:6',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $user = User::where('email', $request->email)
+            ->where('tenant_id', app('tenant.id'))
+            ->first();
+
+        if (!$user) {
+            return response()->json([
+                'error' => 'Invalid credentials',
+                'message' => 'Correo o contraseña incorrectos',
+            ], 401);
+        }
+
+        // Only allow staff users to login via admin endpoint
+        if (!$user->isStaff()) {
+            return response()->json([
+                'error' => 'Unauthorized',
+                'message' => 'Acceso denegado. Solo personal autorizado.',
+            ], 403);
+        }
+
+        // Check if account is active
+        if (!$user->is_active) {
+            return response()->json([
+                'error' => 'Account disabled',
+                'message' => 'Tu cuenta ha sido desactivada. Contacta al administrador.',
+            ], 403);
+        }
+
+        if (!$user->password || !\Hash::check($request->password, $user->password)) {
+            return response()->json([
+                'error' => 'Invalid credentials',
+                'message' => 'Correo o contraseña incorrectos',
+            ], 401);
+        }
+
+        // Record login
+        $user->recordLogin();
+
+        // Create token with admin-specific abilities
+        $token = $user->createToken('admin-token', ['admin'])->plainTextToken;
+
+        return response()->json([
+            'success' => true,
+            'token' => $token,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->type,
+                'is_staff' => true,
+                'permissions' => [
+                    'canViewAllApplications' => $user->canViewAllApplications(),
+                    'canReviewDocuments' => $user->canReviewDocuments(),
+                    'canVerifyReferences' => $user->canVerifyReferences(),
+                    'canChangeApplicationStatus' => $user->canChangeApplicationStatus(),
+                    'canApproveRejectApplications' => $user->canApproveRejectApplications(),
+                    'canAssignApplications' => $user->canAssignApplications(),
+                    'canManageProducts' => $user->canManageProducts(),
+                    'canManageUsers' => $user->canManageUsers(),
+                    'canViewReports' => $user->canViewReports(),
+                ],
+            ],
+        ]);
+    }
+
+    /**
      * Change PIN (requires authentication).
      */
     public function changePin(Request $request): JsonResponse
@@ -404,15 +562,33 @@ class AuthController extends Controller
     {
         $user = $request->user()->load('applicant');
 
-        return response()->json([
+        $response = [
             'user' => [
                 'id' => $user->id,
                 'phone' => $user->phone,
                 'email' => $user->email,
                 'type' => $user->type,
                 'is_admin' => $user->isAdmin(),
+                'is_staff' => $user->isStaff(),
                 'applicant' => $user->applicant,
             ],
-        ]);
+        ];
+
+        // Include permissions for staff users
+        if ($user->isStaff()) {
+            $response['user']['permissions'] = [
+                'canViewAllApplications' => $user->canViewAllApplications(),
+                'canReviewDocuments' => $user->canReviewDocuments(),
+                'canVerifyReferences' => $user->canVerifyReferences(),
+                'canChangeApplicationStatus' => $user->canChangeApplicationStatus(),
+                'canApproveRejectApplications' => $user->canApproveRejectApplications(),
+                'canAssignApplications' => $user->canAssignApplications(),
+                'canManageProducts' => $user->canManageProducts(),
+                'canManageUsers' => $user->canManageUsers(),
+                'canViewReports' => $user->canViewReports(),
+            ];
+        }
+
+        return response()->json($response);
     }
 }

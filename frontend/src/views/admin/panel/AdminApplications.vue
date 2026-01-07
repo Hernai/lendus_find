@@ -1,141 +1,116 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { api } from '@/services/api'
 import { AppButton, AppConfirmModal } from '@/components/common'
 
 const router = useRouter()
 
-interface ApplicationCompleteness {
-  personal_data: boolean
-  address: boolean
-  employment: boolean
-  documents: { uploaded: number; required: number; approved: number }
-  references: { count: number; verified: number }
-  signature: boolean
-}
-
 interface Application {
   id: string
   folio: string
-  applicant_name: string
-  email: string
-  phone: string
+  applicant: {
+    id: string
+    name: string
+    phone: string
+    email: string
+  } | null
+  product: {
+    id: string
+    name: string
+    type: string
+  } | null
   requested_amount: number
+  approved_amount: number | null
   term_months: number
+  payment_frequency: string
+  monthly_payment: number
   status: string
   created_at: string
   updated_at: string
-  product_name: string
-  assigned_to?: string
-  completeness: ApplicationCompleteness
+  assigned_to: string | null
+  risk_level: string | null
+}
+
+interface ApiResponse {
+  data: Application[]
+  meta: {
+    current_page: number
+    last_page: number
+    per_page: number
+    total: number
+  }
 }
 
 // Filters
 const searchQuery = ref('')
 const statusFilter = ref('')
-const productFilter = ref('')
-const dateFrom = ref('')
-const dateTo = ref('')
 const currentPage = ref(1)
-const itemsPerPage = ref(10)
+const itemsPerPage = ref(20)
+
+// Data
+const applications = ref<Application[]>([])
+const totalItems = ref(0)
+const totalPages = ref(1)
+const isLoading = ref(true)
+const error = ref('')
 
 const statusOptions = [
   { value: '', label: 'Todos los estados' },
+  { value: 'DRAFT', label: 'Borrador' },
   { value: 'SUBMITTED', label: 'Nueva' },
   { value: 'IN_REVIEW', label: 'En Revisión' },
   { value: 'DOCS_PENDING', label: 'Docs Pendientes' },
-  { value: 'COUNTER_OFFERED', label: 'Contraoferta' },
   { value: 'APPROVED', label: 'Aprobada' },
   { value: 'REJECTED', label: 'Rechazada' },
   { value: 'CANCELLED', label: 'Cancelada' },
   { value: 'DISBURSED', label: 'Desembolsada' }
 ]
 
-const productOptions = [
-  { value: '', label: 'Todos los productos' },
-  { value: 'PERSONAL', label: 'Crédito Personal' },
-  { value: 'NOMINA', label: 'Crédito Nómina' },
-  { value: 'ARRENDAMIENTO', label: 'Arrendamiento' }
-]
+const fetchApplications = async () => {
+  isLoading.value = true
+  error.value = ''
 
-// Mock data - will be replaced with API calls
-const applications = ref<Application[]>([
-  { id: '1', folio: 'LEN-2026-00042', applicant_name: 'Juan Pérez García', email: 'juan.perez@email.com', phone: '5512345678', requested_amount: 85000, term_months: 12, status: 'SUBMITTED', created_at: new Date(Date.now() - 5 * 60000).toISOString(), updated_at: new Date(Date.now() - 5 * 60000).toISOString(), product_name: 'Crédito Personal', completeness: { personal_data: true, address: true, employment: false, documents: { uploaded: 1, required: 3, approved: 0 }, references: { count: 0, verified: 0 }, signature: false } },
-  { id: '2', folio: 'LEN-2026-00041', applicant_name: 'María González López', email: 'maria.gonzalez@email.com', phone: '5598765432', requested_amount: 50000, term_months: 6, status: 'SUBMITTED', created_at: new Date(Date.now() - 30 * 60000).toISOString(), updated_at: new Date(Date.now() - 30 * 60000).toISOString(), product_name: 'Crédito Personal', completeness: { personal_data: true, address: false, employment: false, documents: { uploaded: 0, required: 3, approved: 0 }, references: { count: 0, verified: 0 }, signature: false } },
-  { id: '3', folio: 'LEN-2026-00040', applicant_name: 'Carlos Rodríguez Martínez', email: 'carlos.rodriguez@email.com', phone: '5511223344', requested_amount: 120000, term_months: 24, status: 'SUBMITTED', created_at: new Date(Date.now() - 2 * 3600000).toISOString(), updated_at: new Date(Date.now() - 2 * 3600000).toISOString(), product_name: 'Crédito Nómina', completeness: { personal_data: true, address: true, employment: true, documents: { uploaded: 2, required: 3, approved: 1 }, references: { count: 1, verified: 0 }, signature: false } },
-  { id: '4', folio: 'LEN-2026-00039', applicant_name: 'Ana Martínez Sánchez', email: 'ana.martinez@email.com', phone: '5544556677', requested_amount: 75000, term_months: 18, status: 'IN_REVIEW', created_at: new Date(Date.now() - 3 * 3600000).toISOString(), updated_at: new Date(Date.now() - 1 * 3600000).toISOString(), product_name: 'Crédito Personal', assigned_to: 'Carlos Ramírez', completeness: { personal_data: true, address: true, employment: true, documents: { uploaded: 3, required: 3, approved: 2 }, references: { count: 2, verified: 1 }, signature: true } },
-  { id: '5', folio: 'LEN-2026-00038', applicant_name: 'Roberto Hernández Torres', email: 'roberto.hernandez@email.com', phone: '5588990011', requested_amount: 200000, term_months: 36, status: 'IN_REVIEW', created_at: new Date(Date.now() - 5 * 3600000).toISOString(), updated_at: new Date(Date.now() - 2 * 3600000).toISOString(), product_name: 'Arrendamiento', assigned_to: 'María López', completeness: { personal_data: true, address: true, employment: true, documents: { uploaded: 3, required: 3, approved: 3 }, references: { count: 2, verified: 2 }, signature: true } },
-  { id: '6', folio: 'LEN-2026-00037', applicant_name: 'Laura Sánchez Flores', email: 'laura.sanchez@email.com', phone: '5522334455', requested_amount: 45000, term_months: 12, status: 'IN_REVIEW', created_at: new Date(Date.now() - 8 * 3600000).toISOString(), updated_at: new Date(Date.now() - 4 * 3600000).toISOString(), product_name: 'Crédito Personal', assigned_to: 'Carlos Ramírez', completeness: { personal_data: true, address: true, employment: true, documents: { uploaded: 3, required: 3, approved: 1 }, references: { count: 2, verified: 0 }, signature: true } },
-  { id: '7', folio: 'LEN-2026-00035', applicant_name: 'Pedro Ramírez Díaz', email: 'pedro.ramirez@email.com', phone: '5566778899', requested_amount: 95000, term_months: 24, status: 'DOCS_PENDING', created_at: new Date(Date.now() - 24 * 3600000).toISOString(), updated_at: new Date(Date.now() - 12 * 3600000).toISOString(), product_name: 'Crédito Nómina', completeness: { personal_data: true, address: true, employment: true, documents: { uploaded: 1, required: 3, approved: 1 }, references: { count: 2, verified: 2 }, signature: true } },
-  { id: '8', folio: 'LEN-2026-00034', applicant_name: 'Sofía Torres Ramírez', email: 'sofia.torres@email.com', phone: '5533445566', requested_amount: 60000, term_months: 18, status: 'DOCS_PENDING', created_at: new Date(Date.now() - 48 * 3600000).toISOString(), updated_at: new Date(Date.now() - 24 * 3600000).toISOString(), product_name: 'Crédito Personal', completeness: { personal_data: true, address: true, employment: true, documents: { uploaded: 2, required: 3, approved: 2 }, references: { count: 1, verified: 1 }, signature: true } },
-  { id: '9', folio: 'LEN-2026-00030', applicant_name: 'Miguel Flores García', email: 'miguel.flores@email.com', phone: '5577889900', requested_amount: 150000, term_months: 36, status: 'APPROVED', created_at: new Date(Date.now() - 72 * 3600000).toISOString(), updated_at: new Date(Date.now() - 48 * 3600000).toISOString(), product_name: 'Arrendamiento', completeness: { personal_data: true, address: true, employment: true, documents: { uploaded: 3, required: 3, approved: 3 }, references: { count: 2, verified: 2 }, signature: true } },
-  { id: '10', folio: 'LEN-2026-00028', applicant_name: 'Carmen Díaz López', email: 'carmen.diaz@email.com', phone: '5500112233', requested_amount: 35000, term_months: 6, status: 'APPROVED', created_at: new Date(Date.now() - 96 * 3600000).toISOString(), updated_at: new Date(Date.now() - 72 * 3600000).toISOString(), product_name: 'Crédito Personal', completeness: { personal_data: true, address: true, employment: true, documents: { uploaded: 3, required: 3, approved: 3 }, references: { count: 2, verified: 2 }, signature: true } },
-  { id: '11', folio: 'LEN-2026-00025', applicant_name: 'Fernando López Hernández', email: 'fernando.lopez@email.com', phone: '5511224455', requested_amount: 80000, term_months: 12, status: 'REJECTED', created_at: new Date(Date.now() - 120 * 3600000).toISOString(), updated_at: new Date(Date.now() - 96 * 3600000).toISOString(), product_name: 'Crédito Nómina', completeness: { personal_data: true, address: true, employment: true, documents: { uploaded: 3, required: 3, approved: 3 }, references: { count: 2, verified: 2 }, signature: true } },
-  { id: '12', folio: 'LEN-2026-00020', applicant_name: 'Patricia Gómez Ruiz', email: 'patricia.gomez@email.com', phone: '5533556677', requested_amount: 100000, term_months: 24, status: 'DISBURSED', created_at: new Date(Date.now() - 168 * 3600000).toISOString(), updated_at: new Date(Date.now() - 120 * 3600000).toISOString(), product_name: 'Crédito Personal', completeness: { personal_data: true, address: true, employment: true, documents: { uploaded: 3, required: 3, approved: 3 }, references: { count: 2, verified: 2 }, signature: true } },
-])
+  try {
+    const params: Record<string, unknown> = {
+      page: currentPage.value,
+      per_page: itemsPerPage.value
+    }
 
-// Computed filtered list
-const filteredApplications = computed(() => {
-  return applications.value.filter(app => {
-    // Search filter
+    if (statusFilter.value) {
+      params.status = statusFilter.value
+    }
+
     if (searchQuery.value) {
-      const query = searchQuery.value.toLowerCase()
-      const matchesName = app.applicant_name.toLowerCase().includes(query)
-      const matchesFolio = app.folio.toLowerCase().includes(query)
-      const matchesEmail = app.email.toLowerCase().includes(query)
-      const matchesPhone = app.phone.includes(query)
-      if (!matchesName && !matchesFolio && !matchesEmail && !matchesPhone) {
-        return false
-      }
+      params.search = searchQuery.value
     }
 
-    // Status filter
-    if (statusFilter.value && app.status !== statusFilter.value) {
-      return false
-    }
+    const response = await api.get<ApiResponse>('/admin/applications', { params })
 
-    // Product filter
-    if (productFilter.value) {
-      const productMap: Record<string, string> = {
-        'PERSONAL': 'Crédito Personal',
-        'NOMINA': 'Crédito Nómina',
-        'ARRENDAMIENTO': 'Arrendamiento'
-      }
-      if (app.product_name !== productMap[productFilter.value]) {
-        return false
-      }
-    }
-
-    // Date range filter
-    if (dateFrom.value) {
-      const fromDate = new Date(dateFrom.value)
-      const appDate = new Date(app.created_at)
-      if (appDate < fromDate) return false
-    }
-
-    if (dateTo.value) {
-      const toDate = new Date(dateTo.value)
-      toDate.setHours(23, 59, 59, 999)
-      const appDate = new Date(app.created_at)
-      if (appDate > toDate) return false
-    }
-
-    return true
-  })
-})
-
-// Pagination
-const totalPages = computed(() => Math.ceil(filteredApplications.value.length / itemsPerPage.value))
-const paginatedApplications = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage.value
-  const end = start + itemsPerPage.value
-  return filteredApplications.value.slice(start, end)
-})
-
-// Reset pagination when filters change
-const resetPage = () => {
-  currentPage.value = 1
+    applications.value = response.data.data
+    totalItems.value = response.data.meta.total
+    totalPages.value = response.data.meta.last_page
+  } catch (e) {
+    console.error('Failed to fetch applications:', e)
+    error.value = 'Error al cargar las solicitudes'
+  } finally {
+    isLoading.value = false
+  }
 }
+
+onMounted(() => {
+  fetchApplications()
+})
+
+// Watch filters and refetch
+watch([statusFilter, searchQuery], () => {
+  currentPage.value = 1
+  fetchApplications()
+})
+
+watch(currentPage, () => {
+  fetchApplications()
+})
 
 // Formatters
 const formatMoney = (amount: number) => {
@@ -158,14 +133,15 @@ const formatDate = (dateStr: string) => {
 
 const getStatusBadge = (status: string) => {
   const badges: Record<string, { bg: string; text: string; label: string }> = {
+    DRAFT: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Borrador' },
     SUBMITTED: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Nueva' },
     IN_REVIEW: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'En Revisión' },
     DOCS_PENDING: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Docs Pendientes' },
-    COUNTER_OFFERED: { bg: 'bg-indigo-100', text: 'text-indigo-800', label: 'Contraoferta' },
     APPROVED: { bg: 'bg-green-100', text: 'text-green-800', label: 'Aprobada' },
     REJECTED: { bg: 'bg-red-100', text: 'text-red-800', label: 'Rechazada' },
     CANCELLED: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Cancelada' },
-    DISBURSED: { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Desembolsada' }
+    DISBURSED: { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Desembolsada' },
+    SYNCED: { bg: 'bg-teal-100', text: 'text-teal-800', label: 'Sincronizada' }
   }
   return badges[status] || { bg: 'bg-gray-100', text: 'text-gray-800', label: status }
 }
@@ -177,22 +153,19 @@ const viewApplication = (app: Application) => {
 const clearFilters = () => {
   searchQuery.value = ''
   statusFilter.value = ''
-  productFilter.value = ''
-  dateFrom.value = ''
-  dateTo.value = ''
   currentPage.value = 1
 }
 
 const exportToCSV = () => {
   const headers = ['Folio', 'Solicitante', 'Email', 'Teléfono', 'Monto', 'Plazo', 'Producto', 'Estado', 'Fecha']
-  const rows = filteredApplications.value.map(app => [
+  const rows = applications.value.map(app => [
     app.folio,
-    app.applicant_name,
-    app.email,
-    app.phone,
+    app.applicant?.name || 'N/A',
+    app.applicant?.email || 'N/A',
+    app.applicant?.phone || 'N/A',
     app.requested_amount,
     `${app.term_months} meses`,
-    app.product_name,
+    app.product?.name || 'N/A',
     getStatusBadge(app.status).label,
     formatDate(app.created_at)
   ])
@@ -211,12 +184,11 @@ const showBulkAssignModal = ref(false)
 const selectedAgentId = ref('')
 const isAssigning = ref(false)
 
-// Agents list
+// Agents list - will be fetched from API
 const agents = ref([
-  { id: 'agent1', name: 'Carlos Ramírez', email: 'carlos.ramirez@lendus.mx', active_cases: 12 },
-  { id: 'agent2', name: 'María López', email: 'maria.lopez@lendus.mx', active_cases: 8 },
-  { id: 'agent3', name: 'Juan Hernández', email: 'juan.hernandez@lendus.mx', active_cases: 15 },
-  { id: 'agent4', name: 'Ana García', email: 'ana.garcia@lendus.mx', active_cases: 5 },
+  { id: 'agent1', name: 'Admin Demo', email: 'admin@demo.com', active_cases: 0 },
+  { id: 'agent2', name: 'Analista Demo', email: 'analista@demo.com', active_cases: 0 },
+  { id: 'agent3', name: 'Agente Demo', email: 'agente@demo.com', active_cases: 0 },
 ])
 
 // Selection functions
@@ -231,62 +203,25 @@ const toggleSelection = (id: string) => {
 }
 
 const toggleSelectAll = () => {
-  if (selectedIds.value.size === paginatedApplications.value.length) {
+  if (selectedIds.value.size === applications.value.length) {
     selectedIds.value.clear()
   } else {
-    paginatedApplications.value.forEach(app => selectedIds.value.add(app.id))
+    applications.value.forEach(app => selectedIds.value.add(app.id))
   }
 }
 
 const isAllSelected = computed(() => {
-  return paginatedApplications.value.length > 0 &&
-    selectedIds.value.size === paginatedApplications.value.length
+  return applications.value.length > 0 &&
+    selectedIds.value.size === applications.value.length
 })
 
 const isSomeSelected = computed(() => {
   return selectedIds.value.size > 0 &&
-    selectedIds.value.size < paginatedApplications.value.length
+    selectedIds.value.size < applications.value.length
 })
 
 const clearSelection = () => {
   selectedIds.value.clear()
-}
-
-// Completeness calculation
-const getCompletenessPercent = (c: ApplicationCompleteness): number => {
-  let completed = 0
-  let total = 6
-
-  if (c.personal_data) completed++
-  if (c.address) completed++
-  if (c.employment) completed++
-  if (c.documents.uploaded >= c.documents.required) completed++
-  if (c.references.count >= 2) completed++
-  if (c.signature) completed++
-
-  return Math.round((completed / total) * 100)
-}
-
-const getCompletenessColor = (percent: number): string => {
-  if (percent >= 100) return 'bg-green-500'
-  if (percent >= 75) return 'bg-blue-500'
-  if (percent >= 50) return 'bg-yellow-500'
-  return 'bg-red-500'
-}
-
-const getMissingItems = (c: ApplicationCompleteness): string[] => {
-  const missing: string[] = []
-  if (!c.personal_data) missing.push('Datos personales')
-  if (!c.address) missing.push('Domicilio')
-  if (!c.employment) missing.push('Empleo')
-  if (c.documents.uploaded < c.documents.required) {
-    missing.push(`Documentos (${c.documents.uploaded}/${c.documents.required})`)
-  }
-  if (c.references.count < 2) {
-    missing.push(`Referencias (${c.references.count}/2)`)
-  }
-  if (!c.signature) missing.push('Firma')
-  return missing
 }
 
 // Bulk assign
@@ -304,22 +239,25 @@ const confirmBulkAssign = async () => {
   if (!selectedAgentId.value || selectedIds.value.size === 0) return
 
   isAssigning.value = true
-  const agent = agents.value.find(a => a.id === selectedAgentId.value)
 
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 1000))
-
-  // Update applications
-  applications.value = applications.value.map(app => {
-    if (selectedIds.value.has(app.id)) {
-      return { ...app, assigned_to: agent?.name }
+  try {
+    // Call API for each selected application
+    for (const appId of selectedIds.value) {
+      await api.put(`/admin/applications/${appId}/assign`, {
+        user_id: selectedAgentId.value
+      })
     }
-    return app
-  })
 
-  isAssigning.value = false
-  clearSelection()
-  closeBulkAssignModal()
+    // Refresh list
+    await fetchApplications()
+    clearSelection()
+    closeBulkAssignModal()
+  } catch (e) {
+    console.error('Failed to assign applications:', e)
+    error.value = 'Error al asignar las solicitudes'
+  } finally {
+    isAssigning.value = false
+  }
 }
 
 // Bulk reject
@@ -353,20 +291,25 @@ const confirmBulkReject = async () => {
 
   isRejecting.value = true
 
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 1000))
-
-  // Update applications
-  applications.value = applications.value.map(app => {
-    if (selectedIds.value.has(app.id)) {
-      return { ...app, status: 'REJECTED' }
+  try {
+    // Call API for each selected application
+    for (const appId of selectedIds.value) {
+      await api.put(`/admin/applications/${appId}/status`, {
+        status: 'REJECTED',
+        rejection_reason: bulkRejectReason.value
+      })
     }
-    return app
-  })
 
-  isRejecting.value = false
-  clearSelection()
-  closeBulkRejectModal()
+    // Refresh list
+    await fetchApplications()
+    clearSelection()
+    closeBulkRejectModal()
+  } catch (e) {
+    console.error('Failed to reject applications:', e)
+    error.value = 'Error al rechazar las solicitudes'
+  } finally {
+    isRejecting.value = false
+  }
 }
 </script>
 
@@ -376,17 +319,35 @@ const confirmBulkReject = async () => {
     <div class="flex items-center justify-between mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-900">Solicitudes</h1>
-        <p class="text-gray-500">{{ filteredApplications.length }} solicitudes encontradas</p>
+        <p class="text-gray-500">{{ totalItems }} solicitudes encontradas</p>
       </div>
-      <button
-        class="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-        @click="exportToCSV"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-        </svg>
-        Exportar CSV
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          class="flex items-center gap-2 px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+          :disabled="isLoading"
+          @click="fetchApplications"
+        >
+          <svg
+            class="w-4 h-4"
+            :class="{ 'animate-spin': isLoading }"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Actualizar
+        </button>
+        <button
+          class="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+          @click="exportToCSV"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Exportar CSV
+        </button>
+      </div>
     </div>
 
     <!-- Bulk Actions Bar -->
@@ -445,9 +406,9 @@ const confirmBulkReject = async () => {
 
     <!-- Filters -->
     <div class="bg-white rounded-xl shadow-sm p-4 mb-6">
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <!-- Search -->
-        <div class="lg:col-span-2">
+        <div class="md:col-span-1">
           <label class="block text-sm font-medium text-gray-700 mb-1">Buscar</label>
           <div class="relative">
             <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -456,9 +417,8 @@ const confirmBulkReject = async () => {
             <input
               v-model="searchQuery"
               type="text"
-              placeholder="Nombre, folio, email, teléfono..."
+              placeholder="Nombre, folio, email..."
               class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              @input="resetPage"
             >
           </div>
         </div>
@@ -469,23 +429,8 @@ const confirmBulkReject = async () => {
           <select
             v-model="statusFilter"
             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            @change="resetPage"
           >
             <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </div>
-
-        <!-- Product Filter -->
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Producto</label>
-          <select
-            v-model="productFilter"
-            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            @change="resetPage"
-          >
-            <option v-for="opt in productOptions" :key="opt.value" :value="opt.value">
               {{ opt.label }}
             </option>
           </select>
@@ -501,34 +446,26 @@ const confirmBulkReject = async () => {
           </button>
         </div>
       </div>
+    </div>
 
-      <!-- Date Range (collapsible) -->
-      <div class="mt-4 pt-4 border-t border-gray-200">
-        <div class="grid grid-cols-2 gap-4 max-w-md">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Desde</label>
-            <input
-              v-model="dateFrom"
-              type="date"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              @change="resetPage"
-            >
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
-            <input
-              v-model="dateTo"
-              type="date"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              @change="resetPage"
-            >
-          </div>
-        </div>
-      </div>
+    <!-- Loading State -->
+    <div v-if="isLoading && applications.length === 0" class="flex items-center justify-center py-12">
+      <div class="animate-spin w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full"></div>
+    </div>
+
+    <!-- Error State -->
+    <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+      <p class="text-red-600">{{ error }}</p>
+      <button
+        @click="fetchApplications"
+        class="mt-4 px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700"
+      >
+        Reintentar
+      </button>
     </div>
 
     <!-- Table -->
-    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <div v-else class="bg-white rounded-xl shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
@@ -549,9 +486,6 @@ const confirmBulkReject = async () => {
                 Solicitante
               </th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Avance
-              </th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Monto
               </th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -567,7 +501,7 @@ const confirmBulkReject = async () => {
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             <tr
-              v-for="app in paginatedApplications"
+              v-for="app in applications"
               :key="app.id"
               :class="[
                 'hover:bg-gray-50 cursor-pointer transition-colors',
@@ -585,55 +519,12 @@ const confirmBulkReject = async () => {
               </td>
               <td class="px-4 py-4 whitespace-nowrap">
                 <div class="font-mono text-sm text-gray-900">{{ app.folio }}</div>
-                <div class="text-xs text-gray-500">{{ app.product_name }}</div>
+                <div class="text-xs text-gray-500">{{ app.product?.name || 'Sin producto' }}</div>
               </td>
               <td class="px-4 py-4 whitespace-nowrap">
                 <div>
-                  <div class="font-medium text-gray-900">{{ app.applicant_name }}</div>
-                  <div class="text-sm text-gray-500">{{ app.phone }}</div>
-                </div>
-              </td>
-              <td class="px-4 py-4 whitespace-nowrap">
-                <div class="group relative">
-                  <div class="flex items-center gap-2">
-                    <div class="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        :class="['h-full rounded-full transition-all', getCompletenessColor(getCompletenessPercent(app.completeness))]"
-                        :style="{ width: getCompletenessPercent(app.completeness) + '%' }"
-                      />
-                    </div>
-                    <span class="text-xs font-medium text-gray-600">{{ getCompletenessPercent(app.completeness) }}%</span>
-                  </div>
-                  <!-- Tooltip -->
-                  <div
-                    v-if="getMissingItems(app.completeness).length > 0"
-                    class="absolute left-0 bottom-full mb-2 hidden group-hover:block z-10"
-                  >
-                    <div class="bg-gray-900 text-white text-xs rounded-lg py-2 px-3 shadow-lg whitespace-nowrap">
-                      <div class="font-semibold mb-1">Pendiente:</div>
-                      <ul class="space-y-0.5">
-                        <li v-for="item in getMissingItems(app.completeness)" :key="item" class="flex items-center gap-1">
-                          <svg class="w-3 h-3 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                          </svg>
-                          {{ item }}
-                        </li>
-                      </ul>
-                      <div class="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900" />
-                    </div>
-                  </div>
-                  <div
-                    v-else
-                    class="absolute left-0 bottom-full mb-2 hidden group-hover:block z-10"
-                  >
-                    <div class="bg-green-700 text-white text-xs rounded-lg py-2 px-3 shadow-lg whitespace-nowrap flex items-center gap-1">
-                      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                      </svg>
-                      Expediente completo
-                      <div class="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-green-700" />
-                    </div>
-                  </div>
+                  <div class="font-medium text-gray-900">{{ app.applicant?.name || 'Sin nombre' }}</div>
+                  <div class="text-sm text-gray-500">{{ app.applicant?.phone || 'Sin teléfono' }}</div>
                 </div>
               </td>
               <td class="px-4 py-4 whitespace-nowrap">
@@ -669,8 +560,8 @@ const confirmBulkReject = async () => {
             </tr>
 
             <!-- Empty state -->
-            <tr v-if="paginatedApplications.length === 0">
-              <td colspan="8" class="px-6 py-12 text-center">
+            <tr v-if="applications.length === 0">
+              <td colspan="7" class="px-6 py-12 text-center">
                 <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
@@ -708,9 +599,9 @@ const confirmBulkReject = async () => {
               Mostrando
               <span class="font-medium">{{ (currentPage - 1) * itemsPerPage + 1 }}</span>
               a
-              <span class="font-medium">{{ Math.min(currentPage * itemsPerPage, filteredApplications.length) }}</span>
+              <span class="font-medium">{{ Math.min(currentPage * itemsPerPage, totalItems) }}</span>
               de
-              <span class="font-medium">{{ filteredApplications.length }}</span>
+              <span class="font-medium">{{ totalItems }}</span>
               resultados
             </p>
           </div>
@@ -726,7 +617,7 @@ const confirmBulkReject = async () => {
                 </svg>
               </button>
               <button
-                v-for="page in totalPages"
+                v-for="page in Math.min(totalPages, 5)"
                 :key="page"
                 :class="[
                   'relative inline-flex items-center px-4 py-2 border text-sm font-medium',
@@ -801,10 +692,6 @@ const confirmBulkReject = async () => {
                   <div class="font-medium text-gray-900">{{ agent.name }}</div>
                   <div class="text-sm text-gray-500">{{ agent.email }}</div>
                 </div>
-                <div class="text-right">
-                  <div class="text-sm font-medium text-gray-900">{{ agent.active_cases }}</div>
-                  <div class="text-xs text-gray-500">casos activos</div>
-                </div>
               </div>
               <svg
                 v-if="selectedAgentId === agent.id"
@@ -865,15 +752,6 @@ const confirmBulkReject = async () => {
               {{ reason.label }}
             </option>
           </select>
-        </div>
-
-        <div v-if="bulkRejectReason === 'OTRO'" class="space-y-2">
-          <label class="block text-sm font-medium text-gray-700">Especifica el motivo</label>
-          <textarea
-            rows="3"
-            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
-            placeholder="Describe el motivo del rechazo..."
-          />
         </div>
       </div>
     </AppConfirmModal>

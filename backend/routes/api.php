@@ -35,6 +35,9 @@ Route::middleware(['tenant'])->group(function () {
         Route::post('/check-user', [AuthController::class, 'checkUser']);
         Route::post('/pin/login', [AuthController::class, 'loginWithPin']);
         Route::post('/pin/reset', [AuthController::class, 'resetPinWithOtp']);
+
+        // Email/Password Authentication (for admin/staff users)
+        Route::post('/password/login', [AuthController::class, 'loginWithPassword']);
     });
 
     // PIN Setup & Change (requires authentication)
@@ -109,37 +112,75 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user'])->group(function () 
         ->name('api.documents.download');
 });
 
-// Admin routes (authenticated admin within tenant)
-Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'admin'])->prefix('admin')->group(function () {
-    // Dashboard
+// =============================================
+// ADMIN AUTH - Staff login (no prior authentication required)
+// =============================================
+Route::middleware(['tenant'])->prefix('admin/auth')->group(function () {
+    Route::post('/login', [AuthController::class, 'adminLogin']);
+});
+
+// Admin routes (authenticated staff within tenant)
+// Base middleware: staff = agent, analyst, admin, super_admin
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff'])->prefix('admin')->group(function () {
+
+    // =============================================
+    // DASHBOARD - All staff can view
+    // =============================================
     Route::get('/dashboard', [DashboardController::class, 'index']);
     Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
 
-    // Applications Management
+    // =============================================
+    // APPLICATIONS - Varies by role
+    // =============================================
     Route::prefix('applications')->group(function () {
+        // List and view - all staff (agents see only assigned)
         Route::get('/', [AdminApplicationController::class, 'index']);
         Route::get('/{application}', [AdminApplicationController::class, 'show']);
-        Route::put('/{application}/status', [AdminApplicationController::class, 'updateStatus']);
-        Route::post('/{application}/counter-offer', [AdminApplicationController::class, 'counterOffer']);
-        Route::put('/{application}/assign', [AdminApplicationController::class, 'assign']);
+
+        // Add notes - all staff can add notes
         Route::post('/{application}/notes', [AdminApplicationController::class, 'addNote']);
 
-        // Document review
-        Route::put('/{application}/documents/{document}/approve', [AdminApplicationController::class, 'approveDocument']);
-        Route::put('/{application}/documents/{document}/reject', [AdminApplicationController::class, 'rejectDocument']);
+        // Status changes - requires canChangeApplicationStatus (analyst+)
+        Route::put('/{application}/status', [AdminApplicationController::class, 'updateStatus'])
+            ->middleware('permission:canChangeApplicationStatus');
 
-        // Reference verification
-        Route::put('/{application}/references/{reference}/verify', [AdminApplicationController::class, 'verifyReference']);
+        // Counter-offer - requires canApproveRejectApplications (admin+)
+        Route::post('/{application}/counter-offer', [AdminApplicationController::class, 'counterOffer'])
+            ->middleware('permission:canApproveRejectApplications');
+
+        // Assign to agent - requires canAssignApplications (admin+)
+        Route::put('/{application}/assign', [AdminApplicationController::class, 'assign'])
+            ->middleware('permission:canAssignApplications');
+
+        // Document review - requires canReviewDocuments (analyst+)
+        Route::put('/{application}/documents/{document}/approve', [AdminApplicationController::class, 'approveDocument'])
+            ->middleware('permission:canReviewDocuments');
+        Route::put('/{application}/documents/{document}/reject', [AdminApplicationController::class, 'rejectDocument'])
+            ->middleware('permission:canReviewDocuments');
+
+        // Reference verification - requires canVerifyReferences (analyst+)
+        Route::put('/{application}/references/{reference}/verify', [AdminApplicationController::class, 'verifyReference'])
+            ->middleware('permission:canVerifyReferences');
     });
 
-    // Products Management
-    Route::apiResource('products', \App\Http\Controllers\Api\Admin\ProductController::class);
+    // =============================================
+    // PRODUCTS MANAGEMENT - Admin only
+    // =============================================
+    Route::middleware('permission:canManageProducts')->group(function () {
+        Route::apiResource('products', \App\Http\Controllers\Api\Admin\ProductController::class);
+    });
 
-    // Users Management
-    Route::apiResource('users', \App\Http\Controllers\Api\Admin\UserController::class);
+    // =============================================
+    // USERS MANAGEMENT - Admin only
+    // =============================================
+    Route::middleware('permission:canManageUsers')->group(function () {
+        Route::apiResource('users', \App\Http\Controllers\Api\Admin\UserController::class);
+    });
 
-    // Reports
-    Route::prefix('reports')->group(function () {
+    // =============================================
+    // REPORTS - Analyst+ can view
+    // =============================================
+    Route::middleware('permission:canViewReports')->prefix('reports')->group(function () {
         Route::get('/applications', [DashboardController::class, 'applicationsReport']);
         Route::get('/disbursements', [DashboardController::class, 'disbursementsReport']);
         Route::get('/portfolio', [DashboardController::class, 'portfolioReport']);

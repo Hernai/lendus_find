@@ -123,14 +123,36 @@ class DemoDataSeeder extends Seeder
             'phone' => '5500000001',
             'password' => Hash::make('password'),
             'tenant_id' => $tenant->id,
-            'type' => 'ADMIN',
-            'role' => 'admin',
+            'type' => User::TYPE_ADMIN,
             'is_active' => true,
             'email_verified_at' => now(),
             'phone_verified_at' => now(),
         ]);
 
-        // Create Agent Users
+        // Create Analyst Users
+        $analysts = [];
+        $analystNames = [
+            ['Patricia', 'Moreno', 'Ruiz'],
+            ['Fernando', 'Díaz', 'Castro'],
+        ];
+
+        foreach ($analystNames as $index => $nameParts) {
+            $analysts[] = User::create([
+                'name' => "{$nameParts[0]} {$nameParts[1]}",
+                'first_name' => $nameParts[0],
+                'last_name' => $nameParts[1],
+                'email' => strtolower($nameParts[0]) . '.' . strtolower($nameParts[1]) . '@lendus.mx',
+                'phone' => '550000010' . ($index + 1),
+                'password' => Hash::make('password'),
+                'tenant_id' => $tenant->id,
+                'type' => User::TYPE_ANALYST,
+                'is_active' => true,
+                'email_verified_at' => now(),
+                'phone_verified_at' => now(),
+            ]);
+        }
+
+        // Create Agent Users (Promotores)
         $agents = [];
         $agentNames = [
             ['Carlos', 'Ramírez', 'López'],
@@ -148,8 +170,7 @@ class DemoDataSeeder extends Seeder
                 'phone' => '550000000' . ($index + 2),
                 'password' => Hash::make('password'),
                 'tenant_id' => $tenant->id,
-                'type' => 'AGENT',
-                'role' => 'agent',
+                'type' => User::TYPE_AGENT,
                 'is_active' => true,
                 'email_verified_at' => now(),
                 'phone_verified_at' => now(),
@@ -243,7 +264,7 @@ class DemoDataSeeder extends Seeder
                 'phone' => $data['phone'],
                 'password' => Hash::make('password'),
                 'tenant_id' => $tenant->id,
-                'type' => 'APPLICANT',
+                'type' => User::TYPE_APPLICANT,
                 'is_active' => true,
                 'email_verified_at' => now(),
                 'phone_verified_at' => now(),
@@ -435,7 +456,11 @@ class DemoDataSeeder extends Seeder
         }
 
         $this->command->info('Demo data seeded successfully!');
-        $this->command->info("Admin credentials: admin@lendus.mx / password");
         $this->command->info("Tenant slug: demo");
+        $this->command->info("");
+        $this->command->info("Staff Credentials (password: 'password'):");
+        $this->command->info("  Admin: admin@lendus.mx");
+        $this->command->info("  Analista: patricia.moreno@lendus.mx");
+        $this->command->info("  Agente: carlos.ramirez@lendus.mx");
     }
 }

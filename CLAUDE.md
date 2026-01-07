@@ -34,6 +34,9 @@ LendusFind/
 │   │   ├── router/
 │   │   ├── stores/       # Pinia stores
 │   │   ├── views/
+│   │   │   ├── public/       # Landing, Simulator
+│   │   │   ├── applicant/    # Auth, Onboarding, Dashboard
+│   │   │   └── admin/        # Auth, Panel
 │   │   └── types/
 │   ├── tailwind.config.js
 │   └── vite.config.ts
@@ -120,7 +123,7 @@ Tenant identification via subdomain (`tenant.losapp.com`) or `X-Tenant-Slug` hea
 
 - **tenants**: Company configuration, branding (JSONB), webhook config
 - **products**: Credit product types (SIMPLE, NOMINA, ARRENDAMIENTO, HIPOTECARIO, PYME) with rules and required docs as JSONB
-- **users**: Authentication with roles (APPLICANT, ANALYST, ADMIN)
+- **users**: Authentication with roles (APPLICANT, AGENT, ANALYST, ADMIN, SUPER_ADMIN)
 - **applicants**: Client data (PERSONA_FISICA or PERSONA_MORAL) with JSONB fields for personal_data, address, employment_info
 - **applications**: Credit applications with status workflow (DRAFT → SUBMITTED → IN_REVIEW → DOCS_PENDING → APPROVED/REJECTED → SYNCED)
 - **documents**: Uploaded files with OCR data, status tracking
@@ -157,3 +160,52 @@ The system validates Mexican tax and identification formats:
 - **Thumb-First**: Action buttons in bottom sticky zone for mobile ergonomics
 - **Progressive Disclosure**: Form fields revealed step by step (8-step wizard)
 - **White-Label Theming**: CSS variables (`--tenant-primary`, etc.) for dynamic branding
+
+## Roles y Permisos (Staff)
+
+El sistema tiene 5 tipos de usuario. Solo los roles de staff pueden acceder al panel administrativo (`/admin`).
+
+### Tipos de Usuario
+
+| Rol | Descripción | Acceso Admin |
+|-----|-------------|--------------|
+| `APPLICANT` | Solicitante de crédito | No |
+| `AGENT` | Promotor/Agente de campo | Sí |
+| `ANALYST` | Analista de crédito | Sí |
+| `ADMIN` | Administrador | Sí |
+| `SUPER_ADMIN` | Super Administrador | Sí |
+
+### Matriz de Permisos
+
+| Permiso | AGENT | ANALYST | ADMIN | SUPER_ADMIN |
+|---------|-------|---------|-------|-------------|
+| Ver solicitudes | Solo asignadas | Todas | Todas | Todas |
+| Revisar documentos | ✅ | ✅ | ✅ | ✅ |
+| Verificar referencias | ✅ | ✅ | ✅ | ✅ |
+| Cambiar status | ❌ | ✅ | ✅ | ✅ |
+| Aprobar/Rechazar | ❌ | ❌ | ✅ | ✅ |
+| Asignar a agentes | ❌ | ❌ | ✅ | ✅ |
+| Gestionar productos | ❌ | ❌ | ✅ | ✅ |
+| Gestionar usuarios | ❌ | ❌ | ✅ | ✅ |
+| Ver reportes | ❌ | ✅ | ✅ | ✅ |
+| Configurar tenant | ❌ | ❌ | ❌ | ✅ |
+
+### Implementación
+
+**Backend (Laravel):**
+- Constantes en `User.php`: `TYPE_APPLICANT`, `TYPE_AGENT`, `TYPE_ANALYST`, `TYPE_ADMIN`, `TYPE_SUPER_ADMIN`
+- Métodos de permiso: `canReviewDocuments()`, `canVerifyReferences()`, `canChangeApplicationStatus()`, etc.
+- Middlewares: `staff` (verifica que sea staff), `permission:methodName` (verifica permiso específico)
+
+**Frontend (Vue):**
+- Store `auth.ts`: expone `isStaff`, `isAgent`, `isAnalyst`, `isAdmin`, `permissions`
+- Router: usa `requiresStaff` en meta para proteger rutas admin
+- `AdminLayout.vue`: filtra navegación según `permissions`
+
+### Credenciales de Prueba (después de seed)
+
+| Rol | Email | Password |
+|-----|-------|----------|
+| Admin | admin@lendus.mx | password |
+| Analista | patricia.moreno@lendus.mx | password |
+| Agente | carlos.ramirez@lendus.mx | password |
