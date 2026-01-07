@@ -72,10 +72,20 @@ const handleSubmit = async () => {
 
 const prevStep = () => router.push('/solicitud/paso-4')
 
-onMounted(() => {
-  // If no simulation exists, redirect to simulator
+onMounted(async () => {
+  // If no simulation exists
   if (!simulation.value) {
-    router.push('/simulador')
+    // In DEV mode, create a mock simulation
+    if (import.meta.env.DEV) {
+      await applicationStore.runSimulation({
+        amount: 25000,
+        term_months: 12,
+        payment_frequency: 'BIWEEKLY'
+      })
+    } else {
+      // In production, redirect to simulator
+      router.push('/simulador')
+    }
   }
 })
 </script>

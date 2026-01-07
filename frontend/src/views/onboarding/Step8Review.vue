@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApplicationStore, useApplicantStore } from '@/stores'
-import { AppButton } from '@/components/common'
+import { AppButton, AppSignaturePad } from '@/components/common'
 
 const router = useRouter()
 const applicationStore = useApplicationStore()
@@ -11,13 +11,20 @@ const applicantStore = useApplicantStore()
 const isSubmitting = ref(false)
 const acceptTerms = ref(false)
 const acceptPrivacy = ref(false)
+const acceptBuro = ref(false)
+const signature = ref<string | null>(null)
 const error = ref('')
 
 const simulation = computed(() => applicationStore.simulation)
 const applicant = computed(() => applicantStore.applicant)
 const application = computed(() => applicationStore.currentApplication)
 
-const canSubmit = computed(() => acceptTerms.value && acceptPrivacy.value)
+const canSubmit = computed(() =>
+  acceptTerms.value &&
+  acceptPrivacy.value &&
+  acceptBuro.value &&
+  signature.value !== null
+)
 
 const formatMoney = (amount: number) => {
   return new Intl.NumberFormat('es-MX', {
@@ -36,7 +43,11 @@ const frequencyLabels: Record<string, string> = {
 
 const handleSubmit = async () => {
   if (!canSubmit.value) {
-    error.value = 'Debes aceptar los términos y condiciones'
+    if (!signature.value) {
+      error.value = 'Debes firmar la solicitud'
+    } else {
+      error.value = 'Debes aceptar todos los términos y condiciones'
+    }
     return
   }
 
@@ -48,6 +59,8 @@ const handleSubmit = async () => {
       step8: {
         accepted_terms: true,
         accepted_privacy: true,
+        accepted_buro: true,
+        signature: signature.value,
         accepted_at: new Date().toISOString()
       }
     })
@@ -149,7 +162,7 @@ const sections = computed(() => [
             <span class="text-sm text-gray-600">
               Acepto los
               <a href="#" class="text-primary-600 hover:underline">Términos y Condiciones</a>
-              del servicio y autorizo la consulta a sociedades de información crediticia.
+              del servicio.
             </span>
           </label>
 
@@ -171,6 +184,35 @@ const sections = computed(() => [
               <a href="#" class="text-primary-600 hover:underline">Aviso de Privacidad</a>.
             </span>
           </label>
+
+          <label class="flex items-start gap-3 cursor-pointer">
+            <div class="relative flex-shrink-0 mt-0.5">
+              <input
+                v-model="acceptBuro"
+                type="checkbox"
+                class="sr-only peer"
+              >
+              <div class="w-5 h-5 border-2 border-gray-300 rounded peer-checked:border-primary-600 peer-checked:bg-primary-600 transition-colors">
+                <svg v-if="acceptBuro" class="w-full h-full text-white p-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            </div>
+            <span class="text-sm text-gray-600">
+              Autorizo la consulta de mi historial crediticio en
+              <strong>Buró de Crédito</strong> y <strong>Círculo de Crédito</strong>.
+            </span>
+          </label>
+        </div>
+
+        <!-- Signature Pad -->
+        <div class="mt-6">
+          <AppSignaturePad
+            v-model="signature"
+            label="Firma digital"
+            :height="120"
+            required
+          />
         </div>
 
         <p v-if="error" class="text-sm text-red-500 text-center mt-4">

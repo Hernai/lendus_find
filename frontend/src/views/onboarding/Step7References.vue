@@ -1,31 +1,49 @@
 <script setup lang="ts">
-import { reactive, computed } from 'vue'
+import { reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApplicationStore } from '@/stores'
-import { AppButton, AppInput, AppSelect } from '@/components/common'
+import { AppButton, AppInput, AppSelect, AppRadioGroup } from '@/components/common'
 
 const router = useRouter()
 const applicationStore = useApplicationStore()
 
 interface Reference {
-  name: string
+  first_name: string
+  last_name_1: string
+  last_name_2: string
   relationship: string
+  type: 'PERSONAL' | 'WORK' | ''
   phone: string
 }
 
 const references = reactive<Reference[]>([
-  { name: '', relationship: '', phone: '' },
-  { name: '', relationship: '', phone: '' }
+  { first_name: '', last_name_1: '', last_name_2: '', relationship: '', type: 'PERSONAL', phone: '' },
+  { first_name: '', last_name_1: '', last_name_2: '', relationship: '', type: 'WORK', phone: '' }
 ])
 
 const errors = reactive<{ [key: string]: string }>({})
 
-const relationshipOptions = [
-  { value: 'FAMILIAR', label: 'Familiar' },
+const familyRelationshipOptions = [
+  { value: 'PADRE_MADRE', label: 'Padre/Madre' },
+  { value: 'HERMANO', label: 'Hermano(a)' },
+  { value: 'CONYUGE', label: 'Cónyuge' },
+  { value: 'HIJO', label: 'Hijo(a)' },
+  { value: 'TIO', label: 'Tío(a)' },
+  { value: 'PRIMO', label: 'Primo(a)' },
+  { value: 'OTRO_FAMILIAR', label: 'Otro familiar' }
+]
+
+const nonFamilyRelationshipOptions = [
   { value: 'AMIGO', label: 'Amigo(a)' },
-  { value: 'COMPAÑERO', label: 'Compañero(a) de trabajo' },
+  { value: 'COMPAÑERO_TRABAJO', label: 'Compañero(a) de trabajo' },
   { value: 'VECINO', label: 'Vecino(a)' },
+  { value: 'CONOCIDO', label: 'Conocido(a)' },
   { value: 'OTRO', label: 'Otro' }
+]
+
+const referenceTypeOptions = [
+  { value: 'PERSONAL', label: 'Personal' },
+  { value: 'WORK', label: 'Laboral' }
 ]
 
 const isPhoneValid = (phone: string): boolean => {
@@ -56,13 +74,23 @@ const validate = () => {
   const newErrors: { [key: string]: string } = {}
 
   references.forEach((ref, index) => {
-    if (!ref.name.trim()) {
-      newErrors[`name_${index}`] = 'El nombre es requerido'
+    if (!ref.first_name.trim()) {
+      newErrors[`first_name_${index}`] = 'El nombre es requerido'
+      isValid = false
+    }
+
+    if (!ref.last_name_1.trim()) {
+      newErrors[`last_name_1_${index}`] = 'El apellido paterno es requerido'
       isValid = false
     }
 
     if (!ref.relationship) {
       newErrors[`relationship_${index}`] = 'Selecciona la relación'
+      isValid = false
+    }
+
+    if (!ref.type) {
+      newErrors[`type_${index}`] = 'Selecciona el tipo de referencia'
       isValid = false
     }
 
@@ -79,6 +107,23 @@ const validate = () => {
     isValid = false
   }
 
+  // Validar que haya al menos 1 familiar y 1 no familiar
+  const hasFamily = references.some(r =>
+    familyRelationshipOptions.some(opt => opt.value === r.relationship)
+  )
+  const hasNonFamily = references.some(r =>
+    nonFamilyRelationshipOptions.some(opt => opt.value === r.relationship)
+  )
+
+  if (!hasFamily) {
+    newErrors['general'] = 'Debe incluir al menos una referencia familiar'
+    isValid = false
+  }
+  if (!hasNonFamily) {
+    newErrors['general'] = 'Debe incluir al menos una referencia no familiar'
+    isValid = false
+  }
+
   Object.assign(errors, newErrors)
   return isValid
 }
@@ -92,8 +137,12 @@ const handleSubmit = async () => {
   await applicationStore.saveStepData({
     step7: {
       references: references.map(ref => ({
-        name: ref.name.toUpperCase(),
+        first_name: ref.first_name.toUpperCase(),
+        last_name_1: ref.last_name_1.toUpperCase(),
+        last_name_2: ref.last_name_2.toUpperCase(),
+        full_name: `${ref.first_name} ${ref.last_name_1} ${ref.last_name_2}`.toUpperCase().trim(),
         relationship: ref.relationship,
+        type: ref.type,
         phone: ref.phone.replace(/\D/g, '')
       }))
     }
@@ -109,7 +158,12 @@ const prevStep = () => router.push('/solicitud/paso-6')
   <div class="px-4 py-6">
     <div class="max-w-md mx-auto">
       <h1 class="text-2xl font-bold text-gray-900 mb-2">Referencias personales</h1>
-      <p class="text-gray-500 mb-6">Proporciona 2 referencias que no vivan contigo.</p>
+      <p class="text-gray-500 mb-6">Proporciona 2 referencias: 1 familiar y 1 no familiar que no vivan contigo.</p>
+
+      <!-- Error general -->
+      <div v-if="errors['general']" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl">
+        <p class="text-sm text-red-600">{{ errors['general'] }}</p>
+      </div>
 
       <form class="space-y-8" @submit.prevent="handleSubmit">
         <div
@@ -122,22 +176,54 @@ const prevStep = () => router.push('/solicitud/paso-6')
               {{ index + 1 }}
             </span>
             Referencia {{ index + 1 }}
+            <span class="text-xs text-gray-500 ml-auto">
+              {{ index === 0 ? '(Familiar)' : '(No familiar)' }}
+            </span>
           </h3>
 
           <div class="space-y-4">
+            <!-- Nombres separados -->
             <AppInput
-              v-model="ref.name"
-              label="Nombre completo"
-              placeholder="JUAN PÉREZ GARCÍA"
-              :error="errors[`name_${index}`]"
+              v-model="ref.first_name"
+              label="Nombre(s)"
+              placeholder="JUAN CARLOS"
+              :error="errors[`first_name_${index}`]"
               uppercase
               required
             />
 
+            <div class="grid grid-cols-2 gap-3">
+              <AppInput
+                v-model="ref.last_name_1"
+                label="Apellido paterno"
+                placeholder="PÉREZ"
+                :error="errors[`last_name_1_${index}`]"
+                uppercase
+                required
+              />
+              <AppInput
+                v-model="ref.last_name_2"
+                label="Apellido materno"
+                placeholder="GARCÍA"
+                uppercase
+              />
+            </div>
+
+            <!-- Tipo de referencia -->
+            <AppRadioGroup
+              v-model="ref.type"
+              :options="referenceTypeOptions"
+              label="Tipo de referencia"
+              :error="errors[`type_${index}`]"
+              inline
+              required
+            />
+
+            <!-- Relación según si es la primera (familiar) o segunda (no familiar) -->
             <AppSelect
               v-model="ref.relationship"
-              :options="relationshipOptions"
-              label="Relación"
+              :options="index === 0 ? familyRelationshipOptions : nonFamilyRelationshipOptions"
+              :label="index === 0 ? 'Parentesco' : 'Relación'"
               placeholder="Selecciona"
               :error="errors[`relationship_${index}`]"
               required

@@ -194,6 +194,13 @@ router.beforeEach(async (to, from, next) => {
   const requiresAdmin = to.matched.some(record => record.meta.requiresAdmin)
   const isGuestOnly = to.matched.some(record => record.meta.guest)
 
+  // DEV MODE: Auto-authenticate for development
+  // This allows navigating directly to any step without logging in
+  if (import.meta.env.DEV && requiresAuth && !authStore.isAuthenticated) {
+    localStorage.setItem('auth_token', 'dev-token-' + Date.now())
+    await authStore.checkAuth()
+  }
+
   // If authenticated and trying to access guest-only page (like login)
   if (isGuestOnly && authStore.isAuthenticated) {
     return next({ name: 'dashboard' })

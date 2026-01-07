@@ -16,7 +16,8 @@ const form = reactive({
   street: '',
   exterior_number: '',
   interior_number: '',
-  years_at_address: ''
+  residence_years: '',
+  residence_months: ''
 })
 
 const errors = reactive({
@@ -26,7 +27,7 @@ const errors = reactive({
   neighborhood: '',
   street: '',
   exterior_number: '',
-  years_at_address: ''
+  residence_time: ''
 })
 
 const neighborhoods = ref<{ value: string; label: string }[]>([])
@@ -146,13 +147,11 @@ const stateOptions = [
   { value: 'ZACATECAS', label: 'Zacatecas' }
 ]
 
-const yearsOptions = [
-  { value: '1', label: 'Menos de 1 año' },
-  { value: '2', label: '1-2 años' },
-  { value: '5', label: '2-5 años' },
-  { value: '10', label: '5-10 años' },
-  { value: '11', label: 'Más de 10 años' }
-]
+// Validar que los meses estén entre 0 y 11
+const validateMonths = (value: string): boolean => {
+  const num = parseInt(value)
+  return !isNaN(num) && num >= 0 && num <= 11
+}
 
 const validate = () => {
   let isValid = true
@@ -199,11 +198,18 @@ const validate = () => {
     errors.exterior_number = ''
   }
 
-  if (!form.years_at_address) {
-    errors.years_at_address = 'Selecciona el tiempo en tu domicilio'
+  // Validar tiempo de residencia
+  const years = parseInt(form.residence_years)
+  const months = parseInt(form.residence_months)
+
+  if (form.residence_years === '' || isNaN(years) || years < 0) {
+    errors.residence_time = 'Indica los años en tu domicilio'
+    isValid = false
+  } else if (form.residence_months === '' || isNaN(months) || months < 0 || months > 11) {
+    errors.residence_time = 'Los meses deben ser entre 0 y 11'
     isValid = false
   } else {
-    errors.years_at_address = ''
+    errors.residence_time = ''
   }
 
   return isValid
@@ -211,6 +217,10 @@ const validate = () => {
 
 const handleSubmit = async () => {
   if (!validate()) return
+
+  const years = parseInt(form.residence_years) || 0
+  const months = parseInt(form.residence_months) || 0
+  const totalMonths = (years * 12) + months
 
   await applicantStore.updateAddress({
     street: form.street.toUpperCase(),
@@ -223,13 +233,23 @@ const handleSubmit = async () => {
     state: form.state,
     country: 'MEX',
     housing_type: 'RENTADA',
-    years_living: parseInt(form.years_at_address) || 0
+    years_living: years,
+    months_living: months,
+    total_months_living: totalMonths
   })
 
   await applicationStore.saveStepData({
     step3: {
-      ...form,
-      years_at_address: parseInt(form.years_at_address)
+      postal_code: form.postal_code,
+      state: form.state,
+      municipality: form.municipality,
+      neighborhood: form.neighborhood,
+      street: form.street,
+      exterior_number: form.exterior_number,
+      interior_number: form.interior_number,
+      residence_years: years,
+      residence_months: months,
+      total_months: totalMonths
     }
   })
 
@@ -354,14 +374,48 @@ const prevStep = () => router.push('/solicitud/paso-2')
             />
           </div>
 
-          <AppSelect
-            v-model="form.years_at_address"
-            :options="yearsOptions"
-            label="Tiempo en este domicilio"
-            placeholder="Selecciona"
-            :error="errors.years_at_address"
-            required
-          />
+          <!-- Tiempo en el domicilio -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              Tiempo en este domicilio <span class="text-red-500">*</span>
+            </label>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <div class="relative">
+                  <input
+                    v-model="form.residence_years"
+                    type="number"
+                    min="0"
+                    max="99"
+                    placeholder="0"
+                    class="w-full px-4 py-3 pr-16 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                    inputmode="numeric"
+                  >
+                  <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">años</span>
+                </div>
+              </div>
+              <div>
+                <div class="relative">
+                  <input
+                    v-model="form.residence_months"
+                    type="number"
+                    min="0"
+                    max="11"
+                    placeholder="0"
+                    class="w-full px-4 py-3 pr-20 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                    inputmode="numeric"
+                  >
+                  <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">meses</span>
+                </div>
+              </div>
+            </div>
+            <p v-if="errors.residence_time" class="mt-1 text-sm text-red-600">
+              {{ errors.residence_time }}
+            </p>
+            <p v-else class="mt-1 text-xs text-gray-500">
+              Ej: 2 años y 6 meses
+            </p>
+          </div>
         </template>
 
         <!-- Sticky Footer -->
