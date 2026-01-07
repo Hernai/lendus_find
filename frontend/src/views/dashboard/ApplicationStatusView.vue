@@ -77,9 +77,13 @@ const goHome = () => router.push('/dashboard')
 
 onMounted(async () => {
   isLoading.value = true
-  // In a real app, fetch the application by ID
-  // await applicationStore.loadApplication(applicationId.value)
-  isLoading.value = false
+  try {
+    await applicationStore.loadApplication(applicationId.value)
+  } catch (e) {
+    console.error('Failed to load application:', e)
+  } finally {
+    isLoading.value = false
+  }
 })
 </script>
 
@@ -99,6 +103,20 @@ onMounted(async () => {
     </header>
 
     <main class="max-w-2xl mx-auto px-4 py-6">
+      <!-- Loading state -->
+      <div v-if="isLoading" class="flex flex-col items-center justify-center py-20">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
+        <p class="text-gray-500">Cargando solicitud...</p>
+      </div>
+
+      <!-- No application found -->
+      <div v-else-if="!application" class="text-center py-20">
+        <p class="text-gray-500 mb-4">No se encontró la solicitud</p>
+        <AppButton variant="primary" @click="goHome">Ir al inicio</AppButton>
+      </div>
+
+      <!-- Application content -->
+      <template v-else>
       <!-- Status Card -->
       <div class="bg-white rounded-2xl shadow-sm p-6 mb-6">
         <div class="flex items-center gap-4 mb-4">
@@ -247,6 +265,14 @@ onMounted(async () => {
           Contactar soporte
         </AppButton>
       </div>
+
+      <!-- Go to Dashboard -->
+      <div class="mt-6 text-center">
+        <AppButton variant="primary" size="lg" class="w-full" @click="goHome">
+          Ver mis solicitudes
+        </AppButton>
+      </div>
+      </template>
     </main>
   </div>
 </template>

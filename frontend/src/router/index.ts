@@ -11,6 +11,8 @@ const AuthMethodView = () => import('@/views/auth/AuthMethodView.vue')
 const AuthPhoneView = () => import('@/views/auth/AuthPhoneView.vue')
 const AuthEmailView = () => import('@/views/auth/AuthEmailView.vue')
 const AuthOtpView = () => import('@/views/auth/AuthOtpView.vue')
+const AuthPinSetupView = () => import('@/views/auth/AuthPinSetupView.vue')
+const AuthPinLoginView = () => import('@/views/auth/AuthPinLoginView.vue')
 
 // Onboarding views
 const OnboardingLayout = () => import('@/views/onboarding/OnboardingLayout.vue')
@@ -71,6 +73,18 @@ const routes: RouteRecordRaw[] = [
     path: '/auth/verify',
     name: 'auth-otp',
     component: AuthOtpView,
+    meta: { public: true, guest: true }
+  },
+  {
+    path: '/auth/pin/setup',
+    name: 'auth-pin-setup',
+    component: AuthPinSetupView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/auth/pin/login',
+    name: 'auth-pin-login',
+    component: AuthPinLoginView,
     meta: { public: true, guest: true }
   },
 

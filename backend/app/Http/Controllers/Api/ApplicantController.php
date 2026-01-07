@@ -245,6 +245,27 @@ class ApplicantController extends Controller
 
         $applicant->save();
 
+        // Sync data to users table
+        $user = $request->user();
+        $userUpdates = [];
+
+        if ($applicant->first_name) {
+            $userUpdates['first_name'] = $applicant->first_name;
+        }
+        if ($applicant->last_name_1 || $applicant->last_name_2) {
+            $userUpdates['last_name'] = trim("{$applicant->last_name_1} {$applicant->last_name_2}");
+        }
+        if ($applicant->full_name) {
+            $userUpdates['name'] = $applicant->full_name;
+        }
+        if ($applicant->email && $applicant->email !== $user->email) {
+            $userUpdates['email'] = $applicant->email;
+        }
+
+        if (!empty($userUpdates)) {
+            $user->update($userUpdates);
+        }
+
         return response()->json([
             'message' => 'Personal data updated',
             'data' => $this->formatApplicant($applicant->fresh())

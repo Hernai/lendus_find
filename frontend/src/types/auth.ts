@@ -37,6 +37,7 @@ export interface VerifyOtpResponse {
   attempts_remaining?: number
   token?: string
   user?: User
+  needsPinSetup?: boolean
 }
 
 export interface AuthState {

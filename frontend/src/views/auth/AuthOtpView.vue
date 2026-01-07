@@ -47,9 +47,31 @@ const handleOtpComplete = async (code: string) => {
     const result = await authStore.verifyOtp(code)
 
     if (result.success) {
-      // Redirect to onboarding or dashboard
+      // Check if user needs to setup PIN
+      if (result.needsPinSetup) {
+        // Redirect to PIN setup, preserving the original redirect
+        const redirect = router.currentRoute.value.query.redirect as string
+        router.push({
+          name: 'auth-pin-setup',
+          query: redirect ? { redirect } : undefined
+        })
+        return
+      }
+
+      // Redirect based on context
       const redirect = router.currentRoute.value.query.redirect as string
-      router.push(redirect || '/solicitud')
+      const hasPendingApplication = localStorage.getItem('pending_application')
+
+      if (redirect) {
+        // Explicit redirect (e.g., from protected route)
+        router.push(redirect)
+      } else if (hasPendingApplication) {
+        // Coming from simulator with a pending loan request
+        router.push('/solicitud')
+      } else {
+        // Regular login - go to dashboard
+        router.push('/dashboard')
+      }
     } else {
       if (result.error === 'OTP_EXPIRED') {
         error.value = 'El código ha expirado. Solicita uno nuevo.'

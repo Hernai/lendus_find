@@ -19,6 +19,27 @@ interface VerifyOtpApiResponse {
     email: string | null
     type: string
     is_admin: boolean
+    has_pin?: boolean
+  }
+}
+
+interface CheckUserApiResponse {
+  exists: boolean
+  has_pin: boolean
+  is_locked: boolean
+  lockout_minutes: number
+}
+
+interface PinLoginApiResponse {
+  success: boolean
+  token: string
+  user: {
+    id: string
+    phone: string | null
+    email: string | null
+    type: string
+    is_admin: boolean
+    has_pin: boolean
   }
 }
 
@@ -41,6 +62,11 @@ export const useAuthStore = defineStore('auth', () => {
   const otpDestination = ref<string | null>(null)
   const otpMethod = ref<OtpMethod | null>(null)
   const otpExpiresAt = ref<Date | null>(null)
+
+  // PIN-related state
+  const hasPin = ref(false)
+  const needsPinSetup = ref(false)
+  const pinLockoutMinutes = ref(0)
 
   // Getters
   const isAuthenticated = computed(() => !!token.value && !!user.value)
@@ -135,6 +161,10 @@ export const useAuthStore = defineStore('auth', () => {
         token.value = response.data.token
         localStorage.setItem('auth_token', response.data.token)
 
+        // Set PIN state
+        hasPin.value = apiUser.has_pin ?? false
+        needsPinSetup.value = !apiUser.has_pin
+
         // Clear OTP state
         otpDestination.value = null
         otpMethod.value = null
@@ -143,7 +173,8 @@ export const useAuthStore = defineStore('auth', () => {
         return {
           success: true,
           token: response.data.token,
-          user: mappedUser
+          user: mappedUser,
+          needsPinSetup: !apiUser.has_pin
         }
       }
 
@@ -225,6 +256,169 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // PIN-related actions
+
+  const checkUser = async (phone: string): Promise<CheckUserApiResponse> => {
+    isLoading.value = true
+    try {
+      const cleanPhone = phone.replace(/\D/g, '')
+      const response = await api.post<CheckUserApiResponse>('/auth/check-user', { phone: cleanPhone })
+      hasPin.value = response.data.has_pin
+      pinLockoutMinutes.value = response.data.lockout_minutes
+      return response.data
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const loginWithPin = async (phone: string, pin: string): Promise<{ success: boolean; error?: string; attemptsRemaining?: number }> => {
+    isLoading.value = true
+    try {
+      const cleanPhone = phone.replace(/\D/g, '')
+      const response = await api.post<PinLoginApiResponse>('/auth/pin/login', { phone: cleanPhone, pin })
+
+      if (response.data.success) {
+        const apiUser = response.data.user
+
+        user.value = {
+          id: apiUser.id,
+          tenant_id: '',
+          phone: apiUser.phone || '',
+          email: apiUser.email,
+          role: mapUserType(apiUser.type, apiUser.is_admin),
+          phone_verified_at: apiUser.phone ? new Date().toISOString() : null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+
+        token.value = response.data.token
+        localStorage.setItem('auth_token', response.data.token)
+        hasPin.value = true
+        needsPinSetup.value = false
+
+        return { success: true }
+      }
+
+      return { success: false, error: 'LOGIN_FAILED' }
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { status?: number; data?: { message?: string; attempts_remaining?: number; lockout_minutes?: number } } }
+
+      if (axiosError.response?.status === 401) {
+        return {
+          success: false,
+          error: 'INVALID_PIN',
+          attemptsRemaining: axiosError.response.data?.attempts_remaining
+        }
+      }
+
+      if (axiosError.response?.status === 423) {
+        pinLockoutMinutes.value = axiosError.response.data?.lockout_minutes || 30
+        return { success: false, error: 'ACCOUNT_LOCKED' }
+      }
+
+      if (axiosError.response?.status === 400) {
+        return { success: false, error: 'NO_PIN_SET' }
+      }
+
+      throw error
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const setupPin = async (pin: string): Promise<{ success: boolean; error?: string }> => {
+    isLoading.value = true
+    try {
+      const response = await api.post<{ success: boolean; message: string }>('/auth/pin/setup', {
+        pin,
+        pin_confirmation: pin
+      })
+
+      if (response.data.success) {
+        hasPin.value = true
+        needsPinSetup.value = false
+        return { success: true }
+      }
+
+      return { success: false, error: 'SETUP_FAILED' }
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { message?: string } } }
+      return { success: false, error: axiosError.response?.data?.message || 'SETUP_FAILED' }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const changePin = async (currentPin: string, newPin: string): Promise<{ success: boolean; error?: string }> => {
+    isLoading.value = true
+    try {
+      const response = await api.post<{ success: boolean; message: string }>('/auth/pin/change', {
+        current_pin: currentPin,
+        new_pin: newPin,
+        new_pin_confirmation: newPin
+      })
+
+      return { success: response.data.success }
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { status?: number; data?: { message?: string } } }
+
+      if (axiosError.response?.status === 401) {
+        return { success: false, error: 'INVALID_CURRENT_PIN' }
+      }
+
+      return { success: false, error: axiosError.response?.data?.message || 'CHANGE_FAILED' }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const resetPinWithOtp = async (phone: string, code: string, newPin: string): Promise<{ success: boolean; error?: string }> => {
+    isLoading.value = true
+    try {
+      const cleanPhone = phone.replace(/\D/g, '')
+      const response = await api.post<PinLoginApiResponse>('/auth/pin/reset', {
+        phone: cleanPhone,
+        code,
+        new_pin: newPin,
+        new_pin_confirmation: newPin
+      })
+
+      if (response.data.success) {
+        const apiUser = response.data.user
+
+        user.value = {
+          id: apiUser.id,
+          tenant_id: '',
+          phone: apiUser.phone || '',
+          email: apiUser.email,
+          role: mapUserType(apiUser.type, apiUser.is_admin),
+          phone_verified_at: apiUser.phone ? new Date().toISOString() : null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+
+        token.value = response.data.token
+        localStorage.setItem('auth_token', response.data.token)
+        hasPin.value = true
+        needsPinSetup.value = false
+
+        return { success: true }
+      }
+
+      return { success: false, error: 'RESET_FAILED' }
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { status?: number; data?: { message?: string } } }
+
+      if (axiosError.response?.status === 401) {
+        return { success: false, error: 'INVALID_CODE' }
+      }
+
+      return { success: false, error: axiosError.response?.data?.message || 'RESET_FAILED' }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   return {
     // State
     user,
@@ -233,6 +427,10 @@ export const useAuthStore = defineStore('auth', () => {
     otpDestination,
     otpMethod,
     otpExpiresAt,
+    // PIN State
+    hasPin,
+    needsPinSetup,
+    pinLockoutMinutes,
     // Getters
     isAuthenticated,
     isApplicant,
@@ -243,6 +441,12 @@ export const useAuthStore = defineStore('auth', () => {
     verifyOtp,
     resendOtp,
     logout,
-    checkAuth
+    checkAuth,
+    // PIN Actions
+    checkUser,
+    loginWithPin,
+    setupPin,
+    changePin,
+    resetPinWithOtp
   }
 })

@@ -48,7 +48,18 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'pin_hash',
     ];
+
+    /**
+     * Maximum PIN attempts before lockout.
+     */
+    public const MAX_PIN_ATTEMPTS = 5;
+
+    /**
+     * PIN lockout duration in minutes.
+     */
+    public const PIN_LOCKOUT_MINUTES = 30;
 
     /**
      * Get the attributes that should be cast.
@@ -59,6 +70,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'phone_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
+            'pin_set_at' => 'datetime',
+            'pin_locked_until' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
         ];
@@ -183,5 +196,103 @@ class User extends Authenticatable
     public function scopeOfType($query, string $type)
     {
         return $query->where('type', $type);
+    }
+
+    /**
+     * Check if user has a PIN set.
+     */
+    public function hasPin(): bool
+    {
+        return $this->pin_hash !== null;
+    }
+
+    /**
+     * Set the user's PIN.
+     */
+    public function setPin(string $pin): bool
+    {
+        return $this->forceFill([
+            'pin_hash' => bcrypt($pin),
+            'pin_set_at' => $this->freshTimestamp(),
+            'pin_attempts' => 0,
+            'pin_locked_until' => null,
+        ])->save();
+    }
+
+    /**
+     * Verify the user's PIN.
+     */
+    public function verifyPin(string $pin): bool
+    {
+        if (!$this->hasPin()) {
+            return false;
+        }
+
+        return \Illuminate\Support\Facades\Hash::check($pin, $this->pin_hash);
+    }
+
+    /**
+     * Check if PIN is locked.
+     */
+    public function isPinLocked(): bool
+    {
+        if ($this->pin_locked_until === null) {
+            return false;
+        }
+
+        return $this->pin_locked_until->isFuture();
+    }
+
+    /**
+     * Get remaining lockout time in minutes.
+     */
+    public function getPinLockoutMinutes(): int
+    {
+        if (!$this->isPinLocked()) {
+            return 0;
+        }
+
+        return (int) now()->diffInMinutes($this->pin_locked_until, false);
+    }
+
+    /**
+     * Increment PIN attempts and lock if necessary.
+     */
+    public function incrementPinAttempts(): void
+    {
+        $attempts = $this->pin_attempts + 1;
+
+        $data = ['pin_attempts' => $attempts];
+
+        if ($attempts >= self::MAX_PIN_ATTEMPTS) {
+            $data['pin_locked_until'] = now()->addMinutes(self::PIN_LOCKOUT_MINUTES);
+        }
+
+        $this->update($data);
+    }
+
+    /**
+     * Reset PIN attempts.
+     */
+    public function resetPinAttempts(): void
+    {
+        $this->update([
+            'pin_attempts' => 0,
+            'pin_locked_until' => null,
+        ]);
+    }
+
+    /**
+     * Change PIN (requires current PIN verification).
+     */
+    public function changePin(string $currentPin, string $newPin): bool
+    {
+        if (!$this->verifyPin($currentPin)) {
+            $this->incrementPinAttempts();
+            return false;
+        }
+
+        $this->resetPinAttempts();
+        return $this->setPin($newPin);
     }
 }

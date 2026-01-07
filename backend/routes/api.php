@@ -30,6 +30,17 @@ Route::middleware(['tenant'])->group(function () {
         Route::post('/otp/request', [AuthController::class, 'requestOtp']);
         Route::post('/otp/verify', [AuthController::class, 'verifyOtp']);
         Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
+
+        // PIN Authentication (no SMS cost)
+        Route::post('/check-user', [AuthController::class, 'checkUser']);
+        Route::post('/pin/login', [AuthController::class, 'loginWithPin']);
+        Route::post('/pin/reset', [AuthController::class, 'resetPinWithOtp']);
+    });
+
+    // PIN Setup & Change (requires authentication)
+    Route::middleware(['auth:sanctum'])->prefix('auth')->group(function () {
+        Route::post('/pin/setup', [AuthController::class, 'setupPin']);
+        Route::post('/pin/change', [AuthController::class, 'changePin']);
     });
 
     // Simulator (public)

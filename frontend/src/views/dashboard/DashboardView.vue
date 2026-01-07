@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore, useTenantStore } from '@/stores'
+import { useAuthStore, useTenantStore, useApplicantStore } from '@/stores'
 import { AppButton } from '@/components/common'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const tenantStore = useTenantStore()
+const applicantStore = useApplicantStore()
 
 interface Application {
   id: string
@@ -24,11 +25,14 @@ interface Application {
 const isLoading = ref(true)
 const applications = ref<Application[]>([])
 
-// Mock data - will be replaced with API
+// Load data on mount
 onMounted(async () => {
   await tenantStore.loadConfig()
 
-  // Simulate API call
+  // Load applicant data to get the user's name
+  await applicantStore.loadApplicant()
+
+  // Simulate API call for applications
   await new Promise(resolve => setTimeout(resolve, 500))
 
   // Mock applications for demo
@@ -51,6 +55,14 @@ onMounted(async () => {
 })
 
 const userName = computed(() => {
+  // First try applicant's first name
+  const applicant = applicantStore.applicant
+  if (applicant?.first_name) {
+    // Capitalize first letter, rest lowercase
+    const name = applicant.first_name.toLowerCase()
+    return name.charAt(0).toUpperCase() + name.slice(1)
+  }
+  // Fallback to email
   const user = authStore.user
   if (user?.email) {
     return user.email.split('@')[0]

@@ -111,6 +111,8 @@ export interface EmploymentRecord {
   company_phone?: string
   company_address?: string
   job_title?: string
+  position?: string // Backend field name (same as job_title)
+  work_phone?: string // Backend field name (same as company_phone)
   department?: string
   start_date?: string
   end_date?: string

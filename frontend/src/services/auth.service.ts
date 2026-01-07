@@ -27,8 +27,39 @@ export interface AuthResponse {
       phone: string
       role: string
       has_applicant_profile: boolean
+      has_pin?: boolean
     }
   }
+}
+
+export interface CheckUserResponse {
+  exists: boolean
+  has_pin: boolean
+  is_locked: boolean
+  lockout_minutes: number
+}
+
+export interface PinLoginPayload {
+  phone: string
+  pin: string
+}
+
+export interface PinSetupPayload {
+  pin: string
+  pin_confirmation: string
+}
+
+export interface PinChangePayload {
+  current_pin: string
+  new_pin: string
+  new_pin_confirmation: string
+}
+
+export interface PinResetPayload {
+  phone: string
+  code: string
+  new_pin: string
+  new_pin_confirmation: string
 }
 
 export interface UserProfile {
@@ -85,6 +116,46 @@ const authService = {
   me: async () => {
     const response = await api.get<{ data: UserProfile }>('/me')
     return response.data.data
+  },
+
+  /**
+   * Check if user exists and has PIN
+   */
+  checkUser: async (phone: string) => {
+    const response = await api.post<CheckUserResponse>('/auth/check-user', { phone })
+    return response.data
+  },
+
+  /**
+   * Login with phone + PIN
+   */
+  loginWithPin: async (payload: PinLoginPayload) => {
+    const response = await api.post<AuthResponse>('/auth/pin/login', payload)
+    return response.data
+  },
+
+  /**
+   * Setup PIN (requires authentication)
+   */
+  setupPin: async (payload: PinSetupPayload) => {
+    const response = await api.post<{ success: boolean; message: string }>('/auth/pin/setup', payload)
+    return response.data
+  },
+
+  /**
+   * Change PIN (requires authentication)
+   */
+  changePin: async (payload: PinChangePayload) => {
+    const response = await api.post<{ success: boolean; message: string }>('/auth/pin/change', payload)
+    return response.data
+  },
+
+  /**
+   * Reset PIN via OTP
+   */
+  resetPinWithOtp: async (payload: PinResetPayload) => {
+    const response = await api.post<AuthResponse>('/auth/pin/reset', payload)
+    return response.data
   },
 }
 

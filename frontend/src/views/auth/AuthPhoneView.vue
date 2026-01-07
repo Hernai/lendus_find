@@ -45,6 +45,8 @@ const handlePhoneInput = (event: Event) => {
   })
 }
 
+const forgotPin = computed(() => route.query.forgot_pin === 'true')
+
 const handleSubmit = async () => {
   if (!isValidPhone.value) {
     error.value = 'Ingresa un número de celular válido (10 dígitos)'
@@ -55,6 +57,25 @@ const handleSubmit = async () => {
   const cleanPhone = phone.value.replace(/\D/g, '')
 
   try {
+    // Check if user has PIN and should use PIN login (unless they forgot PIN)
+    if (!forgotPin.value) {
+      const userCheck = await authStore.checkUser(cleanPhone)
+
+      if (userCheck.exists && userCheck.has_pin) {
+        if (userCheck.is_locked) {
+          error.value = `Cuenta bloqueada. Intenta en ${userCheck.lockout_minutes} minutos o usa código OTP.`
+        } else {
+          // Redirect to PIN login
+          router.push({
+            name: 'auth-pin-login',
+            query: { phone: cleanPhone, redirect: route.query.redirect as string }
+          })
+          return
+        }
+      }
+    }
+
+    // No PIN or new user - send OTP
     await authStore.sendOtp(cleanPhone, method.value)
     router.push('/auth/verify')
   } catch (e) {
@@ -90,8 +111,7 @@ const handleSubmit = async () => {
           ¿Cuál es tu número?
         </h1>
         <p class="text-gray-500 text-center mb-8">
-          Te enviaremos un código de 6 dígitos por
-          {{ method === 'whatsapp' ? 'WhatsApp' : 'SMS' }}
+          Ingresa tu número de celular para continuar
         </p>
 
         <!-- Phone Input -->
@@ -133,7 +153,7 @@ const handleSubmit = async () => {
             :loading="authStore.isLoading"
             :disabled="!isValidPhone"
           >
-            Enviar código
+            Continuar
           </AppButton>
         </form>
 

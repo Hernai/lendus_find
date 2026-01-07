@@ -284,11 +284,11 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           data.value.step4 = {
             employment_type: emp.employment_type || '',
             company_name: emp.company_name || '',
-            job_title: emp.job_title || '',
+            job_title: emp.position || '', // Backend sends 'position'
             monthly_income: emp.monthly_income || 0,
             seniority_years: Math.floor((emp.seniority_months || 0) / 12), // Convert months to years
-            company_phone: emp.company_phone || '',
-            company_address: emp.company_address || ''
+            company_phone: emp.work_phone || '', // Backend sends 'work_phone'
+            company_address: ''
           }
           if (!completedSteps.value.includes(4)) {
             completedSteps.value.push(4)
@@ -379,11 +379,10 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           await applicantStore.updateEmployment({
             employment_type: s4.employment_type as any,
             company_name: s4.company_name || undefined,
-            job_title: s4.job_title || undefined,
+            position: s4.job_title || undefined, // Backend expects 'position', not 'job_title'
             monthly_income: s4.monthly_income,
             seniority_months: (Number(s4.seniority_years) || 0) * 12, // Convert years to months for backend
-            company_phone: s4.company_phone || undefined,
-            company_address: s4.company_address || undefined
+            work_phone: s4.company_phone || undefined // Backend expects 'work_phone', not 'company_phone'
           })
           break
         }
