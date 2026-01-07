@@ -394,22 +394,28 @@ class DemoDataSeeder extends Seeder
                     'updated_at' => now()->subHours($index),
                 ]);
 
-                // Create Documents
+                // Create Documents with actual files
                 $docTypes = ['INE_FRONT', 'INE_BACK', 'PROOF_ADDRESS', 'PROOF_INCOME'];
                 $docsToCreate = min($index + 1, count($docTypes));
 
                 for ($docIndex = 0; $docIndex < $docsToCreate; $docIndex++) {
+                    $docType = $docTypes[$docIndex];
+                    $filePath = "documents/{$applicant->id}/{$docType}.png";
+
+                    // Create actual placeholder image file
+                    $this->createPlaceholderImage($filePath, $docType);
+
                     Document::create([
                         'id' => Str::uuid(),
                         'tenant_id' => $tenant->id,
                         'application_id' => $application->id,
                         'applicant_id' => $applicant->id,
-                        'type' => $docTypes[$docIndex],
-                        'name' => str_replace('_', ' ', $docTypes[$docIndex]),
-                        'file_path' => "documents/{$applicant->id}/{$docTypes[$docIndex]}.pdf",
-                        'file_name' => "{$docTypes[$docIndex]}.pdf",
-                        'mime_type' => 'application/pdf',
-                        'file_size' => rand(100000, 500000),
+                        'type' => $docType,
+                        'name' => str_replace('_', ' ', $docType),
+                        'file_path' => $filePath,
+                        'file_name' => "{$docType}.png",
+                        'mime_type' => 'image/png',
+                        'file_size' => \Storage::disk('local')->size($filePath),
                         'storage_disk' => 'local',
                         'status' => $docIndex < $index ? 'APPROVED' : ($docIndex === $index ? 'PENDING' : 'PENDING'),
                         'reviewed_by' => $docIndex < $index ? $adminUser->id : null,
@@ -462,5 +468,66 @@ class DemoDataSeeder extends Seeder
         $this->command->info("  Admin: admin@lendus.mx");
         $this->command->info("  Analista: patricia.moreno@lendus.mx");
         $this->command->info("  Agente: carlos.ramirez@lendus.mx");
+    }
+
+    /**
+     * Create a placeholder image file for demo documents.
+     */
+    private function createPlaceholderImage(string $filePath, string $docType): void
+    {
+        // Create a simple placeholder image (PNG) that looks like a document
+        $width = 800;
+        $height = 1000;
+        $image = imagecreatetruecolor($width, $height);
+
+        // Colors
+        $white = imagecolorallocate($image, 255, 255, 255);
+        $gray = imagecolorallocate($image, 200, 200, 200);
+        $darkGray = imagecolorallocate($image, 100, 100, 100);
+        $primary = imagecolorallocate($image, 59, 130, 246); // Blue
+
+        // Background
+        imagefill($image, 0, 0, $white);
+
+        // Border
+        imagerectangle($image, 0, 0, $width - 1, $height - 1, $gray);
+
+        // Header area
+        imagefilledrectangle($image, 0, 0, $width, 80, $primary);
+
+        // Document type text
+        $labels = [
+            'INE_FRONT' => 'INE - Frente',
+            'INE_BACK' => 'INE - Reverso',
+            'PROOF_ADDRESS' => 'Comprobante de Domicilio',
+            'PROOF_INCOME' => 'Comprobante de Ingresos',
+        ];
+        $label = $labels[$docType] ?? $docType;
+
+        // Title in header
+        imagestring($image, 5, 20, 30, 'DOCUMENTO DE PRUEBA', $white);
+        imagestring($image, 4, 20, 50, $label, $white);
+
+        // Placeholder content
+        imagestring($image, 3, 50, 150, 'Este es un documento de prueba generado', $darkGray);
+        imagestring($image, 3, 50, 180, 'automaticamente para fines de desarrollo.', $darkGray);
+
+        // Fake document structure
+        for ($i = 0; $i < 15; $i++) {
+            $y = 250 + ($i * 40);
+            $lineWidth = rand(200, 600);
+            imagefilledrectangle($image, 50, $y, 50 + $lineWidth, $y + 10, $gray);
+        }
+
+        // Save as PNG first
+        $tempPath = sys_get_temp_dir() . '/' . uniqid('doc_') . '.png';
+        imagepng($image, $tempPath);
+        imagedestroy($image);
+
+        // Store in Laravel storage
+        \Storage::disk('local')->put($filePath, file_get_contents($tempPath));
+
+        // Clean up temp file
+        unlink($tempPath);
     }
 }

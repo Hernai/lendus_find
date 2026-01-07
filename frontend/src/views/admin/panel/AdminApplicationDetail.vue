@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AppButton, AppConfirmModal } from '@/components/common'
+import { api } from '@/services/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -11,8 +12,11 @@ interface Document {
   type: string
   name: string
   status: 'PENDING' | 'APPROVED' | 'REJECTED'
-  url?: string
+  rejection_reason?: string
+  rejection_comment?: string
   uploaded_at?: string
+  reviewed_at?: string
+  mime_type?: string
 }
 
 interface Reference {
@@ -21,6 +25,9 @@ interface Reference {
   relationship: string
   phone: string
   verified: boolean
+  verification_result?: 'VERIFIED' | 'NOT_VERIFIED' | 'NO_ANSWER'
+  verification_notes?: string
+  verified_at?: string
 }
 
 interface ApplicationCompleteness {
@@ -40,6 +47,7 @@ interface Application {
   updated_at: string
   assigned_to?: string
   completeness: ApplicationCompleteness
+  required_documents: string[]
   applicant: {
     id: string
     full_name: string
@@ -139,6 +147,13 @@ const showDocApproveModal = ref(false)
 const docToApprove = ref<Document | null>(null)
 const isApprovingDoc = ref(false)
 
+// Document viewer state
+const showDocViewerModal = ref(false)
+const docViewerUrl = ref('')
+const docViewerName = ref('')
+const docViewerMimeType = ref('')
+const isLoadingDocViewer = ref(false)
+
 // Add note state
 const newNoteText = ref('')
 const isAddingNote = ref(false)
@@ -191,98 +206,140 @@ const statusOptions = [
   { value: 'DISBURSED', label: 'Desembolsada', color: 'purple' }
 ]
 
-// Mock data - will be replaced with API calls
-onMounted(async () => {
+// Error state
+const error = ref('')
+
+// Fetch application data from API
+const fetchApplication = async () => {
   loading.value = true
+  error.value = ''
 
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 500))
+  try {
+    const appId = route.params.id as string
+    const response = await api.get<{ data: Application }>(`/admin/applications/${appId}`)
 
-  const appId = route.params.id as string
-
-  application.value = {
-    id: appId,
-    folio: 'LEN-2026-00042',
-    status: 'IN_REVIEW',
-    created_at: new Date(Date.now() - 5 * 3600000).toISOString(),
-    updated_at: new Date(Date.now() - 1 * 3600000).toISOString(),
-    assigned_to: 'Agente 1',
-    completeness: {
-      personal_data: true,
-      address: true,
-      employment: true,
-      documents: { uploaded: 5, required: 5, approved: 2 },
-      references: { count: 2, verified: 1 },
-      signature: true
-    },
-    applicant: {
-      id: '1',
-      full_name: 'JUAN CARLOS PÉREZ GARCÍA',
-      first_name: 'JUAN CARLOS',
-      last_name_1: 'PÉREZ',
-      last_name_2: 'GARCÍA',
-      email: 'juan.perez@email.com',
-      phone: '5512345678',
-      curp: 'PEGJ850101HDFRRL09',
-      rfc: 'PEGJ850101AB5',
-      birth_date: '1985-01-01',
-      nationality: 'MEX',
-      gender: 'M'
-    },
-    address: {
-      street: 'AV. REFORMA',
-      ext_number: '123',
-      int_number: 'A',
-      neighborhood: 'ROMA NORTE',
-      postal_code: '06600',
-      municipality: 'CUAUHTÉMOC',
-      state: 'CIUDAD DE MEXICO',
-      housing_type: 'RENTADA',
-      years_living: 3,
-      months_living: 6
-    },
-    employment: {
-      type: 'EMPLEADO',
-      company_name: 'EMPRESA EJEMPLO SA DE CV',
-      position: 'GERENTE DE VENTAS',
-      monthly_income: 45000,
-      seniority_months: 36
-    },
-    loan: {
-      product_name: 'Crédito Personal',
-      requested_amount: 85000,
-      term_months: 12,
-      payment_frequency: 'QUINCENAL',
-      interest_rate: 36,
-      monthly_payment: 8500,
-      total_to_pay: 102000,
-      purpose: 'CONSOLIDACION_DEUDA'
-    },
-    documents: [
-      { id: '1', type: 'INE_FRONT', name: 'INE Frente', status: 'APPROVED', uploaded_at: new Date().toISOString() },
-      { id: '2', type: 'INE_BACK', name: 'INE Reverso', status: 'APPROVED', uploaded_at: new Date().toISOString() },
-      { id: '3', type: 'PROOF_OF_ADDRESS', name: 'Comprobante de Domicilio', status: 'PENDING', uploaded_at: new Date().toISOString() },
-      { id: '4', type: 'PROOF_OF_INCOME', name: 'Comprobante de Ingresos', status: 'PENDING', uploaded_at: new Date().toISOString() },
-      { id: '5', type: 'BANK_STATEMENT', name: 'Estado de Cuenta', status: 'REJECTED', uploaded_at: new Date().toISOString() }
-    ],
-    references: [
-      { id: '1', full_name: 'MARÍA PÉREZ GARCÍA', relationship: 'HERMANO', phone: '5511223344', verified: true },
-      { id: '2', full_name: 'ROBERTO LÓPEZ', relationship: 'AMIGO', phone: '5555667788', verified: false }
-    ],
-    notes: [
-      { id: '1', text: 'Cliente contactado por teléfono, confirmó datos.', author: 'Agente 1', created_at: new Date(Date.now() - 2 * 3600000).toISOString() },
-      { id: '2', text: 'Estado de cuenta rechazado por antigüedad > 3 meses. Solicitar nuevo.', author: 'Agente 1', created_at: new Date(Date.now() - 1 * 3600000).toISOString() }
-    ],
-    timeline: [
-      { id: '1', action: 'CREATED', description: 'Solicitud creada', author: 'Sistema', created_at: new Date(Date.now() - 5 * 3600000).toISOString() },
-      { id: '2', action: 'DOCS_UPLOADED', description: 'Documentos cargados', author: 'Solicitante', created_at: new Date(Date.now() - 4 * 3600000).toISOString() },
-      { id: '3', action: 'STATUS_CHANGE', description: 'Estado cambiado a En Revisión', author: 'Agente 1', created_at: new Date(Date.now() - 3 * 3600000).toISOString() },
-      { id: '4', action: 'NOTE_ADDED', description: 'Nota agregada', author: 'Agente 1', created_at: new Date(Date.now() - 2 * 3600000).toISOString() },
-      { id: '5', action: 'DOC_REJECTED', description: 'Documento rechazado: Estado de Cuenta', author: 'Agente 1', created_at: new Date(Date.now() - 1 * 3600000).toISOString() }
-    ]
+    // Map API response to our interface
+    const data = response.data.data
+    application.value = {
+      id: data.id,
+      folio: data.folio,
+      status: data.status,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+      assigned_to: data.assigned_to,
+      required_documents: data.required_documents || [],
+      completeness: data.completeness || {
+        personal_data: !!data.applicant,
+        address: !!data.address,
+        employment: !!data.employment,
+        documents: {
+          uploaded: data.documents?.length || 0,
+          required: 5,
+          approved: data.documents?.filter((d: Document) => d.status === 'APPROVED').length || 0
+        },
+        references: {
+          count: data.references?.length || 0,
+          verified: data.references?.filter((r: Reference) => r.verified).length || 0
+        },
+        signature: true
+      },
+      applicant: data.applicant || {
+        id: '',
+        full_name: '',
+        first_name: '',
+        last_name_1: '',
+        last_name_2: '',
+        email: '',
+        phone: '',
+        curp: '',
+        rfc: '',
+        birth_date: '',
+        nationality: '',
+        gender: ''
+      },
+      address: data.address || {
+        street: '',
+        ext_number: '',
+        neighborhood: '',
+        postal_code: '',
+        municipality: '',
+        state: '',
+        housing_type: '',
+        years_living: 0,
+        months_living: 0
+      },
+      employment: data.employment || {
+        type: '',
+        monthly_income: 0,
+        seniority_months: 0
+      },
+      loan: data.loan || {
+        product_name: '',
+        requested_amount: 0,
+        term_months: 0,
+        payment_frequency: '',
+        interest_rate: 0,
+        monthly_payment: 0,
+        total_to_pay: 0,
+        purpose: ''
+      },
+      documents: (data.documents || []).map((d: { id: string; type: string; name?: string; status: string; rejection_reason?: string; rejection_comment?: string; uploaded_at?: string; mime_type?: string }) => ({
+        id: d.id,
+        type: d.type,
+        name: d.name || getDocTypeName(d.type),
+        status: d.status as 'PENDING' | 'APPROVED' | 'REJECTED',
+        rejection_reason: d.rejection_reason,
+        rejection_comment: d.rejection_comment,
+        uploaded_at: d.uploaded_at,
+        mime_type: d.mime_type
+      })),
+      references: (data.references || []).map((r: { id: string; full_name: string; relationship: string; phone: string; verified: boolean; verification_result?: string; verification_notes?: string; verified_at?: string }) => ({
+        id: r.id,
+        full_name: r.full_name,
+        relationship: r.relationship,
+        phone: r.phone,
+        verified: r.verified,
+        verification_result: r.verification_result as 'VERIFIED' | 'NOT_VERIFIED' | 'NO_ANSWER' | undefined,
+        verification_notes: r.verification_notes,
+        verified_at: r.verified_at
+      })),
+      notes: data.notes || [],
+      timeline: data.timeline || []
+    }
+  } catch (e) {
+    console.error('Failed to fetch application:', e)
+    error.value = 'Error al cargar la solicitud'
+  } finally {
+    loading.value = false
   }
+}
 
-  loading.value = false
+// Get document type display name
+const getDocTypeName = (type: string): string => {
+  const names: Record<string, string> = {
+    'INE_FRONT': 'INE Frente',
+    'INE_BACK': 'INE Reverso',
+    'PROOF_OF_ADDRESS': 'Comprobante de Domicilio',
+    'PROOF_ADDRESS': 'Comprobante de Domicilio',
+    'PROOF_OF_INCOME': 'Comprobante de Ingresos',
+    'PROOF_INCOME': 'Comprobante de Ingresos',
+    'BANK_STATEMENT': 'Estado de Cuenta',
+    'PAYROLL_STUB': 'Recibo de Nómina',
+    'PAYSLIP_1': 'Recibo de Nómina 1',
+    'PAYSLIP_2': 'Recibo de Nómina 2',
+    'PAYSLIP_3': 'Recibo de Nómina 3',
+    'TAX_RETURN': 'Declaración de Impuestos',
+    'SELFIE': 'Selfie',
+    'SIGNATURE': 'Firma',
+    'VEHICLE_INVOICE': 'Factura del Vehículo',
+    'RFC_CONSTANCIA': 'Constancia RFC',
+    'CURP': 'CURP'
+  }
+  return names[type] || type
+}
+
+onMounted(() => {
+  fetchApplication()
 })
 
 // Formatters
@@ -370,6 +427,33 @@ const getPurpose = (purpose: string) => {
   }
   return purposes[purpose] || purpose
 }
+
+// Computed: all documents (uploaded + missing required)
+const allDocuments = computed(() => {
+  if (!application.value) return []
+
+  const uploadedDocs = application.value.documents
+  const uploadedTypes = new Set(uploadedDocs.map(d => d.type))
+  const requiredDocs = application.value.required_documents || []
+
+  // Create list with uploaded docs first
+  const result: Array<Document & { missing?: boolean }> = [...uploadedDocs]
+
+  // Add missing required docs
+  for (const docType of requiredDocs) {
+    if (!uploadedTypes.has(docType)) {
+      result.push({
+        id: `missing-${docType}`,
+        type: docType,
+        name: getDocTypeName(docType),
+        status: 'PENDING' as const,
+        missing: true
+      })
+    }
+  }
+
+  return result
+})
 
 // Completeness calculation
 const completenessItems = computed(() => {
@@ -467,26 +551,57 @@ const openDocApproveModal = (doc: Document) => {
   showDocApproveModal.value = true
 }
 
+// View document
+const viewDocument = async (doc: Document) => {
+  if (!application.value) return
+
+  isLoadingDocViewer.value = true
+  docViewerName.value = doc.name
+
+  try {
+    const response = await api.get<{ url: string; mime_type: string; original_name: string }>(
+      `/admin/applications/${application.value.id}/documents/${doc.id}/url`
+    )
+
+    docViewerUrl.value = response.data.url
+    docViewerMimeType.value = response.data.mime_type || doc.mime_type || ''
+
+    // For PDFs, open in new tab for better viewing experience
+    if (docViewerMimeType.value === 'application/pdf') {
+      window.open(docViewerUrl.value, '_blank')
+    } else {
+      // For images, show in modal
+      showDocViewerModal.value = true
+    }
+  } catch (e) {
+    console.error('Failed to get document URL:', e)
+    alert('Error al cargar el documento')
+  } finally {
+    isLoadingDocViewer.value = false
+  }
+}
+
 const confirmApproveDocument = async () => {
-  if (!docToApprove.value) return
+  if (!docToApprove.value || !application.value) return
 
   isApprovingDoc.value = true
-  await new Promise(resolve => setTimeout(resolve, 500))
 
-  docToApprove.value.status = 'APPROVED'
+  try {
+    await api.put(`/admin/applications/${application.value.id}/documents/${docToApprove.value.id}/approve`)
 
-  if (application.value) {
-    application.value.timeline.push({
-      id: String(Date.now()),
-      action: 'DOC_APPROVED',
-      description: `Documento aprobado: ${docToApprove.value.name}`,
-      author: 'Admin',
-      created_at: new Date().toISOString()
-    })
+    // Update local state
+    docToApprove.value.status = 'APPROVED'
+
+    // Refresh data to get updated timeline
+    await fetchApplication()
+
+    showDocApproveModal.value = false
+  } catch (e) {
+    console.error('Failed to approve document:', e)
+    alert('Error al aprobar el documento')
+  } finally {
+    isApprovingDoc.value = false
   }
-
-  isApprovingDoc.value = false
-  showDocApproveModal.value = false
 }
 
 const openDocRejectModal = (doc: Document) => {
@@ -497,36 +612,31 @@ const openDocRejectModal = (doc: Document) => {
 }
 
 const confirmRejectDocument = async () => {
-  if (!selectedDocument.value || !docRejectReason.value) return
+  if (!selectedDocument.value || !docRejectReason.value || !application.value) return
 
   isRejectingDoc.value = true
-  await new Promise(resolve => setTimeout(resolve, 500))
 
-  selectedDocument.value.status = 'REJECTED'
-
-  const reasonLabel = docRejectReasons.find(r => r.value === docRejectReason.value)?.label || docRejectReason.value
-
-  if (application.value) {
-    application.value.timeline.push({
-      id: String(Date.now()),
-      action: 'DOC_REJECTED',
-      description: `Documento rechazado: ${selectedDocument.value.name} - ${reasonLabel}`,
-      author: 'Admin',
-      created_at: new Date().toISOString()
+  try {
+    await api.put(`/admin/applications/${application.value.id}/documents/${selectedDocument.value.id}/reject`, {
+      reason: docRejectReason.value,
+      comment: docRejectComment.value || null
     })
 
-    if (docRejectComment.value) {
-      application.value.notes.push({
-        id: String(Date.now()),
-        text: `Rechazo de ${selectedDocument.value.name}: ${docRejectComment.value}`,
-        author: 'Admin',
-        created_at: new Date().toISOString()
-      })
-    }
-  }
+    // Update local state
+    selectedDocument.value.status = 'REJECTED'
+    selectedDocument.value.rejection_reason = docRejectReason.value
+    selectedDocument.value.rejection_comment = docRejectComment.value
 
-  isRejectingDoc.value = false
-  showDocRejectModal.value = false
+    // Refresh data to get updated timeline
+    await fetchApplication()
+
+    showDocRejectModal.value = false
+  } catch (e) {
+    console.error('Failed to reject document:', e)
+    alert('Error al rechazar el documento')
+  } finally {
+    isRejectingDoc.value = false
+  }
 }
 
 // Reference verification
@@ -538,40 +648,31 @@ const openVerifyRefModal = (ref: Reference) => {
 }
 
 const confirmVerifyReference = async () => {
-  if (!selectedReference.value) return
+  if (!selectedReference.value || !application.value) return
 
   isVerifyingRef.value = true
-  await new Promise(resolve => setTimeout(resolve, 500))
 
-  selectedReference.value.verified = refVerifyResult.value === 'VERIFIED'
-
-  const resultLabels = {
-    'VERIFIED': 'Verificada correctamente',
-    'NOT_VERIFIED': 'No verificada - datos incorrectos',
-    'NO_ANSWER': 'Sin respuesta'
-  }
-
-  if (application.value) {
-    application.value.timeline.push({
-      id: String(Date.now()),
-      action: 'REF_VERIFIED',
-      description: `Referencia ${selectedReference.value.full_name}: ${resultLabels[refVerifyResult.value]}`,
-      author: 'Admin',
-      created_at: new Date().toISOString()
+  try {
+    await api.put(`/admin/applications/${application.value.id}/references/${selectedReference.value.id}/verify`, {
+      result: refVerifyResult.value,
+      notes: refVerifyNotes.value || null
     })
 
-    if (refVerifyNotes.value) {
-      application.value.notes.push({
-        id: String(Date.now()),
-        text: `Verificación de referencia ${selectedReference.value.full_name}: ${refVerifyNotes.value}`,
-        author: 'Admin',
-        created_at: new Date().toISOString()
-      })
-    }
-  }
+    // Update local state
+    selectedReference.value.verified = refVerifyResult.value === 'VERIFIED'
+    selectedReference.value.verification_result = refVerifyResult.value
+    selectedReference.value.verification_notes = refVerifyNotes.value
 
-  isVerifyingRef.value = false
-  showVerifyRefModal.value = false
+    // Refresh data to get updated timeline
+    await fetchApplication()
+
+    showVerifyRefModal.value = false
+  } catch (e) {
+    console.error('Failed to verify reference:', e)
+    alert('Error al verificar la referencia')
+  } finally {
+    isVerifyingRef.value = false
+  }
 }
 
 const openCounterOfferModal = () => {
@@ -790,152 +891,186 @@ const addNote = async () => {
         <!-- Tab Content -->
         <div class="p-6">
           <!-- General Tab -->
-          <div v-if="activeTab === 'general'" class="space-y-8">
+          <div v-if="activeTab === 'general'" class="space-y-4">
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-4 gap-3">
+              <div class="bg-gray-50 rounded px-3 py-2">
+                <p class="text-xs text-gray-500">Monto</p>
+                <p class="text-lg font-bold text-gray-900">{{ formatMoney(application.loan.requested_amount) }}</p>
+              </div>
+              <div class="bg-gray-50 rounded px-3 py-2">
+                <p class="text-xs text-gray-500">Pago</p>
+                <p class="text-lg font-bold text-gray-900">{{ formatMoney(application.loan.monthly_payment) }}</p>
+              </div>
+              <div class="bg-gray-50 rounded px-3 py-2">
+                <p class="text-xs text-gray-500">Plazo</p>
+                <p class="text-lg font-bold text-gray-900">{{ application.loan.term_months }} meses</p>
+              </div>
+              <div class="bg-gray-50 rounded px-3 py-2">
+                <p class="text-xs text-gray-500">Tasa</p>
+                <p class="text-lg font-bold text-gray-900">{{ application.loan.interest_rate }}%</p>
+              </div>
+            </div>
+
             <!-- Applicant Info -->
-            <div>
-              <h3 class="text-lg font-semibold text-gray-900 mb-4">Datos del Solicitante</h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div>
-                  <p class="text-sm text-gray-500">Nombre Completo</p>
-                  <p class="font-medium">{{ application.applicant.full_name }}</p>
-                </div>
-                <div>
-                  <p class="text-sm text-gray-500">Email</p>
-                  <p class="font-medium">{{ application.applicant.email }}</p>
-                </div>
-                <div>
-                  <p class="text-sm text-gray-500">Teléfono</p>
-                  <p class="font-medium">{{ application.applicant.phone }}</p>
-                </div>
-                <div>
-                  <p class="text-sm text-gray-500">CURP</p>
-                  <p class="font-medium font-mono">{{ application.applicant.curp }}</p>
-                </div>
-                <div>
-                  <p class="text-sm text-gray-500">RFC</p>
-                  <p class="font-medium font-mono">{{ application.applicant.rfc }}</p>
-                </div>
-                <div>
-                  <p class="text-sm text-gray-500">Fecha de Nacimiento</p>
-                  <p class="font-medium">{{ formatDate(application.applicant.birth_date) }}</p>
+            <div class="border border-gray-200 rounded-lg">
+              <div class="bg-gray-50 px-3 py-2 border-b border-gray-200">
+                <h3 class="text-sm font-semibold text-gray-900">Datos del Solicitante</h3>
+              </div>
+              <div class="p-3">
+                <div class="grid grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <p class="text-xs text-gray-500">Nombre</p>
+                    <p class="font-medium text-gray-900">{{ application.applicant.full_name || '—' }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-gray-500">Email</p>
+                    <p class="font-medium text-gray-900">{{ application.applicant.email || '—' }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-gray-500">Teléfono</p>
+                    <p class="font-medium text-gray-900">{{ application.applicant.phone || '—' }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-gray-500">CURP</p>
+                    <p class="font-mono text-sm text-gray-900">{{ application.applicant.curp || '—' }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-gray-500">RFC</p>
+                    <p class="font-mono text-sm text-gray-900">{{ application.applicant.rfc || '—' }}</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-gray-500">Fecha Nacimiento</p>
+                    <p class="font-medium text-gray-900">{{ application.applicant.birth_date ? formatDate(application.applicant.birth_date) : '—' }}</p>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- Address -->
-            <div>
-              <h3 class="text-lg font-semibold text-gray-900 mb-4">Domicilio</h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div class="lg:col-span-2">
-                  <p class="text-sm text-gray-500">Dirección</p>
-                  <p class="font-medium">
-                    {{ application.address.street }} {{ application.address.ext_number }}
-                    <span v-if="application.address.int_number">, Int. {{ application.address.int_number }}</span>
-                  </p>
+            <!-- Address & Employment Row -->
+            <div class="grid grid-cols-2 gap-4">
+              <!-- Address -->
+              <div class="border border-gray-200 rounded-lg">
+                <div class="bg-gray-50 px-3 py-2 border-b border-gray-200">
+                  <h3 class="text-sm font-semibold text-gray-900">Domicilio</h3>
                 </div>
-                <div>
-                  <p class="text-sm text-gray-500">Colonia</p>
-                  <p class="font-medium">{{ application.address.neighborhood }}</p>
-                </div>
-                <div>
-                  <p class="text-sm text-gray-500">Código Postal</p>
-                  <p class="font-medium">{{ application.address.postal_code }}</p>
-                </div>
-                <div>
-                  <p class="text-sm text-gray-500">Municipio / Estado</p>
-                  <p class="font-medium">{{ application.address.municipality }}, {{ application.address.state }}</p>
-                </div>
-                <div>
-                  <p class="text-sm text-gray-500">Tipo de Vivienda</p>
-                  <p class="font-medium">{{ getHousingType(application.address.housing_type) }}</p>
-                </div>
-                <div>
-                  <p class="text-sm text-gray-500">Tiempo en Domicilio</p>
-                  <p class="font-medium">{{ application.address.years_living }} años, {{ application.address.months_living }} meses</p>
+                <div class="p-3">
+                  <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div class="col-span-2">
+                      <p class="text-xs text-gray-500">Dirección</p>
+                      <p class="font-medium text-gray-900">
+                        {{ application.address.street || '—' }} {{ application.address.ext_number }}
+                        <span v-if="application.address.int_number">, Int. {{ application.address.int_number }}</span>
+                      </p>
+                    </div>
+                    <div>
+                      <p class="text-xs text-gray-500">Colonia</p>
+                      <p class="font-medium text-gray-900">{{ application.address.neighborhood || '—' }}</p>
+                    </div>
+                    <div>
+                      <p class="text-xs text-gray-500">C.P.</p>
+                      <p class="font-medium text-gray-900">{{ application.address.postal_code || '—' }}</p>
+                    </div>
+                    <div>
+                      <p class="text-xs text-gray-500">Municipio/Estado</p>
+                      <p class="font-medium text-gray-900">{{ application.address.municipality || '—' }}, {{ application.address.state || '—' }}</p>
+                    </div>
+                    <div>
+                      <p class="text-xs text-gray-500">Vivienda</p>
+                      <p class="font-medium text-gray-900">{{ getHousingType(application.address.housing_type) || '—' }}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <!-- Employment -->
-            <div>
-              <h3 class="text-lg font-semibold text-gray-900 mb-4">Información Laboral</h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div>
-                  <p class="text-sm text-gray-500">Tipo de Empleo</p>
-                  <p class="font-medium">{{ getEmploymentType(application.employment.type) }}</p>
+              <!-- Employment -->
+              <div class="border border-gray-200 rounded-lg">
+                <div class="bg-gray-50 px-3 py-2 border-b border-gray-200">
+                  <h3 class="text-sm font-semibold text-gray-900">Información Laboral</h3>
                 </div>
-                <div v-if="application.employment.company_name">
-                  <p class="text-sm text-gray-500">Empresa</p>
-                  <p class="font-medium">{{ application.employment.company_name }}</p>
-                </div>
-                <div v-if="application.employment.position">
-                  <p class="text-sm text-gray-500">Puesto</p>
-                  <p class="font-medium">{{ application.employment.position }}</p>
-                </div>
-                <div>
-                  <p class="text-sm text-gray-500">Ingreso Mensual</p>
-                  <p class="font-medium text-green-600">{{ formatMoney(application.employment.monthly_income) }}</p>
-                </div>
-                <div>
-                  <p class="text-sm text-gray-500">Antigüedad</p>
-                  <p class="font-medium">{{ Math.floor(application.employment.seniority_months / 12) }} años, {{ application.employment.seniority_months % 12 }} meses</p>
+                <div class="p-3">
+                  <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p class="text-xs text-gray-500">Tipo</p>
+                      <p class="font-medium text-gray-900">{{ getEmploymentType(application.employment.type) || '—' }}</p>
+                    </div>
+                    <div>
+                      <p class="text-xs text-gray-500">Empresa</p>
+                      <p class="font-medium text-gray-900">{{ application.employment.company_name || '—' }}</p>
+                    </div>
+                    <div>
+                      <p class="text-xs text-gray-500">Puesto</p>
+                      <p class="font-medium text-gray-900">{{ application.employment.position || '—' }}</p>
+                    </div>
+                    <div>
+                      <p class="text-xs text-gray-500">Antigüedad</p>
+                      <p class="font-medium text-gray-900">{{ Math.floor(application.employment.seniority_months / 12) }} años</p>
+                    </div>
+                    <div class="col-span-2">
+                      <p class="text-xs text-gray-500">Ingreso Mensual</p>
+                      <p class="font-bold text-gray-900">{{ formatMoney(application.employment.monthly_income) }}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
             <!-- Loan Details -->
-            <div>
-              <h3 class="text-lg font-semibold text-gray-900 mb-4">Detalles del Crédito</h3>
-              <div class="bg-gray-50 rounded-xl p-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div class="border border-gray-200 rounded-lg">
+              <div class="bg-gray-50 px-3 py-2 border-b border-gray-200">
+                <h3 class="text-sm font-semibold text-gray-900">Detalles del Crédito</h3>
+              </div>
+              <div class="p-3">
+                <div class="grid grid-cols-4 gap-3 text-sm">
                   <div>
-                    <p class="text-sm text-gray-500">Producto</p>
-                    <p class="font-medium">{{ application.loan.product_name }}</p>
+                    <p class="text-xs text-gray-500">Producto</p>
+                    <p class="font-medium text-gray-900">{{ application.loan.product_name || '—' }}</p>
                   </div>
                   <div>
-                    <p class="text-sm text-gray-500">Monto Solicitado</p>
-                    <p class="text-xl font-bold text-primary-600">{{ formatMoney(application.loan.requested_amount) }}</p>
+                    <p class="text-xs text-gray-500">Monto</p>
+                    <p class="font-bold text-gray-900">{{ formatMoney(application.loan.requested_amount) }}</p>
                   </div>
                   <div>
-                    <p class="text-sm text-gray-500">Plazo</p>
-                    <p class="font-medium">{{ application.loan.term_months }} meses</p>
+                    <p class="text-xs text-gray-500">Plazo</p>
+                    <p class="font-medium text-gray-900">{{ application.loan.term_months }} meses</p>
                   </div>
                   <div>
-                    <p class="text-sm text-gray-500">Frecuencia de Pago</p>
-                    <p class="font-medium">{{ application.loan.payment_frequency === 'QUINCENAL' ? 'Quincenal' : 'Mensual' }}</p>
+                    <p class="text-xs text-gray-500">Frecuencia</p>
+                    <p class="font-medium text-gray-900">{{ application.loan.payment_frequency === 'QUINCENAL' ? 'Quincenal' : 'Mensual' }}</p>
                   </div>
                   <div>
-                    <p class="text-sm text-gray-500">Tasa de Interés</p>
-                    <p class="font-medium">{{ application.loan.interest_rate }}% anual</p>
+                    <p class="text-xs text-gray-500">Tasa</p>
+                    <p class="font-medium text-gray-900">{{ application.loan.interest_rate }}% anual</p>
                   </div>
                   <div>
-                    <p class="text-sm text-gray-500">Pago por Periodo</p>
-                    <p class="font-medium">{{ formatMoney(application.loan.monthly_payment) }}</p>
+                    <p class="text-xs text-gray-500">Pago</p>
+                    <p class="font-bold text-gray-900">{{ formatMoney(application.loan.monthly_payment) }}</p>
                   </div>
                   <div>
-                    <p class="text-sm text-gray-500">Total a Pagar</p>
-                    <p class="font-medium">{{ formatMoney(application.loan.total_to_pay) }}</p>
+                    <p class="text-xs text-gray-500">Total</p>
+                    <p class="font-medium text-gray-900">{{ formatMoney(application.loan.total_to_pay) }}</p>
                   </div>
                   <div>
-                    <p class="text-sm text-gray-500">Destino del Crédito</p>
-                    <p class="font-medium">{{ getPurpose(application.loan.purpose) }}</p>
+                    <p class="text-xs text-gray-500">Destino</p>
+                    <p class="font-medium text-gray-900">{{ getPurpose(application.loan.purpose) || '—' }}</p>
                   </div>
                 </div>
               </div>
             </div>
 
             <!-- Notes -->
-            <div>
-              <h3 class="text-lg font-semibold text-gray-900 mb-4">Notas</h3>
-
-              <!-- Add Note Form -->
-              <div class="mb-4">
-                <div class="flex gap-3">
+            <div class="border border-gray-200 rounded-lg">
+              <div class="bg-gray-50 px-3 py-2 border-b border-gray-200">
+                <h3 class="text-sm font-semibold text-gray-900">Notas</h3>
+              </div>
+              <div class="p-3">
+                <!-- Add Note Form -->
+                <div class="flex gap-2 mb-3">
                   <textarea
                     v-model="newNoteText"
-                    rows="2"
-                    class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-                    placeholder="Agregar una nota..."
+                    rows="1"
+                    class="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-primary-500 focus:border-transparent resize-none"
+                    placeholder="Agregar nota..."
                     @keydown.ctrl.enter="addNote"
                   />
                   <AppButton
@@ -943,97 +1078,104 @@ const addNote = async () => {
                     size="sm"
                     :loading="isAddingNote"
                     :disabled="!newNoteText.trim()"
-                    class="self-end"
                     @click="addNote"
                   >
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                    </svg>
                     Agregar
                   </AppButton>
                 </div>
-                <p class="text-xs text-gray-400 mt-1">Ctrl+Enter para enviar</p>
-              </div>
 
-              <!-- Notes List -->
-              <div v-if="application.notes.length > 0" class="space-y-3">
-                <div
-                  v-for="note in application.notes"
-                  :key="note.id"
-                  class="bg-yellow-50 rounded-lg p-4"
-                >
-                  <p class="text-gray-800">{{ note.text }}</p>
-                  <p class="text-sm text-gray-500 mt-2">
-                    {{ note.author }} · {{ formatDateTime(note.created_at) }}
-                  </p>
+                <!-- Notes List -->
+                <div v-if="application.notes.length > 0" class="space-y-2">
+                  <div
+                    v-for="note in application.notes"
+                    :key="note.id"
+                    class="bg-gray-50 rounded p-2 text-sm"
+                  >
+                    <p class="text-gray-800">{{ note.text }}</p>
+                    <p class="text-xs text-gray-500 mt-1">{{ note.author }} · {{ formatDateTime(note.created_at) }}</p>
+                  </div>
                 </div>
-              </div>
-              <div v-else class="text-gray-500 text-sm italic">
-                No hay notas todavía
+                <div v-else class="text-gray-500 text-sm">No hay notas</div>
               </div>
             </div>
           </div>
 
           <!-- Documents Tab -->
           <div v-if="activeTab === 'documents'">
-            <div class="space-y-4">
+            <!-- Document Stats -->
+            <div class="flex items-center gap-4 mb-4 text-sm text-gray-500">
+              <span>Requeridos: <b class="text-gray-900">{{ application.required_documents.length }}</b></span>
+              <span>Subidos: <b class="text-gray-900">{{ application.documents.length }}</b></span>
+              <span>Aprobados: <b class="text-green-600">{{ application.documents.filter(d => d.status === 'APPROVED').length }}</b></span>
+              <span>Rechazados: <b class="text-red-600">{{ application.documents.filter(d => d.status === 'REJECTED').length }}</b></span>
+              <span>Faltantes: <b class="text-orange-600">{{ allDocuments.filter(d => (d as any).missing).length }}</b></span>
+            </div>
+
+            <div v-if="allDocuments.length === 0" class="text-center py-6 text-gray-500 text-sm">
+              No hay documentos requeridos
+            </div>
+
+            <div v-else class="space-y-2">
               <div
-                v-for="doc in application.documents"
+                v-for="doc in allDocuments"
                 :key="doc.id"
-                class="flex items-center justify-between p-4 border rounded-lg"
+                :class="[
+                  'flex items-center justify-between border rounded px-3 py-2',
+                  (doc as any).missing ? 'border-orange-300 bg-orange-50' : 'border-gray-200'
+                ]"
               >
-                <div class="flex items-center gap-4">
-                  <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p class="font-medium text-gray-900">{{ doc.name }}</p>
-                    <p class="text-sm text-gray-500">
-                      Subido {{ doc.uploaded_at ? formatDateTime(doc.uploaded_at) : 'N/A' }}
-                    </p>
-                  </div>
+                <div class="flex items-center gap-2 min-w-0">
+                  <!-- Icon -->
+                  <svg v-if="(doc as any).missing" class="w-4 h-4 text-orange-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <svg v-else-if="doc.status === 'APPROVED'" class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <svg v-else-if="doc.status === 'REJECTED'" class="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <svg v-else class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span :class="['text-sm font-medium truncate', (doc as any).missing ? 'text-orange-700' : 'text-gray-900']">
+                    {{ doc.name || getDocTypeName(doc.type) }}
+                  </span>
+                  <span v-if="(doc as any).missing" class="text-xs text-orange-600 font-medium">No subido</span>
+                  <span v-else class="text-xs text-gray-400">{{ doc.uploaded_at ? formatDateTime(doc.uploaded_at) : '' }}</span>
                 </div>
 
-                <div class="flex items-center gap-3">
-                  <span
-                    :class="[
-                      'px-2 py-1 text-xs font-medium rounded-full',
-                      getDocStatusBadge(doc.status).bg,
-                      getDocStatusBadge(doc.status).text
-                    ]"
-                  >
-                    {{ getDocStatusBadge(doc.status).label }}
-                  </span>
-
-                  <div class="flex gap-2">
+                <div class="flex items-center gap-2">
+                  <span v-if="!(doc as any).missing" class="text-xs text-gray-500">{{ getDocStatusBadge(doc.status).label }}</span>
+                  <div v-if="!(doc as any).missing" class="flex items-center">
                     <button
-                      class="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-                      title="Ver documento"
+                      class="p-1.5 text-gray-400 hover:text-gray-600"
+                      title="Ver"
+                      :disabled="isLoadingDocViewer"
+                      @click="viewDocument(doc)"
                     >
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                       </svg>
                     </button>
                     <button
                       v-if="doc.status === 'PENDING'"
-                      class="p-2 text-green-500 hover:text-green-700 transition-colors"
+                      class="p-1.5 text-gray-400 hover:text-gray-600"
                       title="Aprobar"
                       @click="openDocApproveModal(doc)"
                     >
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                       </svg>
                     </button>
                     <button
                       v-if="doc.status === 'PENDING'"
-                      class="p-2 text-red-500 hover:text-red-700 transition-colors"
+                      class="p-1.5 text-gray-400 hover:text-gray-600"
                       title="Rechazar"
                       @click="openDocRejectModal(doc)"
                     >
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
@@ -1045,51 +1187,56 @@ const addNote = async () => {
 
           <!-- References Tab -->
           <div v-if="activeTab === 'references'">
-            <div class="space-y-4">
+            <!-- Reference Stats -->
+            <div class="flex items-center gap-4 mb-4 text-sm text-gray-500">
+              <span>Total: <b class="text-gray-900">{{ application.references.length }}</b></span>
+              <span>Verificadas: <b class="text-gray-900">{{ application.references.filter(r => r.verified).length }}</b></span>
+              <span>Pendientes: <b class="text-gray-900">{{ application.references.filter(r => !r.verified).length }}</b></span>
+            </div>
+
+            <div v-if="application.references.length === 0" class="text-center py-6 text-gray-500 text-sm">
+              No hay referencias
+            </div>
+
+            <div v-else class="space-y-2">
               <div
                 v-for="ref in application.references"
                 :key="ref.id"
-                class="flex items-center justify-between p-4 border rounded-lg"
+                class="flex items-center justify-between border border-gray-200 rounded px-3 py-2"
               >
-                <div class="flex items-center gap-4">
-                  <div class="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                    <span class="font-medium text-gray-600">{{ ref.full_name.charAt(0) }}</span>
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-medium text-gray-600">
+                    {{ ref.full_name.charAt(0).toUpperCase() }}
                   </div>
                   <div>
-                    <p class="font-medium text-gray-900">{{ ref.full_name }}</p>
-                    <p class="text-sm text-gray-500">{{ ref.relationship }} · {{ ref.phone }}</p>
+                    <span class="text-sm font-medium text-gray-900">{{ ref.full_name }}</span>
+                    <span class="text-xs text-gray-500 ml-2">{{ ref.relationship }} · {{ ref.phone }}</span>
                   </div>
                 </div>
-                <div class="flex items-center gap-3">
-                  <span
-                    :class="[
-                      'px-2 py-1 text-xs font-medium rounded-full',
-                      ref.verified ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                    ]"
-                  >
-                    {{ ref.verified ? 'Verificada' : 'Pendiente' }}
-                  </span>
-                  <!-- Call reference -->
-                  <a
-                    :href="'tel:' + ref.phone"
-                    class="p-2 text-primary-600 hover:text-primary-800 transition-colors"
-                    title="Llamar"
-                  >
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                    </svg>
-                  </a>
-                  <!-- Verify reference -->
-                  <button
-                    v-if="!ref.verified"
-                    class="p-2 text-green-600 hover:text-green-800 transition-colors"
-                    title="Registrar verificación"
-                    @click="openVerifyRefModal(ref)"
-                  >
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </button>
+
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-gray-500">{{ ref.verified ? 'Verificada' : 'Pendiente' }}</span>
+                  <div class="flex items-center">
+                    <a
+                      :href="'tel:' + ref.phone"
+                      class="p-1.5 text-gray-400 hover:text-gray-600"
+                      title="Llamar"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                    </a>
+                    <button
+                      v-if="!ref.verified"
+                      class="p-1.5 text-gray-400 hover:text-gray-600"
+                      title="Verificar"
+                      @click="openVerifyRefModal(ref)"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1506,5 +1653,77 @@ const addNote = async () => {
       :loading="isApprovingDoc"
       @confirm="confirmApproveDocument"
     />
+
+    <!-- Document Viewer Modal -->
+    <div
+      v-if="showDocViewerModal"
+      class="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
+      @click.self="showDocViewerModal = false"
+    >
+      <div class="relative w-full max-w-4xl mx-4 max-h-[90vh] bg-white rounded-xl overflow-hidden">
+        <!-- Header -->
+        <div class="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+          <h3 class="text-lg font-semibold text-gray-900 truncate">{{ docViewerName }}</h3>
+          <div class="flex items-center gap-2">
+            <a
+              :href="docViewerUrl"
+              target="_blank"
+              class="p-2 text-gray-500 hover:text-gray-700 transition-colors"
+              title="Abrir en nueva pestaña"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+            <button
+              class="p-2 text-gray-500 hover:text-gray-700 transition-colors"
+              title="Cerrar"
+              @click="showDocViewerModal = false"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Content -->
+        <div class="p-4 overflow-auto" style="max-height: calc(90vh - 80px);">
+          <!-- Image viewer -->
+          <img
+            v-if="docViewerMimeType.startsWith('image/')"
+            :src="docViewerUrl"
+            :alt="docViewerName"
+            class="max-w-full h-auto mx-auto rounded-lg shadow-lg"
+          />
+
+          <!-- PDF viewer fallback (iframe) -->
+          <iframe
+            v-else-if="docViewerMimeType === 'application/pdf'"
+            :src="docViewerUrl"
+            class="w-full h-[70vh] rounded-lg"
+            frameborder="0"
+          />
+
+          <!-- Unknown type -->
+          <div v-else class="text-center py-12">
+            <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p class="text-gray-500 mb-4">Este tipo de archivo no se puede previsualizar</p>
+            <a
+              :href="docViewerUrl"
+              target="_blank"
+              class="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Descargar archivo
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

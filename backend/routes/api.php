@@ -158,6 +158,11 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff'])->prefix('a
         Route::put('/{application}/documents/{document}/reject', [AdminApplicationController::class, 'rejectDocument'])
             ->middleware('permission:canReviewDocuments');
 
+        // Document view - all staff can view
+        Route::get('/{application}/documents/{document}/url', [AdminApplicationController::class, 'getDocumentUrl']);
+        Route::get('/{application}/documents/{document}/download', [AdminApplicationController::class, 'downloadDocument'])
+            ->name('api.admin.documents.download');
+
         // Reference verification - requires canVerifyReferences (analyst+)
         Route::put('/{application}/references/{reference}/verify', [AdminApplicationController::class, 'verifyReference'])
             ->middleware('permission:canVerifyReferences');

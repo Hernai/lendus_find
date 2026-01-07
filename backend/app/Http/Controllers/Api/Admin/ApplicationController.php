@@ -621,16 +621,20 @@ class ApplicationController extends Controller
                 'data' => $application->scoring_data,
             ],
 
-            // Documents
+            // Required documents from product
+            'required_documents' => $application->product?->required_docs ?? [],
+
+            // Documents (uploaded)
             'documents' => $application->documents->map(fn($doc) => [
                 'id' => $doc->id,
                 'type' => $doc->type,
-                'name' => $doc->original_name,
+                'name' => $doc->name ?? $doc->file_name,
                 'status' => $doc->status,
                 'rejection_reason' => $doc->rejection_reason,
                 'rejection_comment' => $doc->rejection_comment,
                 'uploaded_at' => $doc->created_at->toIso8601String(),
                 'reviewed_at' => $doc->reviewed_at?->toIso8601String(),
+                'mime_type' => $doc->mime_type,
             ]),
 
             // References
@@ -670,6 +674,68 @@ class ApplicationController extends Controller
             'approved_at' => $application->approved_at?->toIso8601String(),
             'disbursed_at' => $application->disbursed_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * Get a temporary URL for viewing a document.
+     */
+    public function getDocumentUrl(Request $request, Application $application, Document $document): JsonResponse
+    {
+        $tenant = $request->attributes->get('tenant');
+
+        if ($application->tenant_id !== $tenant->id || $document->application_id !== $application->id) {
+            return response()->json(['message' => 'Document not found'], 404);
+        }
+
+        if ($document->storage_disk === 's3') {
+            $url = \Illuminate\Support\Facades\Storage::disk('s3')->temporaryUrl(
+                $document->file_path,
+                now()->addMinutes(15)
+            );
+        } else {
+            // For local development, return a route URL with a signed token
+            $url = route('api.admin.documents.download', [
+                'application' => $application->id,
+                'document' => $document->id
+            ]);
+        }
+
+        return response()->json([
+            'url' => $url,
+            'mime_type' => $document->mime_type,
+            'original_name' => $document->name ?? $document->file_name,
+            'expires_in' => 900 // 15 minutes
+        ]);
+    }
+
+    /**
+     * Download a document (for local development).
+     */
+    public function downloadDocument(Request $request, Application $application, Document $document)
+    {
+        $tenant = $request->attributes->get('tenant');
+
+        if ($application->tenant_id !== $tenant->id || $document->application_id !== $application->id) {
+            abort(404);
+        }
+
+        // Only for local storage
+        if ($document->storage_disk !== 'local') {
+            abort(400, 'Direct download not available for this storage type');
+        }
+
+        $path = \Illuminate\Support\Facades\Storage::disk('local')->path($document->file_path);
+
+        if (!file_exists($path)) {
+            abort(404, 'File not found');
+        }
+
+        $fileName = $document->name ?? $document->file_name ?? 'document';
+
+        return response()->file($path, [
+            'Content-Type' => $document->mime_type,
+            'Content-Disposition' => 'inline; filename="' . $fileName . '"',
+        ]);
     }
 
     /**
