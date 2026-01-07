@@ -790,6 +790,8 @@ class ApplicationController extends Controller
         $action = $historyEntry['action'] ?? 'STATUS_CHANGE';
 
         return match ($action) {
+            'DOC_UPLOADED' => 'Documento subido: ' . ($historyEntry['document'] ?? ''),
+            'DOC_DELETED' => 'Documento eliminado: ' . ($historyEntry['document'] ?? ''),
             'DOC_APPROVED' => 'Documento aprobado: ' . ($historyEntry['document'] ?? ''),
             'DOC_REJECTED' => 'Documento rechazado: ' . ($historyEntry['document'] ?? '') .
                 ($historyEntry['reason'] ? ' - ' . $historyEntry['reason'] : ''),

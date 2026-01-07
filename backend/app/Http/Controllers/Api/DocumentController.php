@@ -104,6 +104,18 @@ class DocumentController extends Controller
             'status' => Document::STATUS_PENDING,
         ]);
 
+        // Add to application timeline
+        $history = $application->status_history ?? [];
+        $history[] = [
+            'action' => 'DOC_UPLOADED',
+            'document' => $type,
+            'filename' => $file->getClientOriginalName(),
+            'user_id' => $request->user()->id,
+            'timestamp' => now()->toIso8601String(),
+        ];
+        $application->status_history = $history;
+        $application->save();
+
         return response()->json([
             'message' => 'Document uploaded successfully',
             'data' => $this->formatDocument($document)
@@ -140,7 +152,21 @@ class DocumentController extends Controller
             Storage::disk($document->storage_disk)->delete($document->storage_path);
         }
 
+        $docType = $document->type;
+        $docName = $document->original_name;
         $document->delete();
+
+        // Add to application timeline
+        $history = $application->status_history ?? [];
+        $history[] = [
+            'action' => 'DOC_DELETED',
+            'document' => $docType,
+            'filename' => $docName,
+            'user_id' => $request->user()->id,
+            'timestamp' => now()->toIso8601String(),
+        ];
+        $application->status_history = $history;
+        $application->save();
 
         return response()->json([
             'message' => 'Document deleted'
