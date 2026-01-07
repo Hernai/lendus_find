@@ -16,6 +16,7 @@ const form = reactive({
   street: '',
   exterior_number: '',
   interior_number: '',
+  housing_type: '',
   residence_years: '',
   residence_months: ''
 })
@@ -27,8 +28,16 @@ const errors = reactive({
   neighborhood: '',
   street: '',
   exterior_number: '',
+  housing_type: '',
   residence_time: ''
 })
+
+const housingTypeOptions = [
+  { value: 'PROPIA', label: 'Propia' },
+  { value: 'RENTADA', label: 'Rentada' },
+  { value: 'FAMILIAR', label: 'Familiar' },
+  { value: 'HIPOTECADA', label: 'Hipotecada' }
+]
 
 const neighborhoods = ref<{ value: string; label: string }[]>([])
 const isLoadingPostalCode = ref(false)
@@ -198,6 +207,13 @@ const validate = () => {
     errors.exterior_number = ''
   }
 
+  if (!form.housing_type) {
+    errors.housing_type = 'Selecciona el tipo de vivienda'
+    isValid = false
+  } else {
+    errors.housing_type = ''
+  }
+
   // Validar tiempo de residencia
   const years = parseInt(form.residence_years)
   const months = parseInt(form.residence_months)
@@ -232,7 +248,7 @@ const handleSubmit = async () => {
     city: form.municipality.toUpperCase(),
     state: form.state,
     country: 'MEX',
-    housing_type: 'RENTADA',
+    housing_type: form.housing_type,
     years_living: years,
     months_living: months,
     total_months_living: totalMonths
@@ -247,6 +263,7 @@ const handleSubmit = async () => {
       street: form.street,
       exterior_number: form.exterior_number,
       interior_number: form.interior_number,
+      housing_type: form.housing_type,
       residence_years: years,
       residence_months: months,
       total_months: totalMonths
@@ -373,6 +390,15 @@ const prevStep = () => router.push('/solicitud/paso-2')
               placeholder="A (opcional)"
             />
           </div>
+
+          <AppSelect
+            v-model="form.housing_type"
+            :options="housingTypeOptions"
+            label="Tipo de vivienda"
+            placeholder="Selecciona una opción"
+            :error="errors.housing_type"
+            required
+          />
 
           <!-- Tiempo en el domicilio -->
           <div>
