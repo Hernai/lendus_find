@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOS White-Label - Propuesta Web & Mobile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f4ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            300: '#a5b4fc',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            800: '#3730a3',
+                            900: '#312e81',
+                        },
+                        tenant: {
+                            primary: 'var(--tenant-primary, #6366f1)',
+                            secondary: 'var(--tenant-secondary, #10b981)',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --tenant-primary: #6366f1;
+            --tenant-secondary: #10b981;
+        }
+        .phone-frame {
+            width: 375px;
+            height: 750px;
+            border-radius: 40px;
+            border: 10px solid #1f2937;
+            background: white;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        .phone-notch {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 150px;
+            height: 28px;
+            background: #1f2937;
+            border-radius: 0 0 20px 20px;
+            z-index: 10;
+        }
+        .desktop-frame {
+            width: 100%;
+            max-width: 1200px;
+            height: 700px;
+            border-radius: 12px;
+            border: 2px solid #e5e7eb;
+            background: white;
+            overflow: hidden;
+            box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.15);
+        }
+        .browser-bar {
+            height: 40px;
+            background: #f3f4f6;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            gap: 8px;
+        }
+        .browser-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .screen-content {
+            height: calc(100% - 28px);
+            overflow-y: auto;
+            padding-top: 28px;
+        }
+        .screen-content::-webkit-scrollbar {
+            width: 6px;
+        }
+        .screen-content::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 3px;
+        }
+        .sticky-footer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 16px;
+            background: white;
+            border-top: 1px solid #e5e7eb;
+        }
+        .tab-active {
+            background: linear-gradient(135deg, var(--tenant-primary) 0%, #4338ca 100%);
+            color: white;
+        }
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .otp-box {
+            width: 52px;
+            height: 60px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 24px;
+            text-align: center;
+            font-weight: 600;
+        }
+        .otp-box:focus {
+            border-color: var(--tenant-primary);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, var(--tenant-primary) 0%, #4338ca 100%);
+        }
+        .card-shadow {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .input-focus:focus {
+            border-color: var(--tenant-primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+        .sidebar-item {
+            transition: all 0.2s;
+        }
+        .sidebar-item:hover {
+            background: rgba(99, 102, 241, 0.1);
+        }
+        .sidebar-item.active {
+            background: rgba(99, 102, 241, 0.15);
+            border-right: 3px solid var(--tenant-primary);
+        }
+        .step-connector {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            width: 100%;
+            height: 2px;
+            background: #e5e7eb;
+            z-index: 0;
+        }
+        .step-connector.completed {
+            background: var(--tenant-primary);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans">
+    <!-- Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">LOS White-Label</h1>
+                    <p class="text-sm text-gray-500">Propuesta UI/UX Completa - Web & Mobile</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="setTheme('#6366f1')" class="w-8 h-8 rounded-full bg-indigo-500 border-2 border-white shadow"></button>
+                    <button onclick="setTheme('#059669')" class="w-8 h-8 rounded-full bg-emerald-600 border-2 border-white shadow"></button>
+                    <button onclick="setTheme('#dc2626')" class="w-8 h-8 rounded-full bg-red-600 border-2 border-white shadow"></button>
+                    <button onclick="setTheme('#7c3aed')" class="w-8 h-8 rounded-full bg-violet-600 border-2 border-white shadow"></button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- View Toggle -->
+    <div class="bg-white border-b sticky top-16 z-40">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex items-center justify-between py-3">
+                <nav class="flex gap-2">
+                    <button onclick="showView('mobile')" id="view-mobile" class="px-4 py-2 rounded-lg text-sm font-medium tab-active">
+                        📱 Mobile
+                    </button>
+                    <button onclick="showView('desktop')" id="view-desktop" class="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200">
+                        💻 Desktop/Web
+                    </button>
+                    <button onclick="showView('admin')" id="view-admin" class="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200">
+                        ⚙️ Panel Admin
+                    </button>
+                </nav>
+                <div class="flex gap-4 text-sm">
+                    <span class="px-3 py-1 bg-primary-100 text-primary-700 rounded-full font-medium">Vue.js 3</span>
+                    <span class="px-3 py-1 bg-green-100 text-green-700 rounded-full font-medium">Laravel 11</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        
+        <!-- ==================== MOBILE VIEW ==================== -->
+        <div id="view-content-mobile" class="fade-in">
+            <div class="mb-8">
+                <h2 class="text-xl font-bold text-gray-900 mb-2">Vista Mobile - Flujo Completo</h2>
+                <p class="text-gray-600">Diseño Mobile-First optimizado para thumb zone. Autenticación por SMS, WhatsApp o Email.</p>
+            </div>
+            
+            <div class="flex flex-wrap gap-6 justify-center">
+                
+                <!-- Auth: Method Selection -->
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-3 text-center">2.1 Selección de Método</h3>
+                    <div class="phone-frame">
+                        <div class="phone-notch"></div>
+                        <div class="screen-content">
+                            <div class="p-6">
+                                <div class="flex justify-center mb-10">
+                                    <div class="w-32 h-12 gradient-bg rounded-xl flex items-center justify-center">
+                                        <span class="text-white font-bold text-lg">LOGO</span>
+                                    </div>
+                                </div>
+                                
+                                <h1 class="text-2xl font-bold text-gray-900 text-center mb-2">Ingresa a tu cuenta</h1>
+                                <p class="text-gray-500 text-center mb-8">Elige cómo quieres verificarte</p>
+                                
+                                <!-- Auth Methods -->
+                                <div class="space-y-3">
+                                    <button class="w-full p-4 border-2 border-primary-500 bg-primary-50 rounded-xl flex items-center gap-4 transition hover:bg-primary-100">
+                                        <div class="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
+                                            <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                                            </svg>
+                                        </div>
+                                        <div class="text-left flex-1">
+                                            <p class="font-semibold text-gray-900">Celular (SMS)</p>
+                                            <p class="text-sm text-gray-500">Código por mensaje de texto</p>
+                                        </div>
+                                        <svg class="w-5 h-5 text-primary-500" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                                        </svg>
+                                    </button>
+                                    
+                                    <button class="w-full p-4 border-2 border-gray-200 rounded-xl flex items-center gap-4 transition hover:border-green-300 hover:bg-green-50">
+                                        <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                                            <span class="text-2xl">💬</span>
+                                        </div>
+                                        <div class="text-left flex-1">
+                                            <p class="font-semibold text-gray-900">WhatsApp</p>
+                                            <p class="text-sm text-gray-500">Código por WhatsApp</p>
+                                        </div>
+                                        <svg class="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                                        </svg>
+                                    </button>
+                                    
+                                    <button class="w-full p-4 border-2 border-gray-200 rounded-xl flex items-center gap-4 transition hover:border-blue-300 hover:bg-blue-50">
+                                        <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                                            <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                            </svg>
+                                        </div>
+                                        <div class="text-left flex-1">
+                                            <p class="font-semibold text-gray-900">Correo Electrónico</p>
+                                            <p class="text-sm text-gray-500">Código a tu email</p>
+                                        </div>
+                                        <svg class="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                                
+                                <div class="mt-8 text-center">
+                                    <p class="text-sm text-gray-500">¿Ya tienes cuenta?</p>
+                                    <a href="#" class="text-primary-600 font-medium">Inicia sesión con contraseña</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Auth: Phone Input -->
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-3 text-center">2.2 Ingreso de Celular</h3>
+                    <div class="phone-frame">
+                        <div class="phone-notch"></div>
+                        <div class="screen-content">
+                            <div class="p-6">
+                                <button class="p-2 -ml-2 mb-4">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                    </svg>
+                                </button>
+                                
+                                <div class="w-16 h-16 bg-primary-100 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+                                    <svg class="w-8 h-8 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                                    </svg>
+                                </div>
+                                
+                                <h1 class="text-2xl font-bold text-gray-900 text-center mb-2">¿Cuál es tu número?</h1>
+                                <p class="text-gray-500 text-center mb-8">Te enviaremos un código de 6 dígitos</p>
+                                
+                                <div class="mb-6">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Número de celular</label>
+                                    <div class="flex border-2 border-gray-200 rounded-xl overflow-hidden focus-within:border-primary-500 focus-within:ring-4 focus-within:ring-primary-100">
+                                        <div class="bg-gray-50 px-4 flex items-center border-r gap-2">
+                                            <span class="text-lg">🇲🇽</span>
+                                            <span class="text-gray-600 font-medium">+52</span>
+                                        </div>
+                                        <input type="tel" placeholder="55 1234 5678" class="flex-1 px-4 py-4 text-lg focus:outline-none" value="55 1234 5678">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="sticky-footer">
+                                <button class="w-full py-4 gradient-bg text-white rounded-xl font-semibold text-lg shadow-lg">
+                                    Enviar código
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Auth: Email Input -->
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-3 text-center">2.3 Ingreso de Email</h3>
+                    <div class="phone-frame">
+                        <div class="phone-notch"></div>
+                        <div class="screen-content">
+                            <div class="p-6">
+                                <button class="p-2 -ml-2 mb-4">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                    </svg>
+                                </button>
+                                
+                                <div class="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+                                    <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                    </svg>
+                                </div>
+                                
+                                <h1 class="text-2xl font-bold text-gray-900 text-center mb-2">¿Cuál es tu correo?</h1>
+                                <p class="text-gray-500 text-center mb-8">Te enviaremos un código de verificación</p>
+                                
+                                <div class="mb-6">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Correo electrónico</label>
+                                    <input type="email" placeholder="tu@email.com" class="w-full px-4 py-4 text-lg border-2 border-gray-200 rounded-xl focus:outline-none focus:border-primary-500 focus:ring-4 focus:ring-primary-100" value="juan.perez@gmail.com">
+                                </div>
+                                
+                                <div class="bg-blue-50 rounded-xl p-4 mb-4">
+                                    <div class="flex gap-3">
+                                        <svg class="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                                        </svg>
+                                        <p class="text-sm text-blue-700">Revisa tu bandeja de entrada y carpeta de spam</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="sticky-footer">
+                                <button class="w-full py-4 gradient-bg text-white rounded-xl font-semibold text-lg shadow-lg">
+                                    Enviar código
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Auth: OTP Verification -->
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-3 text-center">2.4 Verificación OTP</h3>
+                    <div class="phone-frame">
+                        <div class="phone-notch"></div>
+                        <div class="screen-content">
+                            <div class="p-6">
+                                <button class="p-2 -ml-2 mb-4">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                    </svg>
+                                </button>
+                                
+                                <div class="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+                                    <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                                    </svg>
+                                </div>
+                                
+                                <h1 class="text-2xl font-bold text-gray-900 text-center mb-2">Verifica tu código</h1>
+                                <p class="text-gray-500 text-center mb-1">Enviado a</p>
+                                <p class="text-primary-600 font-medium text-center mb-6">+52 55 1234 5678</p>
+                                
+                                <div class="flex justify-center gap-2 mb-6">
+                                    <input type="text" maxlength="1" class="otp-box" value="5">
+                                    <input type="text" maxlength="1" class="otp-box" value="2">
+                                    <input type="text" maxlength="1" class="otp-box" value="8">
+                                    <input type="text" maxlength="1" class="otp-box" value="3">
+                                    <input type="text" maxlength="1" class="otp-box">
+                                    <input type="text" maxlength="1" class="otp-box">
+                                </div>
+                                
+                                <p class="text-center text-gray-500 text-sm mb-4">
+                                    El código expira en <span class="font-semibold text-primary-600">4:32</span>
+                                </p>
+                                
+                                <div class="text-center">
+                                    <p class="text-sm text-gray-500 mb-2">¿No recibiste el código?</p>
+                                    <div class="flex justify-center gap-3">
+                                        <button class="px-4 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 rounded-lg">
+                                            Reenviar SMS
+                                        </button>
+                                        <button class="px-4 py-2 text-sm font-medium text-green-600 hover:bg-green-50 rounded-lg">
+                                            WhatsApp
+                                        </button>
+                                        <button class="px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg">
+                                            Email
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ==================== DESKTOP VIEW ==================== -->
+        <div id="view-content-desktop" class="hidden fade-in">
+            <div class="mb-8">
+                <h2 class="text-xl font-bold text-gray-900 mb-2">Vista Desktop/Web - Diseño Responsivo</h2>
+                <p class="text-gray-600">Interfaz optimizada para pantallas grandes con navegación lateral y formularios expandidos.</p>
+            </div>
+            
+            <!-- Desktop: Landing -->
+            <div class="mb-12">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">1. Landing Page con Simulador</h3>
+                <div class="desktop-frame">
+                    <div class="browser-bar">
+                        <div class="browser-dot bg-red-400"></div>
+                        <div class="browser-dot bg-yellow-400"></div>
+                        <div class="browser-dot bg-green-400"></div>
+                        <div class="flex-1 mx-4">
+                            <div class="bg-white rounded-md px-4 py-1 text-sm text-gray-500 max-w-md">
+                                🔒 https://credito.lendus.app
+                            </div>
+                        </div>
+                    </div>
+                    <div class="h-[calc(100%-40px)] overflow-auto">
+                        <!-- Nav -->
+                        <nav class="bg-white border-b px-8 py-4 flex items-center justify-between">
+                            <div class="flex items-center gap-12">
+                                <div class="w-32 h-10 gradient-bg rounded-lg flex items-center justify-center">
+                                    <span class="text-white font-bold">LENDUS</span>
+                                </div>
+                                <div class="hidden md:flex gap-8">
+                                    <a href="#" class="text-gray-600 hover:text-primary-600 font-medium">Productos</a>
+                                    <a href="#" class="text-gray-600 hover:text-primary-600 font-medium">Simulador</a>
+                                    <a href="#" class="text-gray-600 hover:text-primary-600 font-medium">Nosotros</a>
+                                    <a href="#" class="text-gray-600 hover:text-primary-600 font-medium">Contacto</a>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <button class="text-primary-600 font-medium hover:text-primary-700">Iniciar Sesión</button>
+                                <button class="px-5 py-2.5 gradient-bg text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition">
+                                    Solicitar Crédito
+                                </button>
+                            </div>
+                        </nav>
+                        
+                        <!-- Hero Section -->
+                        <div class="grid grid-cols-2 gap-12 p-12 bg-gradient-to-br from-gray-50 to-primary-50">
+                            <div class="flex flex-col justify-center">
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary-100 text-primary-700 w-fit mb-4">
+                                    ✨ 100% Digital
+                                </span>
+                                <h1 class="text-5xl font-extrabold text-gray-900 mb-6 leading-tight">
+                                    Tu crédito aprobado en <span class="text-primary-600">minutos</span>
+                                </h1>
+                                <p class="text-xl text-gray-600 mb-8">
+                                    Sin papeleos, sin filas, sin complicaciones. Solicita desde $5,000 hasta $500,000 MXN.
+                                </p>
+                                <div class="flex gap-4">
+                                    <button class="px-8 py-4 gradient-bg text-white rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transition">
+                                        Comenzar Solicitud →
+                                    </button>
+                                    <button class="px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold text-lg hover:border-primary-300 transition">
+                                        Ver Requisitos
+                                    </button>
+                                </div>
+                                <div class="flex items-center gap-8 mt-8 pt-8 border-t">
+                                    <div class="text-center">
+                                        <p class="text-3xl font-bold text-primary-600">24hrs</p>
+                                        <p class="text-sm text-gray-500">Respuesta</p>
+                                    </div>
+                                    <div class="text-center">
+                                        <p class="text-3xl font-bold text-primary-600">0%</p>
+                                        <p class="text-sm text-gray-500">Comisión oculta</p>
+                                    </div>
+                                    <div class="text-center">
+                                        <p class="text-3xl font-bold text-primary-600">48</p>
+                                        <p class="text-sm text-gray-500">Meses plazo</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Simulator Card -->
+                            <div class="bg-white rounded-2xl shadow-2xl p-8">
+                                <h2 class="text-2xl font-bold text-gray-900 mb-6">Simula tu crédito</h2>
+                                
+                                <div class="mb-6">
+                                    <div class="flex justify-between mb-2">
+                                        <label class="text-sm font-medium text-gray-700">Monto</label>
+                                        <span class="text-2xl font-bold text-primary-600">$85,000</span>
+                                    </div>
+                                    <input type="range" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600" min="5000" max="500000" value="85000">
+                                    <div class="flex justify-between text-xs text-gray-400 mt-1">
+                                        <span>$5,000</span>
+                                        <span>$500,000</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-6">
+                                    <label class="text-sm font-medium text-gray-700 mb-3 block">Plazo (meses)</label>
+                                    <div class="grid grid-cols-5 gap-2">
+                                        <button class="py-3 border rounded-lg text-sm font-medium hover:border-primary-300">6</button>
+                                        <button class="py-3 border rounded-lg text-sm font-medium hover:border-primary-300">12</button>
+                                        <button class="py-3 gradient-bg text-white rounded-lg text-sm font-medium">18</button>
+                                        <button class="py-3 border rounded-lg text-sm font-medium hover:border-primary-300">24</button>
+                                        <button class="py-3 border rounded-lg text-sm font-medium hover:border-primary-300">36</button>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-6">
+                                    <label class="text-sm font-medium text-gray-700 mb-3 block">Frecuencia de pago</label>
+                                    <div class="grid grid-cols-3 gap-2">
+                                        <button class="py-3 border rounded-lg text-sm font-medium hover:border-primary-300">Semanal</button>
+                                        <button class="py-3 border rounded-lg text-sm font-medium hover:border-primary-300">Quincenal</button>
+                                        <button class="py-3 gradient-bg text-white rounded-lg text-sm font-medium">Mensual</button>
+                                    </div>
+                                </div>
+                                
+                                <div class="bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl p-6 text-white mb-6">
+                                    <div class="flex justify-between items-end mb-4">
+                                        <div>
+                                            <p class="text-primary-100 text-sm">Tu pago mensual</p>
+                                            <p class="text-4xl font-bold">$5,832.45</p>
+                                        </div>
+                                        <div class="text-right">
+                                            <p class="text-primary-100 text-sm">CAT</p>
+                                            <p class="text-2xl font-bold">58.5%</p>
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4 pt-4 border-t border-white/20 text-sm">
+                                        <div>
+                                            <p class="text-primary-200">Total a pagar</p>
+                                            <p class="font-semibold">$104,984.10</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-primary-200">Intereses</p>
+                                            <p class="font-semibold">$19,984.10</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <button class="w-full py-4 gradient-bg text-white rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transition">
+                                    ¡Lo quiero! Solicitar ahora
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Desktop: Onboarding Wizard -->
+            <div class="mb-12">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">2. Wizard de Onboarding (Desktop)</h3>
+                <div class="desktop-frame">
+                    <div class="browser-bar">
+                        <div class="browser-dot bg-red-400"></div>
+                        <div class="browser-dot bg-yellow-400"></div>
+                        <div class="browser-dot bg-green-400"></div>
+                        <div class="flex-1 mx-4">
+                            <div class="bg-white rounded-md px-4 py-1 text-sm text-gray-500 max-w-md">
+                                🔒 https://credito.lendus.app/solicitud
+                            </div>
+                        </div>
+                    </div>
+                    <div class="h-[calc(100%-40px)] flex">
+                        <!-- Left: Progress Sidebar -->
+                        <div class="w-80 bg-gray-50 border-r p-6 flex flex-col">
+                            <div class="w-28 h-10 gradient-bg rounded-lg flex items-center justify-center mb-8">
+                                <span class="text-white font-bold text-sm">LENDUS</span>
+                            </div>
+                            
+                            <div class="flex-1">
+                                <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Tu progreso</h3>
+                                
+                                <div class="space-y-1">
+                                    <div class="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+                                        <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                                            <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                            </svg>
+                                        </div>
+                                        <span class="text-sm font-medium text-green-700">Datos personales</span>
+                                    </div>
+                                    
+                                    <div class="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+                                        <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                                            <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                            </svg>
+                                        </div>
+                                        <span class="text-sm font-medium text-green-700">Identificación</span>
+                                    </div>
+                                    
+                                    <div class="flex items-center gap-3 p-3 bg-primary-50 rounded-lg border-2 border-primary-200">
+                                        <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center">
+                                            <span class="text-white text-sm font-bold">3</span>
+                                        </div>
+                                        <span class="text-sm font-medium text-primary-700">Domicilio</span>
+                                    </div>
+                                    
+                                    <div class="flex items-center gap-3 p-3 rounded-lg">
+                                        <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                                            <span class="text-gray-500 text-sm font-bold">4</span>
+                                        </div>
+                                        <span class="text-sm text-gray-500">Información laboral</span>
+                                    </div>
+                                    
+                                    <div class="flex items-center gap-3 p-3 rounded-lg">
+                                        <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                                            <span class="text-gray-500 text-sm font-bold">5</span>
+                                        </div>
+                                        <span class="text-sm text-gray-500">Tu crédito</span>
+                                    </div>
+                                    
+                                    <div class="flex items-center gap-3 p-3 rounded-lg">
+                                        <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                                            <span class="text-gray-500 text-sm font-bold">6</span>
+                                        </div>
+                                        <span class="text-sm text-gray-500">Documentos</span>
+                                    </div>
+                                    
+                                    <div class="flex items-center gap-3 p-3 rounded-lg">
+                                        <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                                            <span class="text-gray-500 text-sm font-bold">7</span>
+                                        </div>
+                                        <span class="text-sm text-gray-500">Referencias</span>
+                                    </div>
+                                    
+                                    <div class="flex items-center gap-3 p-3 rounded-lg">
+                                        <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                                            <span class="text-gray-500 text-sm font-bold">8</span>
+                                        </div>
+                                        <span class="text-sm text-gray-500">Revisión y firma</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="pt-6 border-t">
+                                <div class="flex items-center gap-3 text-sm text-gray-500">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <span>¿Necesitas ayuda?</span>
+                                </div>
+                                <a href="#" class="text-primary-600 font-medium text-sm mt-1 block">Contactar soporte</a>
+                            </div>
+                        </div>
+                        
+                        <!-- Right: Form Content -->
+                        <div class="flex-1 flex flex-col">
+                            <!-- Header -->
+                            <div class="px-8 py-6 border-b bg-white">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h1 class="text-2xl font-bold text-gray-900">¿Dónde vives?</h1>
+                                        <p class="text-gray-500 mt-1">Paso 3 de 8 • Domicilio</p>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm text-gray-500">Guardado automático</span>
+                                        <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Form -->
+                            <div class="flex-1 overflow-auto p-8 bg-gray-50">
+                                <div class="max-w-2xl">
+                                    <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+                                        <h3 class="font-semibold text-gray-900 mb-4">Ubicación</h3>
+                                        
+                                        <div class="grid grid-cols-3 gap-4 mb-4">
+                                            <div class="col-span-1">
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">Código Postal *</label>
+                                                <div class="relative">
+                                                    <input type="text" maxlength="5" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" value="29165">
+                                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-green-500">
+                                                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                                        </svg>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="col-span-2">
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">Colonia *</label>
+                                                <select class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 bg-white">
+                                                    <option>Jardines los Reyes</option>
+                                                    <option>Centro</option>
+                                                    <option>Las Palmas</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">Municipio</label>
+                                                <input type="text" class="w-full px-4 py-3 border rounded-lg bg-gray-50 text-gray-500" value="Chiapa de Corzo" readonly>
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                                                <input type="text" class="w-full px-4 py-3 border rounded-lg bg-gray-50 text-gray-500" value="Chiapas" readonly>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="bg-white rounded-xl shadow-sm p-6">
+                                        <h3 class="font-semibold text-gray-900 mb-4">Dirección</h3>
+                                        
+                                        <div class="mb-4">
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Calle *</label>
+                                            <input type="text" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 uppercase" placeholder="AV. INSURGENTES SUR">
+                                        </div>
+                                        
+                                        <div class="grid grid-cols-3 gap-4 mb-4">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">No. Exterior *</label>
+                                                <input type="text" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500" placeholder="123">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">No. Interior</label>
+                                                <input type="text" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500" placeholder="Depto 5">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">Años viviendo *</label>
+                                                <input type="number" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500" value="3" min="0">
+                                            </div>
+                                        </div>
+                                        
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de vivienda *</label>
+                                            <div class="grid grid-cols-4 gap-2">
+                                                <label class="cursor-pointer">
+                                                    <input type="radio" name="housing" class="sr-only peer">
+                                                    <div class="px-4 py-3 border rounded-lg text-center text-sm peer-checked:bg-primary-50 peer-checked:border-primary-500 peer-checked:text-primary-600 font-medium hover:border-gray-300">
+                                                        Propia
+                                                    </div>
+                                                </label>
+                                                <label class="cursor-pointer">
+                                                    <input type="radio" name="housing" class="sr-only peer" checked>
+                                                    <div class="px-4 py-3 border rounded-lg text-center text-sm peer-checked:bg-primary-50 peer-checked:border-primary-500 peer-checked:text-primary-600 font-medium hover:border-gray-300">
+                                                        Rentada
+                                                    </div>
+                                                </label>
+                                                <label class="cursor-pointer">
+                                                    <input type="radio" name="housing" class="sr-only peer">
+                                                    <div class="px-4 py-3 border rounded-lg text-center text-sm peer-checked:bg-primary-50 peer-checked:border-primary-500 peer-checked:text-primary-600 font-medium hover:border-gray-300">
+                                                        Familiar
+                                                    </div>
+                                                </label>
+                                                <label class="cursor-pointer">
+                                                    <input type="radio" name="housing" class="sr-only peer">
+                                                    <div class="px-4 py-3 border rounded-lg text-center text-sm peer-checked:bg-primary-50 peer-checked:border-primary-500 peer-checked:text-primary-600 font-medium hover:border-gray-300">
+                                                        Hipotecada
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Footer -->
+                            <div class="px-8 py-4 border-t bg-white flex justify-between items-center">
+                                <button class="px-6 py-3 border-2 border-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-50">
+                                    ← Anterior
+                                </button>
+                                <button class="px-8 py-3 gradient-bg text-white rounded-lg font-medium shadow-lg hover:shadow-xl">
+                                    Continuar →
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Desktop: User Dashboard -->
+            <div class="mb-12">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">3. Dashboard del Usuario</h3>
+                <div class="desktop-frame">
+                    <div class="browser-bar">
+                        <div class="browser-dot bg-red-400"></div>
+                        <div class="browser-dot bg-yellow-400"></div>
+                        <div class="browser-dot bg-green-400"></div>
+                        <div class="flex-1 mx-4">
+                            <div class="bg-white rounded-md px-4 py-1 text-sm text-gray-500 max-w-md">
+                                🔒 https://credito.lendus.app/dashboard
+                            </div>
+                        </div>
+                    </div>
+                    <div class="h-[calc(100%-40px)] flex">
+                        <!-- Sidebar -->
+                        <div class="w-64 bg-gray-900 text-white flex flex-col">
+                            <div class="p-6">
+                                <div class="w-28 h-10 bg-white/10 rounded-lg flex items-center justify-center">
+                                    <span class="font-bold">LENDUS</span>
+                                </div>
+                            </div>
+                            
+                            <nav class="flex-1 px-4">
+                                <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/10 text-white mb-1">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                                    </svg>
+                                    Inicio
+                                </a>
+                                <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-white/5 hover:text-white mb-1">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                    </svg>
+                                    Mis Solicitudes
+                                </a>
+                                <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-white/5 hover:text-white mb-1">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                    Mi Perfil
+                                </a>
+                                <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-white/5 hover:text-white mb-1">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    Documentos
+                                </a>
+                            </nav>
+                            
+                            <div class="p-4 border-t border-white/10">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 bg-primary-500 rounded-full flex items-center justify-center font-medium">
+                                        JC
+                                    </div>
+                                    <div class="flex-1">
+                                        <p class="font-medium text-sm">Juan Carlos</p>
+                                        <p class="text-xs text-gray-400">juan@email.com</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Main Content -->
+                        <div class="flex-1 bg-gray-50 overflow-auto">
+                            <div class="p-8">
+                                <div class="flex items-center justify-between mb-8">
+                                    <div>
+                                        <h1 class="text-2xl font-bold text-gray-900">¡Hola, Juan! 👋</h1>
+                                        <p class="text-gray-500">Aquí está el estado de tu solicitud</p>
+                                    </div>
+                                    <button class="px-5 py-2.5 gradient-bg text-white rounded-lg font-medium shadow-lg">
+                                        + Nueva Solicitud
+                                    </button>
+                                </div>
+                                
+                                <!-- Status Card -->
+                                <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+                                    <div class="flex items-start justify-between mb-6">
+                                        <div>
+                                            <div class="flex items-center gap-3 mb-2">
+                                                <span class="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-medium">En Revisión</span>
+                                                <span class="text-gray-400 text-sm">Folio: LEN-2026-00042</span>
+                                            </div>
+                                            <h3 class="text-xl font-bold text-gray-900">Crédito Personal</h3>
+                                        </div>
+                                        <div class="text-right">
+                                            <p class="text-3xl font-bold text-primary-600">$85,000</p>
+                                            <p class="text-sm text-gray-500">18 meses • Mensual</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Progress Timeline -->
+                                    <div class="relative">
+                                        <div class="absolute top-4 left-0 right-0 h-1 bg-gray-200 rounded"></div>
+                                        <div class="absolute top-4 left-0 h-1 bg-primary-500 rounded" style="width: 40%"></div>
+                                        
+                                        <div class="relative flex justify-between">
+                                            <div class="text-center">
+                                                <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center mb-2 mx-auto">
+                                                    <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                                    </svg>
+                                                </div>
+                                                <p class="text-xs font-medium text-green-600">Enviada</p>
+                                            </div>
+                                            <div class="text-center">
+                                                <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center mb-2 mx-auto ring-4 ring-primary-100">
+                                                    <div class="w-2 h-2 bg-white rounded-full"></div>
+                                                </div>
+                                                <p class="text-xs font-medium text-primary-600">En Revisión</p>
+                                            </div>
+                                            <div class="text-center">
+                                                <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center mb-2 mx-auto">
+                                                    <span class="text-gray-400 text-xs">3</span>
+                                                </div>
+                                                <p class="text-xs text-gray-400">Docs</p>
+                                            </div>
+                                            <div class="text-center">
+                                                <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center mb-2 mx-auto">
+                                                    <span class="text-gray-400 text-xs">4</span>
+                                                </div>
+                                                <p class="text-xs text-gray-400">Aprobada</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Info Cards -->
+                                <div class="grid grid-cols-3 gap-6">
+                                    <div class="bg-white rounded-xl shadow-sm p-6">
+                                        <div class="flex items-center gap-4 mb-4">
+                                            <div class="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
+                                                <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <p class="text-sm text-gray-500">Pago mensual</p>
+                                                <p class="text-xl font-bold text-gray-900">$5,832.45</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="bg-white rounded-xl shadow-sm p-6">
+                                        <div class="flex items-center gap-4 mb-4">
+                                            <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                                                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <p class="text-sm text-gray-500">Documentos</p>
+                                                <p class="text-xl font-bold text-gray-900">3 de 4</p>
+                                            </div>
+                                        </div>
+                                        <button class="text-primary-600 text-sm font-medium">Completar →</button>
+                                    </div>
+                                    
+                                    <div class="bg-white rounded-xl shadow-sm p-6">
+                                        <div class="flex items-center gap-4 mb-4">
+                                            <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                                                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <p class="text-sm text-gray-500">Tiempo estimado</p>
+                                                <p class="text-xl font-bold text-gray-900">24 hrs</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ==================== ADMIN VIEW ==================== -->
+        <div id="view-content-admin" class="hidden fade-in">
+            <div class="mb-8">
+                <h2 class="text-xl font-bold text-gray-900 mb-2">Panel Administrativo - Mesa de Control</h2>
+                <p class="text-gray-600">Interfaz para analistas y administradores del tenant.</p>
+            </div>
+            
+            <div class="desktop-frame">
+                <div class="browser-bar">
+                    <div class="browser-dot bg-red-400"></div>
+                    <div class="browser-dot bg-yellow-400"></div>
+                    <div class="browser-dot bg-green-400"></div>
+                    <div class="flex-1 mx-4">
+                        <div class="bg-white rounded-md px-4 py-1 text-sm text-gray-500 max-w-md">
+                            🔒 https://admin.lendus.app/solicitudes
+                        </div>
+                    </div>
+                </div>
+                <div class="h-[calc(100%-40px)] flex">
+                    <!-- Sidebar -->
+                    <div class="w-64 bg-gray-900 text-white flex flex-col">
+                        <div class="p-6">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 gradient-bg rounded-lg flex items-center justify-center">
+                                    <span class="font-bold text-xs">L</span>
+                                </div>
+                                <div>
+                                    <p class="font-bold text-sm">LENDUS</p>
+                                    <p class="text-xs text-gray-400">Admin Panel</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <nav class="flex-1 px-4">
+                            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 mb-2">Principal</p>
+                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-white/5 hover:text-white mb-1">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                                </svg>
+                                Dashboard
+                            </a>
+                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/10 text-white mb-1">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                Solicitudes
+                                <span class="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">5</span>
+                            </a>
+                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-white/5 hover:text-white mb-1">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                </svg>
+                                Clientes
+                            </a>
+                            
+                            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 mb-2 mt-6">Configuración</p>
+                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-white/5 hover:text-white mb-1">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                                </svg>
+                                Productos
+                            </a>
+                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-white/5 hover:text-white mb-1">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                </svg>
+                                Branding
+                            </a>
+                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-white/5 hover:text-white mb-1">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                                </svg>
+                                Webhooks
+                            </a>
+                        </nav>
+                    </div>
+                    
+                    <!-- Main Content -->
+                    <div class="flex-1 bg-gray-100 overflow-auto">
+                        <!-- Header -->
+                        <div class="bg-white border-b px-8 py-4 flex items-center justify-between">
+                            <div>
+                                <h1 class="text-xl font-bold text-gray-900">Mesa de Control</h1>
+                                <p class="text-sm text-gray-500">Gestión de solicitudes de crédito</p>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <div class="relative">
+                                    <input type="search" placeholder="Buscar folio, RFC..." class="pl-10 pr-4 py-2 border rounded-lg w-64 focus:ring-2 focus:ring-primary-500">
+                                    <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                    </svg>
+                                </div>
+                                <button class="p-2 text-gray-500 hover:text-gray-700 relative">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                                    </svg>
+                                    <span class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white text-xs flex items-center justify-center">3</span>
+                                </button>
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 gradient-bg rounded-full flex items-center justify-center text-white font-medium">
+                                        AR
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Kanban Board -->
+                        <div class="p-6">
+                            <div class="flex gap-4 overflow-x-auto pb-4">
+                                <!-- Column: Nuevas -->
+                                <div class="flex-shrink-0 w-80">
+                                    <div class="bg-gray-50 rounded-xl p-4">
+                                        <div class="flex items-center justify-between mb-4">
+                                            <h3 class="font-semibold text-gray-700">Nuevas</h3>
+                                            <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">5</span>
+                                        </div>
+                                        
+                                        <div class="space-y-3">
+                                            <div class="bg-white rounded-lg p-4 shadow-sm border-l-4 border-blue-500 cursor-pointer hover:shadow-md transition">
+                                                <div class="flex items-center justify-between mb-2">
+                                                    <span class="font-mono text-sm text-gray-500">LEN-2026-00045</span>
+                                                    <span class="text-xs text-gray-400">Hace 5 min</span>
+                                                </div>
+                                                <p class="font-medium text-gray-900">María González López</p>
+                                                <p class="text-sm text-gray-500">Crédito Personal</p>
+                                                <div class="flex items-center justify-between mt-3 pt-3 border-t">
+                                                    <span class="font-semibold text-primary-600">$120,000</span>
+                                                    <span class="text-sm text-gray-400">24 meses</span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="bg-white rounded-lg p-4 shadow-sm border-l-4 border-blue-500 cursor-pointer hover:shadow-md transition">
+                                                <div class="flex items-center justify-between mb-2">
+                                                    <span class="font-mono text-sm text-gray-500">LEN-2026-00044</span>
+                                                    <span class="text-xs text-gray-400">Hace 15 min</span>
+                                                </div>
+                                                <p class="font-medium text-gray-900">Roberto Sánchez</p>
+                                                <p class="text-sm text-gray-500">Crédito Nómina</p>
+                                                <div class="flex items-center justify-between mt-3 pt-3 border-t">
+                                                    <span class="font-semibold text-primary-600">$50,000</span>
+                                                    <span class="text-sm text-gray-400">12 meses</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Column: En Revisión -->
+                                <div class="flex-shrink-0 w-80">
+                                    <div class="bg-gray-50 rounded-xl p-4">
+                                        <div class="flex items-center justify-between mb-4">
+                                            <h3 class="font-semibold text-gray-700">En Revisión</h3>
+                                            <span class="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-medium">3</span>
+                                        </div>
+                                        
+                                        <div class="space-y-3">
+                                            <div class="bg-white rounded-lg p-4 shadow-sm border-l-4 border-yellow-500 cursor-pointer hover:shadow-md transition">
+                                                <div class="flex items-center justify-between mb-2">
+                                                    <span class="font-mono text-sm text-gray-500">LEN-2026-00042</span>
+                                                    <span class="text-xs text-gray-400">Hace 2 hrs</span>
+                                                </div>
+                                                <p class="font-medium text-gray-900">Juan Carlos Pérez</p>
+                                                <p class="text-sm text-gray-500">Crédito Personal</p>
+                                                <div class="flex items-center justify-between mt-3 pt-3 border-t">
+                                                    <span class="font-semibold text-primary-600">$85,000</span>
+                                                    <div class="flex -space-x-2">
+                                                        <div class="w-6 h-6 bg-gray-300 rounded-full border-2 border-white"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Column: Documentos Pendientes -->
+                                <div class="flex-shrink-0 w-80">
+                                    <div class="bg-gray-50 rounded-xl p-4">
+                                        <div class="flex items-center justify-between mb-4">
+                                            <h3 class="font-semibold text-gray-700">Docs Pendientes</h3>
+                                            <span class="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-sm font-medium">2</span>
+                                        </div>
+                                        
+                                        <div class="space-y-3">
+                                            <div class="bg-white rounded-lg p-4 shadow-sm border-l-4 border-orange-500 cursor-pointer hover:shadow-md transition">
+                                                <div class="flex items-center justify-between mb-2">
+                                                    <span class="font-mono text-sm text-gray-500">LEN-2026-00038</span>
+                                                    <span class="text-xs text-orange-500 font-medium">⚠️ 1 doc faltante</span>
+                                                </div>
+                                                <p class="font-medium text-gray-900">Ana Martínez</p>
+                                                <p class="text-sm text-gray-500">Arrendamiento</p>
+                                                <div class="flex items-center justify-between mt-3 pt-3 border-t">
+                                                    <span class="font-semibold text-primary-600">$350,000</span>
+                                                    <span class="text-sm text-gray-400">36 meses</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Column: Aprobadas -->
+                                <div class="flex-shrink-0 w-80">
+                                    <div class="bg-gray-50 rounded-xl p-4">
+                                        <div class="flex items-center justify-between mb-4">
+                                            <h3 class="font-semibold text-gray-700">Aprobadas</h3>
+                                            <span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">8</span>
+                                        </div>
+                                        
+                                        <div class="space-y-3">
+                                            <div class="bg-white rounded-lg p-4 shadow-sm border-l-4 border-green-500 cursor-pointer hover:shadow-md transition">
+                                                <div class="flex items-center justify-between mb-2">
+                                                    <span class="font-mono text-sm text-gray-500">LEN-2026-00035</span>
+                                                    <span class="text-xs text-green-500 font-medium">✓ Enviado</span>
+                                                </div>
+                                                <p class="font-medium text-gray-900">Pedro Ramírez</p>
+                                                <p class="text-sm text-gray-500">Crédito PYME</p>
+                                                <div class="flex items-center justify-between mt-3 pt-3 border-t">
+                                                    <span class="font-semibold text-green-600">$250,000</span>
+                                                    <span class="text-sm text-gray-400">48 meses</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function showView(view) {
+            // Hide all views
+            document.querySelectorAll('[id^="view-content-"]').forEach(el => {
+                el.classList.add('hidden');
+            });
+            
+            // Reset all view buttons
+            document.querySelectorAll('[id^="view-"]').forEach(el => {
+                if (el.id.startsWith('view-content-')) return;
+                el.classList.remove('tab-active');
+                el.classList.add('bg-gray-100', 'text-gray-600');
+            });
+            
+            // Show selected view
+            document.getElementById('view-content-' + view).classList.remove('hidden');
+            
+            // Activate button
+            const btn = document.getElementById('view-' + view);
+            btn.classList.add('tab-active');
+            btn.classList.remove('bg-gray-100', 'text-gray-600');
+        }
+        
+        function setTheme(color) {
+            document.documentElement.style.setProperty('--tenant-primary', color);
+        }
+    </script>
+</body>
+</html>

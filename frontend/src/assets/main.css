@@ -1,0 +1,54 @@
+/* Import Inter font - MUST come first */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CSS Variables for tenant theming */
+:root {
+  --tenant-primary: #6366f1;
+  --tenant-secondary: #10b981;
+  --tenant-accent: #f59e0b;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom component classes */
+@layer components {
+  .btn-primary {
+    @apply px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold
+           hover:bg-primary-700 transition-colors shadow-lg hover:shadow-xl;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-3 border-2 border-gray-200 text-gray-700 rounded-xl
+           font-semibold hover:border-primary-300 transition-colors;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 border-2 border-gray-200 rounded-xl
+           focus:border-primary-500 focus:ring-2 focus:ring-primary-100
+           outline-none transition-colors;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl shadow-sm p-6;
+  }
+}
+
+/* OTP input boxes */
+.otp-box {
+  @apply w-12 h-14 border-2 border-gray-200 rounded-xl text-2xl text-center
+         font-semibold focus:border-primary-500 focus:ring-2 focus:ring-primary-100
+         outline-none;
+}
+
+/* Gradient background utility */
+.gradient-bg {
+  background: linear-gradient(135deg, var(--tenant-primary) 0%, #4338ca 100%);
+}

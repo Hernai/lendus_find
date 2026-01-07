@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOS White-Label - Flujo UI/UX</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f4ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .phone-frame {
+            width: 375px;
+            height: 812px;
+            border-radius: 40px;
+            border: 12px solid #1f2937;
+            background: white;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        .phone-notch {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 150px;
+            height: 30px;
+            background: #1f2937;
+            border-radius: 0 0 20px 20px;
+            z-index: 10;
+        }
+        .screen-content {
+            height: 100%;
+            overflow-y: auto;
+            padding-top: 40px;
+        }
+        .screen-content::-webkit-scrollbar {
+            display: none;
+        }
+        .sticky-footer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 16px;
+            background: white;
+            border-top: 1px solid #e5e7eb;
+        }
+        .tab-active {
+            border-bottom: 3px solid #4f46e5;
+            color: #4f46e5;
+        }
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .otp-box {
+            width: 48px;
+            height: 56px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 24px;
+            text-align: center;
+            font-weight: 600;
+        }
+        .otp-box:focus {
+            border-color: #4f46e5;
+            outline: none;
+        }
+        .progress-step {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .progress-step.active {
+            background: #4f46e5;
+            color: white;
+        }
+        .progress-step.completed {
+            background: #10b981;
+            color: white;
+        }
+        .progress-step.pending {
+            background: #e5e7eb;
+            color: #9ca3af;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans">
+    <!-- Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">LOS White-Label</h1>
+                    <p class="text-sm text-gray-500">Flujo de Pantallas UI/UX</p>
+                </div>
+                <div class="flex gap-2">
+                    <span class="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm font-medium">Vue.js 3</span>
+                    <span class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">Laravel 11</span>
+                    <span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">Tailwind CSS</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <div class="bg-white border-b sticky top-16 z-40">
+        <div class="max-w-7xl mx-auto px-4">
+            <nav class="flex gap-8">
+                <button onclick="showModule('landing')" id="tab-landing" class="py-4 text-sm font-medium tab-active">
+                    1. Landing & Simulador
+                </button>
+                <button onclick="showModule('auth')" id="tab-auth" class="py-4 text-sm font-medium text-gray-500 hover:text-gray-700">
+                    2. Autenticación
+                </button>
+                <button onclick="showModule('onboarding')" id="tab-onboarding" class="py-4 text-sm font-medium text-gray-500 hover:text-gray-700">
+                    3. Onboarding Wizard
+                </button>
+                <button onclick="showModule('documents')" id="tab-documents" class="py-4 text-sm font-medium text-gray-500 hover:text-gray-700">
+                    4. Documentos
+                </button>
+                <button onclick="showModule('dashboard')" id="tab-dashboard" class="py-4 text-sm font-medium text-gray-500 hover:text-gray-700">
+                    5. Dashboard
+                </button>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        
+        <!-- Module: Landing & Simulator -->
+        <div id="module-landing" class="fade-in">
+            <div class="mb-8">
+                <h2 class="text-xl font-bold text-gray-900 mb-2">Módulo 1: Landing Page & Simulador</h2>
+                <p class="text-gray-600">Página de entrada con branding dinámico y simulador de crédito interactivo.</p>
+            </div>
+            
+            <div class="flex flex-wrap gap-8 justify-center">
+                <!-- Landing Mobile -->
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-4 text-center">1.1 Landing Hero</h3>
+                    <div class="phone-frame">
+                        <div class="phone-notch"></div>
+                        <div class="screen-content bg-gradient-to-b from-primary-600 to-primary-700">
+                            <div class="p-6 text-white">
+                                <!-- Logo -->
+                                <div class="flex justify-center mb-8">
+                                    <div class="w-32 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                                        <span class="text-white font-bold">LOGO</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Hero Text -->
+                                <h1 class="text-3xl font-bold mb-2">Tu crédito en 5 minutos</h1>
+                                <p class="text-primary-100 mb-8">Sin papeleos, 100% digital</p>
+                                
+                                <!-- Illustration placeholder -->
+                                <div class="bg-white/10 rounded-2xl h-48 flex items-center justify-center mb-8">
+                                    <svg class="w-24 h-24 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                                    </svg>
+                                </div>
+                                
+                                <!-- Mini Simulator Card -->
+                                <div class="bg-white rounded-2xl p-5 text-gray-900 shadow-xl">
+                                    <p class="text-sm text-gray-500 mb-2">¿Cuánto necesitas?</p>
+                                    <p class="text-3xl font-bold text-primary-600 mb-4">$50,000</p>
+                                    <input type="range" class="w-full mb-4 accent-primary-600" min="5000" max="500000" value="50000">
+                                    <p class="text-sm text-gray-500">Cuota desde <span class="font-semibold text-gray-900">$2,890/mes</span></p>
+                                </div>
+                            </div>
+                            
+                            <!-- Sticky Button -->
+                            <div class="sticky-footer bg-primary-700 border-t-0">
+                                <button class="w-full py-4 bg-white text-primary-600 rounded-xl font-semibold text-lg">
+                                    Comenzar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Simulator -->
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-4 text-center">1.2 Simulador Completo</h3>
+                    <div class="phone-frame">
+                        <div class="phone-notch"></div>
+                        <div class="screen-content bg-gray-50">
+                            <!-- Header -->
+                            <div class="bg-white px-4 py-3 flex items-center border-b">
+                                <button class="p-2 -ml-2">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                    </svg>
+                                </button>
+                                <div class="flex-1 flex justify-center">
+                                    <div class="w-24 h-8 bg-gray-100 rounded flex items-center justify-center">
+                                        <span class="text-xs font-medium text-gray-500">LOGO</span>
+                                    </div>
+                                </div>
+                                <div class="w-10"></div>
+                            </div>
+                            
+                            <div class="p-4 pb-32">
+                                <!-- Amount Section -->
+                                <div class="bg-white rounded-xl p-4 mb-4 shadow-sm">
+                                    <p class="text-sm text-gray-500 mb-1">¿Cuánto necesitas?</p>
+                                    <p class="text-3xl font-bold text-primary-600">$85,000 <span class="text-lg text-gray-400">MXN</span></p>
+                                    <input type="range" class="w-full mt-3 accent-primary-600" min="5000" max="500000" value="85000">
+                                    <div class="flex justify-between text-xs text-gray-400 mt-1">
+                                        <span>$5,000</span>
+                                        <span>$500,000</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Term Section -->
+                                <div class="bg-white rounded-xl p-4 mb-4 shadow-sm">
+                                    <p class="text-sm text-gray-500 mb-3">¿En cuánto tiempo?</p>
+                                    <div class="flex gap-2">
+                                        <button class="flex-1 py-2 rounded-lg border text-sm font-medium text-gray-500">6</button>
+                                        <button class="flex-1 py-2 rounded-lg border text-sm font-medium text-gray-500">12</button>
+                                        <button class="flex-1 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium">18</button>
+                                        <button class="flex-1 py-2 rounded-lg border text-sm font-medium text-gray-500">24</button>
+                                        <button class="flex-1 py-2 rounded-lg border text-sm font-medium text-gray-500">36</button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Frequency Section -->
+                                <div class="bg-white rounded-xl p-4 mb-4 shadow-sm">
+                                    <p class="text-sm text-gray-500 mb-3">¿Cada cuándo pagas?</p>
+                                    <div class="flex bg-gray-100 rounded-lg p-1">
+                                        <button class="flex-1 py-2 text-sm font-medium text-gray-500">Semanal</button>
+                                        <button class="flex-1 py-2 text-sm font-medium text-gray-500">Quincenal</button>
+                                        <button class="flex-1 py-2 bg-white rounded-md text-sm font-medium text-primary-600 shadow-sm">Mensual</button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Result Card -->
+                                <div class="bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl p-5 text-white shadow-lg">
+                                    <p class="text-primary-100 text-sm mb-1">Tu pago mensual</p>
+                                    <p class="text-4xl font-bold mb-4">$5,832.45</p>
+                                    <div class="grid grid-cols-2 gap-4 text-sm">
+                                        <div>
+                                            <p class="text-primary-200">Total a pagar</p>
+                                            <p class="font-semibold">$104,984.10</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-primary-200">Intereses</p>
+                                            <p class="font-semibold">$19,984.10</p>
+                                        </div>
+                                    </div>
+                                    <div class="mt-4 pt-4 border-t border-white/20">
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-primary-200 text-sm">CAT Promedio</span>
+                                            <span class="text-xl font-bold">58.5%</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Sticky Button -->
+                            <div class="sticky-footer">
+                                <button class="w-full py-4 bg-primary-600 text-white rounded-xl font-semibold text-lg">
+                                    Solicitar este crédito
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module: Auth -->
+        <div id="module-auth" class="hidden fade-in">
+            <div class="mb-8">
+                <h2 class="text-xl font-bold text-gray-900 mb-2">Módulo 2: Autenticación OTP</h2>
+                <p class="text-gray-600">Verificación ligera por celular con código de un solo uso.</p>
+            </div>
+            
+            <div class="flex flex-wrap gap-8 justify-center">
+                <!-- Phone Input -->
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-4 text-center">2.1 Ingreso de Celular</h3>
+                    <div class="phone-frame">
+                        <div class="phone-notch"></div>
+                        <div class="screen-content">
+                            <div class="p-6">
+                                <!-- Logo -->
+                                <div class="flex justify-center mb-12">
+                                    <div class="w-32 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
+                                        <span class="text-primary-600 font-bold">LOGO</span>
+                                    </div>
+                                </div>
+                                
+                                <h1 class="text-2xl font-bold text-gray-900 text-center mb-2">¿Cuál es tu número?</h1>
+                                <p class="text-gray-500 text-center mb-8">Te enviaremos un código por SMS</p>
+                                
+                                <!-- Phone Input -->
+                                <div class="mb-6">
+                                    <div class="flex border-2 border-gray-200 rounded-xl overflow-hidden focus-within:border-primary-500">
+                                        <div class="bg-gray-50 px-4 flex items-center border-r">
+                                            <span class="text-gray-600 font-medium">+52</span>
+                                        </div>
+                                        <input type="tel" placeholder="(55) 1234-5678" class="flex-1 px-4 py-4 text-lg focus:outline-none">
+                                    </div>
+                                </div>
+                                
+                                <!-- WhatsApp Checkbox -->
+                                <label class="flex items-start gap-3 mb-8">
+                                    <input type="checkbox" class="mt-1 w-5 h-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500">
+                                    <span class="text-sm text-gray-600">También acepto recibir comunicaciones por WhatsApp</span>
+                                </label>
+                            </div>
+                            
+                            <!-- Sticky Button -->
+                            <div class="sticky-footer">
+                                <button class="w-full py-4 bg-gray-200 text-gray-400 rounded-xl font-semibold text-lg cursor-not-allowed">
+                                    Enviar código
+                                </button>
+                                <p class="text-xs text-gray-400 text-center mt-3">
+                                    Al continuar aceptas nuestros <a href="#" class="text-primary-600">Términos</a> y <a href="#" class="text-primary-600">Privacidad</a>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- OTP Verification -->
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-4 text-center">2.2 Verificación OTP</h3>
+                    <div class="phone-frame">
+                        <div class="phone-notch"></div>
+                        <div class="screen-content">
+                            <div class="p-6">
+                                <!-- Back button -->
+                                <button class="p-2 -ml-2 mb-6">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                    </svg>
+                                </button>
+                                
+                                <h1 class="text-2xl font-bold text-gray-900 text-center mb-2">Ingresa el código</h1>
+                                <p class="text-gray-500 text-center mb-2">Enviado a +52 (55) 1234-5678</p>
+                                <button class="text-primary-600 text-sm font-medium block mx-auto mb-8">Cambiar número</button>
+                                
+                                <!-- OTP Boxes -->
+                                <div class="flex justify-center gap-3 mb-8">
+                                    <input type="text" maxlength="1" class="otp-box" value="5">
+                                    <input type="text" maxlength="1" class="otp-box" value="8">
+                                    <input type="text" maxlength="1" class="otp-box" value="3">
+                                    <input type="text" maxlength="1" class="otp-box">
+                                    <input type="text" maxlength="1" class="otp-box">
+                                    <input type="text" maxlength="1" class="otp-box">
+                                </div>
+                                
+                                <!-- Timer -->
+                                <p class="text-center text-gray-500 mb-6">
+                                    ¿No lo recibiste? <span class="text-gray-400">Reenviar en 0:28</span>
+                                </p>
+                                
+                                <!-- Resend options -->
+                                <div class="flex justify-center gap-4">
+                                    <button class="px-4 py-2 border rounded-lg text-sm text-gray-500 opacity-50 cursor-not-allowed">
+                                        📱 SMS
+                                    </button>
+                                    <button class="px-4 py-2 border rounded-lg text-sm text-gray-500 opacity-50 cursor-not-allowed">
+                                        💬 WhatsApp
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module: Onboarding -->
+        <div id="module-onboarding" class="hidden fade-in">
+            <div class="mb-8">
+                <h2 class="text-xl font-bold text-gray-900 mb-2">Módulo 3: Onboarding Wizard</h2>
+                <p class="text-gray-600">Formularios progresivos con validación en tiempo real.</p>
+            </div>
+            
+            <div class="flex flex-wrap gap-8 justify-center">
+                <!-- Step 1: Personal Data -->
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-4 text-center">3.1 Datos Personales</h3>
+                    <div class="phone-frame">
+                        <div class="phone-notch"></div>
+                        <div class="screen-content bg-gray-50">
+                            <!-- Header with Progress -->
+                            <div class="bg-white px-4 py-3 border-b">
+                                <div class="flex items-center justify-between mb-2">
+                                    <button class="p-1">
+                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                        </svg>
+                                    </button>
+                                    <span class="text-sm text-gray-500">Paso 1 de 8</span>
+                                    <div class="w-6"></div>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-1.5">
+                                    <div class="bg-primary-600 h-1.5 rounded-full" style="width: 12.5%"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="p-4 pb-28">
+                                <h1 class="text-xl font-bold text-gray-900 mb-6">¿Cómo te llamas?</h1>
+                                
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Nombre(s) *</label>
+                                        <input type="text" class="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 uppercase" placeholder="JUAN CARLOS">
+                                    </div>
+                                    
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Primer Apellido *</label>
+                                            <input type="text" class="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500 uppercase" placeholder="PÉREZ">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Segundo Apellido</label>
+                                            <input type="text" class="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500 uppercase" placeholder="GARCÍA">
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Fecha de nacimiento *</label>
+                                        <input type="date" class="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500">
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Género *</label>
+                                        <div class="flex gap-3">
+                                            <label class="flex-1">
+                                                <input type="radio" name="gender" class="sr-only peer">
+                                                <div class="px-4 py-3 border rounded-xl text-center cursor-pointer peer-checked:bg-primary-50 peer-checked:border-primary-500 peer-checked:text-primary-600 font-medium">
+                                                    Masculino
+                                                </div>
+                                            </label>
+                                            <label class="flex-1">
+                                                <input type="radio" name="gender" class="sr-only peer">
+                                                <div class="px-4 py-3 border rounded-xl text-center cursor-pointer peer-checked:bg-primary-50 peer-checked:border-primary-500 peer-checked:text-primary-600 font-medium">
+                                                    Femenino
+                                                </div>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Sticky Footer -->
+                            <div class="sticky-footer">
+                                <button class="w-full py-4 bg-primary-600 text-white rounded-xl font-semibold">
+                                    Continuar →
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Step 3: Address -->
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-4 text-center">3.3 Domicilio</h3>
+                    <div class="phone-frame">
+                        <div class="phone-notch"></div>
+                        <div class="screen-content bg-gray-50">
+                            <!-- Header with Progress -->
+                            <div class="bg-white px-4 py-3 border-b">
+                                <div class="flex items-center justify-between mb-2">
+                                    <button class="p-1">
+                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                        </svg>
+                                    </button>
+                                    <span class="text-sm text-gray-500">Paso 3 de 8</span>
+                                    <div class="w-6"></div>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-1.5">
+                                    <div class="bg-primary-600 h-1.5 rounded-full" style="width: 37.5%"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="p-4 pb-28">
+                                <h1 class="text-xl font-bold text-gray-900 mb-6">¿Dónde vives?</h1>
+                                
+                                <div class="space-y-4">
+                                    <!-- CP with auto-fill -->
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Código Postal *</label>
+                                        <div class="relative">
+                                            <input type="text" maxlength="5" class="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500" value="29165">
+                                            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-green-500">
+                                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                                </svg>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Colonia *</label>
+                                        <select class="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500 bg-white">
+                                            <option>Jardines los Reyes</option>
+                                            <option>Centro</option>
+                                            <option>Las Palmas</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Municipio</label>
+                                            <input type="text" class="w-full px-4 py-3 border rounded-xl bg-gray-50 text-gray-500" value="Chiapa de Corzo" readonly>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                                            <input type="text" class="w-full px-4 py-3 border rounded-xl bg-gray-50 text-gray-500" value="Chiapas" readonly>
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Calle *</label>
+                                        <input type="text" class="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500 uppercase" placeholder="AV. REFORMA">
+                                    </div>
+                                    
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">No. Exterior *</label>
+                                            <input type="text" class="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500" placeholder="123">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">No. Interior</label>
+                                            <input type="text" class="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500" placeholder="Depto 5">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Sticky Footer -->
+                            <div class="sticky-footer flex gap-3">
+                                <button class="flex-1 py-4 border-2 border-gray-200 text-gray-700 rounded-xl font-semibold">
+                                    ← Anterior
+                                </button>
+                                <button class="flex-1 py-4 bg-primary-600 text-white rounded-xl font-semibold">
+                                    Continuar →
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module: Documents -->
+        <div id="module-documents" class="hidden fade-in">
+            <div class="mb-8">
+                <h2 class="text-xl font-bold text-gray-900 mb-2">Módulo 4: Documentos y KYC</h2>
+                <p class="text-gray-600">Carga de documentos con preview y procesamiento OCR.</p>
+            </div>
+            
+            <div class="flex flex-wrap gap-8 justify-center">
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-4 text-center">4.1 Carga de Documentos</h3>
+                    <div class="phone-frame">
+                        <div class="phone-notch"></div>
+                        <div class="screen-content bg-gray-50">
+                            <!-- Header -->
+                            <div class="bg-white px-4 py-3 border-b">
+                                <div class="flex items-center justify-between mb-2">
+                                    <button class="p-1">
+                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                        </svg>
+                                    </button>
+                                    <span class="text-sm text-gray-500">Paso 6 de 8</span>
+                                    <div class="w-6"></div>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-1.5">
+                                    <div class="bg-primary-600 h-1.5 rounded-full" style="width: 75%"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="p-4 pb-28">
+                                <h1 class="text-xl font-bold text-gray-900 mb-2">Sube tus documentos</h1>
+                                <p class="text-gray-500 text-sm mb-6">Asegúrate de que las imágenes sean claras</p>
+                                
+                                <!-- Document List -->
+                                <div class="space-y-4">
+                                    <!-- INE Front - Uploaded -->
+                                    <div class="bg-white rounded-xl p-4 border-2 border-green-200">
+                                        <div class="flex items-center justify-between mb-3">
+                                            <div class="flex items-center gap-3">
+                                                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                                                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                                    </svg>
+                                                </div>
+                                                <div>
+                                                    <p class="font-medium text-gray-900">INE (frente)</p>
+                                                    <p class="text-xs text-gray-500">ine_frente.jpg • 2.1 MB</p>
+                                                </div>
+                                            </div>
+                                            <button class="text-gray-400 hover:text-red-500">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                        <div class="h-24 bg-gray-100 rounded-lg overflow-hidden">
+                                            <div class="w-full h-full bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center text-blue-400 text-xs">
+                                                Preview INE
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- INE Back - Pending -->
+                                    <div class="bg-white rounded-xl p-4 border-2 border-dashed border-gray-200">
+                                        <div class="flex items-center gap-3 mb-3">
+                                            <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                                                <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <p class="font-medium text-gray-900">INE (reverso) *</p>
+                                                <p class="text-xs text-gray-500">Requerido</p>
+                                            </div>
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <button class="flex-1 py-3 bg-primary-50 text-primary-600 rounded-lg text-sm font-medium flex items-center justify-center gap-2">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                </svg>
+                                                Tomar foto
+                                            </button>
+                                            <button class="flex-1 py-3 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium flex items-center justify-center gap-2">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                                                </svg>
+                                                Subir archivo
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Proof of Address - Pending -->
+                                    <div class="bg-white rounded-xl p-4 border-2 border-dashed border-gray-200">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                                                <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                                </svg>
+                                            </div>
+                                            <div class="flex-1">
+                                                <p class="font-medium text-gray-900">Comprobante de domicilio *</p>
+                                                <p class="text-xs text-gray-500">Máximo 3 meses de antigüedad</p>
+                                            </div>
+                                            <button class="px-3 py-2 bg-primary-50 text-primary-600 rounded-lg text-sm font-medium">
+                                                Subir
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Sticky Footer -->
+                            <div class="sticky-footer flex gap-3">
+                                <button class="flex-1 py-4 border-2 border-gray-200 text-gray-700 rounded-xl font-semibold">
+                                    ← Anterior
+                                </button>
+                                <button class="flex-1 py-4 bg-gray-200 text-gray-400 rounded-xl font-semibold cursor-not-allowed">
+                                    Continuar →
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module: Dashboard -->
+        <div id="module-dashboard" class="hidden fade-in">
+            <div class="mb-8">
+                <h2 class="text-xl font-bold text-gray-900 mb-2">Módulo 5: Dashboard del Solicitante</h2>
+                <p class="text-gray-600">Vista del estado de la solicitud para el usuario.</p>
+            </div>
+            
+            <div class="flex flex-wrap gap-8 justify-center">
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500 mb-4 text-center">5.1 Estado de Solicitud</h3>
+                    <div class="phone-frame">
+                        <div class="phone-notch"></div>
+                        <div class="screen-content bg-gray-50">
+                            <!-- Header -->
+                            <div class="bg-primary-600 px-4 pt-6 pb-12">
+                                <div class="flex items-center justify-between mb-4">
+                                    <div class="w-24 h-8 bg-white/20 rounded flex items-center justify-center">
+                                        <span class="text-white text-xs font-medium">LOGO</span>
+                                    </div>
+                                    <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                                        <span class="text-white font-medium">JC</span>
+                                    </div>
+                                </div>
+                                <p class="text-primary-100">Hola, Juan 👋</p>
+                                <h1 class="text-white text-xl font-bold">Tu solicitud</h1>
+                            </div>
+                            
+                            <div class="px-4 -mt-8">
+                                <!-- Status Card -->
+                                <div class="bg-white rounded-2xl shadow-lg p-5 mb-4">
+                                    <div class="flex items-center justify-between mb-4">
+                                        <span class="text-sm text-gray-500">Folio</span>
+                                        <span class="font-mono font-medium">LEN-2026-00042</span>
+                                    </div>
+                                    
+                                    <!-- Progress Steps -->
+                                    <div class="relative">
+                                        <div class="absolute left-4 top-4 bottom-4 w-0.5 bg-gray-200"></div>
+                                        
+                                        <div class="relative flex items-center gap-4 mb-4">
+                                            <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center z-10">
+                                                <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                                </svg>
+                                            </div>
+                                            <span class="text-sm text-gray-600">Solicitud enviada</span>
+                                        </div>
+                                        
+                                        <div class="relative flex items-center gap-4 mb-4">
+                                            <div class="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center z-10 ring-4 ring-primary-100">
+                                                <div class="w-2 h-2 bg-white rounded-full"></div>
+                                            </div>
+                                            <span class="text-sm font-medium text-primary-600">En revisión</span>
+                                        </div>
+                                        
+                                        <div class="relative flex items-center gap-4 mb-4">
+                                            <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center z-10">
+                                                <span class="text-gray-400 text-xs">3</span>
+                                            </div>
+                                            <span class="text-sm text-gray-400">Documentos verificados</span>
+                                        </div>
+                                        
+                                        <div class="relative flex items-center gap-4">
+                                            <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center z-10">
+                                                <span class="text-gray-400 text-xs">4</span>
+                                            </div>
+                                            <span class="text-sm text-gray-400">Aprobada</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mt-6 pt-4 border-t">
+                                        <p class="text-xs text-gray-400">Última actualización: Hace 2 horas</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Summary Card -->
+                                <div class="bg-white rounded-2xl shadow-sm p-5">
+                                    <h3 class="font-semibold text-gray-900 mb-4">Resumen</h3>
+                                    <div class="space-y-3">
+                                        <div class="flex justify-between">
+                                            <span class="text-gray-500">Monto</span>
+                                            <span class="font-medium">$85,000 MXN</span>
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span class="text-gray-500">Plazo</span>
+                                            <span class="font-medium">18 meses</span>
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span class="text-gray-500">Pago mensual</span>
+                                            <span class="font-medium text-primary-600">$5,832/mes</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Help -->
+                                <div class="mt-4 p-4 bg-blue-50 rounded-xl">
+                                    <p class="text-sm text-blue-800 font-medium mb-2">¿Necesitas ayuda?</p>
+                                    <div class="flex gap-3">
+                                        <a href="tel:8001234567" class="flex items-center gap-2 text-sm text-blue-600">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
+                                            </svg>
+                                            800-123-4567
+                                        </a>
+                                        <a href="#" class="flex items-center gap-2 text-sm text-green-600">
+                                            💬 WhatsApp
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function showModule(module) {
+            // Hide all modules
+            document.querySelectorAll('[id^="module-"]').forEach(el => {
+                el.classList.add('hidden');
+            });
+            
+            // Reset all tabs
+            document.querySelectorAll('[id^="tab-"]').forEach(el => {
+                el.classList.remove('tab-active');
+                el.classList.add('text-gray-500');
+            });
+            
+            // Show selected module
+            document.getElementById('module-' + module).classList.remove('hidden');
+            
+            // Activate tab
+            document.getElementById('tab-' + module).classList.add('tab-active');
+            document.getElementById('tab-' + module).classList.remove('text-gray-500');
+        }
+    </script>
+</body>
+</html>

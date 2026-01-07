@@ -1,0 +1,8 @@
+// Export all common components
+export { default as AppButton } from './AppButton.vue'
+export { default as AppInput } from './AppInput.vue'
+export { default as AppSelect } from './AppSelect.vue'
+export { default as AppRadioGroup } from './AppRadioGroup.vue'
+export { default as AppOtpInput } from './AppOtpInput.vue'
+export { default as AppSlider } from './AppSlider.vue'
+export { default as AppProgressBar } from './AppProgressBar.vue'
