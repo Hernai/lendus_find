@@ -2,7 +2,7 @@
 import { reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApplicationStore } from '@/stores'
-import { AppButton, AppInput, AppSelect, AppRadioGroup } from '@/components/common'
+import { AppButton, AppInput, AppSelect } from '@/components/common'
 
 const router = useRouter()
 const applicationStore = useApplicationStore()
@@ -12,13 +12,12 @@ interface Reference {
   last_name_1: string
   last_name_2: string
   relationship: string
-  type: 'PERSONAL' | 'WORK' | ''
   phone: string
 }
 
 const references = reactive<Reference[]>([
-  { first_name: '', last_name_1: '', last_name_2: '', relationship: '', type: 'PERSONAL', phone: '' },
-  { first_name: '', last_name_1: '', last_name_2: '', relationship: '', type: 'WORK', phone: '' }
+  { first_name: '', last_name_1: '', last_name_2: '', relationship: '', phone: '' },
+  { first_name: '', last_name_1: '', last_name_2: '', relationship: '', phone: '' }
 ])
 
 const errors = reactive<{ [key: string]: string }>({})
@@ -41,10 +40,10 @@ const nonFamilyRelationshipOptions = [
   { value: 'OTRO', label: 'Otro' }
 ]
 
-const referenceTypeOptions = [
-  { value: 'PERSONAL', label: 'Personal' },
-  { value: 'WORK', label: 'Laboral' }
-]
+// Derivar tipo de referencia desde la relación
+const getTypeFromRelationship = (relationship: string): 'PERSONAL' | 'WORK' => {
+  return relationship === 'COMPAÑERO_TRABAJO' ? 'WORK' : 'PERSONAL'
+}
 
 const isPhoneValid = (phone: string): boolean => {
   const digits = phone.replace(/\D/g, '')
@@ -86,11 +85,6 @@ const validate = () => {
 
     if (!ref.relationship) {
       newErrors[`relationship_${index}`] = 'Selecciona la relación'
-      isValid = false
-    }
-
-    if (!ref.type) {
-      newErrors[`type_${index}`] = 'Selecciona el tipo de referencia'
       isValid = false
     }
 
@@ -142,7 +136,7 @@ const handleSubmit = async () => {
         last_name_2: ref.last_name_2.toUpperCase(),
         full_name: `${ref.first_name} ${ref.last_name_1} ${ref.last_name_2}`.toUpperCase().trim(),
         relationship: ref.relationship,
-        type: ref.type,
+        type: getTypeFromRelationship(ref.relationship),
         phone: ref.phone.replace(/\D/g, '')
       }))
     }
@@ -208,16 +202,6 @@ const prevStep = () => router.push('/solicitud/paso-6')
                 uppercase
               />
             </div>
-
-            <!-- Tipo de referencia -->
-            <AppRadioGroup
-              v-model="ref.type"
-              :options="referenceTypeOptions"
-              label="Tipo de referencia"
-              :error="errors[`type_${index}`]"
-              inline
-              required
-            />
 
             <!-- Relación según si es la primera (familiar) o segunda (no familiar) -->
             <AppSelect
