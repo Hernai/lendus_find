@@ -105,7 +105,7 @@ class DocumentController extends Controller
             'storage_path' => $path,
             'mime_type' => $file->getMimeType(),
             'size' => $file->getSize(),
-            'status' => Document::STATUS_PENDING,
+            'status' => DocumentStatus::PENDING,
         ]);
 
         // Add to application timeline
@@ -165,7 +165,7 @@ class DocumentController extends Controller
             ], 404);
         }
 
-        if (!$application->isEditable() && $document->status !== Document::STATUS_REJECTED) {
+        if (!$application->isEditable() && $document->status !== DocumentStatus::REJECTED) {
             return response()->json([
                 'message' => 'Cannot delete document in current status'
             ], 400);

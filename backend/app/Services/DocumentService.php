@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\DocumentStatus;
 use App\Models\Document;
 use App\Models\Application;
 use App\Models\Applicant;
@@ -80,7 +81,7 @@ class DocumentService
             'storage_path' => $path,
             'mime_type' => $file->getMimeType(),
             'size' => strlen($fileContent),
-            'status' => Document::STATUS_PENDING,
+            'status' => DocumentStatus::PENDING,
             'checksum' => $checksum,
             'metadata' => $metadata,
             'is_sensitive' => $this->isSensitiveDocType($type),
@@ -186,7 +187,7 @@ class DocumentService
             'storage_path' => $path,
             'mime_type' => $mimeType,
             'size' => $size,
-            'status' => Document::STATUS_PENDING,
+            'status' => DocumentStatus::PENDING,
             'is_sensitive' => $this->isSensitiveDocType($type),
         ]);
     }
@@ -238,7 +239,7 @@ class DocumentService
             'storage_path' => $path,
             'mime_type' => $file->getMimeType(),
             'size' => strlen($fileContent),
-            'status' => Document::STATUS_PENDING,
+            'status' => DocumentStatus::PENDING,
             'checksum' => md5($fileContent),
             'rejection_reason' => null,
             'rejection_comment' => null,
@@ -277,7 +278,7 @@ class DocumentService
             'storage_path' => $newPath,
             'mime_type' => $document->mime_type,
             'size' => $document->size,
-            'status' => Document::STATUS_PENDING,
+            'status' => DocumentStatus::PENDING,
             'checksum' => $document->checksum,
             'metadata' => $document->metadata,
             'is_sensitive' => $document->is_sensitive,
@@ -294,9 +295,9 @@ class DocumentService
         return [
             'all' => $documents->map(fn($doc) => $this->formatDocument($doc)),
             'by_type' => $documents->groupBy('type')->map(fn($group) => $group->first()),
-            'pending' => $documents->where('status', Document::STATUS_PENDING)->count(),
-            'approved' => $documents->where('status', Document::STATUS_APPROVED)->count(),
-            'rejected' => $documents->where('status', Document::STATUS_REJECTED)->count(),
+            'pending' => $documents->where('status', DocumentStatus::PENDING)->count(),
+            'approved' => $documents->where('status', DocumentStatus::APPROVED)->count(),
+            'rejected' => $documents->where('status', DocumentStatus::REJECTED)->count(),
         ];
     }
 
@@ -314,9 +315,9 @@ class DocumentService
         foreach ($requiredTypes as $type) {
             if (!isset($documents[$type])) {
                 $missing[] = $type;
-            } elseif ($documents[$type]->status === Document::STATUS_PENDING) {
+            } elseif ($documents[$type]->status === DocumentStatus::PENDING) {
                 $pending[] = $type;
-            } elseif ($documents[$type]->status === Document::STATUS_REJECTED) {
+            } elseif ($documents[$type]->status === DocumentStatus::REJECTED) {
                 $rejected[] = $type;
             }
         }

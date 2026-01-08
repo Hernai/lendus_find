@@ -339,13 +339,13 @@ class ApplicationController extends Controller
             return response()->json(['message' => 'Document not found'], 404);
         }
 
-        if ($document->status !== Document::STATUS_PENDING) {
+        if ($document->status !== DocumentStatus::PENDING) {
             return response()->json([
                 'message' => 'Only pending documents can be approved'
             ], 400);
         }
 
-        $document->status = Document::STATUS_APPROVED;
+        $document->status = DocumentStatus::APPROVED;
         $document->reviewed_by = $request->user()->id;
         $document->reviewed_at = now();
         $document->save();
@@ -394,7 +394,7 @@ class ApplicationController extends Controller
             return response()->json(['message' => 'Document not found'], 404);
         }
 
-        if ($document->status !== Document::STATUS_PENDING) {
+        if ($document->status !== DocumentStatus::PENDING) {
             return response()->json([
                 'message' => 'Only pending documents can be rejected'
             ], 400);
@@ -412,7 +412,7 @@ class ApplicationController extends Controller
             ], 422);
         }
 
-        $document->status = Document::STATUS_REJECTED;
+        $document->status = DocumentStatus::REJECTED;
         $document->rejection_reason = $request->reason;
         $document->rejection_comment = $request->comment;
         $document->reviewed_by = $request->user()->id;
