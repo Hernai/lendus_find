@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import { useAuthStore, useTenantStore, useApplicantStore } from '@/stores'
 import { AppButton } from '@/components/common'
 import applicationService, { type Application as ApiApplication } from '@/services/application.service'
+import { useWebSocket } from '@/composables/useWebSocket'
+import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent } from '@/types/realtime'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -39,6 +41,20 @@ const filteredApplications = computed(() => {
 
 const cancelledCount = computed(() => {
   return applications.value.filter(app => app.status === 'CANCELLED').length
+})
+
+// WebSocket connection for real-time updates
+useWebSocket({
+  tenantId: tenantStore.tenant?.id || '',
+  applicantId: applicantStore.applicant?.id || '',
+  onApplicationStatusChanged: (event: ApplicationStatusChangedEvent) => {
+    console.log('📡 Tu solicitud cambió a:', event.new_status)
+    loadApplications() // Recargar lista de aplicaciones
+  },
+  onDocumentStatusChanged: (event: DocumentStatusChangedEvent) => {
+    console.log('📄 Documento actualizado:', event.type, event.new_status)
+    loadApplications() // Recargar lista
+  },
 })
 
 // Load applications from API

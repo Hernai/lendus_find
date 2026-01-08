@@ -285,6 +285,14 @@ class ApplicationController extends Controller
         $application->assigned_at = now();
         $application->save();
 
+        // Broadcast la asignación
+        $assignedTo = User::find($request->user_id);
+        event(new \App\Events\ApplicationAssigned(
+            $application,
+            $assignedTo,
+            $request->user()
+        ));
+
         // Add to timeline
         $application->changeStatus(
             $application->status->value,
@@ -370,10 +378,21 @@ class ApplicationController extends Controller
             ], 400);
         }
 
+        $previousStatus = $document->status;
+
         $document->status = DocumentStatus::APPROVED;
         $document->reviewed_by = $request->user()->id;
         $document->reviewed_at = now();
         $document->save();
+
+        // Broadcast el cambio de status del documento
+        event(new \App\Events\DocumentStatusChanged(
+            $document,
+            $previousStatus->value,
+            DocumentStatus::APPROVED->value,
+            null,
+            $request->user()
+        ));
 
         // Add to application timeline
         $history = $application->status_history ?? [];
@@ -437,12 +456,23 @@ class ApplicationController extends Controller
             ], 422);
         }
 
+        $previousStatus = $document->status;
+
         $document->status = DocumentStatus::REJECTED;
         $document->rejection_reason = $request->reason;
         $document->rejection_comment = $request->comment;
         $document->reviewed_by = $request->user()->id;
         $document->reviewed_at = now();
         $document->save();
+
+        // Broadcast el cambio de status del documento
+        event(new \App\Events\DocumentStatusChanged(
+            $document,
+            $previousStatus->value,
+            DocumentStatus::REJECTED->value,
+            $request->reason,
+            $request->user()
+        ));
 
         // Add to application timeline
         $history = $application->status_history ?? [];
@@ -517,6 +547,14 @@ class ApplicationController extends Controller
         $reference->verified_by = $request->user()->id;
         $reference->verified_at = now();
         $reference->save();
+
+        // Broadcast la verificación de referencia
+        event(new \App\Events\ReferenceVerified(
+            $reference,
+            $request->result,
+            $request->notes,
+            $request->user()
+        ));
 
         // Add to application timeline
         $history = $application->status_history ?? [];

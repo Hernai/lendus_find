@@ -178,10 +178,12 @@ class Application extends Model
      */
     public function changeStatus(string $status, ?string $reason = null, ?string $userId = null): void
     {
+        $previousStatus = $this->status->value;
+
         $history = $this->status_history ?? [];
 
         $history[] = [
-            'from' => $this->status,
+            'from' => $previousStatus,
             'to' => $status,
             'reason' => $reason,
             'user_id' => $userId,
@@ -200,6 +202,16 @@ class Application extends Model
         }
 
         $this->save();
+
+        // Broadcast el cambio de status
+        $changedBy = $userId ? User::find($userId) : null;
+        event(new \App\Events\ApplicationStatusChanged(
+            $this,
+            $previousStatus,
+            $status,
+            $reason,
+            $changedBy
+        ));
     }
 
     /**

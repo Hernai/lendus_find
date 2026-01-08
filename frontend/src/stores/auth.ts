@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/services/api'
 import type { User, OtpMethod, SendOtpResponse, VerifyOtpResponse } from '@/types'
+import { initializeEcho, disconnectEcho } from '@/plugins/echo'
 
 interface RequestOtpApiResponse {
   success: boolean
@@ -282,6 +283,9 @@ export const useAuthStore = defineStore('auth', () => {
       otpDestination.value = null
       otpMethod.value = null
       otpExpiresAt.value = null
+
+      // Desconectar WebSocket
+      disconnectEcho()
     }
   }
 
@@ -421,6 +425,9 @@ export const useAuthStore = defineStore('auth', () => {
         hasPin.value = true
         needsPinSetup.value = false
 
+        // Inicializar WebSocket
+        initializeEcho(response.data.token)
+
         return { success: true }
       }
 
@@ -532,6 +539,9 @@ export const useAuthStore = defineStore('auth', () => {
         localStorage.setItem('auth_token', response.data.token)
         localStorage.setItem('current_user_id', apiUser.id)
 
+        // Inicializar WebSocket
+        initializeEcho(response.data.token)
+
         return { success: true }
       }
 
@@ -610,6 +620,11 @@ export const useAuthStore = defineStore('auth', () => {
     } finally {
       isLoading.value = false
     }
+  }
+
+  // Inicializar WebSocket si ya hay un token al cargar el store
+  if (token.value && user.value) {
+    initializeEcho(token.value)
   }
 
   return {

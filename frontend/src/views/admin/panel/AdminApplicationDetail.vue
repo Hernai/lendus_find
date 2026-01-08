@@ -3,9 +3,13 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AppButton, AppConfirmModal } from '@/components/common'
 import { api } from '@/services/api'
+import { useWebSocket } from '@/composables/useWebSocket'
+import { useTenantStore } from '@/stores/tenant'
+import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent, ReferenceVerifiedEvent } from '@/types/realtime'
 
 const route = useRoute()
 const router = useRouter()
+const tenantStore = useTenantStore()
 
 interface Document {
   id: string
@@ -234,6 +238,24 @@ const statusOptions = [
 
 // Error state
 const error = ref('')
+
+// WebSocket connection for real-time updates
+useWebSocket({
+  tenantId: tenantStore.tenant?.id || '',
+  applicationId: route.params.id as string,
+  onApplicationStatusChanged: (event: ApplicationStatusChangedEvent) => {
+    console.log('📡 Status changed:', event.previous_status, '→', event.new_status)
+    fetchApplication() // Recargar aplicación
+  },
+  onDocumentStatusChanged: (event: DocumentStatusChangedEvent) => {
+    console.log('📄 Document updated:', event.type, event.new_status)
+    fetchApplication() // Recargar aplicación
+  },
+  onReferenceVerified: (event: ReferenceVerifiedEvent) => {
+    console.log('✅ Reference verified:', event.full_name, event.result)
+    fetchApplication() // Recargar aplicación
+  },
+})
 
 // Fetch application data from API
 const fetchApplication = async () => {
