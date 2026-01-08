@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Enums\ApplicationStatus;
 use App\Enums\AuditAction;
 use App\Enums\DocumentStatus;
+use App\Enums\VerificationStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\ApplicationNote;
@@ -192,12 +193,13 @@ class ApplicationController extends Controller
         // Log status change
         $metadata = $request->attributes->get('metadata', []);
         AuditLog::log(
-            AuditLog::ACTION_STATUS_CHANGED,
+            AuditAction::APPLICATION_UPDATED->value,
             null,
             array_merge($metadata, [
                 'user_id' => $request->user()->id,
                 'applicant_id' => $application->applicant_id,
                 'application_id' => $application->id,
+                'new_status' => $newStatus,
             ])
         );
 
@@ -531,7 +533,7 @@ class ApplicationController extends Controller
         // Log reference verification
         $metadata = $request->attributes->get('metadata', []);
         AuditLog::log(
-            AuditLog::ACTION_REFERENCE_VERIFIED,
+            AuditAction::REFERENCE_VERIFIED->value,
             null,
             array_merge($metadata, [
                 'user_id' => $request->user()->id,
@@ -998,7 +1000,7 @@ class ApplicationController extends Controller
                     'field_value' => $fieldValue,
                     'method' => $method,
                     'is_verified' => true,
-                    'status' => DataVerification::STATUS_VERIFIED,
+                    'status' => VerificationStatus::VERIFIED->value,
                     'notes' => $notes,
                     'verified_by' => $request->user()->id,
                     'rejection_reason' => null,
@@ -1015,7 +1017,7 @@ class ApplicationController extends Controller
                     'field_name' => $field,
                     'field_value' => $fieldValue,
                     'is_verified' => false,
-                    'status' => DataVerification::STATUS_REJECTED,
+                    'status' => VerificationStatus::REJECTED->value,
                     'rejection_reason' => $request->rejection_reason,
                     'rejected_at' => now(),
                     'verified_by' => $request->user()->id,
@@ -1041,7 +1043,7 @@ class ApplicationController extends Controller
                     'field_name' => $field,
                     'field_value' => $fieldValue,
                     'is_verified' => false,
-                    'status' => DataVerification::STATUS_PENDING,
+                    'status' => VerificationStatus::PENDING->value,
                     'rejection_reason' => null,
                     'rejected_at' => null,
                     'verified_by' => $request->user()->id,
@@ -1092,14 +1094,14 @@ class ApplicationController extends Controller
             case 'verify':
                 $auditAction = AuditAction::DATA_VERIFIED->value;
                 $message = DataVerification::getFieldLabel($field) . ' verificado';
-                $status = DataVerification::STATUS_VERIFIED;
+                $status = VerificationStatus::VERIFIED->value;
                 $verifiedAt = now()->toIso8601String();
                 $rejectedAt = null;
                 break;
             case 'reject':
                 $auditAction = AuditAction::DATA_REJECTED->value;
                 $message = DataVerification::getFieldLabel($field) . ' rechazado - se solicitó corrección al usuario';
-                $status = DataVerification::STATUS_REJECTED;
+                $status = VerificationStatus::REJECTED->value;
                 $verifiedAt = null;
                 $rejectedAt = now()->toIso8601String();
                 break;
