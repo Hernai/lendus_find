@@ -132,12 +132,12 @@ class ApplicationController extends Controller
 
         $validator = Validator::make($request->all(), [
             'status' => 'required|in:' . implode(',', [
-                Application::STATUS_IN_REVIEW,
-                Application::STATUS_DOCS_PENDING,
-                Application::STATUS_APPROVED,
-                Application::STATUS_REJECTED,
-                Application::STATUS_CANCELLED,
-                Application::STATUS_DISBURSED,
+                ApplicationStatus::IN_REVIEW,
+                ApplicationStatus::DOCS_PENDING,
+                ApplicationStatus::APPROVED,
+                ApplicationStatus::REJECTED,
+                ApplicationStatus::CANCELLED,
+                ApplicationStatus::DISBURSED,
             ]),
             'reason' => 'nullable|string|max:500',
             'rejection_reason' => 'required_if:status,REJECTED|nullable|string|max:500',
@@ -155,8 +155,8 @@ class ApplicationController extends Controller
         $reason = $request->input('reason', $request->rejection_reason);
 
         // Additional validations based on status transition
-        if ($newStatus === Application::STATUS_DISBURSED) {
-            if ($application->status !== Application::STATUS_APPROVED) {
+        if ($newStatus === ApplicationStatus::DISBURSED) {
+            if ($application->status !== ApplicationStatus::APPROVED) {
                 return response()->json([
                     'message' => 'Only approved applications can be disbursed'
                 ], 400);
@@ -196,8 +196,8 @@ class ApplicationController extends Controller
         }
 
         if (!in_array($application->status, [
-            Application::STATUS_IN_REVIEW,
-            Application::STATUS_DOCS_PENDING,
+            ApplicationStatus::IN_REVIEW,
+            ApplicationStatus::DOCS_PENDING,
         ])) {
             return response()->json([
                 'message' => 'Counter-offer can only be made for applications in review'
@@ -262,7 +262,7 @@ class ApplicationController extends Controller
 
         // Add to timeline
         $application->changeStatus(
-            $application->status,
+            $application->status->value,
             'Assigned to agent',
             $request->user()->id
         );
@@ -432,9 +432,9 @@ class ApplicationController extends Controller
         $application->save();
 
         // Optionally change application status to DOCS_PENDING
-        if ($application->status === Application::STATUS_IN_REVIEW) {
+        if ($application->status === ApplicationStatus::IN_REVIEW) {
             $application->changeStatus(
-                Application::STATUS_DOCS_PENDING,
+                ApplicationStatus::DOCS_PENDING->value,
                 "Document rejected: {$document->type}",
                 $request->user()->id
             );
@@ -1000,9 +1000,9 @@ class ApplicationController extends Controller
                 ]);
 
                 // Change application status to CORRECTIONS_PENDING
-                if ($application->status !== Application::STATUS_CORRECTIONS_PENDING) {
+                if ($application->status !== ApplicationStatus::CORRECTIONS_PENDING) {
                     $application->changeStatus(
-                        Application::STATUS_CORRECTIONS_PENDING,
+                        ApplicationStatus::CORRECTIONS_PENDING->value,
                         "Dato rechazado: " . DataVerification::getFieldLabel($field),
                         $request->user()->id
                     );

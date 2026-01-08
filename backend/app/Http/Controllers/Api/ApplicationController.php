@@ -144,10 +144,10 @@ class ApplicationController extends Controller
             'total_to_pay' => round($totalToPay, 2),
             'purpose' => $request->purpose,
             'purpose_description' => $request->purpose_description,
-            'status' => Application::STATUS_DRAFT,
+            'status' => ApplicationStatus::DRAFT->value,
             'status_history' => [[
                 'from' => null,
-                'to' => Application::STATUS_DRAFT,
+                'to' => ApplicationStatus::DRAFT->value,
                 'reason' => 'Application created',
                 'timestamp' => now()->toIso8601String(),
             ]],
@@ -301,8 +301,8 @@ class ApplicationController extends Controller
             ], 404);
         }
 
-        if ($application->status !== Application::STATUS_DRAFT &&
-            $application->status !== Application::STATUS_DOCS_PENDING) {
+        if ($application->status !== ApplicationStatus::DRAFT &&
+            $application->status !== ApplicationStatus::DOCS_PENDING) {
             return response()->json([
                 'message' => 'Application cannot be submitted in current status'
             ], 400);
@@ -350,7 +350,7 @@ class ApplicationController extends Controller
             ], 422);
         }
 
-        $application->changeStatus(Application::STATUS_SUBMITTED, 'Application submitted by applicant', $request->user()->id);
+        $application->changeStatus(ApplicationStatus::SUBMITTED->value, 'Application submitted by applicant', $request->user()->id);
 
         // Log application submission
         $metadata = $request->attributes->get('metadata', []);
@@ -384,11 +384,11 @@ class ApplicationController extends Controller
         }
 
         $cancelableStatuses = [
-            Application::STATUS_DRAFT,
-            Application::STATUS_SUBMITTED,
-            Application::STATUS_IN_REVIEW,
-            Application::STATUS_DOCS_PENDING,
-            Application::STATUS_COUNTER_OFFERED,
+            ApplicationStatus::DRAFT,
+            ApplicationStatus::SUBMITTED,
+            ApplicationStatus::IN_REVIEW,
+            ApplicationStatus::DOCS_PENDING,
+            ApplicationStatus::COUNTER_OFFERED,
         ];
 
         if (!in_array($application->status, $cancelableStatuses)) {
@@ -402,7 +402,7 @@ class ApplicationController extends Controller
         ]);
 
         $application->changeStatus(
-            Application::STATUS_CANCELLED,
+            ApplicationStatus::CANCELLED->value,
             $request->input('reason', 'Cancelled by applicant'),
             $request->user()->id
         );
@@ -453,7 +453,7 @@ class ApplicationController extends Controller
             ], 404);
         }
 
-        if (!$application->isEditable() && $application->status !== Application::STATUS_SUBMITTED) {
+        if (!$application->isEditable() && $application->status !== ApplicationStatus::SUBMITTED) {
             return response()->json([
                 'message' => 'Cannot add references in current status'
             ], 400);

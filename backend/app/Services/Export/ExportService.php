@@ -153,14 +153,14 @@ class ExportService
     private function translateStatus(string $status): string
     {
         return match ($status) {
-            'DRAFT' => 'Borrador',
-            'SUBMITTED' => 'Enviada',
-            'IN_REVIEW' => 'En Revisión',
-            'DOCS_PENDING' => 'Docs. Pendientes',
-            'APPROVED' => 'Aprobada',
-            'REJECTED' => 'Rechazada',
-            'DISBURSED' => 'Dispersada',
-            'CANCELLED' => 'Cancelada',
+            ApplicationStatus::DRAFT => 'Borrador',
+            ApplicationStatus::SUBMITTED => 'Enviada',
+            ApplicationStatus::IN_REVIEW => 'En Revisión',
+            ApplicationStatus::DOCS_PENDING => 'Docs. Pendientes',
+            ApplicationStatus::APPROVED => 'Aprobada',
+            ApplicationStatus::REJECTED => 'Rechazada',
+            ApplicationStatus::DISBURSED => 'Dispersada',
+            ApplicationStatus::CANCELLED => 'Cancelada',
             default => $status,
         };
     }

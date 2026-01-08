@@ -50,7 +50,7 @@ class DocumentController extends Controller
             ], 404);
         }
 
-        if (!$application->isEditable() && $application->status !== Application::STATUS_DOCS_PENDING) {
+        if (!$application->isEditable() && $application->status !== ApplicationStatus::DOCS_PENDING) {
             return response()->json([
                 'message' => 'Cannot upload documents in current status'
             ], 400);

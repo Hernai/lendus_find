@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore, useApplicationStore } from '@/stores'
+import { useOnboardingStore, useApplicationStore, useAuthStore } from '@/stores'
 import { AppButton, AppSignaturePad } from '@/components/common'
 import { api } from '@/services/api'
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
 const applicationStore = useApplicationStore()
+const authStore = useAuthStore()
 
 // Sync from store on mount
 onMounted(async () => {
@@ -91,9 +92,9 @@ const handleSubmit = async () => {
     const result = await applicationStore.submitApplication()
 
     if (result) {
-      // Clear onboarding data and saved application ID after successful submission
+      // Clear all onboarding data after successful submission
       onboardingStore.reset()
-      localStorage.removeItem('current_application_id')
+      authStore.clearOnboardingCache()
       router.push(`/solicitud/${result.id}/estado`)
     } else {
       error.value = 'Error al enviar la solicitud. Intenta de nuevo.'

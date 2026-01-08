@@ -37,17 +37,29 @@ const handleDelete = () => {
 const handleSubmit = async () => {
   if (pin.value.length !== 4) return
 
+  console.log('🔐 PIN Login - Phone from query:', phone.value)
+  console.log('🔐 PIN Login - Route query:', route.query)
+  console.log('🔐 PIN Login - Current user before login:', authStore.user)
+
   const result = await authStore.loginWithPin(phone.value, pin.value)
 
+  console.log('🔐 PIN Login result:', result)
+  console.log('🔐 Current user after login:', authStore.user)
+
   if (result.success) {
+    // Check auth state to see if user has completed registration
+    await authStore.checkAuth()
+
     const redirect = route.query.redirect as string
-    const hasPendingApplication = localStorage.getItem('pending_application')
 
     if (redirect) {
+      // Explicit redirect (e.g., from protected route)
       router.push(redirect)
-    } else if (hasPendingApplication) {
+    } else if (!authStore.hasApplicant) {
+      // User is new, redirect to onboarding
       router.push('/solicitud')
     } else {
+      // User exists, redirect to dashboard
       router.push('/dashboard')
     }
   } else {

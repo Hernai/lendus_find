@@ -108,7 +108,7 @@ class UserController extends Controller
                 'stats' => [
                     'total_assigned' => $user->total_assigned ?? 0,
                     'pending_review' => $user->assignedApplications()
-                        ->whereIn('status', ['IN_REVIEW', 'DOCS_PENDING'])
+                        ->whereIn('status', [ApplicationStatus::IN_REVIEW, ApplicationStatus::DOCS_PENDING])
                         ->count(),
                 ]
             ])

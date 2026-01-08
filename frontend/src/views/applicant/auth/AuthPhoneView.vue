@@ -66,6 +66,11 @@ const handleSubmit = async () => {
           error.value = `Cuenta bloqueada. Intenta en ${userCheck.lockout_minutes} minutos o usa código OTP.`
         } else {
           // Redirect to PIN login
+          console.log('🔐 AuthPhoneView - Redirecting to PIN login')
+          console.log('🔐 AuthPhoneView - Raw phone:', phone.value)
+          console.log('🔐 AuthPhoneView - Clean phone:', cleanPhone)
+          console.log('🔐 AuthPhoneView - User check result:', userCheck)
+
           router.push({
             name: 'auth-pin-login',
             query: { phone: cleanPhone, redirect: route.query.redirect as string }

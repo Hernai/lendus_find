@@ -1,19 +1,32 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
-import { useApplicationStore, useTenantStore } from '@/stores'
+import { useRoute, useRouter } from 'vue-router'
+import { useApplicationStore, useTenantStore, useAuthStore, useOnboardingStore } from '@/stores'
 import { AppProgressBar } from '@/components/common'
 import type { PaymentFrequency } from '@/types'
 
 const route = useRoute()
+const router = useRouter()
 const applicationStore = useApplicationStore()
 const tenantStore = useTenantStore()
+const authStore = useAuthStore()
+const onboardingStore = useOnboardingStore()
 
 const isInitializing = ref(true)
 
 const currentStep = computed(() => (route.meta.step as number) || 1)
 const totalSteps = computed(() => applicationStore.totalSteps)
 const stepTitle = computed(() => (route.meta.title as string) || '')
+
+// Handle exit button click
+const handleExit = () => {
+  // Clear all onboarding data
+  onboardingStore.reset()
+  authStore.clearOnboardingCache()
+
+  // Navigate to home
+  router.push('/')
+}
 
 // Initialize application from pending data or load existing draft
 onMounted(async () => {
@@ -41,7 +54,7 @@ onMounted(async () => {
     })
 
     if (pendingApp && !applicationStore.currentApplication) {
-      // Create new application from pending data
+      // Prepare for application creation (will happen after step 1 completes)
       const params = JSON.parse(pendingApp) as {
         product_id: string
         requested_amount: number
@@ -49,7 +62,8 @@ onMounted(async () => {
         payment_frequency: PaymentFrequency
       }
 
-      console.log('📝 Creating application from pending data:', params)
+      console.log('📝 Pending application detected:', params)
+      console.log('⏳ Application will be created after completing personal data (step 1)')
 
       // Find and set the product
       const product = tenantStore.products.find(p => p.id === params.product_id)
@@ -59,41 +73,21 @@ onMounted(async () => {
         applicationStore.setSelectedProduct(product)
       }
 
-      // Run simulation first to populate store
-      await applicationStore.runSimulation({
-        product_id: params.product_id,
-        amount: params.requested_amount,
-        term_months: params.term_months,
-        payment_frequency: params.payment_frequency
-      })
-
-      // Create the application
-      console.log('📝 About to create application with params:', params)
-      let newApp = null
+      // Run simulation to pre-populate store (user will see this in step 5)
       try {
-        newApp = await applicationStore.createApplication({
+        await applicationStore.runSimulation({
           product_id: params.product_id,
-          requested_amount: params.requested_amount,
+          amount: params.requested_amount,
           term_months: params.term_months,
           payment_frequency: params.payment_frequency
         })
-        console.log('✅ Application created:', newApp)
-        console.log('✅ Application ID:', newApp?.id)
-        // @ts-ignore - Vue type inference issue
-        console.log('✅ Store currentApplication:', applicationStore.currentApplication?.id)
-      } catch (createError) {
-        console.error('❌ Failed to create application:', createError)
+        console.log('✅ Simulation ready for step 5')
+      } catch (simError) {
+        console.error('❌ Failed to run simulation:', simError)
       }
 
-      // Save the application ID for recovery after refresh
-      if (newApp?.id && newApp.id !== 'null' && newApp.id !== 'undefined') {
-        localStorage.setItem('current_application_id', newApp.id)
-      } else {
-        console.warn('⚠️ Not saving invalid application ID:', newApp?.id)
-      }
-
-      // Clear the pending data
-      localStorage.removeItem('pending_application')
+      // NOTE: Application creation will happen in Step1PersonalData.vue after applicant is created
+      // pending_application will be cleared by Step1 after successful creation
     } else if (!applicationStore.currentApplication) {
       // No pending app and no current application in store
       console.log('🔍 No pending app, looking for existing...')
@@ -138,48 +132,10 @@ onMounted(async () => {
       }
     }
 
-    // FALLBACK: If we still don't have an application by this point, create one
-    // This handles cases where pending_application was cleared or never set
+    // NOTE: Application creation is deferred to Step1PersonalData.vue
+    // It will be created AFTER the applicant record exists (after step 1 completes)
     if (!applicationStore.currentApplication) {
-      console.log('🆕 Creating fallback application...')
-
-      // We need a product - use the first active product if none selected
-      let product = applicationStore.selectedProduct || tenantStore.activeProducts[0]
-      if (!product) {
-        console.error('❌ No products available to create application')
-      } else {
-        // Use simulation data if available, or defaults
-        const sim = applicationStore.simulation
-        const params = {
-          product_id: product.id,
-          requested_amount: sim?.requested_amount || product.rules.min_amount || 10000,
-          term_months: sim?.term_months || product.rules.min_term_months || 12,
-          payment_frequency: (sim?.payment_frequency || 'MONTHLY') as PaymentFrequency
-        }
-
-        console.log('📝 Creating application with fallback params:', params)
-
-        // Ensure simulation is run first
-        await applicationStore.runSimulation({
-          product_id: params.product_id,
-          amount: params.requested_amount,
-          term_months: params.term_months,
-          payment_frequency: params.payment_frequency
-        })
-
-        try {
-          const newApp = await applicationStore.createApplication(params)
-          console.log('✅ Fallback application created:', newApp?.id)
-
-          if (newApp?.id && newApp.id !== 'null' && newApp.id !== 'undefined') {
-            localStorage.setItem('current_application_id', newApp.id)
-          } else {
-            console.warn('⚠️ Fallback application has invalid ID:', newApp?.id)
-          }
-        } catch (createErr) {
-          console.error('❌ Failed to create fallback application:', createErr)
-        }
-      }
+      console.log('ℹ️ No current application - will be created after completing step 1')
     }
 
     console.log('🏁 Final state:', {
@@ -200,11 +156,11 @@ onMounted(async () => {
     <header class="bg-white px-4 py-3 border-b sticky top-0 z-50">
       <div class="max-w-2xl mx-auto">
         <div class="flex items-center justify-between mb-2">
-          <router-link to="/" class="p-1 -ml-1">
+          <button @click="handleExit" class="p-1 -ml-1 hover:bg-gray-100 rounded transition-colors">
             <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
-          </router-link>
+          </button>
           <span class="text-sm text-gray-500">Paso {{ currentStep }} de {{ totalSteps }}</span>
           <div class="w-6" />
         </div>

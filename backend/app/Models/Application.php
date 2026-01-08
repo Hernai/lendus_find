@@ -176,7 +176,7 @@ class Application extends Model
     /**
      * Change the status and record in history.
      */
-    public function changeStatus(string $status, ?string $reason = null, ?int $userId = null): void
+    public function changeStatus(string $status, ?string $reason = null, ?string $userId = null): void
     {
         $history = $this->status_history ?? [];
 
@@ -245,7 +245,7 @@ class Application extends Model
         float $interestRate,
         string $paymentFrequency,
         ?string $reason = null,
-        ?int $userId = null
+        ?string $userId = null
     ): void {
         $this->approved_amount = $amount;
         $this->term_months = $termMonths;
@@ -278,22 +278,22 @@ class Application extends Model
         $this->monthly_payment = round($payment, 2);
         $this->total_to_pay = round($payment * $totalPeriods, 2);
 
-        $this->changeStatus(self::STATUS_COUNTER_OFFERED, $reason, $userId);
+        $this->changeStatus(ApplicationStatus::COUNTER_OFFERED->value, $reason, $userId);
     }
 
     /**
      * Accept counter-offer.
      */
-    public function acceptCounterOffer(?int $userId = null): void
+    public function acceptCounterOffer(?string $userId = null): void
     {
-        $this->changeStatus(self::STATUS_APPROVED, 'Contraoferta aceptada', $userId);
+        $this->changeStatus(ApplicationStatus::APPROVED->value, 'Contraoferta aceptada', $userId);
     }
 
     /**
      * Reject counter-offer.
      */
-    public function rejectCounterOffer(?string $reason = null, ?int $userId = null): void
+    public function rejectCounterOffer(?string $reason = null, ?string $userId = null): void
     {
-        $this->changeStatus(self::STATUS_CANCELLED, $reason ?? 'Contraoferta rechazada', $userId);
+        $this->changeStatus(ApplicationStatus::CANCELLED->value, $reason ?? 'Contraoferta rechazada', $userId);
     }
 }

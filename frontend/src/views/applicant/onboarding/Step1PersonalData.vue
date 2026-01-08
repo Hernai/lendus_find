@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore } from '@/stores'
+import { useOnboardingStore, useApplicationStore, useTenantStore } from '@/stores'
 import { AppButton, AppInput, AppRadioGroup, AppSelect } from '@/components/common'
+import type { PaymentFrequency } from '@/types'
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
+const applicationStore = useApplicationStore()
+const tenantStore = useTenantStore()
 
 // Local form state (reactive copy from store)
 const form = reactive({
@@ -202,8 +205,79 @@ const handleSubmit = async () => {
   if (!validate()) return
 
   try {
-    // Save step 1 explicitly (not using nextStep to avoid currentStep sync issues)
+    // Save step 1 explicitly - this creates the applicant record
     await onboardingStore.completeStep(1)
+    console.log('✅ Step 1 completed - applicant record created')
+
+    // ALWAYS create application if it doesn't exist (now that applicant exists)
+    if (!applicationStore.currentApplication) {
+      console.log('📝 No current application, creating one...')
+
+      // Check if there's a pending application from the simulator
+      const pendingApp = localStorage.getItem('pending_application')
+      let params: {
+        product_id: string
+        requested_amount: number
+        term_months: number
+        payment_frequency: PaymentFrequency
+      }
+
+      if (pendingApp) {
+        // Use pending application params
+        console.log('📝 Using pending application params')
+        params = JSON.parse(pendingApp)
+      } else {
+        // Use default params with first active product
+        console.log('📝 Using default params')
+        const product = applicationStore.selectedProduct || tenantStore.activeProducts[0]
+
+        if (!product) {
+          console.error('❌ No products available to create application')
+          router.push('/solicitud/paso-2')
+          return
+        }
+
+        params = {
+          product_id: product.id,
+          requested_amount: product.rules.min_amount || 10000,
+          term_months: product.rules.min_term_months || 12,
+          payment_frequency: 'MONTHLY'
+        }
+
+        // Set the selected product
+        applicationStore.setSelectedProduct(product)
+      }
+
+      try {
+        // Run simulation first to populate store
+        await applicationStore.runSimulation({
+          product_id: params.product_id,
+          amount: params.requested_amount,
+          term_months: params.term_months,
+          payment_frequency: params.payment_frequency
+        })
+
+        // Create the application (now that applicant exists)
+        const newApp = await applicationStore.createApplication({
+          product_id: params.product_id,
+          requested_amount: params.requested_amount,
+          term_months: params.term_months,
+          payment_frequency: params.payment_frequency
+        })
+
+        console.log('✅ Application created after step 1:', newApp?.id)
+
+        // Clear pending application if it existed
+        if (pendingApp) {
+          localStorage.removeItem('pending_application')
+        }
+      } catch (createError) {
+        console.error('❌ Failed to create application after step 1:', createError)
+        // Show error to user but don't block navigation
+        alert('No se pudo crear la solicitud. Por favor intenta de nuevo o contacta soporte.')
+      }
+    }
+
     router.push('/solicitud/paso-2')
   } catch (e) {
     console.error('Failed to save step 1:', e)
@@ -309,8 +383,17 @@ const handleSubmit = async () => {
         </div>
 
         <!-- Auto-save indicator -->
-        <div v-if="onboardingStore.lastSavedAt" class="text-xs text-gray-400 text-right">
-          Guardado automáticamente
+        <div v-if="onboardingStore.isSaving || onboardingStore.lastSavedAt" class="text-xs text-right">
+          <span v-if="onboardingStore.isSaving" class="text-primary-600 flex items-center justify-end gap-1">
+            <svg class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Guardando...
+          </span>
+          <span v-else class="text-gray-400">
+            ✓ Guardado automáticamente
+          </span>
         </div>
 
         <!-- Sticky Footer -->

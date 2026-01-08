@@ -251,6 +251,17 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('onboarding_draft')
     localStorage.removeItem('current_application_id')
     localStorage.removeItem('pending_application')
+
+    // Clear old application progress data (app_progress_*)
+    const keysToRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith('app_progress_')) {
+        keysToRemove.push(key)
+      }
+    }
+    keysToRemove.forEach(key => localStorage.removeItem(key))
+
     console.log('🧹 Cleared onboarding cache')
   }
 
@@ -353,7 +364,13 @@ export const useAuthStore = defineStore('auth', () => {
     isLoading.value = true
     try {
       const cleanPhone = phone.replace(/\D/g, '')
+      console.log('🔐 Store checkUser - Raw phone:', phone)
+      console.log('🔐 Store checkUser - Clean phone:', cleanPhone)
+
       const response = await api.post<CheckUserApiResponse>('/auth/check-user', { phone: cleanPhone })
+
+      console.log('🔐 Store checkUser - Response:', response.data)
+
       hasPin.value = response.data.has_pin
       pinLockoutMinutes.value = response.data.lockout_minutes
       return response.data
@@ -366,10 +383,17 @@ export const useAuthStore = defineStore('auth', () => {
     isLoading.value = true
     try {
       const cleanPhone = phone.replace(/\D/g, '')
+      console.log('🔐 Store loginWithPin - Raw phone:', phone)
+      console.log('🔐 Store loginWithPin - Clean phone:', cleanPhone)
+
       const response = await api.post<PinLoginApiResponse>('/auth/pin/login', { phone: cleanPhone, pin })
+
+      console.log('🔐 Store loginWithPin - Response:', response.data)
 
       if (response.data.success) {
         const apiUser = response.data.user
+
+        console.log('🔐 Store loginWithPin - User from API:', apiUser)
 
         // Check if user changed (different user_id)
         const previousUserId = localStorage.getItem('current_user_id')
@@ -388,6 +412,8 @@ export const useAuthStore = defineStore('auth', () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }
+
+        console.log('🔐 Store loginWithPin - User set in store:', user.value)
 
         token.value = response.data.token
         localStorage.setItem('auth_token', response.data.token)
@@ -615,6 +641,7 @@ export const useAuthStore = defineStore('auth', () => {
     resendOtp,
     logout,
     checkAuth,
+    clearOnboardingCache,
     // PIN Actions
     checkUser,
     loginWithPin,

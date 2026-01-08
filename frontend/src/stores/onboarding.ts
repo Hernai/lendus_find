@@ -151,6 +151,9 @@ export const useOnboardingStore = defineStore('onboarding', () => {
   const isLoading = ref(false)
   const lastSavedAt = ref<Date | null>(null)
 
+  // Auto-save timer
+  let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
+
   // Getters
   const progress = computed(() => Math.round((completedSteps.value.length / 7) * 100))
 
@@ -323,6 +326,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
             last_name_1: s1.last_name,
             last_name_2: s1.second_last_name || undefined,
             birth_date: s1.birth_date,
+            birth_state: s1.birth_state || undefined,
             gender: s1.gender as 'M' | 'F',
             nationality: s1.nationality || 'MX',
             marital_status: s1.marital_status || ''
@@ -493,6 +497,74 @@ export const useOnboardingStore = defineStore('onboarding', () => {
   ) => {
     data.value[stepKey] = { ...data.value[stepKey], ...stepData }
     saveToStorage()
+
+    // Trigger auto-save with debounce (extract step number from stepKey)
+    const stepNumber = parseInt(stepKey.replace('step', ''))
+    if (!isNaN(stepNumber)) {
+      triggerAutoSave(stepNumber)
+    }
+  }
+
+  // Auto-save with debounce (2 seconds after last change)
+  const triggerAutoSave = (step: number) => {
+    // Clear existing timer
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer)
+    }
+
+    // Set new timer
+    autoSaveTimer = setTimeout(async () => {
+      // Check if minimum required fields are filled before attempting save
+      if (!canAutoSaveStep(step)) {
+        console.log(`⏭️ Skipping auto-save for step ${step} - required fields not filled`)
+        return
+      }
+
+      try {
+        console.log(`💾 Auto-saving step ${step}...`)
+        await saveStepToBackend(step)
+        console.log(`✅ Auto-save complete for step ${step}`)
+      } catch (error) {
+        console.error(`❌ Auto-save failed for step ${step}:`, error)
+        // Don't throw - auto-save failures shouldn't block the user
+      }
+    }, 2000) // 2 seconds debounce
+  }
+
+  // Check if step has minimum data to attempt auto-save
+  const canAutoSaveStep = (step: number): boolean => {
+    switch (step) {
+      case 1: {
+        const s1 = data.value.step1
+        return !!(s1.first_name && s1.last_name && s1.birth_date && s1.gender)
+      }
+      case 2: {
+        const s2 = data.value.step2
+        // At least CURP or RFC should be filled
+        return !!(s2.curp || s2.rfc)
+      }
+      case 3: {
+        const s3 = data.value.step3
+        return !!(s3.street && s3.ext_number && s3.neighborhood && s3.postal_code && s3.state)
+      }
+      case 4: {
+        const s4 = data.value.step4
+        return !!(s4.employment_type && s4.monthly_income >= 1000)
+      }
+      case 5: {
+        // Step 5 needs application ID to save
+        const appId = applicationStore.currentApplication?.id
+        return !!(appId && appId !== 'null' && appId !== 'undefined' && data.value.step5.purpose)
+      }
+      case 6:
+        // Documents don't auto-save, they upload individually
+        return false
+      case 7:
+        // References can always be saved
+        return true
+      default:
+        return false
+    }
   }
 
   // Reset all data

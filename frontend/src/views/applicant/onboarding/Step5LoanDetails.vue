@@ -26,8 +26,8 @@ onMounted(async () => {
   // Check if we have a valid application
   const appId = applicationStore.currentApplication?.id
   if (!appId || appId === 'null' || appId === 'undefined') {
-    console.warn('⚠️ Step5: No valid application found, redirecting to home')
-    router.push('/')
+    console.warn('⚠️ Step5: No valid application found, redirecting to step 1')
+    router.push('/solicitud/paso-1')
     return
   }
 
@@ -35,10 +35,10 @@ onMounted(async () => {
   form.purpose = step5.purpose || ''
   form.confirmed_simulation = step5.confirmed_simulation || false
 
-  // If no simulation exists, redirect to simulator
+  // If no simulation exists, redirect to step 1 to restart the flow
   if (!simulation.value) {
-    console.warn('⚠️ Step5: No simulation found, redirecting to home')
-    router.push('/')
+    console.warn('⚠️ Step5: No simulation found, redirecting to step 1')
+    router.push('/solicitud/paso-1')
   }
 })
 
@@ -104,6 +104,7 @@ const handleSubmit = async () => {
     router.push('/solicitud/paso-6')
   } catch (e) {
     console.error('Failed to save step 5:', e)
+    errors.purpose = 'Error al guardar. Por favor intenta de nuevo.'
   }
 }
 
@@ -191,8 +192,17 @@ const prevStep = () => router.push('/solicitud/paso-4')
         </div>
 
         <!-- Auto-save indicator -->
-        <div v-if="onboardingStore.lastSavedAt" class="text-xs text-gray-400 text-right">
-          Guardado automáticamente
+        <div v-if="onboardingStore.isSaving || onboardingStore.lastSavedAt" class="text-xs text-right">
+          <span v-if="onboardingStore.isSaving" class="text-primary-600 flex items-center justify-end gap-1">
+    <svg class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+    Guardando...
+  </span>
+  <span v-else class="text-gray-400">
+    ✓ Guardado automáticamente
+  </span>
         </div>
 
         <!-- Sticky Footer -->

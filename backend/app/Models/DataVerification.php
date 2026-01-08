@@ -102,7 +102,7 @@ class DataVerification extends Model
     /**
      * Reject this field with a reason.
      */
-    public function reject(string $reason, ?int $userId = null): void
+    public function reject(string $reason, ?string $userId = null): void
     {
         $this->status = VerificationStatus::REJECTED;
         $this->rejection_reason = $reason;
@@ -124,7 +124,7 @@ class DataVerification extends Model
     /**
      * Verify this field.
      */
-    public function verify(?string $method = null, ?int $userId = null, ?string $notes = null): void
+    public function verify(?string $method = null, ?string $userId = null, ?string $notes = null): void
     {
         $this->status = VerificationStatus::VERIFIED;
         $this->is_verified = true;

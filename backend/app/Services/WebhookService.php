@@ -277,17 +277,17 @@ class WebhookService
 
         // Also dispatch specific events
         match ($application->status) {
-            Application::STATUS_APPROVED => $this->dispatch(
+            ApplicationStatus::APPROVED => $this->dispatch(
                 self::EVENT_APPLICATION_APPROVED,
                 $payload,
                 $application->tenant
             ),
-            Application::STATUS_REJECTED => $this->dispatch(
+            ApplicationStatus::REJECTED => $this->dispatch(
                 self::EVENT_APPLICATION_REJECTED,
                 $payload,
                 $application->tenant
             ),
-            Application::STATUS_DISBURSED => $this->dispatch(
+            ApplicationStatus::DISBURSED => $this->dispatch(
                 self::EVENT_APPLICATION_DISBURSED,
                 $payload,
                 $application->tenant

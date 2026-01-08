@@ -41,8 +41,8 @@ class DashboardController extends Controller
             ->count();
 
         // Pending review (in review + docs pending)
-        $pendingReview = ($statusCounts[Application::STATUS_IN_REVIEW] ?? 0) +
-            ($statusCounts[Application::STATUS_DOCS_PENDING] ?? 0);
+        $pendingReview = ($statusCounts[ApplicationStatus::IN_REVIEW] ?? 0) +
+            ($statusCounts[ApplicationStatus::DOCS_PENDING] ?? 0);
 
         // Total amounts
         $amounts = Application::where('tenant_id', $tenant->id)
@@ -51,9 +51,9 @@ class DashboardController extends Controller
                 SUM(CASE WHEN status = ? THEN approved_amount ELSE 0 END) as approved_amount,
                 SUM(CASE WHEN status = ? THEN approved_amount ELSE 0 END) as disbursed_amount
             ', [
-                Application::STATUS_SUBMITTED,
-                Application::STATUS_APPROVED,
-                Application::STATUS_DISBURSED,
+                ApplicationStatus::SUBMITTED,
+                ApplicationStatus::APPROVED,
+                ApplicationStatus::DISBURSED,
             ])
             ->first();
 
@@ -80,9 +80,9 @@ class DashboardController extends Controller
                     'today_applications' => $todayApplications,
                     'month_applications' => $monthApplications,
                     'pending_review' => $pendingReview,
-                    'approved' => $statusCounts[Application::STATUS_APPROVED] ?? 0,
-                    'disbursed' => $statusCounts[Application::STATUS_DISBURSED] ?? 0,
-                    'rejected' => $statusCounts[Application::STATUS_REJECTED] ?? 0,
+                    'approved' => $statusCounts[ApplicationStatus::APPROVED] ?? 0,
+                    'disbursed' => $statusCounts[ApplicationStatus::DISBURSED] ?? 0,
+                    'rejected' => $statusCounts[ApplicationStatus::REJECTED] ?? 0,
                 ],
                 'amounts' => [
                     'pending' => (float) ($amounts->pending_amount ?? 0),
@@ -120,24 +120,24 @@ class DashboardController extends Controller
         // Conversion rates
         $totalSubmitted = Application::where('tenant_id', $tenant->id)
             ->whereIn('status', [
-                Application::STATUS_SUBMITTED,
-                Application::STATUS_IN_REVIEW,
-                Application::STATUS_DOCS_PENDING,
-                Application::STATUS_APPROVED,
-                Application::STATUS_REJECTED,
-                Application::STATUS_DISBURSED,
+                ApplicationStatus::SUBMITTED,
+                ApplicationStatus::IN_REVIEW,
+                ApplicationStatus::DOCS_PENDING,
+                ApplicationStatus::APPROVED,
+                ApplicationStatus::REJECTED,
+                ApplicationStatus::DISBURSED,
             ])
             ->count();
 
         $totalApproved = Application::where('tenant_id', $tenant->id)
             ->whereIn('status', [
-                Application::STATUS_APPROVED,
-                Application::STATUS_DISBURSED,
+                ApplicationStatus::APPROVED,
+                ApplicationStatus::DISBURSED,
             ])
             ->count();
 
         $totalDisbursed = Application::where('tenant_id', $tenant->id)
-            ->where('status', Application::STATUS_DISBURSED)
+            ->where('status', ApplicationStatus::DISBURSED)
             ->count();
 
         // Average processing time (submitted to approved)
@@ -162,7 +162,7 @@ class DashboardController extends Controller
 
         // Rejection reasons
         $rejectionReasons = Application::where('tenant_id', $tenant->id)
-            ->where('status', Application::STATUS_REJECTED)
+            ->where('status', ApplicationStatus::REJECTED)
             ->whereNotNull('rejection_reason')
             ->select('rejection_reason', DB::raw('COUNT(*) as count'))
             ->groupBy('rejection_reason')
@@ -263,7 +263,7 @@ class DashboardController extends Controller
             now()->endOfDay();
 
         $applications = Application::where('tenant_id', $tenant->id)
-            ->where('status', Application::STATUS_DISBURSED)
+            ->where('status', ApplicationStatus::DISBURSED)
             ->whereBetween('disbursed_at', [$startDate, $endDate])
             ->with(['applicant:id,personal_data,bank_info', 'product:id,name'])
             ->orderByDesc('disbursed_at')
@@ -310,7 +310,7 @@ class DashboardController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         $applications = Application::where('tenant_id', $tenant->id)
-            ->where('status', Application::STATUS_DISBURSED)
+            ->where('status', ApplicationStatus::DISBURSED)
             ->with(['applicant:id,first_name,last_name_1,last_name_2,curp', 'product:id,name'])
             ->orderByDesc('disbursed_at')
             ->get();
@@ -433,7 +433,7 @@ class DashboardController extends Controller
             now()->endOfDay();
 
         $applications = Application::where('tenant_id', $tenant->id)
-            ->where('status', Application::STATUS_DISBURSED)
+            ->where('status', ApplicationStatus::DISBURSED)
             ->whereBetween('disbursed_at', [$startDate, $endDate])
             ->with(['applicant', 'product:id,name'])
             ->orderByDesc('disbursed_at')
@@ -451,7 +451,7 @@ class DashboardController extends Controller
         $now = now();
 
         $applications = Application::where('tenant_id', $tenant->id)
-            ->where('status', Application::STATUS_DISBURSED)
+            ->where('status', ApplicationStatus::DISBURSED)
             ->with(['applicant', 'product:id,name'])
             ->orderByDesc('disbursed_at')
             ->get();

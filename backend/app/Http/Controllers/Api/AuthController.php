@@ -99,9 +99,17 @@ class AuthController extends Controller
 
         $destination = $request->email ?: $request->phone;
 
+        \Log::info('🔐 OTP Verify Request', [
+            'phone' => $request->phone,
+            'email' => $request->email,
+            'destination' => $destination,
+            'code' => $request->code,
+        ]);
+
         $otp = OtpCode::verify($destination, $request->code);
 
         if (!$otp) {
+            \Log::warning('🔐 OTP Verify Failed - Invalid code');
             return response()->json([
                 'error' => 'Invalid code',
                 'message' => 'El código es inválido o ha expirado',
@@ -109,9 +117,27 @@ class AuthController extends Controller
         }
 
         // Find or create user
-        $user = User::where('phone', $request->phone)
-            ->orWhere('email', $request->email)
+        $user = User::where('tenant_id', app('tenant.id'))
+            ->where(function ($query) use ($request) {
+                if ($request->phone) {
+                    $query->where('phone', $request->phone);
+                }
+                if ($request->email) {
+                    $query->orWhere('email', $request->email);
+                }
+            })
             ->first();
+
+        \Log::info('🔐 OTP Verify - User Search Result', [
+            'tenant_id' => app('tenant.id'),
+            'phone_search' => $request->phone,
+            'email_search' => $request->email,
+            'user_found' => $user !== null,
+            'user_id' => $user?->id,
+            'user_phone' => $user?->phone,
+            'user_email' => $user?->email,
+            'user_name' => $user?->name,
+        ]);
 
         $isNewUser = false;
         if (!$user) {
@@ -177,6 +203,14 @@ class AuthController extends Controller
             ])
         );
 
+        \Log::info('✅ OTP Verify Success - Returning User', [
+            'user_id' => $user->id,
+            'user_phone' => $user->phone,
+            'user_email' => $user->email,
+            'user_name' => $user->name,
+            'is_new_user' => $isNewUser,
+        ]);
+
         return response()->json([
             'success' => true,
             'token' => $token,
@@ -210,6 +244,16 @@ class AuthController extends Controller
         $user = User::where('phone', $request->phone)
             ->where('tenant_id', app('tenant.id'))
             ->first();
+
+        \Log::info('🔐 Check User', [
+            'phone_received' => $request->phone,
+            'tenant_id' => app('tenant.id'),
+            'user_found' => $user !== null,
+            'user_id' => $user?->id,
+            'user_phone' => $user?->phone,
+            'user_name' => $user?->name,
+            'has_pin' => $user?->hasPin() ?? false,
+        ]);
 
         return response()->json([
             'exists' => $user !== null,
@@ -285,6 +329,15 @@ class AuthController extends Controller
             ->where('tenant_id', app('tenant.id'))
             ->first();
 
+        \Log::info('🔐 PIN Login Attempt', [
+            'phone_received' => $request->phone,
+            'tenant_id' => app('tenant.id'),
+            'user_found' => $user !== null,
+            'user_id' => $user?->id,
+            'user_phone' => $user?->phone,
+            'user_name' => $user?->name,
+        ]);
+
         if (!$user) {
             return response()->json([
                 'error' => 'User not found',
@@ -355,6 +408,14 @@ class AuthController extends Controller
                 'metadata' => ['method' => 'PIN'],
             ])
         );
+
+        \Log::info('✅ PIN Login Success', [
+            'phone_request' => $request->phone,
+            'user_id' => $user->id,
+            'user_phone' => $user->phone,
+            'user_name' => $user->name,
+            'user_email' => $user->email,
+        ]);
 
         return response()->json([
             'success' => true,

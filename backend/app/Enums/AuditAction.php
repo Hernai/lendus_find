@@ -17,6 +17,7 @@ enum AuditAction: string
     case APPLICANT_CREATED = 'APPLICANT_CREATED';
     case APPLICANT_UPDATED = 'APPLICANT_UPDATED';
     case APPLICATION_CREATED = 'APPLICATION_CREATED';
+    case APPLICATION_UPDATED = 'APPLICATION_UPDATED';
     case APPLICATION_SUBMITTED = 'APPLICATION_SUBMITTED';
     case APPLICATION_APPROVED = 'APPLICATION_APPROVED';
     case APPLICATION_REJECTED = 'APPLICATION_REJECTED';
@@ -25,6 +26,7 @@ enum AuditAction: string
     case DOCUMENT_REJECTED = 'DOCUMENT_REJECTED';
     case DATA_VERIFIED = 'DATA_VERIFIED';
     case DATA_REJECTED = 'DATA_REJECTED';
+    case DATA_CORRECTED = 'DATA_CORRECTED';
     case REFERENCE_VERIFIED = 'REFERENCE_VERIFIED';
     case STEP_COMPLETED = 'STEP_COMPLETED';
 
@@ -44,6 +46,7 @@ enum AuditAction: string
             self::APPLICANT_CREATED => 'Solicitante creado',
             self::APPLICANT_UPDATED => 'Solicitante actualizado',
             self::APPLICATION_CREATED => 'Solicitud creada',
+            self::APPLICATION_UPDATED => 'Solicitud actualizada',
             self::APPLICATION_SUBMITTED => 'Solicitud enviada',
             self::APPLICATION_APPROVED => 'Solicitud aprobada',
             self::APPLICATION_REJECTED => 'Solicitud rechazada',
@@ -52,6 +55,7 @@ enum AuditAction: string
             self::DOCUMENT_REJECTED => 'Documento rechazado',
             self::DATA_VERIFIED => 'Dato verificado',
             self::DATA_REJECTED => 'Dato rechazado',
+            self::DATA_CORRECTED => 'Dato corregido',
             self::REFERENCE_VERIFIED => 'Referencia verificada',
             self::STEP_COMPLETED => 'Paso completado',
         };
