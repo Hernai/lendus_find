@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\ApplicationStatus;
+use App\Enums\AuditAction;
 use App\Enums\VerifiableField;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
@@ -43,7 +45,7 @@ class CorrectionController extends Controller
 
         // Get applications with CORRECTIONS_PENDING status
         $pendingApplications = Application::where('applicant_id', $applicant->id)
-            ->where('status', Application::STATUS_CORRECTIONS_PENDING)
+            ->where('status', ApplicationStatus::CORRECTIONS_PENDING)
             ->get(['id', 'folio', 'status', 'updated_at']);
 
         return response()->json([
@@ -109,7 +111,7 @@ class CorrectionController extends Controller
         $metadata = $request->attributes->get('metadata', []);
         $tenant = $request->attributes->get('tenant');
         AuditLog::log(
-            AuditLog::ACTION_DATA_CORRECTED,
+            AuditAction::DATA_CORRECTED,
             $tenant->id,
             array_merge($metadata, [
                 'user_id' => $user->id,
@@ -216,13 +218,13 @@ class CorrectionController extends Controller
 
         // Update any applications in CORRECTIONS_PENDING status
         $applications = Application::where('applicant_id', $applicant->id)
-            ->where('status', Application::STATUS_CORRECTIONS_PENDING)
+            ->where('status', ApplicationStatus::CORRECTIONS_PENDING)
             ->get();
 
         foreach ($applications as $application) {
             // Move back to IN_REVIEW status
             $application->changeStatus(
-                Application::STATUS_IN_REVIEW,
+                ApplicationStatus::IN_REVIEW,
                 'Correcciones completadas por el solicitante'
             );
         }
