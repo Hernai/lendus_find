@@ -156,7 +156,7 @@ class ApplicationController extends Controller
         // Log application creation
         $metadata = $request->attributes->get('metadata', []);
         AuditLog::log(
-            AuditLog::ACTION_APPLICATION_CREATED,
+            AuditAction::APPLICATION_CREATED->value,
             null,
             array_merge($metadata, [
                 'user_id' => $user->id,
@@ -273,7 +273,7 @@ class ApplicationController extends Controller
         // Log application update
         $metadata = $request->attributes->get('metadata', []);
         AuditLog::log(
-            AuditLog::ACTION_APPLICATION_UPDATED,
+            AuditAction::APPLICATION_UPDATED->value,
             null,
             array_merge($metadata, [
                 'user_id' => $request->user()->id,
@@ -355,7 +355,7 @@ class ApplicationController extends Controller
         // Log application submission
         $metadata = $request->attributes->get('metadata', []);
         AuditLog::log(
-            AuditLog::ACTION_APPLICATION_SUBMITTED,
+            AuditAction::APPLICATION_SUBMITTED->value,
             null,
             array_merge($metadata, [
                 'user_id' => $request->user()->id,

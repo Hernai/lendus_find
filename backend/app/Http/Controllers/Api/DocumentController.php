@@ -123,7 +123,7 @@ class DocumentController extends Controller
         // Add to audit log with full metadata
         $metadata = $request->attributes->get('metadata', []);
         AuditLog::log(
-            AuditLog::ACTION_DOCUMENT_UPLOADED,
+            AuditAction::DOCUMENT_UPLOADED->value,
             $tenant->id,
             array_merge($metadata, [
                 'user_id' => $request->user()->id,

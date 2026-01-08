@@ -364,7 +364,7 @@ class ApplicationController extends Controller
         // Log document approval
         $metadata = $request->attributes->get('metadata', []);
         AuditLog::log(
-            AuditLog::ACTION_DOCUMENT_APPROVED,
+            AuditAction::DOCUMENT_APPROVED->value,
             null,
             array_merge($metadata, [
                 'user_id' => $request->user()->id,
@@ -443,7 +443,7 @@ class ApplicationController extends Controller
         // Log document rejection
         $metadata = $request->attributes->get('metadata', []);
         AuditLog::log(
-            AuditLog::ACTION_DOCUMENT_REJECTED,
+            AuditAction::DOCUMENT_REJECTED->value,
             null,
             array_merge($metadata, [
                 'user_id' => $request->user()->id,
@@ -1067,21 +1067,21 @@ class ApplicationController extends Controller
         $metadata = $request->attributes->get('metadata', []);
         switch ($action) {
             case 'verify':
-                $auditAction = AuditLog::ACTION_DATA_VERIFIED;
+                $auditAction = AuditAction::DATA_VERIFIED->value;
                 $message = DataVerification::getFieldLabel($field) . ' verificado';
                 $status = DataVerification::STATUS_VERIFIED;
                 $verifiedAt = now()->toIso8601String();
                 $rejectedAt = null;
                 break;
             case 'reject':
-                $auditAction = AuditLog::ACTION_DATA_REJECTED;
+                $auditAction = AuditAction::DATA_REJECTED->value;
                 $message = DataVerification::getFieldLabel($field) . ' rechazado - se solicitó corrección al usuario';
                 $status = DataVerification::STATUS_REJECTED;
                 $verifiedAt = null;
                 $rejectedAt = now()->toIso8601String();
                 break;
             case 'unverify':
-                $auditAction = AuditLog::ACTION_DATA_VERIFIED;
+                $auditAction = AuditAction::DATA_VERIFIED->value;
                 $message = 'Verificación de ' . DataVerification::getFieldLabel($field) . ' removida';
                 $status = null;
                 $verifiedAt = null;
