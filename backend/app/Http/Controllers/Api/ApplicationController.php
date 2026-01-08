@@ -500,7 +500,7 @@ class ApplicationController extends Controller
             'relationship' => $request->relationship,
             'phone' => $request->phone,
             'email' => $request->email,
-            'type' => Reference::TYPE_PERSONAL,
+            'type' => 'PERSONAL',
             'is_verified' => false,
         ]);
 

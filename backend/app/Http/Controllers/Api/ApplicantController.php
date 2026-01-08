@@ -74,7 +74,7 @@ class ApplicantController extends Controller
             'first_name' => $request->input('first_name'),
             'last_name_1' => $request->input('last_name_1'),
             'last_name_2' => $request->input('last_name_2'),
-            'kyc_status' => Applicant::KYC_PENDING,
+            'kyc_status' => 'PENDING',
         ]);
 
         return response()->json([
@@ -521,7 +521,7 @@ class ApplicantController extends Controller
                 'type' => 'PERSONA_FISICA',
                 'phone' => $user->phone,
                 'email' => $user->email,
-                'kyc_status' => Applicant::KYC_PENDING,
+                'kyc_status' => 'PENDING',
             ]);
         }
 

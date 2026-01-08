@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Enums\ApplicationStatus;
 use App\Enums\AuditAction;
 use App\Enums\VerifiableField;
+use App\Enums\VerificationStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\AuditLog;
@@ -103,7 +104,7 @@ class CorrectionController extends Controller
 
         // Update verification record
         $verification->field_value = is_array($newValue) ? json_encode($newValue) : $newValue;
-        $verification->status = DataVerification::STATUS_CORRECTED;
+        $verification->status = VerificationStatus::CORRECTED;
         $verification->corrected_at = now();
         $verification->save();
 
