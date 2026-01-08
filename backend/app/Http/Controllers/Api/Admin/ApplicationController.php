@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Enums\ApplicationStatus;
+use App\Enums\AuditAction;
+use App\Enums\DocumentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\ApplicationNote;

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\ApplicationStatus;
+use App\Enums\AuditAction;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\AuditLog;
