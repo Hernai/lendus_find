@@ -623,7 +623,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // Inicializar WebSocket si ya hay un token al cargar el store
-  if (token.value && user.value) {
+  if (token.value) {
+    console.log('🔌 Inicializando Echo con token existente...')
     initializeEcho(token.value)
   }
 

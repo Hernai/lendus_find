@@ -19,19 +19,23 @@ interface UseWebSocketOptions {
 }
 
 export function useWebSocket(options: UseWebSocketOptions) {
-  const echo = getEcho()
-
-  if (!echo) {
-    console.warn('Echo not initialized. WebSocket features will not work.')
-    return {
-      connect: () => {},
-      disconnect: () => {},
-    }
-  }
-
   const channels: any[] = []
 
   const connect = () => {
+    const echo = getEcho()
+
+    if (!echo) {
+      console.warn('⚠️ Echo not initialized yet. WebSocket will connect after authentication.')
+      return
+    }
+
+    // Si ya hay canales, no reconectar
+    if (channels.length > 0) {
+      return
+    }
+
+    console.log('🔌 Connecting to WebSocket channels...')
+
     // Suscribirse al canal de aplicación específica
     if (options.applicationId) {
       const appChannel = echo.private(`tenant.${options.tenantId}.application.${options.applicationId}`)
@@ -91,16 +95,25 @@ export function useWebSocket(options: UseWebSocketOptions) {
 
       channels.push(userChannel)
     }
+
+    console.log(`✅ Connected to ${channels.length} WebSocket channel(s)`)
   }
 
   const disconnect = () => {
+    const echo = getEcho()
+
+    if (!echo) {
+      return
+    }
+
     channels.forEach((channel) => {
       echo.leave(channel.name)
     })
     channels.length = 0
+    console.log('🔌 Disconnected from WebSocket channels')
   }
 
-  // Auto-conectar
+  // Auto-conectar (solo si Echo ya está inicializado)
   connect()
 
   // Cleanup en unmount
