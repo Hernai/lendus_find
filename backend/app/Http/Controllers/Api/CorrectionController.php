@@ -111,7 +111,7 @@ class CorrectionController extends Controller
         $metadata = $request->attributes->get('metadata', []);
         $tenant = $request->attributes->get('tenant');
         AuditLog::log(
-            AuditAction::DATA_CORRECTED,
+            AuditAction::DATA_CORRECTED->value,
             $tenant->id,
             array_merge($metadata, [
                 'user_id' => $user->id,
@@ -224,7 +224,7 @@ class CorrectionController extends Controller
         foreach ($applications as $application) {
             // Move back to IN_REVIEW status
             $application->changeStatus(
-                ApplicationStatus::IN_REVIEW,
+                ApplicationStatus::IN_REVIEW->value,
                 'Correcciones completadas por el solicitante'
             );
         }

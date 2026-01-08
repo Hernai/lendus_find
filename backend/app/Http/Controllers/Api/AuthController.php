@@ -52,7 +52,7 @@ class AuthController extends Controller
             // Log OTP request
             $metadata = $request->attributes->get('metadata', []);
             AuditLog::log(
-                AuditAction::OTP_REQUESTED,
+                AuditAction::OTP_REQUESTED->value,
                 app('tenant.id'),
                 array_merge($metadata, [
                     'metadata' => [
@@ -142,7 +142,7 @@ class AuthController extends Controller
         // Log OTP verification and potential user creation
         $metadata = $request->attributes->get('metadata', []);
         AuditLog::log(
-            AuditAction::OTP_VERIFIED,
+            AuditAction::OTP_VERIFIED->value,
             app('tenant.id'),
             array_merge($metadata, [
                 'user_id' => $user->id,
@@ -152,7 +152,7 @@ class AuthController extends Controller
 
         if ($isNewUser) {
             AuditLog::log(
-                AuditAction::USER_CREATED,
+                AuditAction::USER_CREATED->value,
                 app('tenant.id'),
                 array_merge($metadata, [
                     'user_id' => $user->id,
@@ -168,7 +168,7 @@ class AuthController extends Controller
         }
 
         AuditLog::log(
-            AuditAction::LOGIN_SUCCESS,
+            AuditAction::LOGIN_SUCCESS->value,
             app('tenant.id'),
             array_merge($metadata, [
                 'user_id' => $user->id,
@@ -250,7 +250,7 @@ class AuthController extends Controller
         // Log PIN setup
         $metadata = $request->attributes->get('metadata', []);
         AuditLog::log(
-            AuditAction::PIN_SET,
+            AuditAction::PIN_SET->value,
             app('tenant.id'),
             array_merge($metadata, [
                 'user_id' => $user->id,
@@ -316,7 +316,7 @@ class AuthController extends Controller
 
             // Log failed login attempt
             AuditLog::log(
-                AuditAction::LOGIN_FAILED,
+                AuditAction::LOGIN_FAILED->value,
                 app('tenant.id'),
                 array_merge($metadata, [
                     'user_id' => $user->id,
@@ -347,7 +347,7 @@ class AuthController extends Controller
 
         // Log successful login
         AuditLog::log(
-            AuditAction::LOGIN_SUCCESS,
+            AuditAction::LOGIN_SUCCESS->value,
             app('tenant.id'),
             array_merge($metadata, [
                 'user_id' => $user->id,
@@ -496,7 +496,7 @@ class AuthController extends Controller
         if (!$user->password || !\Hash::check($request->password, $user->password)) {
             // Log failed admin login
             AuditLog::log(
-                AuditAction::LOGIN_FAILED,
+                AuditAction::LOGIN_FAILED->value,
                 app('tenant.id'),
                 array_merge($metadata, [
                     'user_id' => $user->id,
@@ -522,7 +522,7 @@ class AuthController extends Controller
 
         // Log successful admin login
         AuditLog::log(
-            AuditAction::LOGIN_SUCCESS,
+            AuditAction::LOGIN_SUCCESS->value,
             app('tenant.id'),
             array_merge($metadata, [
                 'user_id' => $user->id,
@@ -678,7 +678,7 @@ class AuthController extends Controller
         // Log logout
         $metadata = $request->attributes->get('metadata', []);
         AuditLog::log(
-            AuditAction::LOGOUT,
+            AuditAction::LOGOUT->value,
             app('tenant.id'),
             array_merge($metadata, [
                 'user_id' => $user->id,
