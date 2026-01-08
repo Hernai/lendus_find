@@ -91,7 +91,7 @@ class OtpCode extends Model
     public static function verify(
         string $destination,
         string $code,
-        string $purpose = self::PURPOSE_LOGIN
+        string $purpose = 'LOGIN'
     ): ?self {
         $otp = static::where(function ($q) use ($destination) {
                 $q->where('phone', $destination)->orWhere('email', $destination);
