@@ -104,6 +104,7 @@ export const useApplicantStore = defineStore('applicant', () => {
     last_name_1: string
     last_name_2?: string
     birth_date: string
+    birth_state?: string
     gender: 'M' | 'F'
     nationality: string
     marital_status: string

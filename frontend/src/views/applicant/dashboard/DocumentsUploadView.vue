@@ -130,6 +130,12 @@ const uploadDocument = async (doc: DocumentItem) => {
 }
 
 const removeDocument = async (doc: DocumentItem) => {
+  // Don't allow deleting approved documents
+  if (doc.existingDoc?.status === 'APPROVED') {
+    error.value = 'No puedes eliminar un documento aprobado'
+    return
+  }
+
   if (!doc.existingDoc) {
     doc.file = undefined
     doc.uploaded = false
@@ -155,6 +161,24 @@ const allRequiredUploaded = computed(() => {
     .filter(d => d.required && !d.existingDoc?.status?.includes('REJECTED'))
     .every(d => d.uploaded)
 })
+
+const canEditDocument = (doc: DocumentItem): boolean => {
+  // Can't edit approved documents
+  if (doc.existingDoc?.status === 'APPROVED') return false
+  return true
+}
+
+const getStatusBadge = (doc: DocumentItem) => {
+  if (!doc.existingDoc) return null
+
+  const statusMap: Record<string, { label: string; color: string; bg: string }> = {
+    PENDING: { label: 'Pendiente', color: 'text-yellow-700', bg: 'bg-yellow-100' },
+    APPROVED: { label: 'Aprobado', color: 'text-green-700', bg: 'bg-green-100' },
+    REJECTED: { label: 'Rechazado', color: 'text-red-700', bg: 'bg-red-100' }
+  }
+
+  return statusMap[doc.existingDoc.status] || statusMap.PENDING
+}
 
 const pendingCount = computed(() => {
   return documents.value.filter(d => !d.uploaded && d.required).length
@@ -251,23 +275,46 @@ const goBack = () => {
           >
             <div class="p-4">
               <div class="flex items-start justify-between mb-2">
-                <div>
+                <div class="flex-1">
                   <h3 class="font-medium text-gray-900">
                     {{ doc.label }}
                     <span v-if="doc.required" class="text-red-500">*</span>
                   </h3>
                   <p class="text-sm text-gray-500 mt-1">{{ doc.description }}</p>
                 </div>
-                <div v-if="doc.uploaded" class="flex-shrink-0">
-                  <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                <div class="flex-shrink-0 ml-3">
+                  <!-- Status Badge -->
+                  <span
+                    v-if="doc.existingDoc && getStatusBadge(doc)"
+                    :class="[
+                      'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium',
+                      getStatusBadge(doc)?.bg,
+                      getStatusBadge(doc)?.color
+                    ]"
+                  >
+                    <svg v-if="doc.existingDoc.status === 'APPROVED'" class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                    </svg>
+                    <svg v-else-if="doc.existingDoc.status === 'REJECTED'" class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                    </svg>
+                    {{ getStatusBadge(doc)?.label }}
+                  </span>
+                  <!-- Upload Status (for non-existing docs) -->
+                  <span
+                    v-else-if="doc.uploaded && !doc.existingDoc"
+                    class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"
+                  >
                     <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                       <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                     </svg>
                     Listo
                   </span>
-                </div>
-                <div v-else-if="doc.isUploading" class="flex-shrink-0">
-                  <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                  <!-- Uploading -->
+                  <span
+                    v-else-if="doc.isUploading"
+                    class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700"
+                  >
                     <div class="w-3 h-3 mr-1 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
                     Subiendo...
                   </span>
@@ -279,8 +326,18 @@ const goBack = () => {
                 {{ doc.uploadError }}
               </div>
 
+              <!-- Locked Message (Approved) -->
+              <div v-if="doc.existingDoc?.status === 'APPROVED'" class="mt-3 bg-green-50 rounded-lg p-3 flex gap-3">
+                <svg class="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <p class="text-sm text-green-800">
+                  Este documento ha sido aprobado y no puede ser modificado.
+                </p>
+              </div>
+
               <!-- Upload Area -->
-              <div v-if="!doc.uploaded && !doc.isUploading" class="mt-3">
+              <div v-else-if="!doc.uploaded && !doc.isUploading" class="mt-3">
                 <label
                   :for="`file-${doc.type}`"
                   class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-primary-500 hover:bg-primary-50 transition-colors"
@@ -315,13 +372,20 @@ const goBack = () => {
                   </div>
                 </div>
                 <button
+                  v-if="canEditDocument(doc)"
                   class="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                  title="Eliminar documento"
                   @click="removeDocument(doc)"
                 >
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </button>
+                <div v-else class="p-2 text-gray-300" title="Documento aprobado y bloqueado">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
               </div>
             </div>
           </div>
