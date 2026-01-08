@@ -1,31 +1,57 @@
-import { onUnmounted } from 'vue'
+import { onUnmounted, watch, type Ref, isRef, toValue, type ComputedRef } from 'vue'
 import { getEcho } from '@/plugins/echo'
 import type {
   ApplicationStatusChangedEvent,
   DocumentStatusChangedEvent,
+  DocumentDeletedEvent,
+  DocumentUploadedEvent,
   ReferenceVerifiedEvent,
   ApplicationAssignedEvent,
 } from '@/types/realtime'
 
+type MaybeRef<T> = T | Ref<T> | ComputedRef<T>
+
 interface UseWebSocketOptions {
-  tenantId: string
-  applicationId?: string
-  applicantId?: string
-  userId?: string
+  tenantId: MaybeRef<string | undefined>
+  applicationId?: MaybeRef<string | undefined>
+  applicantId?: MaybeRef<string | undefined>
+  userId?: MaybeRef<string | undefined>
   onApplicationStatusChanged?: (event: ApplicationStatusChangedEvent) => void
   onDocumentStatusChanged?: (event: DocumentStatusChangedEvent) => void
+  onDocumentDeleted?: (event: DocumentDeletedEvent) => void
+  onDocumentUploaded?: (event: DocumentUploadedEvent) => void
   onReferenceVerified?: (event: ReferenceVerifiedEvent) => void
   onApplicationAssigned?: (event: ApplicationAssignedEvent) => void
+}
+
+// Helper para verificar si un valor es reactivo (Ref o ComputedRef)
+function isReactive<T>(value: MaybeRef<T>): value is Ref<T> | ComputedRef<T> {
+  return isRef(value) || (typeof value === 'object' && value !== null && 'value' in value)
 }
 
 export function useWebSocket(options: UseWebSocketOptions) {
   const channels: any[] = []
 
+  // Determinar la intención del caller basado en qué opciones fueron provistas
+  // (no en sus valores actuales, que pueden ser undefined inicialmente)
+  const isApplicantMode = 'applicantId' in options
+  const isApplicationMode = 'applicationId' in options
+  const isAdminMode = !isApplicantMode && !isApplicationMode
+
   const connect = () => {
     const echo = getEcho()
+    const tenantId = toValue(options.tenantId)
+    const applicationId = toValue(options.applicationId)
+    const applicantId = toValue(options.applicantId)
+    const userId = toValue(options.userId)
 
     if (!echo) {
       console.warn('⚠️ Echo not initialized yet. WebSocket will connect after authentication.')
+      return
+    }
+
+    if (!tenantId) {
+      console.warn('⚠️ Tenant ID not available yet. WebSocket will connect when tenant loads.')
       return
     }
 
@@ -34,11 +60,28 @@ export function useWebSocket(options: UseWebSocketOptions) {
       return
     }
 
-    console.log('🔌 Connecting to WebSocket channels...')
+    // Para modo aplicante, esperar a que applicantId esté disponible
+    if (isApplicantMode && !applicantId) {
+      console.warn('⚠️ Applicant ID not available yet. WebSocket will connect when applicant loads.')
+      return
+    }
 
-    // Suscribirse al canal de aplicación específica
-    if (options.applicationId) {
-      const appChannel = echo.private(`tenant.${options.tenantId}.application.${options.applicationId}`)
+    // Para modo aplicación, esperar a que applicationId esté disponible
+    if (isApplicationMode && !applicationId) {
+      console.warn('⚠️ Application ID not available yet. WebSocket will connect when application loads.')
+      return
+    }
+
+    console.log('🔌 Connecting to WebSocket channels...', {
+      tenantId,
+      applicationId,
+      applicantId,
+      mode: isAdminMode ? 'admin' : isApplicantMode ? 'applicant' : 'application',
+    })
+
+    // Canal de aplicación específica (staff viendo la aplicación)
+    if (applicationId) {
+      const appChannel = echo.private(`tenant.${tenantId}.application.${applicationId}`)
 
       if (options.onApplicationStatusChanged) {
         appChannel.listen('.application.status.changed', options.onApplicationStatusChanged)
@@ -48,6 +91,14 @@ export function useWebSocket(options: UseWebSocketOptions) {
         appChannel.listen('.document.status.changed', options.onDocumentStatusChanged)
       }
 
+      if (options.onDocumentDeleted) {
+        appChannel.listen('.document.deleted', options.onDocumentDeleted)
+      }
+
+      if (options.onDocumentUploaded) {
+        appChannel.listen('.document.uploaded', options.onDocumentUploaded)
+      }
+
       if (options.onReferenceVerified) {
         appChannel.listen('.reference.verified', options.onReferenceVerified)
       }
@@ -55,9 +106,9 @@ export function useWebSocket(options: UseWebSocketOptions) {
       channels.push(appChannel)
     }
 
-    // Suscribirse al canal personal del aplicante
-    if (options.applicantId) {
-      const applicantChannel = echo.private(`tenant.${options.tenantId}.applicant.${options.applicantId}`)
+    // Canal personal del aplicante (para su dashboard)
+    if (applicantId) {
+      const applicantChannel = echo.private(`tenant.${tenantId}.applicant.${applicantId}`)
 
       if (options.onApplicationStatusChanged) {
         applicantChannel.listen('.application.status.changed', options.onApplicationStatusChanged)
@@ -67,15 +118,31 @@ export function useWebSocket(options: UseWebSocketOptions) {
         applicantChannel.listen('.document.status.changed', options.onDocumentStatusChanged)
       }
 
+      if (options.onDocumentDeleted) {
+        applicantChannel.listen('.document.deleted', options.onDocumentDeleted)
+      }
+
+      if (options.onDocumentUploaded) {
+        applicantChannel.listen('.document.uploaded', options.onDocumentUploaded)
+      }
+
       channels.push(applicantChannel)
     }
 
-    // Suscribirse al canal admin
-    if (!options.applicationId && !options.applicantId) {
-      const adminChannel = echo.private(`tenant.${options.tenantId}.admin`)
+    // Canal admin (solo si no se especificó applicationId ni applicantId)
+    if (isAdminMode) {
+      const adminChannel = echo.private(`tenant.${tenantId}.admin`)
 
       if (options.onApplicationStatusChanged) {
         adminChannel.listen('.application.status.changed', options.onApplicationStatusChanged)
+      }
+
+      if (options.onDocumentDeleted) {
+        adminChannel.listen('.document.deleted', options.onDocumentDeleted)
+      }
+
+      if (options.onDocumentUploaded) {
+        adminChannel.listen('.document.uploaded', options.onDocumentUploaded)
       }
 
       if (options.onApplicationAssigned) {
@@ -85,9 +152,9 @@ export function useWebSocket(options: UseWebSocketOptions) {
       channels.push(adminChannel)
     }
 
-    // Suscribirse al canal de usuario específico
-    if (options.userId) {
-      const userChannel = echo.private(`tenant.${options.tenantId}.user.${options.userId}`)
+    // Canal de usuario específico (notificaciones personales)
+    if (userId) {
+      const userChannel = echo.private(`tenant.${tenantId}.user.${userId}`)
 
       if (options.onApplicationAssigned) {
         userChannel.listen('.application.assigned', options.onApplicationAssigned)
@@ -113,8 +180,50 @@ export function useWebSocket(options: UseWebSocketOptions) {
     console.log('🔌 Disconnected from WebSocket channels')
   }
 
-  // Auto-conectar (solo si Echo ya está inicializado)
+  // Auto-conectar
   connect()
+
+  // Watcher para reconectar cuando tenantId cambie (soporta Ref y ComputedRef)
+  if (isReactive(options.tenantId)) {
+    watch(
+      () => toValue(options.tenantId),
+      (newTenantId) => {
+        if (newTenantId && channels.length === 0) {
+          console.log('🔄 Tenant loaded, attempting to connect WebSocket...')
+          connect()
+        }
+      },
+      { immediate: true } // Ejecutar inmediatamente para capturar el valor actual si ya está disponible
+    )
+  }
+
+  // Watcher para reconectar cuando applicantId cambie (modo aplicante)
+  if (isApplicantMode && options.applicantId && isReactive(options.applicantId)) {
+    watch(
+      () => toValue(options.applicantId),
+      (newApplicantId) => {
+        if (newApplicantId && channels.length === 0) {
+          console.log('🔄 Applicant loaded, attempting to connect WebSocket...')
+          connect()
+        }
+      },
+      { immediate: true }
+    )
+  }
+
+  // Watcher para reconectar cuando applicationId cambie (modo aplicación)
+  if (isApplicationMode && options.applicationId && isReactive(options.applicationId)) {
+    watch(
+      () => toValue(options.applicationId),
+      (newApplicationId) => {
+        if (newApplicationId && channels.length === 0) {
+          console.log('🔄 Application loaded, attempting to connect WebSocket...')
+          connect()
+        }
+      },
+      { immediate: true }
+    )
+  }
 
   // Cleanup en unmount
   onUnmounted(() => {

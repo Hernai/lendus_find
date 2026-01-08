@@ -24,6 +24,7 @@ enum AuditAction: string
     case DOCUMENT_UPLOADED = 'DOCUMENT_UPLOADED';
     case DOCUMENT_APPROVED = 'DOCUMENT_APPROVED';
     case DOCUMENT_REJECTED = 'DOCUMENT_REJECTED';
+    case DOCUMENT_DELETED = 'DOCUMENT_DELETED';
     case DATA_VERIFIED = 'DATA_VERIFIED';
     case DATA_REJECTED = 'DATA_REJECTED';
     case DATA_CORRECTED = 'DATA_CORRECTED';
@@ -53,6 +54,7 @@ enum AuditAction: string
             self::DOCUMENT_UPLOADED => 'Documento subido',
             self::DOCUMENT_APPROVED => 'Documento aprobado',
             self::DOCUMENT_REJECTED => 'Documento rechazado',
+            self::DOCUMENT_DELETED => 'Documento eliminado',
             self::DATA_VERIFIED => 'Dato verificado',
             self::DATA_REJECTED => 'Dato rechazado',
             self::DATA_CORRECTED => 'Dato corregido',

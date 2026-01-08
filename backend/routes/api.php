@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\SimulatorController;
 use App\Http\Controllers\Api\Admin\DashboardController;
 use App\Http\Controllers\Api\Admin\ApplicationController as AdminApplicationController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Broadcast;
 
 /*
 |--------------------------------------------------------------------------
@@ -53,6 +54,27 @@ Route::middleware(['tenant'])->group(function () {
         Route::post('/calculate', [SimulatorController::class, 'calculate']);
         Route::get('/amortization', [SimulatorController::class, 'amortization']);
     });
+});
+
+// Broadcasting auth (for WebSocket channel authorization)
+Route::middleware(['tenant', 'auth:sanctum'])->post('/broadcasting/auth', function () {
+    \Log::info('Broadcasting auth request', [
+        'user_id' => auth()->id(),
+        'channel_name' => request('channel_name'),
+        'socket_id' => request('socket_id'),
+    ]);
+
+    try {
+        $response = Broadcast::auth(request());
+        \Log::info('Broadcasting auth success', ['response' => $response]);
+        return $response;
+    } catch (\Exception $e) {
+        \Log::error('Broadcasting auth error', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+        ]);
+        throw $e;
+    }
 });
 
 // Protected routes (authenticated user within tenant)

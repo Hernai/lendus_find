@@ -180,6 +180,9 @@ class Application extends Model
     {
         $previousStatus = $this->status->value;
 
+        // Look up user to get name for history
+        $changedBy = $userId ? User::find($userId) : null;
+
         $history = $this->status_history ?? [];
 
         $history[] = [
@@ -187,6 +190,7 @@ class Application extends Model
             'to' => $status,
             'reason' => $reason,
             'user_id' => $userId,
+            'user_name' => $changedBy?->name,
             'timestamp' => now()->toIso8601String(),
         ];
 
@@ -204,7 +208,6 @@ class Application extends Model
         $this->save();
 
         // Broadcast el cambio de status
-        $changedBy = $userId ? User::find($userId) : null;
         event(new \App\Events\ApplicationStatusChanged(
             $this,
             $previousStatus,
@@ -212,6 +215,27 @@ class Application extends Model
             $reason,
             $changedBy
         ));
+    }
+
+    /**
+     * Add an entry to the status_history without changing status.
+     * Used for timeline events like data corrections, document uploads, etc.
+     */
+    public function addTimelineEntry(string $action, array $data = [], ?string $userId = null): void
+    {
+        $user = $userId ? User::find($userId) : null;
+
+        $history = $this->status_history ?? [];
+
+        $history[] = array_merge([
+            'action' => $action,
+            'user_id' => $userId,
+            'user_name' => $user?->name,
+            'timestamp' => now()->toIso8601String(),
+        ], $data);
+
+        $this->status_history = $history;
+        $this->save();
     }
 
     /**

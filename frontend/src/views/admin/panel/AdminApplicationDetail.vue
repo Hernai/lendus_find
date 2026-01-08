@@ -5,7 +5,7 @@ import { AppButton, AppConfirmModal } from '@/components/common'
 import { api } from '@/services/api'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useTenantStore } from '@/stores/tenant'
-import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent, ReferenceVerifiedEvent } from '@/types/realtime'
+import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent, DocumentDeletedEvent, DocumentUploadedEvent, ReferenceVerifiedEvent } from '@/types/realtime'
 
 const route = useRoute()
 const router = useRouter()
@@ -79,11 +79,11 @@ interface Application {
     months_living: number
   }
   employment: {
-    type: string
+    employment_type?: string
     company_name?: string
     position?: string
     monthly_income: number
-    seniority_months: number
+    seniority_months?: number
   }
   loan: {
     product_name: string
@@ -99,7 +99,22 @@ interface Application {
   documents: Document[]
   references: Reference[]
   notes: { id: string; text: string; author: string; created_at: string }[]
-  timeline: { id: string; action: string; description: string; author: string; created_at: string }[]
+  timeline: {
+    id: string
+    action: string
+    description: string
+    author: string
+    created_at: string
+    metadata?: {
+      ip_address?: string
+      user_agent?: string
+      location?: string
+      old_value?: string
+      new_value?: string
+      changes?: Record<string, string>
+      reason?: string
+    }
+  }[]
   signature?: {
     has_signed: boolean
     signature_base64?: string
@@ -152,6 +167,10 @@ const selectedDocument = ref<Document | null>(null)
 const docRejectReason = ref('')
 const docRejectComment = ref('')
 const isRejectingDoc = ref(false)
+
+// Timeline metadata modal state
+const showMetadataModal = ref(false)
+const selectedTimelineEvent = ref<Application['timeline'][0] | null>(null)
 
 const docRejectReasons = [
   { value: 'ILLEGIBLE', label: 'Documento ilegible' },
@@ -239,9 +258,12 @@ const statusOptions = [
 // Error state
 const error = ref('')
 
+// Computed refs for WebSocket (to allow reactive reconnection when tenant loads)
+const tenantIdRef = computed(() => tenantStore.tenant?.id)
+
 // WebSocket connection for real-time updates
 useWebSocket({
-  tenantId: tenantStore.tenant?.id || '',
+  tenantId: tenantIdRef,
   applicationId: route.params.id as string,
   onApplicationStatusChanged: (event: ApplicationStatusChangedEvent) => {
     console.log('📡 Status changed:', event.previous_status, '→', event.new_status)
@@ -249,6 +271,14 @@ useWebSocket({
   },
   onDocumentStatusChanged: (event: DocumentStatusChangedEvent) => {
     console.log('📄 Document updated:', event.type, event.new_status)
+    fetchApplication() // Recargar aplicación
+  },
+  onDocumentDeleted: (event: DocumentDeletedEvent) => {
+    console.log('🗑️ Document deleted:', event.type, 'by', event.deleted_by?.name)
+    fetchApplication() // Recargar aplicación
+  },
+  onDocumentUploaded: (event: DocumentUploadedEvent) => {
+    console.log('📤 Document uploaded:', event.type, 'by', event.uploaded_by?.name)
     fetchApplication() // Recargar aplicación
   },
   onReferenceVerified: (event: ReferenceVerifiedEvent) => {
@@ -325,7 +355,9 @@ const fetchApplication = async () => {
         months_living: 0
       },
       employment: data.employment || {
-        type: '',
+        employment_type: '',
+        company_name: '',
+        position: '',
         monthly_income: 0,
         seniority_months: 0
       },
@@ -453,6 +485,38 @@ const formatPhone = (phone: string | null | undefined): string => {
   return phone
 }
 
+// Parse user agent to friendly name
+const parseUserAgent = (ua: string): string => {
+  if (!ua) return 'Desconocido'
+
+  // Detect browser
+  let browser = 'Navegador desconocido'
+  if (ua.includes('Chrome') && !ua.includes('Edg')) browser = 'Chrome'
+  else if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari'
+  else if (ua.includes('Firefox')) browser = 'Firefox'
+  else if (ua.includes('Edg')) browser = 'Edge'
+  else if (ua.includes('Opera') || ua.includes('OPR')) browser = 'Opera'
+
+  // Detect OS
+  let os = ''
+  if (ua.includes('Windows')) os = 'Windows'
+  else if (ua.includes('Mac OS')) os = 'macOS'
+  else if (ua.includes('iPhone')) os = 'iPhone'
+  else if (ua.includes('iPad')) os = 'iPad'
+  else if (ua.includes('Android')) os = 'Android'
+  else if (ua.includes('Linux')) os = 'Linux'
+
+  return os ? `${browser} en ${os}` : browser
+}
+
+// Parse change value from "old → new" format
+const parseChangeValue = (change: string, part: 'old' | 'new'): string => {
+  if (!change) return ''
+  const parts = change.split(' → ')
+  if (parts.length !== 2) return change
+  return part === 'old' ? parts[0] : parts[1]
+}
+
 const getStatusBadge = (status: string) => {
   const badges: Record<string, { bg: string; text: string; label: string }> = {
     SUBMITTED: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Nueva' },
@@ -480,9 +544,12 @@ const getDocStatusBadge = (status: string) => {
 const getEmploymentType = (type: string) => {
   const types: Record<string, string> = {
     EMPLEADO: 'Empleado',
-    INDEPENDIENTE: 'Independiente',
-    NEGOCIO_PROPIO: 'Negocio Propio',
+    INDEPENDIENTE: 'Trabajador Independiente',
+    EMPRESARIO: 'Empresario',
     PENSIONADO: 'Pensionado',
+    ESTUDIANTE: 'Estudiante',
+    HOGAR: 'Hogar',
+    DESEMPLEADO: 'Desempleado',
     OTRO: 'Otro'
   }
   return types[type] || type
@@ -1647,7 +1714,7 @@ const addNote = async () => {
                   <div class="flex items-center gap-2">
                     <span
                       class="w-2 h-2 rounded-full flex-shrink-0"
-                      :class="isFieldRejected('employment') ? 'bg-red-500' : isFieldVerified('employment') ? 'bg-green-500' : isFieldPending('employment') ? 'bg-yellow-500' : application.employment.type ? 'bg-blue-500' : 'bg-gray-300'"
+                      :class="isFieldRejected('employment') ? 'bg-red-500' : isFieldVerified('employment') ? 'bg-green-500' : isFieldPending('employment') ? 'bg-yellow-500' : application.employment.employment_type ? 'bg-blue-500' : 'bg-gray-300'"
                     ></span>
                     <h3 class="text-sm font-semibold text-gray-900">Información Laboral</h3>
                   </div>
@@ -1709,7 +1776,7 @@ const addNote = async () => {
                   <div class="grid grid-cols-2 gap-2 text-sm">
                     <div>
                       <p class="text-xs text-gray-500">Tipo</p>
-                      <p class="font-medium text-gray-900">{{ getEmploymentType(application.employment.type) || '—' }}</p>
+                      <p class="font-medium text-gray-900">{{ getEmploymentType(application.employment.employment_type || '') || '—' }}</p>
                     </div>
                     <div>
                       <p class="text-xs text-gray-500">Empresa</p>
@@ -1721,7 +1788,7 @@ const addNote = async () => {
                     </div>
                     <div>
                       <p class="text-xs text-gray-500">Antigüedad</p>
-                      <p class="font-medium text-gray-900">{{ Math.floor(application.employment.seniority_months / 12) }} años</p>
+                      <p class="font-medium text-gray-900">{{ application.employment.seniority_months ?? 0 }} meses</p>
                     </div>
                     <div class="col-span-2">
                       <p class="text-xs text-gray-500">Ingreso Mensual</p>
@@ -2020,7 +2087,7 @@ const addNote = async () => {
                         </span>
                       </div>
                       <div class="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
-                        <div>
+                        <div class="flex-1">
                           <p class="text-sm text-gray-800">
                             {{ event.description }}
                           </p>
@@ -2028,8 +2095,18 @@ const addNote = async () => {
                             Por {{ event.author }}
                           </p>
                         </div>
-                        <div class="text-right text-sm whitespace-nowrap text-gray-500">
-                          {{ formatDateTime(event.created_at) }}
+                        <div class="text-right text-sm whitespace-nowrap text-gray-500 flex flex-col items-end gap-1">
+                          <span>{{ formatDateTime(event.created_at) }}</span>
+                          <button
+                            v-if="event.metadata?.ip_address || event.metadata?.user_agent"
+                            class="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-1"
+                            @click="selectedTimelineEvent = event; showMetadataModal = true"
+                          >
+                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Ver detalles
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -2571,6 +2648,185 @@ const addNote = async () => {
               Descargar archivo
             </a>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timeline Metadata Modal -->
+    <div
+      v-if="showMetadataModal && selectedTimelineEvent"
+      class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      @click.self="showMetadataModal = false"
+    >
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-primary-600 to-primary-700 px-6 py-4 flex justify-between items-center">
+          <div class="flex items-center gap-3">
+            <div class="bg-white/20 rounded-lg p-2">
+              <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-white">Detalles del Evento</h3>
+          </div>
+          <button
+            class="text-white/80 hover:text-white hover:bg-white/10 rounded-lg p-1.5 transition-colors"
+            @click="showMetadataModal = false"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Content -->
+        <div class="flex-1 overflow-y-auto p-6 space-y-5">
+          <!-- Event Description Card -->
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm text-gray-900 leading-relaxed">{{ selectedTimelineEvent.description }}</p>
+          </div>
+
+          <!-- Info Grid -->
+          <div class="grid grid-cols-2 gap-4">
+            <div class="bg-gray-50 rounded-xl p-4">
+              <div class="flex items-center gap-2 mb-2">
+                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span class="text-xs font-medium text-gray-500 uppercase">Realizado por</span>
+              </div>
+              <p class="text-sm font-medium text-gray-900">{{ selectedTimelineEvent.author }}</p>
+            </div>
+
+            <div class="bg-gray-50 rounded-xl p-4">
+              <div class="flex items-center gap-2 mb-2">
+                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="text-xs font-medium text-gray-500 uppercase">Fecha y Hora</span>
+              </div>
+              <p class="text-sm font-medium text-gray-900">{{ formatDateTime(selectedTimelineEvent.created_at) }}</p>
+            </div>
+          </div>
+
+          <!-- Technical Details -->
+          <div v-if="selectedTimelineEvent.metadata?.ip_address || selectedTimelineEvent.metadata?.user_agent" class="border border-gray-200 rounded-xl overflow-hidden">
+            <div class="bg-gray-100 px-4 py-2 border-b border-gray-200">
+              <div class="flex items-center gap-2">
+                <svg class="h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <span class="text-xs font-semibold text-gray-600 uppercase">Información Técnica</span>
+              </div>
+            </div>
+            <div class="p-4 space-y-3">
+              <div v-if="selectedTimelineEvent.metadata?.ip_address" class="flex items-center justify-between">
+                <span class="text-xs text-gray-500">IP</span>
+                <span class="text-sm font-mono text-gray-700 bg-gray-100 px-2 py-0.5 rounded">{{ selectedTimelineEvent.metadata.ip_address }}</span>
+              </div>
+              <div v-if="selectedTimelineEvent.metadata?.location" class="flex items-center justify-between">
+                <span class="text-xs text-gray-500">Ubicación</span>
+                <span class="text-sm text-gray-700">{{ selectedTimelineEvent.metadata.location }}</span>
+              </div>
+              <div v-if="selectedTimelineEvent.metadata?.user_agent" class="flex items-center justify-between">
+                <span class="text-xs text-gray-500">Dispositivo</span>
+                <span class="text-sm text-gray-700">{{ parseUserAgent(selectedTimelineEvent.metadata.user_agent) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cambios específicos (para correcciones de datos) -->
+          <div v-if="selectedTimelineEvent.metadata?.changes && Object.keys(selectedTimelineEvent.metadata.changes).length > 0" class="border border-amber-200 rounded-xl overflow-hidden">
+            <div class="bg-amber-50 px-4 py-2 border-b border-amber-200">
+              <div class="flex items-center gap-2">
+                <svg class="h-4 w-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span class="text-xs font-semibold text-amber-700 uppercase">Cambios Realizados</span>
+              </div>
+            </div>
+            <div class="divide-y divide-gray-100">
+              <div
+                v-for="(change, field) in selectedTimelineEvent.metadata.changes"
+                :key="field"
+                class="p-4"
+              >
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{{ field }}</p>
+                <div class="space-y-2">
+                  <div class="flex items-start gap-3 bg-red-50 rounded-lg px-3 py-2">
+                    <span class="text-red-400 mt-0.5">
+                      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                      </svg>
+                    </span>
+                    <span class="text-sm text-red-700 line-through flex-1">{{ parseChangeValue(change, 'old') }}</span>
+                  </div>
+                  <div class="flex items-start gap-3 bg-green-50 rounded-lg px-3 py-2">
+                    <span class="text-green-500 mt-0.5">
+                      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                      </svg>
+                    </span>
+                    <span class="text-sm text-green-700 font-medium flex-1">{{ parseChangeValue(change, 'new') }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Fallback para old_value/new_value cuando no hay changes específicos -->
+          <template v-if="!selectedTimelineEvent.metadata?.changes && (selectedTimelineEvent.metadata?.old_value || selectedTimelineEvent.metadata?.new_value)">
+            <div class="border border-amber-200 rounded-xl overflow-hidden">
+              <div class="bg-amber-50 px-4 py-2 border-b border-amber-200">
+                <div class="flex items-center gap-2">
+                  <svg class="h-4 w-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  <span class="text-xs font-semibold text-amber-700 uppercase">Cambio de Valor</span>
+                </div>
+              </div>
+              <div class="p-4 space-y-2">
+                <div v-if="selectedTimelineEvent.metadata?.old_value" class="flex items-start gap-3 bg-red-50 rounded-lg px-3 py-2">
+                  <span class="text-red-400 mt-0.5">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                    </svg>
+                  </span>
+                  <span class="text-sm text-red-700 line-through flex-1">{{ selectedTimelineEvent.metadata.old_value }}</span>
+                </div>
+                <div v-if="selectedTimelineEvent.metadata?.new_value" class="flex items-start gap-3 bg-green-50 rounded-lg px-3 py-2">
+                  <span class="text-green-500 mt-0.5">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                  </span>
+                  <span class="text-sm text-green-700 font-medium flex-1">{{ selectedTimelineEvent.metadata.new_value }}</span>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <div v-if="selectedTimelineEvent.metadata?.reason" class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <div class="flex items-start gap-3">
+              <svg class="h-5 w-5 text-blue-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+              </svg>
+              <div>
+                <p class="text-xs font-medium text-blue-600 uppercase mb-1">Motivo</p>
+                <p class="text-sm text-blue-800">{{ selectedTimelineEvent.metadata.reason }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="border-t border-gray-200 px-6 py-4 bg-gray-50">
+          <button
+            class="w-full px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-xl transition-colors"
+            @click="showMetadataModal = false"
+          >
+            Cerrar
+          </button>
         </div>
       </div>
     </div>

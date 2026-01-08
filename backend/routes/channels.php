@@ -6,8 +6,17 @@ use Illuminate\Support\Facades\Broadcast;
 
 // Canal de aplicación específica (staff viendo la aplicación)
 Broadcast::channel('tenant.{tenantId}.application.{applicationId}', function (User $user, string $tenantId, string $applicationId) {
-    // Usuario debe pertenecer al tenant
-    if ($user->tenant_id !== $tenantId) {
+    \Log::info('Channel auth: application', [
+        'user_id' => $user->id,
+        'user_tenant_id' => (string) $user->tenant_id,
+        'channel_tenant_id' => $tenantId,
+        'application_id' => $applicationId,
+        'is_staff' => $user->isStaff(),
+    ]);
+
+    // Usuario debe pertenecer al tenant (cast to string for UUID comparison)
+    if ((string) $user->tenant_id !== $tenantId) {
+        \Log::info('Channel auth failed: tenant mismatch');
         return false;
     }
 
@@ -16,15 +25,16 @@ Broadcast::channel('tenant.{tenantId}.application.{applicationId}', function (Us
         // Agentes solo ven aplicaciones asignadas
         if ($user->isAgent() && !$user->canViewAllApplications()) {
             $application = Application::find($applicationId);
-            return $application && $application->assigned_to === $user->id;
+            return $application && (string) $application->assigned_to === (string) $user->id;
         }
+        \Log::info('Channel auth success: staff');
         return true;
     }
 
     // Aplicantes solo ven sus propias aplicaciones
     if ($user->isApplicant() && $user->applicant) {
         $application = Application::find($applicationId);
-        return $application && $application->applicant_id === $user->applicant->id;
+        return $application && (string) $application->applicant_id === (string) $user->applicant->id;
     }
 
     return false;
@@ -32,25 +42,37 @@ Broadcast::channel('tenant.{tenantId}.application.{applicationId}', function (Us
 
 // Canal personal del aplicante (para su dashboard)
 Broadcast::channel('tenant.{tenantId}.applicant.{applicantId}', function (User $user, string $tenantId, string $applicantId) {
-    if ($user->tenant_id !== $tenantId) {
+    if ((string) $user->tenant_id !== $tenantId) {
         return false;
     }
 
     // Solo el aplicante puede suscribirse a su propio canal
-    return $user->isApplicant() && $user->applicant && $user->applicant->id === $applicantId;
+    return $user->isApplicant() && $user->applicant && (string) $user->applicant->id === $applicantId;
 });
 
 // Canal admin del tenant (para dashboard admin)
 Broadcast::channel('tenant.{tenantId}.admin', function (User $user, string $tenantId) {
-    if ($user->tenant_id !== $tenantId) {
+    \Log::info('Channel auth: admin', [
+        'user_id' => $user->id,
+        'user_tenant_id' => (string) $user->tenant_id,
+        'channel_tenant_id' => $tenantId,
+        'is_staff' => $user->isStaff(),
+        'can_view_all' => $user->canViewAllApplications(),
+        'user_type' => $user->type?->value ?? 'null',
+    ]);
+
+    if ((string) $user->tenant_id !== $tenantId) {
+        \Log::info('Channel auth: admin - tenant mismatch');
         return false;
     }
 
     // Solo staff con permisos puede suscribirse
-    return $user->isStaff() && $user->canViewAllApplications();
+    $result = $user->isStaff() && $user->canViewAllApplications();
+    \Log::info('Channel auth: admin - result', ['result' => $result]);
+    return $result;
 });
 
 // Canal de usuario específico (notificaciones personales como asignaciones)
 Broadcast::channel('tenant.{tenantId}.user.{userId}', function (User $user, string $tenantId, string $userId) {
-    return $user->tenant_id === $tenantId && $user->id === $userId;
+    return (string) $user->tenant_id === $tenantId && (string) $user->id === $userId;
 });

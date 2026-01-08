@@ -140,6 +140,9 @@ class DocumentController extends Controller
             ])
         );
 
+        // Broadcast document uploaded event
+        event(new \App\Events\DocumentUploaded($document, $request->user()));
+
         return response()->json([
             'message' => 'Document uploaded successfully',
             'data' => $this->formatDocument($document)
@@ -171,14 +174,11 @@ class DocumentController extends Controller
             ], 400);
         }
 
-        // Delete from storage
-        if ($document->storage_path) {
-            Storage::disk($document->storage_disk)->delete($document->storage_path);
-        }
-
-        $docType = $document->type;
-        $docName = $document->original_name;
-        $document->delete();
+        // Soft delete - NO eliminar archivo físico para permitir restauración
+        $docId = $document->id;
+        $docType = $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type;
+        $docName = $document->original_name ?? $document->file_name ?? 'unknown';
+        $document->delete(); // Soft delete por trait SoftDeletes
 
         // Add to application timeline
         $history = $application->status_history ?? [];
@@ -196,7 +196,7 @@ class DocumentController extends Controller
         $metadata = $request->attributes->get('metadata', []);
         $tenant = $request->attributes->get('tenant');
         AuditLog::log(
-            AuditLog::ACTION_DOCUMENT_DELETED,
+            AuditAction::DOCUMENT_DELETED->value,
             $tenant->id,
             array_merge($metadata, [
                 'user_id' => $request->user()->id,
@@ -209,6 +209,16 @@ class DocumentController extends Controller
                 ],
             ])
         );
+
+        // Broadcast document deleted event
+        event(new \App\Events\DocumentDeleted(
+            $docId,
+            $docType,
+            $application->id,
+            $applicant->id,
+            $tenant->id,
+            $request->user()
+        ));
 
         return response()->json([
             'message' => 'Document deleted'

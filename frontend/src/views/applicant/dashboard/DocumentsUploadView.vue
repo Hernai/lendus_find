@@ -23,9 +23,30 @@ interface DocumentItem {
 
 const isLoading = ref(true)
 const isSaving = ref(false)
+const isDeleting = ref(false)
 const error = ref<string | null>(null)
 const application = ref<Application | null>(null)
 const documents = ref<DocumentItem[]>([])
+const documentToDelete = ref<DocumentItem | null>(null)
+const showDeleteModal = ref(false)
+
+// Helper to get human-readable document label
+const getDocumentLabel = (type: string): string => {
+  const labels: Record<string, string> = {
+    'INE_FRONT': 'INE (Frente)',
+    'INE_BACK': 'INE (Reverso)',
+    'PROOF_ADDRESS': 'Comprobante de domicilio',
+    'PROOF_INCOME': 'Comprobante de ingresos',
+    'BANK_STATEMENT': 'Estado de cuenta bancario',
+    'RFC_CONSTANCIA': 'Constancia de situación fiscal',
+    'SIGNATURE': 'Firma',
+    'PAYSLIP_1': 'Recibo de nómina 1',
+    'PAYSLIP_2': 'Recibo de nómina 2',
+    'PAYSLIP_3': 'Recibo de nómina 3',
+    'VEHICLE_INVOICE': 'Factura del vehículo',
+  }
+  return labels[type] || type
+}
 
 onMounted(async () => {
   await loadApplication()
@@ -60,7 +81,7 @@ const loadApplication = async () => {
       for (const doc of data.documents) {
         items.push({
           type: doc.type,
-          label: doc.name,
+          label: getDocumentLabel(doc.type),
           description: doc.status === 'REJECTED'
             ? `Rechazado: ${doc.rejection_reason || 'Sin motivo especificado'}`
             : 'Documento cargado',
@@ -117,7 +138,7 @@ const uploadDocument = async (doc: DocumentItem) => {
     const uploaded = await applicationService.uploadDocument(applicationId, doc.type, doc.file)
     doc.uploaded = true
     doc.existingDoc = uploaded
-    doc.label = uploaded.name
+    // Mantener el label original (tipo de documento), no sobrescribir con el nombre del archivo
     doc.description = 'Documento cargado'
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } } }
@@ -129,30 +150,52 @@ const uploadDocument = async (doc: DocumentItem) => {
   }
 }
 
-const removeDocument = async (doc: DocumentItem) => {
+const removeDocument = (doc: DocumentItem) => {
   // Don't allow deleting approved documents
   if (doc.existingDoc?.status === 'APPROVED') {
     error.value = 'No puedes eliminar un documento aprobado'
     return
   }
 
+  // If no existing doc (just local file), remove immediately
   if (!doc.existingDoc) {
     doc.file = undefined
     doc.uploaded = false
     return
   }
 
+  // Show confirmation modal for server-side documents
+  documentToDelete.value = doc
+  showDeleteModal.value = true
+}
+
+const cancelDelete = () => {
+  documentToDelete.value = null
+  showDeleteModal.value = false
+}
+
+const confirmDelete = async () => {
+  if (!documentToDelete.value?.existingDoc) {
+    cancelDelete()
+    return
+  }
+
+  isDeleting.value = true
+
   try {
-    await applicationService.deleteDocument(applicationId, doc.existingDoc.id)
-    doc.uploaded = false
-    doc.file = undefined
-    doc.existingDoc = undefined
+    await applicationService.deleteDocument(applicationId, documentToDelete.value.existingDoc.id)
+    documentToDelete.value.uploaded = false
+    documentToDelete.value.file = undefined
+    documentToDelete.value.existingDoc = undefined
     // Reload to get fresh pending documents list
     await loadApplication()
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } } }
     error.value = err.response?.data?.message || 'Error al eliminar el documento'
     console.error('Failed to delete document:', e)
+  } finally {
+    isDeleting.value = false
+    cancelDelete()
   }
 }
 
@@ -428,5 +471,117 @@ const goBack = () => {
         </div>
       </template>
     </main>
+
+    <!-- Delete Confirmation Modal (Bottom Sheet Style) -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div
+          v-if="showDeleteModal"
+          class="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+        >
+          <!-- Backdrop -->
+          <div
+            class="absolute inset-0 bg-black/50 transition-opacity"
+            @click="cancelDelete"
+          />
+
+          <!-- Modal Content (Bottom Sheet) -->
+          <div class="relative w-full sm:max-w-md mx-auto bg-white rounded-t-2xl sm:rounded-2xl shadow-xl transform transition-all">
+            <!-- Handle bar for mobile -->
+            <div class="flex justify-center pt-3 sm:hidden">
+              <div class="w-10 h-1 bg-gray-300 rounded-full" />
+            </div>
+
+            <div class="p-6">
+              <!-- Icon -->
+              <div class="flex justify-center mb-4">
+                <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                  <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Title -->
+              <h3 class="text-lg font-semibold text-gray-900 text-center">
+                ¿Eliminar documento?
+              </h3>
+
+              <!-- Description -->
+              <p class="mt-2 text-sm text-gray-600 text-center">
+                Estás a punto de eliminar
+                <span class="font-medium text-gray-900">{{ documentToDelete?.label }}</span>.
+                Esta acción no se puede deshacer.
+              </p>
+
+              <!-- Buttons -->
+              <div class="mt-6 space-y-3">
+                <button
+                  class="w-full py-3 px-4 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  :disabled="isDeleting"
+                  @click="confirmDelete"
+                >
+                  <template v-if="isDeleting">
+                    <div class="w-5 h-5 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Eliminando...
+                  </template>
+                  <template v-else>
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Sí, eliminar
+                  </template>
+                </button>
+                <button
+                  class="w-full py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors"
+                  :disabled="isDeleting"
+                  @click="cancelDelete"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+
+            <!-- Safe area padding for iPhone -->
+            <div class="h-safe-area-inset-bottom sm:hidden" />
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
+
+<style scoped>
+/* Modal animations */
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.modal-enter-active > div:last-child,
+.modal-leave-active > div:last-child {
+  transition: transform 0.3s ease;
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+
+.modal-enter-from > div:last-child,
+.modal-leave-to > div:last-child {
+  transform: translateY(100%);
+}
+
+@media (min-width: 640px) {
+  .modal-enter-from > div:last-child,
+  .modal-leave-to > div:last-child {
+    transform: translateY(20px) scale(0.95);
+  }
+}
+
+/* Safe area for iPhone notch */
+.h-safe-area-inset-bottom {
+  height: env(safe-area-inset-bottom, 0);
+}
+</style>

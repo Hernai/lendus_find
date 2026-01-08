@@ -53,3 +53,44 @@ export interface ApplicationAssignedEvent {
   }
   assigned_at: string
 }
+
+export interface DocumentDeletedEvent {
+  document_id: string
+  application_id: string
+  applicant_id: string
+  type: string
+  deleted_by?: {
+    id: string
+    name: string
+  }
+  deleted_at: string
+}
+
+export interface DocumentUploadedEvent {
+  document_id: string
+  application_id: string
+  applicant_id: string
+  type: string
+  status: string
+  uploaded_by?: {
+    id: string
+    name: string
+  }
+  uploaded_at: string
+}
+
+export interface DataCorrectionSubmittedEvent {
+  verification_id: string
+  applicant_id: string
+  applicant_name: string
+  field_name: string
+  field_label: string
+  old_value: unknown
+  new_value: unknown
+  corrected_by?: {
+    id: string
+    name: string
+  }
+  correction_count: number
+  corrected_at: string
+}

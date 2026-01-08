@@ -43,10 +43,14 @@ const cancelledCount = computed(() => {
   return applications.value.filter(app => app.status === 'CANCELLED').length
 })
 
+// Computed refs for WebSocket (to allow reactive reconnection when tenant/applicant loads)
+const tenantIdRef = computed(() => tenantStore.tenant?.id)
+const applicantIdRef = computed(() => applicantStore.applicant?.id)
+
 // WebSocket connection for real-time updates
 useWebSocket({
-  tenantId: tenantStore.tenant?.id || '',
-  applicantId: applicantStore.applicant?.id || '',
+  tenantId: tenantIdRef,
+  applicantId: applicantIdRef,
   onApplicationStatusChanged: (event: ApplicationStatusChangedEvent) => {
     console.log('📡 Tu solicitud cambió a:', event.new_status)
     loadApplications() // Recargar lista de aplicaciones

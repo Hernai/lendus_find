@@ -1,19 +1,22 @@
 import Echo from 'laravel-echo'
 import Pusher from 'pusher-js'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type EchoInstance = Echo<any>
+
 declare global {
   interface Window {
     Pusher: typeof Pusher
-    Echo: Echo
+    Echo: EchoInstance
   }
 }
 
 // Hacer Pusher disponible globalmente (requerido por Laravel Echo)
 window.Pusher = Pusher
 
-let echoInstance: Echo | null = null
+let echoInstance: EchoInstance | null = null
 
-export function initializeEcho(token: string): Echo {
+export function initializeEcho(token: string): EchoInstance {
   if (echoInstance) {
     return echoInstance
   }
@@ -70,6 +73,6 @@ export function disconnectEcho(): void {
   }
 }
 
-export function getEcho(): Echo | null {
+export function getEcho(): EchoInstance | null {
   return echoInstance
 }

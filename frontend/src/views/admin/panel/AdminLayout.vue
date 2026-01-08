@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore, useTenantStore } from '@/stores'
 
@@ -7,6 +7,11 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const tenantStore = useTenantStore()
+
+// Cargar configuración del tenant al montar el layout
+onMounted(async () => {
+  await tenantStore.loadConfig()
+})
 
 const showUserMenu = ref(false)
 

@@ -567,7 +567,8 @@ class ApplicationController extends Controller
 
         // Pending documents (required but not uploaded)
         $requiredDocs = $application->product->required_docs ?? $application->product->required_documents ?? [];
-        $uploadedTypes = $application->documents->pluck('type')->toArray();
+        // Convert enum values to strings for comparison
+        $uploadedTypes = $application->documents->pluck('type')->map(fn($t) => $t instanceof \App\Enums\DocumentType ? $t->value : $t)->toArray();
         $data['pending_documents'] = collect($requiredDocs)
             ->filter(fn($type) => !in_array($type, $uploadedTypes))
             ->map(fn($type) => [
@@ -588,10 +589,13 @@ class ApplicationController extends Controller
         ]);
 
         // Status history (simplified for applicant)
-        $data['status_history'] = collect($application->status_history ?? [])->map(fn($h) => [
-            'status' => $h['to'],
-            'timestamp' => $h['timestamp'],
-        ]);
+        $data['status_history'] = collect($application->status_history ?? [])
+            ->filter(fn($h) => isset($h['to']) && isset($h['timestamp']))
+            ->map(fn($h) => [
+                'status' => $h['to'],
+                'timestamp' => $h['timestamp'],
+            ])
+            ->values();
 
         return $data;
     }

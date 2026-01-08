@@ -27,6 +27,7 @@ class DataVerification extends Model
         'status',
         'rejected_at',
         'corrected_at',
+        'correction_history',
         'metadata',
         'verified_by',
     ];
@@ -36,6 +37,7 @@ class DataVerification extends Model
         'method' => VerificationMethod::class,
         'is_verified' => 'boolean',
         'metadata' => 'array',
+        'correction_history' => 'array',
         'rejected_at' => 'datetime',
         'corrected_at' => 'datetime',
     ];
@@ -112,13 +114,32 @@ class DataVerification extends Model
     }
 
     /**
-     * Mark as corrected (user submitted new value).
+     * Mark as corrected (user submitted new value) with history.
      */
-    public function markCorrected(): void
+    public function markCorrected($oldValue = null, $newValue = null, ?array $correctedBy = null): void
     {
+        // Append to correction history
+        $history = $this->correction_history ?? [];
+        $history[] = [
+            'old_value' => $oldValue,
+            'new_value' => $newValue,
+            'rejection_reason' => $this->rejection_reason,
+            'corrected_by' => $correctedBy,
+            'corrected_at' => now()->toIso8601String(),
+        ];
+
         $this->status = VerificationStatus::CORRECTED;
         $this->corrected_at = now();
+        $this->correction_history = $history;
         $this->save();
+    }
+
+    /**
+     * Get the correction history count.
+     */
+    public function getCorrectionCountAttribute(): int
+    {
+        return count($this->correction_history ?? []);
     }
 
     /**

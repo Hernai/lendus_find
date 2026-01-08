@@ -698,13 +698,12 @@ class ApplicationController extends Controller
             // Current Employment
             'employment' => $currentEmployment ? [
                 'id' => $currentEmployment->id,
-                'employment_type' => $currentEmployment->employment_type,
-                'occupation' => $currentEmployment->occupation,
+                'employment_type' => $currentEmployment->employment_type?->value,
                 'company_name' => $currentEmployment->company_name,
                 'company_industry' => $currentEmployment->company_industry,
-                'job_title' => $currentEmployment->job_title,
+                'position' => $currentEmployment->position,
                 'start_date' => $currentEmployment->start_date?->format('Y-m-d'),
-                'seniority_years' => $currentEmployment->seniority_years,
+                'seniority_months' => $currentEmployment->seniority_months,
                 'contract_type' => $currentEmployment->contract_type,
                 'monthly_income' => $currentEmployment->monthly_income ? (float) $currentEmployment->monthly_income : null,
                 'monthly_net_income' => $currentEmployment->monthly_net_income ? (float) $currentEmployment->monthly_net_income : null,
@@ -850,6 +849,15 @@ class ApplicationController extends Controller
                             'description' => $this->getTimelineDescription($h),
                             'author' => $author,
                             'created_at' => $h['timestamp'] ?? now()->toIso8601String(),
+                            'metadata' => [
+                                'ip_address' => $h['ip_address'] ?? null,
+                                'user_agent' => $h['user_agent'] ?? null,
+                                'location' => $h['location'] ?? null,
+                                'old_value' => $h['old_value'] ?? null,
+                                'new_value' => $h['new_value'] ?? null,
+                                'changes' => $h['changes'] ?? null,
+                                'reason' => $h['reason'] ?? null,
+                            ],
                         ];
                     });
             })(),
@@ -944,6 +952,7 @@ class ApplicationController extends Controller
             'DATA_VERIFIED' => ($historyEntry['verified'] ?? true)
                 ? 'Dato verificado: ' . ($historyEntry['field_label'] ?? $historyEntry['field'] ?? '')
                 : 'Verificación removida: ' . ($historyEntry['field_label'] ?? $historyEntry['field'] ?? ''),
+            'DATA_CORRECTED' => $this->formatDataCorrectedDescription($historyEntry),
             default => isset($historyEntry['to']) ?
                 'Estado cambiado a ' . $historyEntry['to'] .
                     ($historyEntry['reason'] ? ': ' . $historyEntry['reason'] : '') :
@@ -962,6 +971,30 @@ class ApplicationController extends Controller
             'NO_ANSWER' => 'Sin Respuesta',
             default => $result,
         };
+    }
+
+    /**
+     * Format DATA_CORRECTED description with specific field changes.
+     */
+    private function formatDataCorrectedDescription(array $historyEntry): string
+    {
+        $fieldLabel = $historyEntry['field_label'] ?? '';
+
+        // If we have specific changes (as JSON array), show them
+        if (!empty($historyEntry['changes']) && is_array($historyEntry['changes'])) {
+            $changesList = [];
+            foreach ($historyEntry['changes'] as $subFieldLabel => $change) {
+                $changesList[] = "{$subFieldLabel}: {$change}";
+            }
+            return "Dato corregido ({$fieldLabel}): " . implode(', ', $changesList);
+        }
+
+        // Fallback to old/new value if no specific changes
+        if (isset($historyEntry['old_value']) && isset($historyEntry['new_value'])) {
+            return "Dato corregido: {$fieldLabel} ({$historyEntry['old_value']} → {$historyEntry['new_value']})";
+        }
+
+        return "Dato corregido: {$fieldLabel}";
     }
 
     /**
