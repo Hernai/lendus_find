@@ -708,6 +708,7 @@ class AuthController extends Controller
                 'type' => $user->type,
                 'is_admin' => $user->isAdmin(),
                 'is_staff' => $user->isStaff(),
+                'has_pin' => $user->hasPin(),
                 'applicant' => $user->applicant,
             ],
         ];

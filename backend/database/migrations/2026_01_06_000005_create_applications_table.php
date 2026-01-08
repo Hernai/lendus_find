@@ -53,7 +53,7 @@ return new class extends Migration
             $table->json('status_history')->nullable();
 
             // Assignment
-            $table->foreignId('assigned_to')->nullable()->constrained('users')->nullOnDelete();
+            $table->uuid('assigned_to')->nullable();
             $table->timestamp('assigned_at')->nullable();
 
             // Review
@@ -79,6 +79,7 @@ return new class extends Migration
             $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
             $table->foreign('applicant_id')->references('id')->on('applicants')->onDelete('cascade');
             $table->foreign('product_id')->references('id')->on('products')->onDelete('restrict');
+            $table->foreign('assigned_to')->references('id')->on('users')->nullOnDelete();
 
             $table->index(['tenant_id', 'status']);
             $table->index(['tenant_id', 'created_at']);

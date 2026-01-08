@@ -31,7 +31,7 @@ return new class extends Migration
             $table->text('rejection_reason')->nullable();
 
             // Review
-            $table->foreignId('reviewed_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->uuid('reviewed_by')->nullable();
             $table->timestamp('reviewed_at')->nullable();
 
             // Metadata (OCR results, validation data)
@@ -47,6 +47,7 @@ return new class extends Migration
             $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
             $table->foreign('application_id')->references('id')->on('applications')->onDelete('cascade');
             $table->foreign('applicant_id')->references('id')->on('applicants')->onDelete('cascade');
+            $table->foreign('reviewed_by')->references('id')->on('users')->nullOnDelete();
 
             $table->index(['application_id', 'type']);
             $table->index(['applicant_id', 'type']);

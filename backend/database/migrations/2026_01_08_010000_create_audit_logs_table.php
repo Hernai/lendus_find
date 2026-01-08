@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('audit_logs', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('tenant_id');
-            $table->unsignedBigInteger('user_id')->nullable(); // Who performed the action (uses bigint like users table)
+            $table->uuid('user_id')->nullable(); // Who performed the action
             $table->uuid('applicant_id')->nullable(); // Affected applicant
             $table->uuid('application_id')->nullable(); // Affected application
 

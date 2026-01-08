@@ -25,8 +25,8 @@ const timeline = computed<TimelineStep[]>(() => {
   const status = application.value?.status || 'DRAFT'
 
   const steps = [
-    { id: 'submitted', title: 'Solicitud enviada', description: 'Tu solicitud fue recibida', statusWhen: ['SUBMITTED', 'IN_REVIEW', 'DOCS_PENDING', 'APPROVED', 'REJECTED', 'SYNCED'] },
-    { id: 'review', title: 'En revisión', description: 'Estamos analizando tu información', statusWhen: ['IN_REVIEW', 'DOCS_PENDING', 'APPROVED', 'REJECTED', 'SYNCED'] },
+    { id: 'submitted', title: 'Solicitud enviada', description: 'Tu solicitud fue recibida', statusWhen: ['SUBMITTED', 'IN_REVIEW', 'DOCS_PENDING', 'CORRECTIONS_PENDING', 'APPROVED', 'REJECTED', 'SYNCED'] },
+    { id: 'review', title: 'En revisión', description: 'Estamos analizando tu información', statusWhen: ['IN_REVIEW', 'DOCS_PENDING', 'CORRECTIONS_PENDING', 'APPROVED', 'REJECTED', 'SYNCED'] },
     { id: 'docs', title: 'Documentos verificados', description: 'Tus documentos fueron revisados', statusWhen: ['APPROVED', 'REJECTED', 'SYNCED'] },
     { id: 'decision', title: 'Decisión', description: 'Resultado de tu solicitud', statusWhen: ['APPROVED', 'REJECTED', 'SYNCED'] }
   ]
@@ -50,6 +50,7 @@ const statusConfig = computed((): { color: string; label: string; icon: string }
     SUBMITTED: { color: 'blue', label: 'Enviada', icon: 'clock' },
     IN_REVIEW: { color: 'yellow', label: 'En revisión', icon: 'search' },
     DOCS_PENDING: { color: 'orange', label: 'Documentos pendientes', icon: 'document' },
+    CORRECTIONS_PENDING: { color: 'orange', label: 'Correcciones pendientes', icon: 'edit' },
     APPROVED: { color: 'green', label: 'Aprobada', icon: 'check' },
     REJECTED: { color: 'red', label: 'Rechazada', icon: 'x' },
     SYNCED: { color: 'purple', label: 'Sincronizada', icon: 'cloud' }
@@ -57,6 +58,38 @@ const statusConfig = computed((): { color: string; label: string; icon: string }
   const status = application.value?.status || 'DRAFT'
   return configs[status] ?? defaultConfig
 })
+
+const needsAction = computed(() => {
+  const status = application.value?.status
+  return status === 'CORRECTIONS_PENDING' || status === 'DOCS_PENDING'
+})
+
+const actionMessage = computed(() => {
+  const status = application.value?.status
+  if (status === 'CORRECTIONS_PENDING') {
+    return {
+      title: 'Se requieren correcciones',
+      description: 'Algunos de tus datos necesitan ser actualizados. Por favor revisa y corrige la información solicitada.',
+      buttonText: 'Corregir datos',
+      route: '/correcciones'
+    }
+  }
+  if (status === 'DOCS_PENDING') {
+    return {
+      title: 'Documentos pendientes',
+      description: 'Necesitamos que subas algunos documentos para continuar con tu solicitud.',
+      buttonText: 'Subir documentos',
+      route: `/solicitud/${applicationId.value}/documentos`
+    }
+  }
+  return null
+})
+
+const goToAction = () => {
+  if (actionMessage.value) {
+    router.push(actionMessage.value.route)
+  }
+}
 
 const formatMoney = (amount: number) => {
   return new Intl.NumberFormat('es-MX', {
@@ -111,8 +144,17 @@ onMounted(async () => {
 
       <!-- No application found -->
       <div v-else-if="!application" class="text-center py-20">
-        <p class="text-gray-500 mb-4">No se encontró la solicitud</p>
-        <AppButton variant="primary" @click="goHome">Ir al inicio</AppButton>
+        <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+          <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <h2 class="text-lg font-semibold text-gray-900 mb-2">No se encontró la solicitud</h2>
+        <p class="text-gray-500 mb-6 max-w-sm mx-auto">
+          Esta solicitud no existe o no tienes permiso para verla.
+          Por favor verifica el enlace o regresa a tu panel.
+        </p>
+        <AppButton variant="primary" @click="goHome">Ir a mis solicitudes</AppButton>
       </div>
 
       <!-- Application content -->
@@ -190,6 +232,24 @@ onMounted(async () => {
             <p class="font-semibold text-gray-900">{{ formatMoney(simulation.periodic_payment) }}</p>
           </div>
         </div>
+      </div>
+
+      <!-- Action Required Alert -->
+      <div v-if="needsAction && actionMessage" class="bg-orange-50 border-2 border-orange-200 rounded-2xl p-6 mb-6">
+        <div class="flex items-start gap-3 mb-4">
+          <div class="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
+            <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div class="flex-1">
+            <h3 class="font-semibold text-orange-900 mb-1">{{ actionMessage.title }}</h3>
+            <p class="text-sm text-orange-700">{{ actionMessage.description }}</p>
+          </div>
+        </div>
+        <AppButton variant="primary" size="lg" class="w-full" @click="goToAction">
+          {{ actionMessage.buttonText }}
+        </AppButton>
       </div>
 
       <!-- Timeline -->

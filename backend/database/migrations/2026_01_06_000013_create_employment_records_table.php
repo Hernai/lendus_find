@@ -79,7 +79,7 @@ return new class extends Migration
             // Verification
             $table->boolean('is_verified')->default(false);
             $table->timestamp('verified_at')->nullable();
-            $table->foreignId('verified_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->uuid('verified_by')->nullable();
             $table->text('verification_notes')->nullable();
             $table->string('verification_method')->nullable(); // RECIBO_NOMINA, CONSTANCIA, LLAMADA
 
@@ -94,6 +94,7 @@ return new class extends Migration
             $table->foreign('applicant_id')->references('id')->on('applicants')->onDelete('cascade');
             $table->foreign('work_address_id')->references('id')->on('addresses')->nullOnDelete();
             $table->foreign('proof_document_id')->references('id')->on('documents')->nullOnDelete();
+            $table->foreign('verified_by')->references('id')->on('users')->nullOnDelete();
 
             // Indexes
             $table->index(['applicant_id', 'is_current']);

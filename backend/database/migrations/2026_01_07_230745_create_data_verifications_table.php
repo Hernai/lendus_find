@@ -27,13 +27,14 @@ return new class extends Migration
             $table->json('metadata')->nullable(); // Extra data from verification service
 
             // Who verified
-            $table->foreignId('verified_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->uuid('verified_by')->nullable();
 
             $table->timestamps();
 
             // Foreign keys
             $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
             $table->foreign('applicant_id')->references('id')->on('applicants')->onDelete('cascade');
+            $table->foreign('verified_by')->references('id')->on('users')->nullOnDelete();
 
             // Indexes
             $table->index(['applicant_id', 'field_name']);

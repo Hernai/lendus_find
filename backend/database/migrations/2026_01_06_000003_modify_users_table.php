@@ -19,7 +19,7 @@ return new class extends Migration
             $table->string('phone', 15)->nullable()->unique()->after('email');
 
             // User type and role
-            $table->enum('type', ['APPLICANT', 'ADMIN', 'AGENT', 'SUPER_ADMIN'])->default('APPLICANT')->after('phone');
+            $table->enum('type', ['APPLICANT', 'AGENT', 'ANALYST', 'ADMIN', 'SUPER_ADMIN'])->default('APPLICANT')->after('phone');
             $table->string('role')->nullable()->after('type');
 
             // Profile

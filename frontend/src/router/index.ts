@@ -302,6 +302,11 @@ router.beforeEach(async (to, from, next) => {
       }
     }
 
+    // Check if user needs to setup PIN (for applicants only, not staff)
+    if (!requiresStaff && authStore.needsPinSetup && to.name !== 'auth-pin-setup') {
+      return next({ name: 'auth-pin-setup', query: { redirect: to.fullPath } })
+    }
+
     // Check staff requirement (agents, analysts, admins can access admin panel)
     if (requiresStaff && !authStore.isStaff) {
       // User is logged in but not staff - redirect to user dashboard

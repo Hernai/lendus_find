@@ -28,7 +28,7 @@ return new class extends Migration
             // Verification
             $table->boolean('is_verified')->default(false);
             $table->timestamp('verified_at')->nullable();
-            $table->foreignId('verified_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->uuid('verified_by')->nullable();
             $table->text('verification_notes')->nullable();
 
             // Contact Attempts (JSON array)
@@ -39,6 +39,7 @@ return new class extends Migration
 
             $table->foreign('applicant_id')->references('id')->on('applicants')->onDelete('cascade');
             $table->foreign('application_id')->references('id')->on('applications')->onDelete('cascade');
+            $table->foreign('verified_by')->references('id')->on('users')->nullOnDelete();
 
             $table->index('applicant_id');
             $table->index('application_id');

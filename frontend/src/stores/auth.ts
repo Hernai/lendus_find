@@ -76,6 +76,7 @@ interface MeApiResponse {
     type: string
     is_admin: boolean
     is_staff: boolean
+    has_pin?: boolean
     applicant?: unknown
     permissions?: UserPermissions
   }
@@ -177,6 +178,13 @@ export const useAuthStore = defineStore('auth', () => {
       if (response.data.success) {
         const apiUser = response.data.user
 
+        // Check if user changed (different user_id)
+        const previousUserId = localStorage.getItem('current_user_id')
+        if (previousUserId && previousUserId !== apiUser.id) {
+          console.log('🔄 User changed, clearing onboarding cache')
+          clearOnboardingCache()
+        }
+
         // Map backend user to frontend User type
         const mappedUser: User = {
           id: apiUser.id,
@@ -192,10 +200,12 @@ export const useAuthStore = defineStore('auth', () => {
         user.value = mappedUser
         token.value = response.data.token
         localStorage.setItem('auth_token', response.data.token)
+        localStorage.setItem('current_user_id', apiUser.id)
 
-        // Set PIN state
+        // Set PIN state (only for phone-based authentication, not email)
+        const isPhoneAuth = otpMethod.value === 'sms' || otpMethod.value === 'whatsapp'
         hasPin.value = apiUser.has_pin ?? false
-        needsPinSetup.value = !apiUser.has_pin
+        needsPinSetup.value = isPhoneAuth && !apiUser.has_pin
 
         // Clear OTP state
         otpDestination.value = null
@@ -206,7 +216,7 @@ export const useAuthStore = defineStore('auth', () => {
           success: true,
           token: response.data.token,
           user: mappedUser,
-          needsPinSetup: !apiUser.has_pin
+          needsPinSetup: isPhoneAuth && !apiUser.has_pin
         }
       }
 
@@ -233,6 +243,14 @@ export const useAuthStore = defineStore('auth', () => {
     return sendOtp(otpDestination.value, method ?? otpMethod.value ?? 'sms')
   }
 
+  const clearOnboardingCache = () => {
+    // Clear all onboarding-related localStorage when user changes
+    localStorage.removeItem('onboarding_draft')
+    localStorage.removeItem('current_application_id')
+    localStorage.removeItem('pending_application')
+    console.log('🧹 Cleared onboarding cache')
+  }
+
   const logout = async () => {
     try {
       if (token.value) {
@@ -245,6 +263,8 @@ export const useAuthStore = defineStore('auth', () => {
       token.value = null
       permissions.value = null
       localStorage.removeItem('auth_token')
+      localStorage.removeItem('current_user_id')
+      clearOnboardingCache()
       otpDestination.value = null
       otpMethod.value = null
       otpExpiresAt.value = null
@@ -264,6 +284,13 @@ export const useAuthStore = defineStore('auth', () => {
         ? apiUser.type as User['role']
         : mapUserType(apiUser.type, apiUser.is_admin)
 
+      // Check if user changed (different user_id)
+      const previousUserId = localStorage.getItem('current_user_id')
+      if (previousUserId && previousUserId !== apiUser.id) {
+        console.log('🔄 User changed on checkAuth, clearing onboarding cache')
+        clearOnboardingCache()
+      }
+
       user.value = {
         id: apiUser.id,
         tenant_id: '',
@@ -275,11 +302,21 @@ export const useAuthStore = defineStore('auth', () => {
         updated_at: new Date().toISOString()
       }
 
+      // Save current user ID
+      localStorage.setItem('current_user_id', apiUser.id)
+
       // Store permissions for staff users
       if (apiUser.permissions) {
         permissions.value = apiUser.permissions
       } else {
         permissions.value = null
+      }
+
+      // Set PIN state (only for applicants with phone, not email-only users)
+      if (!apiUser.is_staff) {
+        const hasPhone = !!apiUser.phone
+        hasPin.value = apiUser.has_pin ?? false
+        needsPinSetup.value = hasPhone && !apiUser.has_pin
       }
 
       // Check if user has access to target route
@@ -326,6 +363,13 @@ export const useAuthStore = defineStore('auth', () => {
       if (response.data.success) {
         const apiUser = response.data.user
 
+        // Check if user changed (different user_id)
+        const previousUserId = localStorage.getItem('current_user_id')
+        if (previousUserId && previousUserId !== apiUser.id) {
+          console.log('🔄 User changed, clearing onboarding cache')
+          clearOnboardingCache()
+        }
+
         user.value = {
           id: apiUser.id,
           tenant_id: '',
@@ -339,6 +383,7 @@ export const useAuthStore = defineStore('auth', () => {
 
         token.value = response.data.token
         localStorage.setItem('auth_token', response.data.token)
+        localStorage.setItem('current_user_id', apiUser.id)
         hasPin.value = true
         needsPinSetup.value = false
 
@@ -426,6 +471,13 @@ export const useAuthStore = defineStore('auth', () => {
       if (response.data.success) {
         const apiUser = response.data.user
 
+        // Check if user changed (different user_id)
+        const previousUserId = localStorage.getItem('current_user_id')
+        if (previousUserId && previousUserId !== apiUser.id) {
+          console.log('🔄 User changed, clearing onboarding cache')
+          clearOnboardingCache()
+        }
+
         user.value = {
           id: apiUser.id,
           tenant_id: '',
@@ -444,6 +496,7 @@ export const useAuthStore = defineStore('auth', () => {
 
         token.value = response.data.token
         localStorage.setItem('auth_token', response.data.token)
+        localStorage.setItem('current_user_id', apiUser.id)
 
         return { success: true }
       }
@@ -484,6 +537,13 @@ export const useAuthStore = defineStore('auth', () => {
       if (response.data.success) {
         const apiUser = response.data.user
 
+        // Check if user changed (different user_id)
+        const previousUserId = localStorage.getItem('current_user_id')
+        if (previousUserId && previousUserId !== apiUser.id) {
+          console.log('🔄 User changed, clearing onboarding cache')
+          clearOnboardingCache()
+        }
+
         user.value = {
           id: apiUser.id,
           tenant_id: '',
@@ -497,6 +557,7 @@ export const useAuthStore = defineStore('auth', () => {
 
         token.value = response.data.token
         localStorage.setItem('auth_token', response.data.token)
+        localStorage.setItem('current_user_id', apiUser.id)
         hasPin.value = true
         needsPinSetup.value = false
 

@@ -15,7 +15,10 @@ return new class extends Migration
             $table->timestamp('phone_verified_at')->nullable()->after('phone');
             $table->timestamp('email_verified_at')->nullable()->after('email');
             $table->timestamp('identity_verified_at')->nullable()->after('kyc_verified_at');
-            $table->foreignId('identity_verified_by')->nullable()->after('identity_verified_at')->constrained('users')->nullOnDelete();
+            $table->uuid('identity_verified_by')->nullable()->after('identity_verified_at');
+
+            // Add foreign key constraint
+            $table->foreign('identity_verified_by')->references('id')->on('users')->nullOnDelete();
         });
     }
 

@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('application_notes', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('application_id');
-            $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
+            $table->uuid('user_id')->nullable();
 
             // Note Content
             $table->text('content');
@@ -24,6 +24,7 @@ return new class extends Migration
             $table->softDeletes();
 
             $table->foreign('application_id')->references('id')->on('applications')->onDelete('cascade');
+            $table->foreign('user_id')->references('id')->on('users')->nullOnDelete();
 
             $table->index(['application_id', 'created_at']);
         });

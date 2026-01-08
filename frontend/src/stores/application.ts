@@ -60,6 +60,7 @@ export const useApplicationStore = defineStore('application', () => {
       SUBMITTED: 'Enviada',
       IN_REVIEW: 'En revisión',
       DOCS_PENDING: 'Documentos pendientes',
+      CORRECTIONS_PENDING: 'Correcciones pendientes',
       APPROVED: 'Aprobada',
       REJECTED: 'Rechazada',
       SYNCED: 'Sincronizada'

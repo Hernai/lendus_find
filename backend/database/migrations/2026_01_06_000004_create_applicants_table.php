@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('applicants', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('tenant_id');
-            $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
+            $table->uuid('user_id')->nullable();
 
             // Type
             $table->enum('type', ['PERSONA_FISICA', 'PERSONA_MORAL'])->default('PERSONA_FISICA');
@@ -50,6 +50,7 @@ return new class extends Migration
             $table->softDeletes();
 
             $table->foreign('tenant_id')->references('id')->on('tenants')->onDelete('cascade');
+            $table->foreign('user_id')->references('id')->on('users')->nullOnDelete();
 
             $table->index(['tenant_id', 'curp']);
             $table->index(['tenant_id', 'rfc']);

@@ -77,6 +77,9 @@ const handleSubmit = async () => {
 }
 
 const skipSetup = () => {
+  // Mark that user doesn't need PIN setup anymore (they chose to skip it)
+  authStore.needsPinSetup = false
+
   const redirect = router.currentRoute.value.query.redirect as string
   const hasPendingApplication = localStorage.getItem('pending_application')
 
@@ -105,8 +108,11 @@ const skipSetup = () => {
         <h1 class="text-2xl font-bold text-gray-900 text-center mb-2">
           Crea tu NIP de acceso
         </h1>
-        <p class="text-gray-500 text-center mb-8">
+        <p class="text-gray-500 text-center mb-2">
           {{ currentInput === 'pin' ? 'Ingresa un NIP de 4 dígitos' : 'Confirma tu NIP' }}
+        </p>
+        <p class="text-xs text-gray-400 text-center mb-6">
+          El NIP es opcional. Puedes omitir este paso y configurarlo después.
         </p>
 
         <!-- PIN Display -->
