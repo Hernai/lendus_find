@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Application;
+use App\Models\AuditLog;
 use App\Models\Product;
 use App\Models\Reference;
 use Illuminate\Http\JsonResponse;
@@ -150,6 +151,18 @@ class ApplicationController extends Controller
             ]],
         ]);
 
+        // Log application creation
+        $metadata = $request->attributes->get('metadata', []);
+        AuditLog::log(
+            AuditLog::ACTION_APPLICATION_CREATED,
+            null,
+            array_merge($metadata, [
+                'user_id' => $user->id,
+                'applicant_id' => $applicant->id,
+                'application_id' => $application->id,
+            ])
+        );
+
         return response()->json([
             'message' => 'Application created',
             'data' => $this->formatApplication($application->load('product'))
@@ -255,6 +268,18 @@ class ApplicationController extends Controller
 
         $application->save();
 
+        // Log application update
+        $metadata = $request->attributes->get('metadata', []);
+        AuditLog::log(
+            AuditLog::ACTION_APPLICATION_UPDATED,
+            null,
+            array_merge($metadata, [
+                'user_id' => $request->user()->id,
+                'applicant_id' => $applicant->id,
+                'application_id' => $application->id,
+            ])
+        );
+
         return response()->json([
             'message' => 'Application updated',
             'data' => $this->formatApplication($application->fresh()->load('product'))
@@ -324,6 +349,18 @@ class ApplicationController extends Controller
         }
 
         $application->changeStatus(Application::STATUS_SUBMITTED, 'Application submitted by applicant', $request->user()->id);
+
+        // Log application submission
+        $metadata = $request->attributes->get('metadata', []);
+        AuditLog::log(
+            AuditLog::ACTION_APPLICATION_SUBMITTED,
+            null,
+            array_merge($metadata, [
+                'user_id' => $request->user()->id,
+                'applicant_id' => $applicant->id,
+                'application_id' => $application->id,
+            ])
+        );
 
         return response()->json([
             'message' => 'Application submitted successfully',

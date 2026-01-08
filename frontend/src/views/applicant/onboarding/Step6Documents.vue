@@ -3,6 +3,7 @@ import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOnboardingStore, useApplicationStore, useTenantStore } from '@/stores'
 import { AppButton } from '@/components/common'
+import type { Product } from '@/types'
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
@@ -38,8 +39,8 @@ const documentLabels: Record<string, { name: string; description: string }> = {
 // Get document list from product, fallback to defaults
 const getRequiredDocuments = (): DocumentUpload[] => {
   const product = applicationStore.selectedProduct
-  const productFromConfig = tenantStore.currentConfig?.products?.find(
-    p => p.id === product?.id
+  const productFromConfig = tenantStore.products.find(
+    (p: Product) => p.id === product?.id
   )
 
   // Get required_docs from product (either selected or from config)

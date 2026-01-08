@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\ApplicationController;
 use App\Http\Controllers\Api\ApplicantController;
+use App\Http\Controllers\Api\CorrectionController;
 use App\Http\Controllers\Api\DocumentController;
 use App\Http\Controllers\Api\SimulatorController;
 use App\Http\Controllers\Api\Admin\DashboardController;
@@ -25,8 +26,8 @@ Route::middleware(['tenant'])->group(function () {
     // Tenant Configuration (public)
     Route::get('/config', [ConfigController::class, 'index']);
 
-    // Authentication
-    Route::prefix('auth')->group(function () {
+    // Authentication (with metadata capture for audit logging)
+    Route::middleware(['metadata'])->prefix('auth')->group(function () {
         Route::post('/otp/request', [AuthController::class, 'requestOtp']);
         Route::post('/otp/verify', [AuthController::class, 'verifyOtp']);
         Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
@@ -55,7 +56,7 @@ Route::middleware(['tenant'])->group(function () {
 });
 
 // Protected routes (authenticated user within tenant)
-Route::middleware(['tenant', 'auth:sanctum', 'tenant.user'])->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'metadata'])->group(function () {
     // Current user
     Route::get('/me', [AuthController::class, 'me']);
 
@@ -88,6 +89,13 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user'])->group(function () 
         Route::post('/validate-clabe', [ApplicantController::class, 'validateClabe']);
     });
 
+    // Data Corrections (for rejected fields)
+    Route::prefix('corrections')->group(function () {
+        Route::get('/', [CorrectionController::class, 'index']);
+        Route::get('/{fieldName}', [CorrectionController::class, 'show']);
+        Route::post('/', [CorrectionController::class, 'submitCorrection']);
+    });
+
     // Applications (for applicants)
     Route::prefix('applications')->group(function () {
         Route::get('/', [ApplicationController::class, 'index']);
@@ -115,13 +123,13 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user'])->group(function () 
 // =============================================
 // ADMIN AUTH - Staff login (no prior authentication required)
 // =============================================
-Route::middleware(['tenant'])->prefix('admin/auth')->group(function () {
+Route::middleware(['tenant', 'metadata'])->prefix('admin/auth')->group(function () {
     Route::post('/login', [AuthController::class, 'adminLogin']);
 });
 
 // Admin routes (authenticated staff within tenant)
 // Base middleware: staff = agent, analyst, admin, super_admin
-Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff'])->prefix('admin')->group(function () {
+Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff', 'metadata'])->prefix('admin')->group(function () {
 
     // =============================================
     // DASHBOARD - All staff can view

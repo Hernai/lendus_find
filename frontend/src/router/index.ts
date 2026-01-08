@@ -35,6 +35,7 @@ const Step8Review = () => import('@/views/applicant/onboarding/Step8Review.vue')
 const DashboardView = () => import('@/views/applicant/dashboard/DashboardView.vue')
 const ApplicationStatusView = () => import('@/views/applicant/dashboard/ApplicationStatusView.vue')
 const DocumentsUploadView = () => import('@/views/applicant/dashboard/DocumentsUploadView.vue')
+const DataCorrectionsView = () => import('@/views/applicant/dashboard/DataCorrectionsView.vue')
 
 // ==============================================
 // ADMIN VIEWS (staff: agents, analysts, admins)
@@ -181,6 +182,12 @@ const routes: RouteRecordRaw[] = [
     path: '/solicitud/:id/documentos',
     name: 'application-documents',
     component: DocumentsUploadView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/correcciones',
+    name: 'data-corrections',
+    component: DataCorrectionsView,
     meta: { requiresAuth: true }
   },
 

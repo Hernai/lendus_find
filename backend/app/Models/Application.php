@@ -69,6 +69,7 @@ class Application extends Model
     public const STATUS_SUBMITTED = 'SUBMITTED';
     public const STATUS_IN_REVIEW = 'IN_REVIEW';
     public const STATUS_DOCS_PENDING = 'DOCS_PENDING';
+    public const STATUS_CORRECTIONS_PENDING = 'CORRECTIONS_PENDING'; // User needs to correct rejected data
     public const STATUS_COUNTER_OFFERED = 'COUNTER_OFFERED';
     public const STATUS_APPROVED = 'APPROVED';
     public const STATUS_REJECTED = 'REJECTED';
@@ -224,6 +225,7 @@ class Application extends Model
         return in_array($this->status, [
             self::STATUS_DRAFT,
             self::STATUS_DOCS_PENDING,
+            self::STATUS_CORRECTIONS_PENDING,
         ]);
     }
 
@@ -244,6 +246,7 @@ class Application extends Model
             self::STATUS_SUBMITTED,
             self::STATUS_IN_REVIEW,
             self::STATUS_DOCS_PENDING,
+            self::STATUS_CORRECTIONS_PENDING,
             self::STATUS_COUNTER_OFFERED,
         ]);
     }

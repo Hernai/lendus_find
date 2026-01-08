@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\ApplicationNote;
+use App\Models\AuditLog;
 use App\Models\DataVerification;
 use App\Models\Document;
 use App\Models\Reference;
@@ -102,6 +103,7 @@ class ApplicationController extends Controller
             'applicant.addresses',
             'applicant.currentEmployment',
             'applicant.bankAccounts',
+            'applicant.dataVerifications.verifier:id,name',
             'product',
             'documents',
             'references',
@@ -160,6 +162,18 @@ class ApplicationController extends Controller
         }
 
         $application->changeStatus($newStatus, $reason, $request->user()->id);
+
+        // Log status change
+        $metadata = $request->attributes->get('metadata', []);
+        AuditLog::log(
+            AuditLog::ACTION_STATUS_CHANGED,
+            null,
+            array_merge($metadata, [
+                'user_id' => $request->user()->id,
+                'applicant_id' => $application->applicant_id,
+                'application_id' => $application->id,
+            ])
+        );
 
         return response()->json([
             'message' => 'Status updated',
@@ -344,6 +358,18 @@ class ApplicationController extends Controller
         $application->status_history = $history;
         $application->save();
 
+        // Log document approval
+        $metadata = $request->attributes->get('metadata', []);
+        AuditLog::log(
+            AuditLog::ACTION_DOCUMENT_APPROVED,
+            null,
+            array_merge($metadata, [
+                'user_id' => $request->user()->id,
+                'applicant_id' => $application->applicant_id,
+                'application_id' => $application->id,
+            ])
+        );
+
         return response()->json([
             'message' => 'Document approved',
             'data' => [
@@ -411,6 +437,18 @@ class ApplicationController extends Controller
             );
         }
 
+        // Log document rejection
+        $metadata = $request->attributes->get('metadata', []);
+        AuditLog::log(
+            AuditLog::ACTION_DOCUMENT_REJECTED,
+            null,
+            array_merge($metadata, [
+                'user_id' => $request->user()->id,
+                'applicant_id' => $application->applicant_id,
+                'application_id' => $application->id,
+            ])
+        );
+
         return response()->json([
             'message' => 'Document rejected',
             'data' => [
@@ -463,6 +501,18 @@ class ApplicationController extends Controller
         ];
         $application->status_history = $history;
         $application->save();
+
+        // Log reference verification
+        $metadata = $request->attributes->get('metadata', []);
+        AuditLog::log(
+            AuditLog::ACTION_REFERENCE_VERIFIED,
+            null,
+            array_merge($metadata, [
+                'user_id' => $request->user()->id,
+                'applicant_id' => $application->applicant_id,
+                'application_id' => $application->id,
+            ])
+        );
 
         return response()->json([
             'message' => 'Reference verification recorded',
@@ -642,16 +692,21 @@ class ApplicationController extends Controller
                 'signature_ip' => $applicant->signature_ip,
             ] : null,
 
-            // Field-level verifications
-            'field_verifications' => $applicant?->dataVerifications?->mapWithKeys(fn($v) => [
-                $v->field_name => [
-                    'verified' => $v->is_verified,
-                    'method' => $v->method,
-                    'verified_at' => $v->created_at?->toIso8601String(),
-                    'verified_by' => $v->verifier?->name,
-                    'notes' => $v->notes,
-                ]
-            ]) ?? [],
+            // Field-level verifications (only most recent per field)
+            'field_verifications' => $applicant?->dataVerifications
+                ?->groupBy('field_name')
+                ->map(fn($verifications) => $verifications->sortByDesc('created_at')->first())
+                ->mapWithKeys(fn($v) => [
+                    $v->field_name => [
+                        'verified' => $v->is_verified,
+                        'method' => $v->method,
+                        'verified_at' => $v->created_at?->toIso8601String(),
+                        'verified_by' => $v->verifier?->name,
+                        'notes' => $v->notes,
+                        'rejection_reason' => $v->rejection_reason,
+                        'status' => $v->status,
+                    ]
+                ]) ?? [],
 
             // Legacy verification status (for backwards compatibility)
             'verification' => [
@@ -702,14 +757,36 @@ class ApplicationController extends Controller
                 'created_at' => $note->created_at->toIso8601String(),
             ]),
 
-            // Timeline (from status_history)
-            'timeline' => collect($application->status_history ?? [])->map(fn($h, $i) => [
-                'id' => (string) ($i + 1),
-                'action' => $h['action'] ?? 'STATUS_CHANGE',
-                'description' => $this->getTimelineDescription($h),
-                'author' => 'System', // Could look up user_id if needed
-                'created_at' => $h['timestamp'] ?? $application->created_at->toIso8601String(),
-            ]),
+            // Timeline (from status_history) - Most recent first
+            'timeline' => (function() use ($application) {
+                $history = collect($application->status_history ?? []);
+
+                // Get all unique user IDs from history
+                $userIds = $history->pluck('user_id')->filter()->unique()->values()->toArray();
+
+                // Load all users at once to avoid N+1 queries
+                $users = !empty($userIds)
+                    ? \App\Models\User::whereIn('id', $userIds)->get()->keyBy('id')
+                    : collect();
+
+                return $history
+                    ->reverse()
+                    ->values()
+                    ->map(function($h, $i) use ($users) {
+                        $author = 'System';
+                        if (isset($h['user_id']) && $users->has($h['user_id'])) {
+                            $author = $users[$h['user_id']]->name;
+                        }
+
+                        return [
+                            'id' => (string) ($i + 1),
+                            'action' => $h['action'] ?? 'STATUS_CHANGE',
+                            'description' => $this->getTimelineDescription($h),
+                            'author' => $author,
+                            'created_at' => $h['timestamp'] ?? now()->toIso8601String(),
+                        ];
+                    });
+            })(),
 
             // Additional data
             'rejection_reason' => $application->rejection_reason,
@@ -796,7 +873,7 @@ class ApplicationController extends Controller
             'DOC_REJECTED' => 'Documento rechazado: ' . ($historyEntry['document'] ?? '') .
                 ($historyEntry['reason'] ? ' - ' . $historyEntry['reason'] : ''),
             'REF_VERIFIED' => 'Referencia verificada: ' . ($historyEntry['reference'] ?? '') .
-                ' (' . ($historyEntry['result'] ?? '') . ')',
+                ' (' . $this->translateReferenceResult($historyEntry['result'] ?? '') . ')',
             'NOTE_ADDED' => 'Nota agregada: ' . ($historyEntry['note_preview'] ?? ''),
             'DATA_VERIFIED' => ($historyEntry['verified'] ?? true)
                 ? 'Dato verificado: ' . ($historyEntry['field_label'] ?? $historyEntry['field'] ?? '')
@@ -805,6 +882,19 @@ class ApplicationController extends Controller
                 'Estado cambiado a ' . $historyEntry['to'] .
                     ($historyEntry['reason'] ? ': ' . $historyEntry['reason'] : '') :
                 ($historyEntry['reason'] ?? 'Actualización')
+        };
+    }
+
+    /**
+     * Translate reference verification result to Spanish.
+     */
+    private function translateReferenceResult(string $result): string
+    {
+        return match (strtoupper($result)) {
+            'VERIFIED' => 'Verificado',
+            'NOT_VERIFIED' => 'No Verificado',
+            'NO_ANSWER' => 'Sin Respuesta',
+            default => $result,
         };
     }
 
@@ -826,9 +916,11 @@ class ApplicationController extends Controller
 
         $validator = Validator::make($request->all(), [
             'field' => 'required|in:' . implode(',', $validFields),
-            'verified' => 'required|boolean',
+            'action' => 'sometimes|in:verify,reject,unverify', // Optional: verify, reject, or unverify
+            'verified' => 'sometimes|boolean', // For backward compatibility
             'method' => 'sometimes|in:MANUAL,OTP,API,DOCUMENT,BUREAU',
-            'notes' => 'sometimes|string|max:500',
+            'notes' => 'nullable|string|max:500',
+            'rejection_reason' => 'required_if:action,reject|nullable|string|max:500',
         ]);
 
         if ($validator->fails()) {
@@ -839,7 +931,6 @@ class ApplicationController extends Controller
         }
 
         $field = $request->field;
-        $verified = $request->verified;
         $method = $request->input('method', 'MANUAL');
         $notes = $request->notes;
         $applicant = $application->applicant;
@@ -855,27 +946,88 @@ class ApplicationController extends Controller
             default => $applicant->{$field} ?? null
         };
 
-        if ($verified) {
-            // Create or update verification record
-            $verification = DataVerification::updateOrCreate(
-                [
+        // Determine action: support both new 'action' field and legacy 'verified' boolean
+        if ($request->has('action')) {
+            $action = $request->action;
+        } else {
+            // Legacy support: use 'verified' boolean
+            $verified = $request->verified;
+            if ($verified) {
+                $action = 'verify';
+            } elseif ($request->rejection_reason) {
+                $action = 'reject';
+            } else {
+                $action = 'unverify';
+            }
+        }
+
+        // Process action - Always create new records to maintain history
+        switch ($action) {
+            case 'verify':
+                // VERIFY the field - create new verification record
+                $verification = DataVerification::create([
+                    'tenant_id' => $tenant->id,
                     'applicant_id' => $applicant->id,
                     'field_name' => $field,
-                ],
-                [
-                    'tenant_id' => $tenant->id,
                     'field_value' => $fieldValue,
                     'method' => $method,
                     'is_verified' => true,
+                    'status' => DataVerification::STATUS_VERIFIED,
                     'notes' => $notes,
                     'verified_by' => $request->user()->id,
-                ]
-            );
-        } else {
-            // Remove verification
-            DataVerification::where('applicant_id', $applicant->id)
-                ->where('field_name', $field)
-                ->delete();
+                    'rejection_reason' => null,
+                    'rejected_at' => null,
+                ]);
+                $verified = true;
+                break;
+
+            case 'reject':
+                // REJECT the field - create rejection record
+                $verification = DataVerification::create([
+                    'tenant_id' => $tenant->id,
+                    'applicant_id' => $applicant->id,
+                    'field_name' => $field,
+                    'field_value' => $fieldValue,
+                    'is_verified' => false,
+                    'status' => DataVerification::STATUS_REJECTED,
+                    'rejection_reason' => $request->rejection_reason,
+                    'rejected_at' => now(),
+                    'verified_by' => $request->user()->id,
+                    'notes' => $notes,
+                ]);
+
+                // Change application status to CORRECTIONS_PENDING
+                if ($application->status !== Application::STATUS_CORRECTIONS_PENDING) {
+                    $application->changeStatus(
+                        Application::STATUS_CORRECTIONS_PENDING,
+                        "Dato rechazado: " . DataVerification::getFieldLabel($field),
+                        $request->user()->id
+                    );
+                }
+                $verified = false;
+                break;
+
+            case 'unverify':
+                // UN-VERIFY the field - create PENDING record (maintains history)
+                $verification = DataVerification::create([
+                    'tenant_id' => $tenant->id,
+                    'applicant_id' => $applicant->id,
+                    'field_name' => $field,
+                    'field_value' => $fieldValue,
+                    'is_verified' => false,
+                    'status' => DataVerification::STATUS_PENDING,
+                    'rejection_reason' => null,
+                    'rejected_at' => null,
+                    'verified_by' => $request->user()->id,
+                    'notes' => $notes ?? 'Verificación removida',
+                ]);
+                $verified = false;
+                break;
+
+            default:
+                return response()->json([
+                    'message' => 'Invalid action'
+                ], 400);
         }
 
         // Also update legacy fields for backwards compatibility
@@ -908,15 +1060,54 @@ class ApplicationController extends Controller
         ];
         $application->update(['status_history' => $history]);
 
+        // Log data verification/rejection/unverification
+        $metadata = $request->attributes->get('metadata', []);
+        switch ($action) {
+            case 'verify':
+                $auditAction = AuditLog::ACTION_DATA_VERIFIED;
+                $message = DataVerification::getFieldLabel($field) . ' verificado';
+                $status = DataVerification::STATUS_VERIFIED;
+                $verifiedAt = now()->toIso8601String();
+                $rejectedAt = null;
+                break;
+            case 'reject':
+                $auditAction = AuditLog::ACTION_DATA_REJECTED;
+                $message = DataVerification::getFieldLabel($field) . ' rechazado - se solicitó corrección al usuario';
+                $status = DataVerification::STATUS_REJECTED;
+                $verifiedAt = null;
+                $rejectedAt = now()->toIso8601String();
+                break;
+            case 'unverify':
+                $auditAction = AuditLog::ACTION_DATA_VERIFIED;
+                $message = 'Verificación de ' . DataVerification::getFieldLabel($field) . ' removida';
+                $status = null;
+                $verifiedAt = null;
+                $rejectedAt = null;
+                break;
+        }
+
+        AuditLog::log(
+            $auditAction,
+            null,
+            array_merge($metadata, [
+                'user_id' => $request->user()->id,
+                'applicant_id' => $application->applicant_id,
+                'application_id' => $application->id,
+            ])
+        );
+
         return response()->json([
-            'message' => $verified
-                ? DataVerification::getFieldLabel($field) . ' verificado'
-                : 'Verificación de ' . DataVerification::getFieldLabel($field) . ' removida',
+            'message' => $message,
             'data' => [
                 'field' => $field,
+                'field_label' => DataVerification::getFieldLabel($field),
+                'action' => $action,
                 'verified' => $verified,
+                'status' => $status,
                 'method' => $method,
-                'verified_at' => $verified ? now()->toIso8601String() : null,
+                'verified_at' => $verifiedAt,
+                'rejected_at' => $rejectedAt,
+                'rejection_reason' => $request->rejection_reason,
             ]
         ]);
     }

@@ -20,6 +20,10 @@ class DataVerification extends Model
         'method',
         'is_verified',
         'notes',
+        'rejection_reason',
+        'status',
+        'rejected_at',
+        'corrected_at',
         'metadata',
         'verified_by',
     ];
@@ -27,7 +31,17 @@ class DataVerification extends Model
     protected $casts = [
         'is_verified' => 'boolean',
         'metadata' => 'array',
+        'rejected_at' => 'datetime',
+        'corrected_at' => 'datetime',
     ];
+
+    /**
+     * Verification statuses.
+     */
+    public const STATUS_PENDING = 'PENDING';
+    public const STATUS_VERIFIED = 'VERIFIED';
+    public const STATUS_REJECTED = 'REJECTED';
+    public const STATUS_CORRECTED = 'CORRECTED';
 
     /**
      * Verification methods.
@@ -105,5 +119,96 @@ class DataVerification extends Model
         ];
 
         return $labels[$method] ?? $method;
+    }
+
+    /**
+     * Get status label in Spanish.
+     */
+    public static function getStatusLabel(string $status): string
+    {
+        $labels = [
+            self::STATUS_PENDING => 'Pendiente',
+            self::STATUS_VERIFIED => 'Verificado',
+            self::STATUS_REJECTED => 'Rechazado',
+            self::STATUS_CORRECTED => 'Corregido',
+        ];
+
+        return $labels[$status] ?? $status;
+    }
+
+    /**
+     * Check if this field is rejected.
+     */
+    public function isRejected(): bool
+    {
+        return $this->status === self::STATUS_REJECTED;
+    }
+
+    /**
+     * Check if this field needs correction.
+     */
+    public function needsCorrection(): bool
+    {
+        return $this->status === self::STATUS_REJECTED;
+    }
+
+    /**
+     * Reject this field with a reason.
+     */
+    public function reject(string $reason, ?int $userId = null): void
+    {
+        $this->status = self::STATUS_REJECTED;
+        $this->rejection_reason = $reason;
+        $this->rejected_at = now();
+        $this->verified_by = $userId;
+        $this->save();
+    }
+
+    /**
+     * Mark as corrected (user submitted new value).
+     */
+    public function markCorrected(): void
+    {
+        $this->status = self::STATUS_CORRECTED;
+        $this->corrected_at = now();
+        $this->save();
+    }
+
+    /**
+     * Verify this field.
+     */
+    public function verify(?string $method = null, ?int $userId = null, ?string $notes = null): void
+    {
+        $this->status = self::STATUS_VERIFIED;
+        $this->is_verified = true;
+        $this->method = $method ?? self::METHOD_MANUAL;
+        $this->verified_by = $userId;
+        $this->notes = $notes;
+        $this->rejection_reason = null; // Clear any previous rejection
+        $this->save();
+    }
+
+    /**
+     * Scope to get rejected fields.
+     */
+    public function scopeRejected($query)
+    {
+        return $query->where('status', self::STATUS_REJECTED);
+    }
+
+    /**
+     * Scope to get pending fields.
+     */
+    public function scopePending($query)
+    {
+        return $query->where('status', self::STATUS_PENDING);
+    }
+
+    /**
+     * Scope to get verified fields.
+     */
+    public function scopeVerified($query)
+    {
+        return $query->where('status', self::STATUS_VERIFIED);
     }
 }

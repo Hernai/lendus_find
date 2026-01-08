@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\OtpCode;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -46,6 +47,21 @@ class AuthController extends Controller
             // TODO: Send OTP via provider (Twilio, MessageBird, etc.)
             // For development, we'll just return success
             // In production, integrate with SMS/Email provider
+
+            // Log OTP request
+            $metadata = $request->attributes->get('metadata', []);
+            AuditLog::log(
+                AuditLog::ACTION_OTP_REQUESTED,
+                app('tenant.id'),
+                array_merge($metadata, [
+                    'metadata' => [
+                        'channel' => $channel,
+                        'destination_masked' => $email
+                            ? substr($email, 0, 3) . '***@' . substr($email, strpos($email, '@') + 1)
+                            : substr($phone, 0, 3) . '****' . substr($phone, -2),
+                    ],
+                ])
+            );
 
             return response()->json([
                 'success' => true,
@@ -96,7 +112,9 @@ class AuthController extends Controller
             ->orWhere('email', $request->email)
             ->first();
 
+        $isNewUser = false;
         if (!$user) {
+            $isNewUser = true;
             $user = User::create([
                 'tenant_id' => app('tenant.id'),
                 'phone' => $request->phone,
@@ -119,6 +137,44 @@ class AuthController extends Controller
 
         // Create token
         $token = $user->createToken('auth-token')->plainTextToken;
+
+        // Log OTP verification and potential user creation
+        $metadata = $request->attributes->get('metadata', []);
+        AuditLog::log(
+            AuditLog::ACTION_OTP_VERIFIED,
+            app('tenant.id'),
+            array_merge($metadata, [
+                'user_id' => $user->id,
+                'applicant_id' => $user->applicant?->id,
+            ])
+        );
+
+        if ($isNewUser) {
+            AuditLog::log(
+                AuditLog::ACTION_USER_CREATED,
+                app('tenant.id'),
+                array_merge($metadata, [
+                    'user_id' => $user->id,
+                    'entity_type' => 'User',
+                    'entity_id' => $user->id,
+                    'new_values' => [
+                        'phone' => $user->phone,
+                        'email' => $user->email,
+                        'type' => $user->type,
+                    ],
+                ])
+            );
+        }
+
+        AuditLog::log(
+            AuditLog::ACTION_LOGIN_SUCCESS,
+            app('tenant.id'),
+            array_merge($metadata, [
+                'user_id' => $user->id,
+                'applicant_id' => $user->applicant?->id,
+                'metadata' => ['method' => 'OTP'],
+            ])
+        );
 
         return response()->json([
             'success' => true,
@@ -190,6 +246,17 @@ class AuthController extends Controller
 
         $user->setPin($request->pin);
 
+        // Log PIN setup
+        $metadata = $request->attributes->get('metadata', []);
+        AuditLog::log(
+            AuditLog::ACTION_PIN_SET,
+            app('tenant.id'),
+            array_merge($metadata, [
+                'user_id' => $user->id,
+                'applicant_id' => $user->applicant?->id,
+            ])
+        );
+
         return response()->json([
             'success' => true,
             'message' => 'NIP configurado correctamente',
@@ -240,9 +307,26 @@ class AuthController extends Controller
             ], 423);
         }
 
+        $metadata = $request->attributes->get('metadata', []);
+
         if (!$user->verifyPin($request->pin)) {
             $user->incrementPinAttempts();
             $remaining = User::MAX_PIN_ATTEMPTS - $user->pin_attempts;
+
+            // Log failed login attempt
+            AuditLog::log(
+                AuditLog::ACTION_LOGIN_FAILED,
+                app('tenant.id'),
+                array_merge($metadata, [
+                    'user_id' => $user->id,
+                    'applicant_id' => $user->applicant?->id,
+                    'metadata' => [
+                        'method' => 'PIN',
+                        'reason' => 'invalid_pin',
+                        'attempts_remaining' => $remaining,
+                    ],
+                ])
+            );
 
             return response()->json([
                 'error' => 'Invalid PIN',
@@ -259,6 +343,17 @@ class AuthController extends Controller
 
         // Create token
         $token = $user->createToken('auth-token')->plainTextToken;
+
+        // Log successful login
+        AuditLog::log(
+            AuditLog::ACTION_LOGIN_SUCCESS,
+            app('tenant.id'),
+            array_merge($metadata, [
+                'user_id' => $user->id,
+                'applicant_id' => $user->applicant?->id,
+                'metadata' => ['method' => 'PIN'],
+            ])
+        );
 
         return response()->json([
             'success' => true,
@@ -395,7 +490,23 @@ class AuthController extends Controller
             ], 403);
         }
 
+        $metadata = $request->attributes->get('metadata', []);
+
         if (!$user->password || !\Hash::check($request->password, $user->password)) {
+            // Log failed admin login
+            AuditLog::log(
+                AuditLog::ACTION_LOGIN_FAILED,
+                app('tenant.id'),
+                array_merge($metadata, [
+                    'user_id' => $user->id,
+                    'metadata' => [
+                        'method' => 'PASSWORD',
+                        'reason' => 'invalid_password',
+                        'is_admin' => true,
+                    ],
+                ])
+            );
+
             return response()->json([
                 'error' => 'Invalid credentials',
                 'message' => 'Correo o contraseña incorrectos',
@@ -407,6 +518,20 @@ class AuthController extends Controller
 
         // Create token with admin-specific abilities
         $token = $user->createToken('admin-token', ['admin'])->plainTextToken;
+
+        // Log successful admin login
+        AuditLog::log(
+            AuditLog::ACTION_LOGIN_SUCCESS,
+            app('tenant.id'),
+            array_merge($metadata, [
+                'user_id' => $user->id,
+                'metadata' => [
+                    'method' => 'PASSWORD',
+                    'is_admin' => true,
+                    'role' => $user->type,
+                ],
+            ])
+        );
 
         return response()->json([
             'success' => true,
@@ -547,7 +672,20 @@ class AuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        $user = $request->user();
+
+        // Log logout
+        $metadata = $request->attributes->get('metadata', []);
+        AuditLog::log(
+            AuditLog::ACTION_LOGOUT,
+            app('tenant.id'),
+            array_merge($metadata, [
+                'user_id' => $user->id,
+                'applicant_id' => $user->applicant?->id,
+            ])
+        );
+
+        $user->currentAccessToken()->delete();
 
         return response()->json([
             'success' => true,

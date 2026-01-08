@@ -38,6 +38,7 @@ export type ApplicationStatus =
   | 'SUBMITTED'
   | 'IN_REVIEW'
   | 'DOCS_PENDING'
+  | 'CORRECTIONS_PENDING'
   | 'APPROVED'
   | 'REJECTED'
   | 'SYNCED'

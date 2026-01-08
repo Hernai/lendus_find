@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Application;
+use App\Models\AuditLog;
 use App\Models\Document;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -116,6 +117,26 @@ class DocumentController extends Controller
         $application->status_history = $history;
         $application->save();
 
+        // Add to audit log with full metadata
+        $metadata = $request->attributes->get('metadata', []);
+        AuditLog::log(
+            AuditLog::ACTION_DOCUMENT_UPLOADED,
+            $tenant->id,
+            array_merge($metadata, [
+                'user_id' => $request->user()->id,
+                'applicant_id' => $applicant->id,
+                'application_id' => $application->id,
+                'entity_type' => 'Document',
+                'entity_id' => $document->id,
+                'new_values' => [
+                    'type' => $type,
+                    'filename' => $file->getClientOriginalName(),
+                    'mime_type' => $file->getMimeType(),
+                    'size' => $file->getSize(),
+                ],
+            ])
+        );
+
         return response()->json([
             'message' => 'Document uploaded successfully',
             'data' => $this->formatDocument($document)
@@ -167,6 +188,24 @@ class DocumentController extends Controller
         ];
         $application->status_history = $history;
         $application->save();
+
+        // Add to audit log with full metadata
+        $metadata = $request->attributes->get('metadata', []);
+        $tenant = $request->attributes->get('tenant');
+        AuditLog::log(
+            AuditLog::ACTION_DOCUMENT_DELETED,
+            $tenant->id,
+            array_merge($metadata, [
+                'user_id' => $request->user()->id,
+                'applicant_id' => $applicant->id,
+                'application_id' => $application->id,
+                'entity_type' => 'Document',
+                'old_values' => [
+                    'type' => $docType,
+                    'filename' => $docName,
+                ],
+            ])
+        );
 
         return response()->json([
             'message' => 'Document deleted'
