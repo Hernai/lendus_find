@@ -125,6 +125,27 @@ const applicationService = {
   },
 
   /**
+   * Accept counter offer
+   */
+  acceptCounterOffer: async (id: string) => {
+    const response = await api.post<{ message: string; data: Application }>(
+      `/applications/${id}/counter-offer/accept`
+    )
+    return response.data.data
+  },
+
+  /**
+   * Reject counter offer
+   */
+  rejectCounterOffer: async (id: string, reason?: string) => {
+    const response = await api.post<{ message: string; data: Application }>(
+      `/applications/${id}/counter-offer/reject`,
+      { reason }
+    )
+    return response.data.data
+  },
+
+  /**
    * Get documents for application
    */
   getDocuments: async (applicationId: string) => {

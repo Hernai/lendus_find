@@ -41,14 +41,8 @@ const cancelledCount = computed(() => {
   return applications.value.filter(app => app.status === 'CANCELLED').length
 })
 
-// Load data on mount
-onMounted(async () => {
-  await tenantStore.loadConfig()
-
-  // Load applicant data to get the user's name
-  await applicantStore.loadApplicant()
-
-  // Load real applications from API
+// Load applications from API
+const loadApplications = async () => {
   try {
     const response = await applicationService.list()
     applications.value = response.data.map((app: ApiApplication) => ({
@@ -67,6 +61,17 @@ onMounted(async () => {
     console.error('Failed to load applications:', e)
     applications.value = []
   }
+}
+
+// Load data on mount
+onMounted(async () => {
+  await tenantStore.loadConfig()
+
+  // Load applicant data to get the user's name
+  await applicantStore.loadApplicant()
+
+  // Load applications
+  await loadApplications()
 
   isLoading.value = false
 })
@@ -79,10 +84,16 @@ const getNextAction = (status: string): string | undefined => {
       return 'Subir documentos faltantes'
     case 'CORRECTIONS_PENDING':
       return 'Corregir datos rechazados'
+    case 'COUNTER_OFFERED':
+      return 'Revisar contraoferta'
     case 'SUBMITTED':
       return 'Esperando revisión'
     case 'IN_REVIEW':
       return 'En análisis por un asesor'
+    case 'APPROVED':
+      return 'Solicitud aprobada'
+    case 'DISBURSED':
+      return 'Fondos recibidos'
     default:
       return undefined
   }
@@ -159,6 +170,13 @@ const getStatusInfo = (status: string) => {
       icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z',
       description: 'Algunos datos necesitan corrección'
     },
+    COUNTER_OFFERED: {
+      label: 'Contraoferta',
+      color: 'text-purple-600',
+      bg: 'bg-purple-100',
+      icon: 'M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4',
+      description: 'Tenemos una propuesta alternativa para ti'
+    },
     APPROVED: {
       label: 'Aprobada',
       color: 'text-green-600',
@@ -186,6 +204,27 @@ const getStatusInfo = (status: string) => {
       bg: 'bg-red-50',
       icon: 'M6 18L18 6M6 6l12 12',
       description: 'Esta solicitud fue cancelada'
+    },
+    ACTIVE: {
+      label: 'Activa',
+      color: 'text-blue-600',
+      bg: 'bg-blue-100',
+      icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+      description: 'Tu crédito está activo'
+    },
+    COMPLETED: {
+      label: 'Completada',
+      color: 'text-green-700',
+      bg: 'bg-green-50',
+      icon: 'M5 13l4 4L19 7',
+      description: 'Crédito liquidado exitosamente'
+    },
+    DEFAULT: {
+      label: 'En Mora',
+      color: 'text-red-700',
+      bg: 'bg-red-100',
+      icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
+      description: 'Hay pagos pendientes'
     }
   }
   return statusMap[status] || statusMap.SUBMITTED
@@ -210,6 +249,26 @@ const uploadDocs = (app: Application) => {
 
 const correctData = () => {
   router.push('/correcciones')
+}
+
+const acceptCounterOffer = async (app: Application) => {
+  try {
+    await applicationService.acceptCounterOffer(app.id)
+    // Reload applications
+    await loadApplications()
+  } catch (e) {
+    console.error('Failed to accept counter offer:', e)
+  }
+}
+
+const rejectCounterOffer = async (app: Application) => {
+  try {
+    await applicationService.rejectCounterOffer(app.id, 'Rechazado por el solicitante')
+    // Reload applications
+    await loadApplications()
+  } catch (e) {
+    console.error('Failed to reject counter offer:', e)
+  }
 }
 
 const canCancel = (status: string) => {
@@ -400,8 +459,31 @@ const handleCancelApplication = async () => {
                     Corregir Datos
                   </AppButton>
                   <AppButton
+                    v-if="app.status === 'COUNTER_OFFERED'"
+                    variant="primary"
+                    class="flex-1"
+                    @click="acceptCounterOffer(app)"
+                  >
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Aceptar
+                  </AppButton>
+                  <AppButton
+                    v-if="app.status === 'COUNTER_OFFERED'"
                     variant="outline"
-                    :class="['DOCS_PENDING', 'CORRECTIONS_PENDING'].includes(app.status) ? '' : 'flex-1'"
+                    class="flex-1"
+                    @click="rejectCounterOffer(app)"
+                  >
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Rechazar
+                  </AppButton>
+                  <AppButton
+                    v-if="!['DOCS_PENDING', 'CORRECTIONS_PENDING', 'COUNTER_OFFERED'].includes(app.status)"
+                    variant="outline"
+                    class="flex-1"
                     @click="viewApplication(app)"
                   >
                     Ver Detalle
