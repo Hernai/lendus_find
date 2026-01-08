@@ -132,12 +132,17 @@ class ApplicationController extends Controller
 
         $validator = Validator::make($request->all(), [
             'status' => 'required|in:' . implode(',', [
-                ApplicationStatus::IN_REVIEW,
-                ApplicationStatus::DOCS_PENDING,
-                ApplicationStatus::APPROVED,
-                ApplicationStatus::REJECTED,
-                ApplicationStatus::CANCELLED,
-                ApplicationStatus::DISBURSED,
+                ApplicationStatus::IN_REVIEW->value,
+                ApplicationStatus::DOCS_PENDING->value,
+                ApplicationStatus::CORRECTIONS_PENDING->value,
+                ApplicationStatus::COUNTER_OFFERED->value,
+                ApplicationStatus::APPROVED->value,
+                ApplicationStatus::REJECTED->value,
+                ApplicationStatus::CANCELLED->value,
+                ApplicationStatus::DISBURSED->value,
+                ApplicationStatus::ACTIVE->value,
+                ApplicationStatus::COMPLETED->value,
+                ApplicationStatus::DEFAULT->value,
             ]),
             'reason' => 'nullable|string|max:500',
             'rejection_reason' => 'required_if:status,REJECTED|nullable|string|max:500',
@@ -155,13 +160,31 @@ class ApplicationController extends Controller
         $reason = $request->input('reason', $request->rejection_reason);
 
         // Additional validations based on status transition
-        if ($newStatus === ApplicationStatus::DISBURSED) {
-            if ($application->status !== ApplicationStatus::APPROVED) {
+        if ($newStatus === ApplicationStatus::DISBURSED->value) {
+            if ($application->status->value !== ApplicationStatus::APPROVED->value) {
                 return response()->json([
                     'message' => 'Only approved applications can be disbursed'
                 ], 400);
             }
             $application->disbursement_reference = $request->disbursement_reference;
+        }
+
+        // ACTIVE can only be set from DISBURSED
+        if ($newStatus === ApplicationStatus::ACTIVE->value) {
+            if ($application->status->value !== ApplicationStatus::DISBURSED->value) {
+                return response()->json([
+                    'message' => 'Only disbursed applications can be marked as active'
+                ], 400);
+            }
+        }
+
+        // COMPLETED or DEFAULT can only be set from ACTIVE
+        if (in_array($newStatus, [ApplicationStatus::COMPLETED->value, ApplicationStatus::DEFAULT->value])) {
+            if ($application->status->value !== ApplicationStatus::ACTIVE->value) {
+                return response()->json([
+                    'message' => 'Only active applications can be marked as completed or default'
+                ], 400);
+            }
         }
 
         $application->changeStatus($newStatus, $reason, $request->user()->id);
