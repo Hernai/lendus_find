@@ -451,6 +451,7 @@ class DemoDataSeeder extends Seeder
                 if ($index >= 2) {
                     ApplicationNote::create([
                         'id' => Str::uuid(),
+                        'tenant_id' => $tenant->id,
                         'application_id' => $application->id,
                         'user_id' => $agents[$index % count($agents)]->id,
                         'content' => 'Solicitud revisada. Documentación en orden.',
