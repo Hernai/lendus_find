@@ -584,29 +584,23 @@ const updateStatus = async () => {
 
   isUpdatingStatus.value = true
 
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 1000))
-
-  application.value.status = newStatus.value
-  application.value.timeline.push({
-    id: String(Date.now()),
-    action: 'STATUS_CHANGE',
-    description: `Estado cambiado a ${getStatusBadge(newStatus.value).label}${statusNote.value ? ': ' + statusNote.value : ''}`,
-    author: 'Admin',
-    created_at: new Date().toISOString()
-  })
-
-  if (statusNote.value) {
-    application.value.notes.push({
-      id: String(Date.now()),
-      text: statusNote.value,
-      author: 'Admin',
-      created_at: new Date().toISOString()
+  try {
+    // Make actual API call to update status
+    await api.put(`/admin/applications/${application.value.id}/status`, {
+      status: newStatus.value,
+      reason: statusNote.value || undefined
     })
-  }
 
-  isUpdatingStatus.value = false
-  showStatusModal.value = false
+    // Reload application data to get updated timeline and notes from backend
+    await fetchApplication()
+
+    showStatusModal.value = false
+  } catch (error: any) {
+    console.error('Failed to update status:', error)
+    alert(error.response?.data?.message || 'Error al cambiar el estado')
+  } finally {
+    isUpdatingStatus.value = false
+  }
 }
 
 const openDocApproveModal = (doc: Document) => {
