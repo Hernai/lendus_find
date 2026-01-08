@@ -58,18 +58,20 @@ const handleOtpComplete = async (code: string) => {
         return
       }
 
+      // Check if user has completed registration (has applicant)
+      await authStore.checkAuth()
+
       // Redirect based on context
       const redirect = router.currentRoute.value.query.redirect as string
-      const hasPendingApplication = localStorage.getItem('pending_application')
 
       if (redirect) {
         // Explicit redirect (e.g., from protected route)
         router.push(redirect)
-      } else if (hasPendingApplication) {
-        // Coming from simulator with a pending loan request
+      } else if (!authStore.hasApplicant) {
+        // User is new, redirect to onboarding
         router.push('/solicitud')
       } else {
-        // Regular login - go to dashboard
+        // User exists, redirect to dashboard
         router.push('/dashboard')
       }
     } else {

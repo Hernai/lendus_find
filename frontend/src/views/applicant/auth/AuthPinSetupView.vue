@@ -58,14 +58,18 @@ const handleSubmit = async () => {
   const result = await authStore.setupPin(pin.value)
 
   if (result.success) {
+    // Check if user has completed registration (has applicant)
+    await authStore.checkAuth()
+
     const redirect = router.currentRoute.value.query.redirect as string
-    const hasPendingApplication = localStorage.getItem('pending_application')
 
     if (redirect) {
       router.push(redirect)
-    } else if (hasPendingApplication) {
+    } else if (!authStore.hasApplicant) {
+      // User is new, redirect to onboarding
       router.push('/solicitud')
     } else {
+      // User exists, redirect to dashboard
       router.push('/dashboard')
     }
   } else {
@@ -76,18 +80,22 @@ const handleSubmit = async () => {
   }
 }
 
-const skipSetup = () => {
+const skipSetup = async () => {
   // Mark that user doesn't need PIN setup anymore (they chose to skip it)
   authStore.needsPinSetup = false
 
+  // Check if user has completed registration (has applicant)
+  await authStore.checkAuth()
+
   const redirect = router.currentRoute.value.query.redirect as string
-  const hasPendingApplication = localStorage.getItem('pending_application')
 
   if (redirect) {
     router.push(redirect)
-  } else if (hasPendingApplication) {
+  } else if (!authStore.hasApplicant) {
+    // User is new, redirect to onboarding
     router.push('/solicitud')
   } else {
+    // User exists, redirect to dashboard
     router.push('/dashboard')
   }
 }

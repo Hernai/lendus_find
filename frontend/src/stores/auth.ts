@@ -96,6 +96,9 @@ export const useAuthStore = defineStore('auth', () => {
   const needsPinSetup = ref(false)
   const pinLockoutMinutes = ref(0)
 
+  // Applicant state
+  const hasApplicant = ref(false)
+
   // Permissions state (for staff users)
   const permissions = ref<UserPermissions | null>(null)
 
@@ -310,6 +313,11 @@ export const useAuthStore = defineStore('auth', () => {
         permissions.value = apiUser.permissions
       } else {
         permissions.value = null
+      }
+
+      // Set applicant state (only for applicants)
+      if (!apiUser.is_staff) {
+        hasApplicant.value = !!apiUser.applicant
       }
 
       // Set PIN state (only for applicants with phone, not email-only users)
@@ -590,6 +598,8 @@ export const useAuthStore = defineStore('auth', () => {
     hasPin,
     needsPinSetup,
     pinLockoutMinutes,
+    // Applicant State
+    hasApplicant,
     // Getters
     isAuthenticated,
     isApplicant,
