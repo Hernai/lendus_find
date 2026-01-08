@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\DocumentStatus;
+use App\Enums\DocumentType;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -40,28 +42,12 @@ class Document extends Model
     ];
 
     protected $casts = [
+        'type' => DocumentType::class,
+        'status' => DocumentStatus::class,
         'metadata' => 'array',
         'is_sensitive' => 'boolean',
         'reviewed_at' => 'datetime',
     ];
-
-    /**
-     * Document statuses.
-     */
-    public const STATUS_PENDING = 'PENDING';
-    public const STATUS_APPROVED = 'APPROVED';
-    public const STATUS_REJECTED = 'REJECTED';
-
-    /**
-     * Document types.
-     */
-    public const TYPE_INE_FRONT = 'INE_FRONT';
-    public const TYPE_INE_BACK = 'INE_BACK';
-    public const TYPE_PROOF_ADDRESS = 'PROOF_ADDRESS';
-    public const TYPE_PROOF_INCOME = 'PROOF_INCOME';
-    public const TYPE_BANK_STATEMENT = 'BANK_STATEMENT';
-    public const TYPE_RFC_CONSTANCIA = 'RFC_CONSTANCIA';
-    public const TYPE_SIGNATURE = 'SIGNATURE';
 
     /**
      * Get the application.
@@ -104,7 +90,7 @@ class Document extends Model
     public function approve(int $userId): void
     {
         $this->update([
-            'status' => self::STATUS_APPROVED,
+            'status' => DocumentStatus::APPROVED,
             'reviewed_by' => $userId,
             'reviewed_at' => now(),
             'rejection_reason' => null,
@@ -117,7 +103,7 @@ class Document extends Model
     public function reject(int $userId, string $reason): void
     {
         $this->update([
-            'status' => self::STATUS_REJECTED,
+            'status' => DocumentStatus::REJECTED,
             'reviewed_by' => $userId,
             'reviewed_at' => now(),
             'rejection_reason' => $reason,
@@ -129,7 +115,7 @@ class Document extends Model
      */
     public function isPending(): bool
     {
-        return $this->status === self::STATUS_PENDING;
+        return $this->status === DocumentStatus::PENDING;
     }
 
     /**
@@ -137,7 +123,7 @@ class Document extends Model
      */
     public function isApproved(): bool
     {
-        return $this->status === self::STATUS_APPROVED;
+        return $this->status === DocumentStatus::APPROVED;
     }
 
     /**
@@ -145,7 +131,7 @@ class Document extends Model
      */
     public function isRejected(): bool
     {
-        return $this->status === self::STATUS_REJECTED;
+        return $this->status === DocumentStatus::REJECTED;
     }
 
     /**

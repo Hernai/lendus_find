@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ApplicationNoteType;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -23,17 +24,9 @@ class ApplicationNote extends Model
     ];
 
     protected $casts = [
+        'type' => ApplicationNoteType::class,
         'is_internal' => 'boolean',
     ];
-
-    /**
-     * Note types.
-     */
-    public const TYPE_NOTE = 'NOTE';
-    public const TYPE_STATUS_CHANGE = 'STATUS_CHANGE';
-    public const TYPE_CALL = 'CALL';
-    public const TYPE_EMAIL = 'EMAIL';
-    public const TYPE_SYSTEM = 'SYSTEM';
 
     /**
      * Get the application.

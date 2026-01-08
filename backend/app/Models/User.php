@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\UserType;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,25 +15,6 @@ use Laravel\Sanctum\HasApiTokens;
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, HasUuids, Notifiable;
-
-    /**
-     * User types/roles.
-     */
-    public const TYPE_APPLICANT = 'APPLICANT';
-    public const TYPE_AGENT = 'AGENT';         // Promotor - solo ve sus asignadas
-    public const TYPE_ANALYST = 'ANALYST';     // Analista - revisa documentos y referencias
-    public const TYPE_ADMIN = 'ADMIN';         // Admin - aprueba/rechaza, gestiona
-    public const TYPE_SUPER_ADMIN = 'SUPER_ADMIN'; // Super Admin - configura tenant
-
-    /**
-     * Staff roles (can access admin panel).
-     */
-    public const STAFF_ROLES = [
-        self::TYPE_AGENT,
-        self::TYPE_ANALYST,
-        self::TYPE_ADMIN,
-        self::TYPE_SUPER_ADMIN,
-    ];
 
     /**
      * The attributes that are mass assignable.
@@ -79,6 +61,7 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
+            'type' => UserType::class,
             'email_verified_at' => 'datetime',
             'phone_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
@@ -130,7 +113,7 @@ class User extends Authenticatable
      */
     public function isAdmin(): bool
     {
-        return in_array($this->type, [self::TYPE_ADMIN, self::TYPE_SUPER_ADMIN]);
+        return in_array($this->type, [UserType::ADMIN, UserType::SUPER_ADMIN]);
     }
 
     /**
@@ -138,7 +121,7 @@ class User extends Authenticatable
      */
     public function isAnalyst(): bool
     {
-        return $this->type === self::TYPE_ANALYST;
+        return $this->type === UserType::ANALYST;
     }
 
     /**
@@ -146,7 +129,7 @@ class User extends Authenticatable
      */
     public function isAgent(): bool
     {
-        return $this->type === self::TYPE_AGENT;
+        return $this->type === UserType::AGENT;
     }
 
     /**
@@ -154,7 +137,7 @@ class User extends Authenticatable
      */
     public function isApplicant(): bool
     {
-        return $this->type === self::TYPE_APPLICANT;
+        return $this->type === UserType::APPLICANT;
     }
 
     /**
@@ -162,7 +145,7 @@ class User extends Authenticatable
      */
     public function isSuperAdmin(): bool
     {
-        return $this->type === self::TYPE_SUPER_ADMIN;
+        return $this->type === UserType::SUPER_ADMIN;
     }
 
     /**
@@ -170,7 +153,7 @@ class User extends Authenticatable
      */
     public function isStaff(): bool
     {
-        return in_array($this->type, self::STAFF_ROLES);
+        return $this->type?->isStaff() ?? false;
     }
 
     /**
@@ -179,9 +162,9 @@ class User extends Authenticatable
     public function isAtLeastAnalyst(): bool
     {
         return in_array($this->type, [
-            self::TYPE_ANALYST,
-            self::TYPE_ADMIN,
-            self::TYPE_SUPER_ADMIN,
+            UserType::ANALYST,
+            UserType::ADMIN,
+            UserType::SUPER_ADMIN,
         ]);
     }
 

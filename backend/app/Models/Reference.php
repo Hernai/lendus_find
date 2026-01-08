@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ReferenceType;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -31,16 +32,11 @@ class Reference extends Model
     ];
 
     protected $casts = [
+        'type' => ReferenceType::class,
         'is_verified' => 'boolean',
         'verified_at' => 'datetime',
         'contact_attempts' => 'array',
     ];
-
-    /**
-     * Reference types.
-     */
-    public const TYPE_PERSONAL = 'PERSONAL';
-    public const TYPE_WORK = 'WORK';
 
     /**
      * Boot the model.

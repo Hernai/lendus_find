@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use App\Enums\BankAccountType;
+use App\Enums\BankAccountUsageType;
+use App\Enums\BankVerificationMethod;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -42,6 +45,9 @@ class BankAccount extends Model
     ];
 
     protected $casts = [
+        'type' => BankAccountUsageType::class,
+        'account_type' => BankAccountType::class,
+        'verification_method' => BankVerificationMethod::class,
         'is_primary' => 'boolean',
         'is_own_account' => 'boolean',
         'is_verified' => 'boolean',
@@ -57,30 +63,6 @@ class BankAccount extends Model
         'clabe',
         'account_number',
     ];
-
-    /**
-     * Account purpose type constants.
-     */
-    public const TYPE_DISBURSEMENT = 'DISBURSEMENT';
-    public const TYPE_PAYMENT = 'PAYMENT';
-    public const TYPE_BOTH = 'BOTH';
-
-    /**
-     * Account type constants.
-     */
-    public const ACCOUNT_DEBIT = 'DEBITO';
-    public const ACCOUNT_PAYROLL = 'NOMINA';
-    public const ACCOUNT_SAVINGS = 'AHORRO';
-    public const ACCOUNT_CHECKING = 'CHEQUES';
-    public const ACCOUNT_INVESTMENT = 'INVERSION';
-    public const ACCOUNT_OTHER = 'OTRO';
-
-    /**
-     * Verification method constants.
-     */
-    public const VERIFICATION_SPEI = 'SPEI_VALIDATION';
-    public const VERIFICATION_PENNY = 'PENNY_TEST';
-    public const VERIFICATION_MANUAL = 'MANUAL';
 
     /**
      * Mexican bank codes (SPEI).
@@ -231,16 +213,7 @@ class BankAccount extends Model
      */
     public function getAccountTypeLabelAttribute(): string
     {
-        $labels = [
-            self::ACCOUNT_DEBIT => 'Débito',
-            self::ACCOUNT_PAYROLL => 'Nómina',
-            self::ACCOUNT_SAVINGS => 'Ahorro',
-            self::ACCOUNT_CHECKING => 'Cheques',
-            self::ACCOUNT_INVESTMENT => 'Inversión',
-            self::ACCOUNT_OTHER => 'Otro',
-        ];
-
-        return $labels[$this->account_type] ?? $this->account_type;
+        return $this->account_type?->label() ?? '';
     }
 
     /**

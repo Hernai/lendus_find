@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\VerifiableField;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\AuditLog;
@@ -142,42 +143,42 @@ class CorrectionController extends Controller
     protected function updateApplicantField($applicant, string $fieldName, $value): void
     {
         switch ($fieldName) {
-            case DataVerification::FIELD_FIRST_NAME:
+            case VerifiableField::FIRST_NAME->value:
                 $applicant->first_name = $value;
                 break;
-            case DataVerification::FIELD_LAST_NAME_1:
+            case VerifiableField::LAST_NAME_1->value:
                 $applicant->last_name_1 = $value;
                 break;
-            case DataVerification::FIELD_LAST_NAME_2:
+            case VerifiableField::LAST_NAME_2->value:
                 $applicant->last_name_2 = $value;
                 break;
-            case DataVerification::FIELD_CURP:
+            case VerifiableField::CURP->value:
                 $personalData = $applicant->personal_data ?? [];
                 $personalData['curp'] = $value;
                 $applicant->personal_data = $personalData;
                 break;
-            case DataVerification::FIELD_RFC:
+            case VerifiableField::RFC->value:
                 $personalData = $applicant->personal_data ?? [];
                 $personalData['rfc'] = $value;
                 $applicant->personal_data = $personalData;
                 break;
-            case DataVerification::FIELD_INE:
+            case VerifiableField::INE->value:
                 $personalData = $applicant->personal_data ?? [];
                 $personalData['ine_clave'] = $value;
                 $applicant->personal_data = $personalData;
                 break;
-            case DataVerification::FIELD_BIRTH_DATE:
+            case VerifiableField::BIRTH_DATE->value:
                 $personalData = $applicant->personal_data ?? [];
                 $personalData['birth_date'] = $value;
                 $applicant->personal_data = $personalData;
                 break;
-            case DataVerification::FIELD_PHONE:
+            case VerifiableField::PHONE->value:
                 $applicant->phone = $value;
                 break;
-            case DataVerification::FIELD_EMAIL:
+            case VerifiableField::EMAIL->value:
                 $applicant->email = $value;
                 break;
-            case DataVerification::FIELD_ADDRESS:
+            case VerifiableField::ADDRESS->value:
                 // For address, expect full address object
                 if (is_array($value) && $applicant->primaryAddress) {
                     $address = $applicant->primaryAddress;
@@ -185,7 +186,7 @@ class CorrectionController extends Controller
                     $address->save();
                 }
                 break;
-            case DataVerification::FIELD_EMPLOYMENT:
+            case VerifiableField::EMPLOYMENT->value:
                 // For employment, expect full employment object
                 if (is_array($value)) {
                     $applicant->employment_info = array_merge(

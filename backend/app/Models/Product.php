@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ProductType;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -39,6 +40,7 @@ class Product extends Model
     ];
 
     protected $casts = [
+        'type' => ProductType::class,
         'min_amount' => 'decimal:2',
         'max_amount' => 'decimal:2',
         'interest_rate' => 'decimal:2',
@@ -52,15 +54,6 @@ class Product extends Model
         'extra_fields' => 'array',
         'is_active' => 'boolean',
     ];
-
-    /**
-     * Product types.
-     */
-    public const TYPE_PERSONAL = 'PERSONAL';
-    public const TYPE_PAYROLL = 'PAYROLL';
-    public const TYPE_SME = 'SME';
-    public const TYPE_LEASING = 'LEASING';
-    public const TYPE_FACTORING = 'FACTORING';
 
     /**
      * Get applications for this product.

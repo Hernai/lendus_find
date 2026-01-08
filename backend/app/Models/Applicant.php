@@ -2,6 +2,11 @@
 
 namespace App\Models;
 
+use App\Enums\ApplicantType;
+use App\Enums\EducationLevel;
+use App\Enums\Gender;
+use App\Enums\KycStatus;
+use App\Enums\MaritalStatus;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -62,6 +67,11 @@ class Applicant extends Model
     ];
 
     protected $casts = [
+        'type' => ApplicantType::class,
+        'kyc_status' => KycStatus::class,
+        'gender' => Gender::class,
+        'marital_status' => MaritalStatus::class,
+        'education_level' => EducationLevel::class,
         'birth_date' => 'date',
         'passport_issue_date' => 'date',
         'passport_expiry_date' => 'date',
@@ -73,47 +83,6 @@ class Applicant extends Model
         'identity_verified_at' => 'datetime',
         'signature_date' => 'datetime',
     ];
-
-    /**
-     * Applicant type constants.
-     */
-    public const TYPE_PERSONA_FISICA = 'PERSONA_FISICA';
-    public const TYPE_PERSONA_MORAL = 'PERSONA_MORAL';
-
-    /**
-     * KYC Status constants.
-     */
-    public const KYC_PENDING = 'PENDING';
-    public const KYC_IN_PROGRESS = 'IN_PROGRESS';
-    public const KYC_VERIFIED = 'VERIFIED';
-    public const KYC_REJECTED = 'REJECTED';
-
-    /**
-     * Gender constants.
-     */
-    public const GENDER_MALE = 'M';
-    public const GENDER_FEMALE = 'F';
-    public const GENDER_OTHER = 'O';
-
-    /**
-     * Marital status constants.
-     */
-    public const MARITAL_SINGLE = 'SOLTERO';
-    public const MARITAL_MARRIED = 'CASADO';
-    public const MARITAL_DIVORCED = 'DIVORCIADO';
-    public const MARITAL_WIDOWED = 'VIUDO';
-    public const MARITAL_FREE_UNION = 'UNION_LIBRE';
-
-    /**
-     * Education level constants.
-     */
-    public const EDUCATION_PRIMARY = 'PRIMARIA';
-    public const EDUCATION_SECONDARY = 'SECUNDARIA';
-    public const EDUCATION_HIGH_SCHOOL = 'PREPARATORIA';
-    public const EDUCATION_TECHNICAL = 'TECNICO';
-    public const EDUCATION_BACHELOR = 'LICENCIATURA';
-    public const EDUCATION_MASTER = 'MAESTRIA';
-    public const EDUCATION_DOCTORATE = 'DOCTORADO';
 
     /**
      * Boot the model.
@@ -275,12 +244,7 @@ class Applicant extends Model
      */
     public function getGenderLabelAttribute(): string
     {
-        $labels = [
-            self::GENDER_MALE => 'Masculino',
-            self::GENDER_FEMALE => 'Femenino',
-            self::GENDER_OTHER => 'Otro',
-        ];
-        return $labels[$this->gender] ?? '';
+        return $this->gender?->label() ?? '';
     }
 
     /**
@@ -288,14 +252,7 @@ class Applicant extends Model
      */
     public function getMaritalStatusLabelAttribute(): string
     {
-        $labels = [
-            self::MARITAL_SINGLE => 'Soltero(a)',
-            self::MARITAL_MARRIED => 'Casado(a)',
-            self::MARITAL_DIVORCED => 'Divorciado(a)',
-            self::MARITAL_WIDOWED => 'Viudo(a)',
-            self::MARITAL_FREE_UNION => 'Unión Libre',
-        ];
-        return $labels[$this->marital_status] ?? '';
+        return $this->marital_status?->label() ?? '';
     }
 
     /**
@@ -303,16 +260,7 @@ class Applicant extends Model
      */
     public function getEducationLevelLabelAttribute(): string
     {
-        $labels = [
-            self::EDUCATION_PRIMARY => 'Primaria',
-            self::EDUCATION_SECONDARY => 'Secundaria',
-            self::EDUCATION_HIGH_SCHOOL => 'Preparatoria',
-            self::EDUCATION_TECHNICAL => 'Técnico',
-            self::EDUCATION_BACHELOR => 'Licenciatura',
-            self::EDUCATION_MASTER => 'Maestría',
-            self::EDUCATION_DOCTORATE => 'Doctorado',
-        ];
-        return $labels[$this->education_level] ?? '';
+        return $this->education_level?->label() ?? '';
     }
 
     // =========================================================================
@@ -324,7 +272,7 @@ class Applicant extends Model
      */
     public function isKycVerified(): bool
     {
-        return $this->kyc_status === self::KYC_VERIFIED;
+        return $this->kyc_status === KycStatus::VERIFIED;
     }
 
     /**

@@ -114,6 +114,21 @@ class DemoDataSeeder extends Seeder
         $personalProduct = Product::where('type', 'PERSONAL')->first();
         $payrollProduct = Product::where('type', 'PAYROLL')->first();
 
+        // Create Super Admin User
+        $superAdminUser = User::create([
+            'name' => 'Super Admin',
+            'first_name' => 'Super',
+            'last_name' => 'Admin',
+            'email' => 'superadmin@lendus.mx',
+            'phone' => '5500000000',
+            'password' => Hash::make('password'),
+            'tenant_id' => $tenant->id,
+            'type' => 'SUPER_ADMIN',
+            'is_active' => true,
+            'email_verified_at' => now(),
+            'phone_verified_at' => now(),
+        ]);
+
         // Create Admin User
         $adminUser = User::create([
             'name' => 'Admin Demo',
@@ -123,7 +138,7 @@ class DemoDataSeeder extends Seeder
             'phone' => '5500000001',
             'password' => Hash::make('password'),
             'tenant_id' => $tenant->id,
-            'type' => User::TYPE_ADMIN,
+            'type' => 'ADMIN',
             'is_active' => true,
             'email_verified_at' => now(),
             'phone_verified_at' => now(),
@@ -145,7 +160,7 @@ class DemoDataSeeder extends Seeder
                 'phone' => '550000010' . ($index + 1),
                 'password' => Hash::make('password'),
                 'tenant_id' => $tenant->id,
-                'type' => User::TYPE_ANALYST,
+                'type' => 'ANALYST',
                 'is_active' => true,
                 'email_verified_at' => now(),
                 'phone_verified_at' => now(),
@@ -170,7 +185,7 @@ class DemoDataSeeder extends Seeder
                 'phone' => '550000000' . ($index + 2),
                 'password' => Hash::make('password'),
                 'tenant_id' => $tenant->id,
-                'type' => User::TYPE_AGENT,
+                'type' => 'AGENT',
                 'is_active' => true,
                 'email_verified_at' => now(),
                 'phone_verified_at' => now(),
@@ -264,7 +279,7 @@ class DemoDataSeeder extends Seeder
                 'phone' => $data['phone'],
                 'password' => Hash::make('password'),
                 'tenant_id' => $tenant->id,
-                'type' => User::TYPE_APPLICANT,
+                'type' => 'APPLICANT',
                 'is_active' => true,
                 'email_verified_at' => now(),
                 'phone_verified_at' => now(),
@@ -466,9 +481,12 @@ class DemoDataSeeder extends Seeder
         $this->command->info("Tenant slug: demo");
         $this->command->info("");
         $this->command->info("Staff Credentials (password: 'password'):");
+        $this->command->info("  Super Admin: superadmin@lendus.mx");
         $this->command->info("  Admin: admin@lendus.mx");
         $this->command->info("  Analista: patricia.moreno@lendus.mx");
+        $this->command->info("  Analista: fernando.diaz@lendus.mx");
         $this->command->info("  Agente: carlos.ramirez@lendus.mx");
+        $this->command->info("  Agente: maria.lopez@lendus.mx");
     }
 
     /**

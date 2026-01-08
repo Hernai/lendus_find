@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\OtpChannel;
+use App\Enums\OtpPurpose;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -29,33 +31,20 @@ class OtpCode extends Model
     ];
 
     protected $casts = [
+        'channel' => OtpChannel::class,
+        'purpose' => OtpPurpose::class,
         'is_used' => 'boolean',
         'used_at' => 'datetime',
         'expires_at' => 'datetime',
     ];
 
     /**
-     * Channels.
-     */
-    public const CHANNEL_SMS = 'SMS';
-    public const CHANNEL_WHATSAPP = 'WHATSAPP';
-    public const CHANNEL_EMAIL = 'EMAIL';
-
-    /**
-     * Purposes.
-     */
-    public const PURPOSE_LOGIN = 'LOGIN';
-    public const PURPOSE_VERIFY_PHONE = 'VERIFY_PHONE';
-    public const PURPOSE_VERIFY_EMAIL = 'VERIFY_EMAIL';
-    public const PURPOSE_RESET_PASSWORD = 'RESET_PASSWORD';
-
-    /**
      * Generate a new OTP code.
      */
     public static function generate(
         string $destination,
-        string $channel = self::CHANNEL_SMS,
-        string $purpose = self::PURPOSE_LOGIN,
+        string $channel = 'SMS',
+        string $purpose = 'LOGIN',
         ?string $tenantId = null,
         int $expirationMinutes = 10
     ): self {
@@ -70,8 +59,8 @@ class OtpCode extends Model
 
         $otp = static::create([
             'tenant_id' => $tenantId,
-            'phone' => $channel !== self::CHANNEL_EMAIL ? $destination : null,
-            'email' => $channel === self::CHANNEL_EMAIL ? $destination : null,
+            'phone' => $channel !== 'EMAIL' ? $destination : null,
+            'email' => $channel === 'EMAIL' ? $destination : null,
             'code' => $code,
             'channel' => $channel,
             'purpose' => $purpose,

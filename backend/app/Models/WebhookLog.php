@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\WebhookStatus;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Model;
@@ -40,18 +41,11 @@ class WebhookLog extends Model
     ];
 
     protected $casts = [
+        'status' => WebhookStatus::class,
         'payload' => 'array',
         'last_attempt_at' => 'datetime',
         'next_retry_at' => 'datetime',
     ];
-
-    /**
-     * Status constants.
-     */
-    public const STATUS_PENDING = 'PENDING';
-    public const STATUS_SENT = 'SENT';
-    public const STATUS_FAILED = 'FAILED';
-    public const STATUS_RETRYING = 'RETRYING';
 
     /**
      * Get the tenant.
@@ -66,7 +60,7 @@ class WebhookLog extends Model
      */
     public function scopeSuccessful($query)
     {
-        return $query->where('status', self::STATUS_SENT);
+        return $query->where('status', WebhookStatus::SENT);
     }
 
     /**
@@ -74,7 +68,7 @@ class WebhookLog extends Model
      */
     public function scopeFailed($query)
     {
-        return $query->where('status', self::STATUS_FAILED);
+        return $query->where('status', WebhookStatus::FAILED);
     }
 
     /**
@@ -82,7 +76,7 @@ class WebhookLog extends Model
      */
     public function scopePending($query)
     {
-        return $query->where('status', self::STATUS_PENDING);
+        return $query->where('status', WebhookStatus::PENDING);
     }
 
     /**
@@ -90,7 +84,7 @@ class WebhookLog extends Model
      */
     public function scopeRetrying($query)
     {
-        return $query->where('status', self::STATUS_RETRYING)
+        return $query->where('status', WebhookStatus::RETRYING)
             ->where(function ($q) {
                 $q->whereNull('next_retry_at')
                     ->orWhere('next_retry_at', '<=', now());
@@ -103,7 +97,7 @@ class WebhookLog extends Model
     public function markAsSent(int $responseCode, ?string $responseBody = null): void
     {
         $this->update([
-            'status' => self::STATUS_SENT,
+            'status' => WebhookStatus::SENT,
             'response_code' => $responseCode,
             'response_body' => $responseBody,
             'last_attempt_at' => now(),
@@ -117,7 +111,7 @@ class WebhookLog extends Model
     public function markAsFailed(string $error, ?int $responseCode = null): void
     {
         $attempts = $this->attempts + 1;
-        $status = $attempts >= $this->max_attempts ? self::STATUS_FAILED : self::STATUS_RETRYING;
+        $status = $attempts >= $this->max_attempts ? WebhookStatus::FAILED : WebhookStatus::RETRYING;
 
         $this->update([
             'status' => $status,
@@ -125,7 +119,7 @@ class WebhookLog extends Model
             'response_code' => $responseCode,
             'last_attempt_at' => now(),
             'attempts' => $attempts,
-            'next_retry_at' => $status === self::STATUS_RETRYING
+            'next_retry_at' => $status === WebhookStatus::RETRYING
                 ? now()->addMinutes(pow(2, $attempts)) // Exponential backoff
                 : null,
         ]);

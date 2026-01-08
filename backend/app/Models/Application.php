@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ApplicationStatus;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -47,6 +48,7 @@ class Application extends Model
     ];
 
     protected $casts = [
+        'status' => ApplicationStatus::class,
         'requested_amount' => 'decimal:2',
         'approved_amount' => 'decimal:2',
         'interest_rate' => 'decimal:2',
@@ -61,23 +63,6 @@ class Application extends Model
         'approved_at' => 'datetime',
         'disbursed_at' => 'datetime',
     ];
-
-    /**
-     * Application statuses.
-     */
-    public const STATUS_DRAFT = 'DRAFT';
-    public const STATUS_SUBMITTED = 'SUBMITTED';
-    public const STATUS_IN_REVIEW = 'IN_REVIEW';
-    public const STATUS_DOCS_PENDING = 'DOCS_PENDING';
-    public const STATUS_CORRECTIONS_PENDING = 'CORRECTIONS_PENDING'; // User needs to correct rejected data
-    public const STATUS_COUNTER_OFFERED = 'COUNTER_OFFERED';
-    public const STATUS_APPROVED = 'APPROVED';
-    public const STATUS_REJECTED = 'REJECTED';
-    public const STATUS_CANCELLED = 'CANCELLED';
-    public const STATUS_DISBURSED = 'DISBURSED';
-    public const STATUS_ACTIVE = 'ACTIVE';
-    public const STATUS_COMPLETED = 'COMPLETED';
-    public const STATUS_DEFAULT = 'DEFAULT';
 
     /**
      * Boot the model.
@@ -206,11 +191,11 @@ class Application extends Model
         $this->status = $status;
         $this->status_history = $history;
 
-        if ($status === self::STATUS_APPROVED) {
+        if ($status === ApplicationStatus::APPROVED->value) {
             $this->approved_at = now();
-        } elseif ($status === self::STATUS_REJECTED && $reason) {
+        } elseif ($status === ApplicationStatus::REJECTED->value && $reason) {
             $this->rejection_reason = $reason;
-        } elseif ($status === self::STATUS_DISBURSED) {
+        } elseif ($status === ApplicationStatus::DISBURSED->value) {
             $this->disbursed_at = now();
         }
 
@@ -223,9 +208,9 @@ class Application extends Model
     public function isEditable(): bool
     {
         return in_array($this->status, [
-            self::STATUS_DRAFT,
-            self::STATUS_DOCS_PENDING,
-            self::STATUS_CORRECTIONS_PENDING,
+            ApplicationStatus::DRAFT,
+            ApplicationStatus::DOCS_PENDING,
+            ApplicationStatus::CORRECTIONS_PENDING,
         ]);
     }
 

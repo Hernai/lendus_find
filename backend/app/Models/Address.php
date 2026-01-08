@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use App\Enums\AddressType;
+use App\Enums\AddressVerificationMethod;
+use App\Enums\HousingType;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -47,6 +50,9 @@ class Address extends Model
     ];
 
     protected $casts = [
+        'type' => AddressType::class,
+        'housing_type' => HousingType::class,
+        'verification_method' => AddressVerificationMethod::class,
         'is_primary' => 'boolean',
         'monthly_rent' => 'decimal:2',
         'years_at_address' => 'integer',
@@ -56,31 +62,6 @@ class Address extends Model
         'is_verified' => 'boolean',
         'verified_at' => 'datetime',
     ];
-
-    /**
-     * Address type constants.
-     */
-    public const TYPE_HOME = 'HOME';
-    public const TYPE_WORK = 'WORK';
-    public const TYPE_FISCAL = 'FISCAL';
-    public const TYPE_CORRESPONDENCE = 'CORRESPONDENCE';
-
-    /**
-     * Housing type constants.
-     */
-    public const HOUSING_OWNED_PAID = 'PROPIA_PAGADA';
-    public const HOUSING_OWNED_MORTGAGE = 'PROPIA_HIPOTECA';
-    public const HOUSING_RENTED = 'RENTADA';
-    public const HOUSING_FAMILY = 'FAMILIAR';
-    public const HOUSING_BORROWED = 'PRESTADA';
-    public const HOUSING_OTHER = 'OTRO';
-
-    /**
-     * Verification method constants.
-     */
-    public const VERIFICATION_DOCUMENT = 'DOCUMENT';
-    public const VERIFICATION_GEOLOCATION = 'GEOLOCATION';
-    public const VERIFICATION_VISIT = 'VISIT';
 
     // =========================================================================
     // RELATIONSHIPS
@@ -141,16 +122,7 @@ class Address extends Model
      */
     public function getHousingTypeLabelAttribute(): string
     {
-        $labels = [
-            self::HOUSING_OWNED_PAID => 'Propia (pagada)',
-            self::HOUSING_OWNED_MORTGAGE => 'Propia (hipoteca)',
-            self::HOUSING_RENTED => 'Rentada',
-            self::HOUSING_FAMILY => 'Familiar',
-            self::HOUSING_BORROWED => 'Prestada',
-            self::HOUSING_OTHER => 'Otro',
-        ];
-
-        return $labels[$this->housing_type] ?? $this->housing_type;
+        return $this->housing_type?->label() ?? '';
     }
 
     // =========================================================================

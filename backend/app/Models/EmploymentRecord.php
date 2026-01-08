@@ -2,6 +2,12 @@
 
 namespace App\Models;
 
+use App\Enums\CompanySize;
+use App\Enums\ContractType;
+use App\Enums\EmploymentType;
+use App\Enums\EmploymentVerificationMethod;
+use App\Enums\IncomeType;
+use App\Enums\PaymentFrequency;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -56,6 +62,12 @@ class EmploymentRecord extends Model
     ];
 
     protected $casts = [
+        'employment_type' => EmploymentType::class,
+        'company_size' => CompanySize::class,
+        'contract_type' => ContractType::class,
+        'payment_frequency' => PaymentFrequency::class,
+        'income_type' => IncomeType::class,
+        'verification_method' => EmploymentVerificationMethod::class,
         'is_current' => 'boolean',
         'start_date' => 'date',
         'end_date' => 'date',
@@ -66,61 +78,6 @@ class EmploymentRecord extends Model
         'is_verified' => 'boolean',
         'verified_at' => 'datetime',
     ];
-
-    /**
-     * Employment type constants.
-     */
-    public const TYPE_EMPLOYED = 'EMPLEADO';
-    public const TYPE_INDEPENDENT = 'INDEPENDIENTE';
-    public const TYPE_BUSINESS_OWNER = 'EMPRESARIO';
-    public const TYPE_RETIRED = 'PENSIONADO';
-    public const TYPE_STUDENT = 'ESTUDIANTE';
-    public const TYPE_HOMEMAKER = 'HOGAR';
-    public const TYPE_UNEMPLOYED = 'DESEMPLEADO';
-    public const TYPE_OTHER = 'OTRO';
-
-    /**
-     * Company size constants.
-     */
-    public const SIZE_MICRO = 'MICRO';
-    public const SIZE_SMALL = 'PEQUENA';
-    public const SIZE_MEDIUM = 'MEDIANA';
-    public const SIZE_LARGE = 'GRANDE';
-
-    /**
-     * Contract type constants.
-     */
-    public const CONTRACT_PERMANENT = 'INDEFINIDO';
-    public const CONTRACT_TEMPORARY = 'TEMPORAL';
-    public const CONTRACT_PROJECT = 'POR_OBRA';
-    public const CONTRACT_FREELANCE = 'HONORARIOS';
-    public const CONTRACT_COMMISSION = 'COMISION';
-    public const CONTRACT_OTHER = 'OTRO';
-
-    /**
-     * Payment frequency constants.
-     */
-    public const FREQUENCY_WEEKLY = 'SEMANAL';
-    public const FREQUENCY_BIWEEKLY = 'QUINCENAL';
-    public const FREQUENCY_MONTHLY = 'MENSUAL';
-
-    /**
-     * Income type constants.
-     */
-    public const INCOME_PAYROLL = 'NOMINA';
-    public const INCOME_FREELANCE = 'HONORARIOS';
-    public const INCOME_MIXED = 'MIXTO';
-    public const INCOME_COMMISSION = 'COMISIONES';
-    public const INCOME_BUSINESS = 'NEGOCIO_PROPIO';
-    public const INCOME_PENSION = 'PENSION';
-    public const INCOME_OTHER = 'OTRO';
-
-    /**
-     * Verification method constants.
-     */
-    public const VERIFICATION_PAYSLIP = 'RECIBO_NOMINA';
-    public const VERIFICATION_LETTER = 'CONSTANCIA';
-    public const VERIFICATION_CALL = 'LLAMADA';
 
     // =========================================================================
     // RELATIONSHIPS
@@ -175,18 +132,7 @@ class EmploymentRecord extends Model
      */
     public function getEmploymentTypeLabelAttribute(): string
     {
-        $labels = [
-            self::TYPE_EMPLOYED => 'Empleado',
-            self::TYPE_INDEPENDENT => 'Independiente',
-            self::TYPE_BUSINESS_OWNER => 'Empresario',
-            self::TYPE_RETIRED => 'Pensionado',
-            self::TYPE_STUDENT => 'Estudiante',
-            self::TYPE_HOMEMAKER => 'Hogar',
-            self::TYPE_UNEMPLOYED => 'Desempleado',
-            self::TYPE_OTHER => 'Otro',
-        ];
-
-        return $labels[$this->employment_type] ?? $this->employment_type;
+        return $this->employment_type?->label() ?? '';
     }
 
     /**
