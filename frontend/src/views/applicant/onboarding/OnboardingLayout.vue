@@ -24,8 +24,12 @@ const handleExit = () => {
   onboardingStore.reset()
   authStore.clearOnboardingCache()
 
-  // Navigate to home
-  router.push('/')
+  // Navigate based on auth state
+  if (authStore.isAuthenticated) {
+    router.push('/dashboard')
+  } else {
+    router.push('/')
+  }
 }
 
 // Initialize application from pending data or load existing draft
