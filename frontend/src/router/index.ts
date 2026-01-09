@@ -50,6 +50,7 @@ const AdminLayout = () => import('@/views/admin/panel/AdminLayout.vue')
 const AdminDashboard = () => import('@/views/admin/panel/AdminDashboard.vue')
 const AdminApplications = () => import('@/views/admin/panel/AdminApplications.vue')
 const AdminApplicationDetail = () => import('@/views/admin/panel/AdminApplicationDetail.vue')
+const AdminUsers = () => import('@/views/admin/panel/AdminUsers.vue')
 const AdminUnderConstruction = () => import('@/views/admin/panel/AdminUnderConstruction.vue')
 
 const routes: RouteRecordRaw[] = [
@@ -235,7 +236,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'usuarios',
         name: 'admin-users',
-        component: AdminUnderConstruction
+        component: AdminUsers
       },
       {
         path: 'reportes',

@@ -485,8 +485,8 @@ class DemoDataSeeder extends Seeder
         $this->command->info("  Admin: admin@lendus.mx");
         $this->command->info("  Analista: patricia.moreno@lendus.mx");
         $this->command->info("  Analista: fernando.diaz@lendus.mx");
-        $this->command->info("  Agente: carlos.ramirez@lendus.mx");
-        $this->command->info("  Agente: maria.lopez@lendus.mx");
+        $this->command->info("  Supervisor: carlos.ramirez@lendus.mx");
+        $this->command->info("  Supervisor: maria.lopez@lendus.mx");
     }
 
     /**

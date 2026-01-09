@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Enums\UserType;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -21,9 +22,12 @@ class UserController extends Controller
 
         $query = User::where('tenant_id', $tenant->id);
 
-        // Filter by role
-        if ($role = $request->input('role')) {
-            $query->where('role', $role);
+        // Always exclude APPLICANT users - this endpoint is for staff management
+        $query->where('type', '!=', UserType::APPLICANT);
+
+        // Filter by type/role
+        if ($type = $request->input('role')) {
+            $query->where('type', $type);
         }
 
         // Filter by active status
@@ -40,10 +44,18 @@ class UserController extends Controller
             });
         }
 
-        $users = $query->orderBy('name')->get();
+        // Pagination
+        $perPage = min($request->input('per_page', 20), 100);
+        $paginated = $query->orderBy('name')->paginate($perPage);
 
         return response()->json([
-            'data' => $users->map(fn($u) => $this->formatUser($u))
+            'data' => $paginated->map(fn($u) => $this->formatUser($u)),
+            'meta' => [
+                'current_page' => $paginated->currentPage(),
+                'last_page' => $paginated->lastPage(),
+                'per_page' => $paginated->perPage(),
+                'total' => $paginated->total(),
+            ]
         ]);
     }
 
@@ -54,12 +66,19 @@ class UserController extends Controller
     {
         $tenant = $request->attributes->get('tenant');
 
-        $validator = Validator::make($request->all(), [
+        // Format phone before validation (remove non-digits)
+        $phone = $request->phone ? preg_replace('/\D/', '', $request->phone) : null;
+
+        $validator = Validator::make(array_merge($request->all(), ['phone' => $phone]), [
             'name' => 'required|string|max:100',
             'email' => 'required|email|unique:users,email',
-            'phone' => 'nullable|string|max:20',
-            'role' => 'required|in:ADMIN,AGENT,ANALYST,VIEWER',
+            'phone' => 'nullable|string|size:10|unique:users,phone',
+            'role' => 'required|in:ADMIN,AGENT,ANALYST',
             'password' => 'nullable|string|min:8',
+        ], [
+            'email.unique' => 'Este correo electrónico ya está registrado',
+            'phone.unique' => 'Este número de teléfono ya está registrado',
+            'phone.size' => 'El teléfono debe tener 10 dígitos',
         ]);
 
         if ($validator->fails()) {
@@ -76,8 +95,8 @@ class UserController extends Controller
             'tenant_id' => $tenant->id,
             'name' => $request->name,
             'email' => $request->email,
-            'phone' => $request->phone,
-            'role' => $request->role,
+            'phone' => $phone,
+            'type' => $request->role,
             'password' => Hash::make($password),
             'is_active' => true,
         ]);
@@ -133,13 +152,20 @@ class UserController extends Controller
             ], 400);
         }
 
-        $validator = Validator::make($request->all(), [
+        // Format phone before validation (remove non-digits)
+        $phone = $request->phone ? preg_replace('/\D/', '', $request->phone) : null;
+
+        $validator = Validator::make(array_merge($request->all(), ['phone' => $phone]), [
             'name' => 'sometimes|string|max:100',
             'email' => 'sometimes|email|unique:users,email,' . $user->id,
-            'phone' => 'nullable|string|max:20',
-            'role' => 'sometimes|in:ADMIN,AGENT,ANALYST,VIEWER',
+            'phone' => 'nullable|string|size:10|unique:users,phone,' . $user->id,
+            'role' => 'sometimes|in:ADMIN,AGENT,ANALYST',
             'password' => 'nullable|string|min:8',
             'is_active' => 'sometimes|boolean',
+        ], [
+            'email.unique' => 'Este correo electrónico ya está registrado',
+            'phone.unique' => 'Este número de teléfono ya está registrado',
+            'phone.size' => 'El teléfono debe tener 10 dígitos',
         ]);
 
         if ($validator->fails()) {
@@ -149,7 +175,13 @@ class UserController extends Controller
             ], 422);
         }
 
-        $user->fill($request->only(['name', 'email', 'phone', 'role', 'is_active']));
+        $user->fill($request->only(['name', 'email', 'is_active']));
+        $user->phone = $phone;
+
+        // Handle type/role separately
+        if ($request->has('role')) {
+            $user->type = $request->role;
+        }
 
         if ($request->filled('password')) {
             $user->password = Hash::make($request->password);
@@ -205,7 +237,7 @@ class UserController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'phone' => $user->phone,
-            'role' => $user->role,
+            'role' => $user->type?->value ?? $user->type,
             'is_active' => $user->is_active ?? true,
             'last_login_at' => $user->last_login_at?->toIso8601String(),
             'created_at' => $user->created_at->toIso8601String(),

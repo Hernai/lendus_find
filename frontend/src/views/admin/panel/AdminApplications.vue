@@ -179,18 +179,23 @@ const exportToCSV = () => {
   link.click()
 }
 
+// Analyst interface
+interface Analyst {
+  id: string
+  name: string
+  email: string
+  role: string
+}
+
 // Selection state
 const selectedIds = ref<Set<string>>(new Set())
 const showBulkAssignModal = ref(false)
 const selectedAgentId = ref('')
 const isAssigning = ref(false)
+const isLoadingAnalysts = ref(false)
 
-// Agents list - will be fetched from API
-const agents = ref([
-  { id: 'agent1', name: 'Admin Demo', email: 'admin@demo.com', active_cases: 0 },
-  { id: 'agent2', name: 'Analista Demo', email: 'analista@demo.com', active_cases: 0 },
-  { id: 'agent3', name: 'Agente Demo', email: 'agente@demo.com', active_cases: 0 },
-])
+// Analysts list - fetched from API
+const analysts = ref<Analyst[]>([])
 
 // Selection functions
 const isSelected = (id: string) => selectedIds.value.has(id)
@@ -226,9 +231,23 @@ const clearSelection = () => {
 }
 
 // Bulk assign
-const openBulkAssignModal = () => {
+const openBulkAssignModal = async () => {
   selectedAgentId.value = ''
   showBulkAssignModal.value = true
+  isLoadingAnalysts.value = true
+
+  try {
+    // Fetch only analysts for assignment
+    const response = await api.get<{ data: Analyst[] }>('/admin/users', {
+      params: { active: true, role: 'ANALYST' }
+    })
+    analysts.value = response.data.data
+  } catch (e) {
+    console.error('Failed to load analysts:', e)
+    analysts.value = []
+  } finally {
+    isLoadingAnalysts.value = false
+  }
 }
 
 const closeBulkAssignModal = () => {
@@ -381,7 +400,7 @@ const confirmBulkReject = async () => {
             <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
-            Asignar a Agente
+            Asignar a Analista
           </AppButton>
           <AppButton
             variant="danger"
@@ -648,7 +667,7 @@ const confirmBulkReject = async () => {
     <!-- Bulk Assign Modal -->
     <AppConfirmModal
       :show="showBulkAssignModal"
-      title="Asignar Solicitudes a Agente"
+      title="Asignar Solicitudes a Analista"
       confirm-text="Asignar"
       :confirm-disabled="!selectedAgentId"
       :loading="isAssigning"
@@ -659,50 +678,86 @@ const confirmBulkReject = async () => {
     >
       <div class="space-y-4">
         <p class="text-gray-600">
-          Selecciona el agente al que deseas asignar
+          Selecciona el analista al que deseas asignar
           <span class="font-semibold text-gray-900">{{ selectedIds.size }}</span>
           {{ selectedIds.size === 1 ? 'solicitud' : 'solicitudes' }}.
         </p>
 
-        <div class="space-y-2">
-          <label class="block text-sm font-medium text-gray-700">Agente</label>
-          <div class="space-y-2 max-h-60 overflow-y-auto">
-            <label
-              v-for="agent in agents"
-              :key="agent.id"
-              :class="[
-                'flex items-center p-3 border rounded-lg cursor-pointer transition-all',
-                selectedAgentId === agent.id
-                  ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-500'
-                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-              ]"
-            >
-              <input
-                v-model="selectedAgentId"
-                type="radio"
-                :value="agent.id"
-                class="sr-only"
+        <!-- Loading state -->
+          <div v-if="isLoadingAnalysts" class="flex justify-center py-8">
+            <div class="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full" />
+          </div>
+
+          <!-- Empty state -->
+          <div v-else-if="analysts.length === 0" class="text-center py-8">
+            <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <p class="text-gray-500 font-medium">No hay analistas disponibles</p>
+            <p class="text-sm text-gray-400 mt-1">Crea un usuario con rol Analista en la sección de Usuarios</p>
+          </div>
+
+          <!-- Analysts list -->
+          <div v-else class="space-y-2">
+            <label class="block text-sm font-medium text-gray-700">Analista</label>
+            <div class="space-y-2 max-h-60 overflow-y-auto">
+              <label
+                v-for="analyst in analysts"
+                :key="analyst.id"
+                :class="[
+                  'flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200',
+                  selectedAgentId === analyst.id
+                    ? 'border-primary-500 bg-gradient-to-r from-primary-50 to-primary-100 shadow-md shadow-primary-100'
+                    : 'border-gray-200 hover:border-primary-300 hover:bg-gray-50'
+                ]"
               >
-              <div class="flex items-center gap-3 flex-1">
-                <div class="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                  <span class="text-primary-700 font-semibold text-sm">
-                    {{ agent.name.split(' ').map(n => n[0]).join('').slice(0, 2) }}
-                  </span>
+                <input
+                  v-model="selectedAgentId"
+                  type="radio"
+                  :value="analyst.id"
+                  class="sr-only"
+                >
+                <div class="flex items-center gap-3 flex-1">
+                  <div
+                    :class="[
+                      'w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200',
+                      selectedAgentId === analyst.id
+                        ? 'bg-primary-600 text-white shadow-lg shadow-primary-200'
+                        : 'bg-primary-100 text-primary-700'
+                    ]"
+                  >
+                    <span class="font-bold text-sm">
+                      {{ analyst.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() }}
+                    </span>
+                  </div>
+                  <div class="flex-1">
+                    <div :class="[
+                      'font-semibold transition-colors',
+                      selectedAgentId === analyst.id ? 'text-primary-900' : 'text-gray-900'
+                    ]">
+                      {{ analyst.name }}
+                    </div>
+                    <div class="text-sm text-gray-500">{{ analyst.email }}</div>
+                  </div>
                 </div>
-                <div class="flex-1">
-                  <div class="font-medium text-gray-900">{{ agent.name }}</div>
-                  <div class="text-sm text-gray-500">{{ agent.email }}</div>
+                <div
+                  :class="[
+                    'w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-200',
+                    selectedAgentId === analyst.id
+                      ? 'border-primary-600 bg-primary-600'
+                      : 'border-gray-300 bg-white'
+                  ]"
+                >
+                  <svg
+                    v-if="selectedAgentId === analyst.id"
+                    class="w-4 h-4 text-white"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                  </svg>
                 </div>
-              </div>
-              <svg
-                v-if="selectedAgentId === agent.id"
-                class="w-5 h-5 text-primary-600 ml-2"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-              </svg>
-            </label>
+              </label>
           </div>
         </div>
       </div>

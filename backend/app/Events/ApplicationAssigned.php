@@ -25,7 +25,7 @@ class ApplicationAssigned implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            // Al agente asignado
+            // Al analista asignado
             new PrivateChannel("tenant.{$this->application->tenant_id}.user.{$this->assignedTo->id}"),
 
             // Al canal de la aplicación

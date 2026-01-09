@@ -125,11 +125,23 @@ class User extends Authenticatable
     }
 
     /**
-     * Check if user is an agent (promotor).
+     * Check if user is a supervisor (formerly agent).
      */
     public function isAgent(): bool
     {
         return $this->type === UserType::AGENT;
+    }
+
+    /**
+     * Check if user is supervisor or above (can assign and authorize).
+     */
+    public function isSupervisorOrAbove(): bool
+    {
+        return in_array($this->type, [
+            UserType::AGENT,  // Supervisor
+            UserType::ADMIN,
+            UserType::SUPER_ADMIN,
+        ]);
     }
 
     /**
@@ -174,10 +186,11 @@ class User extends Authenticatable
 
     /**
      * Can view all applications (not just assigned).
+     * Analysts, supervisors, and admins can see all.
      */
     public function canViewAllApplications(): bool
     {
-        return $this->isAtLeastAnalyst();
+        return $this->isAtLeastAnalyst() || $this->isAgent();
     }
 
     /**
@@ -200,26 +213,29 @@ class User extends Authenticatable
 
     /**
      * Can change application status (in_review, docs_pending).
+     * Analysts, supervisors, and admins can change status.
      */
     public function canChangeApplicationStatus(): bool
     {
-        return $this->isAtLeastAnalyst();
+        return $this->isAtLeastAnalyst() || $this->isAgent();
     }
 
     /**
      * Can approve or reject applications (final decision).
+     * Supervisors and admins can authorize.
      */
     public function canApproveRejectApplications(): bool
     {
-        return $this->isAdmin();
+        return $this->isSupervisorOrAbove();
     }
 
     /**
-     * Can assign applications to agents.
+     * Can assign applications to analysts.
+     * Supervisors and admins can assign.
      */
     public function canAssignApplications(): bool
     {
-        return $this->isAdmin();
+        return $this->isSupervisorOrAbove();
     }
 
     /**

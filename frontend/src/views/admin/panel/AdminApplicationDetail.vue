@@ -7,11 +7,16 @@ import ConfirmModal from '@/components/admin/ConfirmModal.vue'
 import { api } from '@/services/api'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useTenantStore } from '@/stores/tenant'
+import { useAuthStore } from '@/stores/auth'
 import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent, DocumentDeletedEvent, DocumentUploadedEvent, ReferenceVerifiedEvent, BankAccountVerifiedEvent } from '@/types/realtime'
 
 const route = useRoute()
 const router = useRouter()
 const tenantStore = useTenantStore()
+const authStore = useAuthStore()
+
+// Permission checks
+const canAssign = computed(() => authStore.permissions?.canAssignApplications ?? false)
 
 interface Document {
   id: string
@@ -246,6 +251,28 @@ const showBankAccountUnverifyModal = ref(false)
 const selectedBankAccount = ref<BankAccount | null>(null)
 const isVerifyingBankAccount = ref(false)
 const isUnverifyingBankAccount = ref(false)
+
+// Assignment state
+interface StaffUser {
+  id: string
+  name: string
+  email: string
+  role: string
+}
+
+const roleLabels: Record<string, string> = {
+  SUPER_ADMIN: 'Super Admin',
+  ADMIN: 'Administrador',
+  ANALYST: 'Analista',
+  AGENT: 'Supervisor'
+}
+
+const getRoleLabel = (role: string) => roleLabels[role] || role
+const showAssignModal = ref(false)
+const staffUsers = ref<StaffUser[]>([])
+const selectedUserId = ref('')
+const isAssigning = ref(false)
+const isLoadingUsers = ref(false)
 
 // Calculated values for counter-offer
 const counterOfferCalculation = computed(() => {
@@ -962,6 +989,45 @@ const updateStatus = async () => {
   }
 }
 
+// Assignment methods
+const openAssignModal = async () => {
+  showAssignModal.value = true
+  isLoadingUsers.value = true
+  selectedUserId.value = ''
+
+  try {
+    // Only fetch analysts for application assignment
+    const response = await api.get<{ data: StaffUser[] }>('/admin/users', {
+      params: { active: true, role: 'ANALYST' }
+    })
+    staffUsers.value = response.data.data
+  } catch (error) {
+    console.error('Failed to load analysts:', error)
+  } finally {
+    isLoadingUsers.value = false
+  }
+}
+
+const assignApplication = async () => {
+  if (!application.value || !selectedUserId.value) return
+
+  isAssigning.value = true
+
+  try {
+    await api.put(`/admin/applications/${application.value.id}/assign`, {
+      user_id: selectedUserId.value
+    })
+
+    await fetchApplication()
+    showAssignModal.value = false
+  } catch (error: any) {
+    console.error('Failed to assign application:', error)
+    alert(error.response?.data?.message || 'Error al asignar la solicitud')
+  } finally {
+    isAssigning.value = false
+  }
+}
+
 const openDocApproveModal = (doc: Document) => {
   docToApprove.value = doc
   showDocApproveModal.value = true
@@ -1374,6 +1440,12 @@ const addNote = async () => {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
             </svg>
             Contraoferta
+          </AppButton>
+          <AppButton v-if="canAssign" variant="outline" size="sm" @click="openAssignModal">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            Asignar
           </AppButton>
           <AppButton variant="outline" size="sm" @click="openStatusModal">
             Cambiar Estado
@@ -2546,6 +2618,91 @@ const addNote = async () => {
             @click="updateStatus"
           >
             Guardar
+          </AppButton>
+        </div>
+      </div>
+    </div>
+
+    <!-- Assignment Modal -->
+    <div
+      v-if="showAssignModal"
+      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      @click.self="showAssignModal = false"
+    >
+      <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">Asignar para Revisión</h3>
+        <p class="text-sm text-gray-500 mb-4">Selecciona un analista para revisar esta solicitud</p>
+
+        <div class="space-y-4">
+          <div v-if="isLoadingUsers" class="flex justify-center py-8">
+            <div class="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full" />
+          </div>
+
+          <div v-else-if="staffUsers.length === 0" class="text-center py-8">
+            <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <p class="text-gray-500">No hay analistas disponibles</p>
+            <p class="text-sm text-gray-400 mt-1">Crea un usuario con rol Analista en la sección de Usuarios</p>
+          </div>
+
+          <template v-else>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Analista</label>
+              <select
+                v-model="selectedUserId"
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="">Seleccionar analista...</option>
+                <option v-for="user in staffUsers" :key="user.id" :value="user.id">
+                  {{ user.name }}
+                </option>
+              </select>
+            </div>
+
+            <!-- Analysts list -->
+            <div class="mt-4 space-y-2">
+              <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Analistas disponibles</p>
+              <div
+                v-for="user in staffUsers"
+                :key="user.id"
+                class="flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors"
+                :class="selectedUserId === user.id ? 'bg-primary-50 border border-primary-200' : 'bg-gray-50 hover:bg-gray-100'"
+                @click="selectedUserId = user.id"
+              >
+                <div class="flex items-center gap-3">
+                  <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-sm font-medium text-blue-700">
+                    {{ user.name.charAt(0).toUpperCase() }}
+                  </div>
+                  <div>
+                    <p class="font-medium text-gray-900 text-sm">{{ user.name }}</p>
+                    <p class="text-xs text-gray-500">{{ user.email }}</p>
+                  </div>
+                </div>
+                <svg v-if="selectedUserId === user.id" class="w-5 h-5 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div class="flex gap-3 mt-6">
+          <AppButton
+            variant="outline"
+            class="flex-1"
+            @click="showAssignModal = false"
+          >
+            Cancelar
+          </AppButton>
+          <AppButton
+            variant="primary"
+            class="flex-1"
+            :loading="isAssigning"
+            :disabled="!selectedUserId"
+            @click="assignApplication"
+          >
+            Asignar
           </AppButton>
         </div>
       </div>

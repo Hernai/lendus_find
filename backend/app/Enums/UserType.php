@@ -38,7 +38,7 @@ enum UserType: string
     {
         return match ($this) {
             self::APPLICANT => 'Solicitante',
-            self::AGENT => 'Agente',
+            self::AGENT => 'Supervisor',
             self::ANALYST => 'Analista',
             self::ADMIN => 'Administrador',
             self::SUPER_ADMIN => 'Super Administrador',

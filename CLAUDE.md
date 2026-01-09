@@ -170,24 +170,24 @@ El sistema tiene 5 tipos de usuario. Solo los roles de staff pueden acceder al p
 | Rol | Descripción | Acceso Admin |
 |-----|-------------|--------------|
 | `APPLICANT` | Solicitante de crédito | No |
-| `AGENT` | Promotor/Agente de campo | Sí |
-| `ANALYST` | Analista de crédito | Sí |
+| `AGENT` | Supervisor (asigna y autoriza) | Sí |
+| `ANALYST` | Analista de crédito (revisa solicitudes) | Sí |
 | `ADMIN` | Administrador | Sí |
 | `SUPER_ADMIN` | Super Administrador | Sí |
 
 ### Matriz de Permisos
 
-| Permiso | AGENT | ANALYST | ADMIN | SUPER_ADMIN |
-|---------|-------|---------|-------|-------------|
-| Ver solicitudes | Solo asignadas | Todas | Todas | Todas |
+| Permiso | ANALYST | AGENT (Supervisor) | ADMIN | SUPER_ADMIN |
+|---------|---------|-------------------|-------|-------------|
+| Ver solicitudes | Todas | Todas | Todas | Todas |
 | Revisar documentos | ✅ | ✅ | ✅ | ✅ |
 | Verificar referencias | ✅ | ✅ | ✅ | ✅ |
-| Cambiar status | ❌ | ✅ | ✅ | ✅ |
-| Aprobar/Rechazar | ❌ | ❌ | ✅ | ✅ |
-| Asignar a agentes | ❌ | ❌ | ✅ | ✅ |
+| Cambiar status | ✅ | ✅ | ✅ | ✅ |
+| Aprobar/Rechazar | ❌ | ✅ | ✅ | ✅ |
+| Asignar a analistas | ❌ | ✅ | ✅ | ✅ |
 | Gestionar productos | ❌ | ❌ | ✅ | ✅ |
 | Gestionar usuarios | ❌ | ❌ | ✅ | ✅ |
-| Ver reportes | ❌ | ✅ | ✅ | ✅ |
+| Ver reportes | ✅ | ❌ | ✅ | ✅ |
 | Configurar tenant | ❌ | ❌ | ❌ | ✅ |
 
 ### Implementación
@@ -208,4 +208,4 @@ El sistema tiene 5 tipos de usuario. Solo los roles de staff pueden acceder al p
 |-----|-------|----------|
 | Admin | admin@lendus.mx | password |
 | Analista | patricia.moreno@lendus.mx | password |
-| Agente | carlos.ramirez@lendus.mx | password |
+| Supervisor | carlos.ramirez@lendus.mx | password |
