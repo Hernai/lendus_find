@@ -62,11 +62,11 @@ const isRejecting = ref(false)
 const isUnapproving = ref(false)
 const isUnrejecting = ref(false)
 
-// Rejection reasons
+// Rejection reasons (values must match backend RejectionReason enum)
 const rejectionReasons = [
   { value: 'ILLEGIBLE', label: 'Documento ilegible' },
   { value: 'EXPIRED', label: 'Documento vencido' },
-  { value: 'WRONG_DOCUMENT', label: 'Documento incorrecto' },
+  { value: 'WRONG_DOC', label: 'Documento incorrecto' },
   { value: 'INCOMPLETE', label: 'Documento incompleto' },
   { value: 'TAMPERED', label: 'Documento alterado' },
   { value: 'MISMATCH', label: 'No coincide con datos' },
@@ -86,6 +86,13 @@ const missingDocuments = computed(() => {
 })
 
 const getDocTypeName = (type: string) => docTypeLabels[type] || type
+
+// Get rejection reason label from value
+const getRejectionReasonLabel = (value?: string): string => {
+  if (!value) return ''
+  const reason = rejectionReasons.find(r => r.value === value)
+  return reason?.label || value
+}
 
 const isImage = (mimeType?: string) => mimeType?.startsWith('image/')
 const isPdf = (mimeType?: string) => mimeType === 'application/pdf'
@@ -418,7 +425,7 @@ const getStatusBadge = (status: string) => {
         <div
           v-for="doc in documents"
           :key="doc.id"
-          class="group relative border rounded-xl overflow-hidden transition-all hover:shadow-lg"
+          class="group relative border rounded-xl overflow-hidden transition-all hover:shadow-lg flex flex-col"
           :class="{
             'border-green-300 bg-green-50/50': doc.status === 'APPROVED',
             'border-red-300 bg-red-50/50': doc.status === 'REJECTED',
@@ -475,30 +482,54 @@ const getStatusBadge = (status: string) => {
             </span>
           </button>
 
-          <!-- Info -->
-          <div class="p-2">
-            <p class="text-xs font-medium text-gray-900 truncate">{{ getDocTypeName(doc.type) }}</p>
-            <p class="text-xs text-gray-500 truncate">{{ doc.name }}</p>
+          <!-- Footer: info + actions (flex-grow to push to bottom) -->
+          <div class="p-2 flex flex-col flex-grow">
+            <!-- Document info -->
+            <div class="flex-grow">
+              <p class="text-xs font-medium text-gray-900 truncate">{{ getDocTypeName(doc.type) }}</p>
+              <!-- Rejection reason -->
+              <p v-if="doc.status === 'REJECTED' && doc.rejection_reason" class="text-xs text-red-600 mt-1 truncate">
+                {{ getRejectionReasonLabel(doc.rejection_reason) }}
+              </p>
+            </div>
 
-            <!-- Rejection reason -->
-            <p v-if="doc.status === 'REJECTED' && doc.rejection_reason" class="text-xs text-red-600 mt-1 truncate">
-              {{ doc.rejection_reason }}
-            </p>
+            <!-- Actions (always at bottom) -->
+            <div class="mt-2">
+              <!-- PENDING: Aprobar / Rechazar -->
+              <div v-if="doc.status === 'PENDING'" class="flex gap-1">
+                <button
+                  class="flex-1 px-2 py-1 text-xs text-green-600 hover:bg-green-50 rounded transition-colors"
+                  @click="openApproveModal(doc)"
+                >
+                  Aprobar
+                </button>
+                <button
+                  class="flex-1 px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
+                  @click="openRejectModal(doc)"
+                >
+                  Rechazar
+                </button>
+              </div>
 
-            <!-- Actions -->
-            <div v-if="doc.status === 'PENDING'" class="flex gap-1 mt-2">
-              <button
-                class="flex-1 px-2 py-1 text-xs text-green-600 hover:bg-green-50 rounded transition-colors"
-                @click="openApproveModal(doc)"
-              >
-                Aprobar
-              </button>
-              <button
-                class="flex-1 px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
-                @click="openRejectModal(doc)"
-              >
-                Rechazar
-              </button>
+              <!-- REJECTED: Quitar Rechazo -->
+              <div v-else-if="doc.status === 'REJECTED'" class="flex gap-1">
+                <button
+                  class="flex-1 px-2 py-1 text-xs text-yellow-600 hover:bg-yellow-50 rounded transition-colors border border-yellow-200"
+                  @click="openUnrejectModal(doc)"
+                >
+                  Quitar Rechazo
+                </button>
+              </div>
+
+              <!-- APPROVED: Desaprobar -->
+              <div v-else-if="doc.status === 'APPROVED'" class="flex gap-1">
+                <button
+                  class="flex-1 px-2 py-1 text-xs text-yellow-600 hover:bg-yellow-50 rounded transition-colors border border-yellow-200"
+                  @click="openUnapproveModal(doc)"
+                >
+                  Desaprobar
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -507,18 +538,24 @@ const getStatusBadge = (status: string) => {
         <div
           v-for="missing in missingDocuments"
           :key="missing.type"
-          class="border-2 border-dashed border-orange-300 rounded-xl overflow-hidden bg-orange-50/50"
+          class="border-2 border-dashed border-orange-300 rounded-xl overflow-hidden bg-orange-50/50 flex flex-col"
         >
-          <div class="w-full aspect-[4/3] flex items-center justify-center">
-            <div class="text-center p-4">
-              <svg class="w-10 h-10 text-orange-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <!-- Thumbnail placeholder -->
+          <div class="w-full aspect-[4/3] flex items-center justify-center bg-orange-100/50">
+            <div class="text-center">
+              <svg class="w-10 h-10 text-orange-400 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
               <p class="text-xs text-orange-600 font-medium">No subido</p>
             </div>
           </div>
-          <div class="p-2 border-t border-orange-200">
-            <p class="text-xs font-medium text-orange-800 truncate">{{ missing.name }}</p>
+
+          <!-- Footer (to match other cards) -->
+          <div class="p-2 flex flex-col flex-grow">
+            <div class="flex-grow">
+              <p class="text-xs font-medium text-orange-800 truncate">{{ missing.name }}</p>
+            </div>
+            <div class="mt-2 h-7" />
           </div>
         </div>
       </div>
