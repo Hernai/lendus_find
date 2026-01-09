@@ -265,35 +265,35 @@ const handleLogout = async () => {
 <template>
   <div class="min-h-screen bg-gray-50">
     <!-- Header -->
-    <header class="bg-gradient-to-br from-primary-600 to-primary-700 px-4 pt-4 pb-16">
+    <header class="bg-gradient-to-br from-primary-600 to-primary-700 px-4 pt-3 pb-12">
       <div class="max-w-2xl mx-auto">
-        <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center justify-between mb-3">
           <button
-            class="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
+            class="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/10 rounded-lg text-white text-xs hover:bg-white/20 transition-colors"
             @click="goBack"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
             </svg>
             Volver
           </button>
           <button
-            class="flex items-center gap-2 px-3 py-2 bg-white/10 rounded-lg text-white text-sm hover:bg-white/20 transition-colors"
+            class="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/10 rounded-lg text-white text-xs hover:bg-white/20 transition-colors"
             @click="handleLogout"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
             Salir
           </button>
         </div>
 
-        <h1 class="text-2xl font-bold text-white text-center">Mi Perfil</h1>
+        <h1 class="text-xl font-bold text-white">Mi Perfil</h1>
       </div>
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-2xl mx-auto px-4 -mt-12 pb-8">
+    <main class="max-w-2xl mx-auto px-4 -mt-10 pb-8">
       <!-- Loading -->
       <div v-if="isLoading" class="bg-white rounded-2xl shadow-lg p-8 text-center">
         <div class="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto" />

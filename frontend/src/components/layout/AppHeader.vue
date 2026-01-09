@@ -41,7 +41,7 @@ const tenantName = computed(() => tenantStore.name || 'LendusFind')
       <div class="flex items-center gap-4">
         <router-link
           to="/auth"
-          class="hidden sm:block text-primary-600 font-medium hover:text-primary-700"
+          class="text-primary-600 font-medium hover:text-primary-700"
         >
           Iniciar Sesión
         </router-link>

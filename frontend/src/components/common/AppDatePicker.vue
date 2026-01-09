@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue'
-import AppBottomSheet from './AppBottomSheet.vue'
+import { computed, ref, onMounted, watch, nextTick } from 'vue'
 
 interface Props {
   modelValue: string
@@ -126,32 +125,62 @@ const handleNativeChange = (event: Event) => {
   emit('update:modelValue', target.value)
 }
 
-// Wheel scroll handlers
-const handleDayScroll = (e: WheelEvent) => {
-  e.preventDefault()
-  const delta = e.deltaY > 0 ? 1 : -1
-  const maxDay = days.value.length
-  let newDay = selectedDay.value + delta
-  if (newDay < 1) newDay = maxDay
-  if (newDay > maxDay) newDay = 1
-  selectedDay.value = newDay
+// Constants for scroll calculations
+const ITEM_HEIGHT = 48 // h-12 = 3rem = 48px
+const CONTAINER_HEIGHT = 256 // h-64 = 16rem = 256px
+const PADDING_TOP = 96 // h-24 = 6rem = 96px
+const CENTER_OFFSET = (CONTAINER_HEIGHT / 2) - (ITEM_HEIGHT / 2)
+
+// Debounce timers for scroll end detection
+let dayScrollTimer: ReturnType<typeof setTimeout> | null = null
+let monthScrollTimer: ReturnType<typeof setTimeout> | null = null
+let yearScrollTimer: ReturnType<typeof setTimeout> | null = null
+
+// Calculate selected index from scroll position
+const getIndexFromScroll = (scrollTop: number): number => {
+  const adjustedScroll = scrollTop - PADDING_TOP + CENTER_OFFSET
+  return Math.round(adjustedScroll / ITEM_HEIGHT)
 }
 
-const handleMonthScroll = (e: WheelEvent) => {
-  e.preventDefault()
-  const delta = e.deltaY > 0 ? 1 : -1
-  let newMonth = selectedMonth.value + delta
-  if (newMonth < 0) newMonth = 11
-  if (newMonth > 11) newMonth = 0
-  selectedMonth.value = newMonth
+// Handle day scroll - detect scroll end and update selection
+const handleDayScroll = () => {
+  if (dayScrollTimer) clearTimeout(dayScrollTimer)
+  dayScrollTimer = setTimeout(() => {
+    if (!dayRef.value) return
+    const index = getIndexFromScroll(dayRef.value.scrollTop)
+    const maxDay = days.value.length
+    const newDay = Math.max(1, Math.min(maxDay, index + 1))
+    if (newDay !== selectedDay.value) {
+      selectedDay.value = newDay
+    }
+  }, 100)
 }
 
-const handleYearScroll = (e: WheelEvent) => {
-  e.preventDefault()
-  const delta = e.deltaY > 0 ? 1 : -1
-  const idx = years.value.indexOf(selectedYear.value)
-  const newIdx = Math.max(0, Math.min(years.value.length - 1, idx + delta))
-  selectedYear.value = years.value[newIdx] ?? selectedYear.value
+// Handle month scroll
+const handleMonthScroll = () => {
+  if (monthScrollTimer) clearTimeout(monthScrollTimer)
+  monthScrollTimer = setTimeout(() => {
+    if (!monthRef.value) return
+    const index = getIndexFromScroll(monthRef.value.scrollTop)
+    const newMonth = Math.max(0, Math.min(11, index))
+    if (newMonth !== selectedMonth.value) {
+      selectedMonth.value = newMonth
+    }
+  }, 100)
+}
+
+// Handle year scroll
+const handleYearScroll = () => {
+  if (yearScrollTimer) clearTimeout(yearScrollTimer)
+  yearScrollTimer = setTimeout(() => {
+    if (!yearRef.value) return
+    const index = getIndexFromScroll(yearRef.value.scrollTop)
+    const clampedIndex = Math.max(0, Math.min(years.value.length - 1, index))
+    const newYear = years.value[clampedIndex]
+    if (newYear && newYear !== selectedYear.value) {
+      selectedYear.value = newYear
+    }
+  }, 100)
 }
 
 // Adjust day if month changes and day exceeds max
@@ -159,6 +188,45 @@ watch(selectedMonth, () => {
   const maxDay = days.value.length
   if (selectedDay.value > maxDay) {
     selectedDay.value = maxDay
+  }
+})
+
+// Scroll wheels to selected values
+const scrollToSelected = () => {
+  nextTick(() => {
+    const itemHeight = 48 // h-12 = 3rem = 48px
+    const containerHeight = 256 // h-64 = 16rem = 256px
+    const paddingTop = 96 // h-24 = 6rem = 96px
+    const centerOffset = (containerHeight / 2) - (itemHeight / 2)
+
+    // Scroll day wheel
+    if (dayRef.value) {
+      const dayIndex = selectedDay.value - 1
+      const dayScrollTop = paddingTop + (dayIndex * itemHeight) - centerOffset
+      dayRef.value.scrollTop = dayScrollTop
+    }
+
+    // Scroll month wheel
+    if (monthRef.value) {
+      const monthScrollTop = paddingTop + (selectedMonth.value * itemHeight) - centerOffset
+      monthRef.value.scrollTop = monthScrollTop
+    }
+
+    // Scroll year wheel
+    if (yearRef.value) {
+      const yearIndex = years.value.indexOf(selectedYear.value)
+      if (yearIndex >= 0) {
+        const yearScrollTop = paddingTop + (yearIndex * itemHeight) - centerOffset
+        yearRef.value.scrollTop = yearScrollTop
+      }
+    }
+  })
+}
+
+// Scroll to selected when picker opens
+watch(isOpen, (open) => {
+  if (open) {
+    scrollToSelected()
   }
 })
 </script>
@@ -236,7 +304,7 @@ watch(selectedMonth, () => {
                   <div
                     ref="dayRef"
                     class="h-64 overflow-y-auto snap-y snap-mandatory scrollbar-hide relative z-10"
-                    @wheel="handleDayScroll"
+                    @scroll="handleDayScroll"
                   >
                     <div class="h-24" />
                     <button
@@ -259,7 +327,7 @@ watch(selectedMonth, () => {
                   <div
                     ref="monthRef"
                     class="h-64 overflow-y-auto snap-y snap-mandatory scrollbar-hide relative z-10"
-                    @wheel="handleMonthScroll"
+                    @scroll="handleMonthScroll"
                   >
                     <div class="h-24" />
                     <button
@@ -282,7 +350,7 @@ watch(selectedMonth, () => {
                   <div
                     ref="yearRef"
                     class="h-64 overflow-y-auto snap-y snap-mandatory scrollbar-hide relative z-10"
-                    @wheel="handleYearScroll"
+                    @scroll="handleYearScroll"
                   >
                     <div class="h-24" />
                     <button
