@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '@/services/api'
-import { AppButton, AppInput } from '@/components/common'
+import { AppButton } from '@/components/common'
 
 interface User {
   id: string
@@ -83,7 +83,6 @@ const formErrors = ref({
 // Password management
 const showChangePassword = ref(false)
 const showPassword = ref(false)
-const isGeneratingPassword = ref(false)
 
 // Password strength calculation
 const passwordStrength = computed(() => {
@@ -198,22 +197,17 @@ watch(currentPage, () => {
 })
 
 // Formatters
-const formatDate = (dateStr?: string) => {
-  if (!dateStr) return '-'
+const formatDateOnly = (dateStr?: string) => {
+  if (!dateStr) return 'Nunca'
   return new Date(dateStr).toLocaleDateString('es-MX', {
-    year: 'numeric',
-    month: 'short',
     day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+    month: 'short'
   })
 }
 
-const formatDateShort = (dateStr?: string) => {
-  if (!dateStr) return 'Nunca'
-  return new Date(dateStr).toLocaleDateString('es-MX', {
-    month: 'short',
-    day: 'numeric',
+const formatTimeOnly = (dateStr?: string) => {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleTimeString('es-MX', {
     hour: '2-digit',
     minute: '2-digit'
   })
@@ -600,57 +594,66 @@ const paginationRange = computed(() => {
 
       <!-- Table -->
       <div v-else class="overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-gray-50 border-b border-gray-200">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
             <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="px-3 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
                 Usuario
               </th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="px-3 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                Teléfono
+              </th>
+              <th class="px-3 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
                 Rol
               </th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">
+              <th class="px-3 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
                 Último acceso
               </th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="px-3 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
                 Estado
               </th>
-              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="px-3 py-2 text-right text-[11px] font-medium text-gray-500 uppercase tracking-wider">
                 Acciones
               </th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-200">
+          <tbody class="bg-white divide-y divide-gray-200">
             <tr
               v-for="user in users"
               :key="user.id"
               class="hover:bg-gray-50 transition-colors"
             >
-              <td class="px-4 py-4">
-                <div class="flex items-center gap-3">
-                  <div class="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-medium">
+              <td class="px-3 py-2">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-medium text-sm flex-shrink-0">
                     {{ user.name.charAt(0).toUpperCase() }}
                   </div>
-                  <div>
-                    <p class="font-medium text-gray-900">{{ user.name }}</p>
-                    <p class="text-sm text-gray-500">{{ user.email }}</p>
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium text-gray-900 truncate">{{ user.name }}</p>
+                    <p class="text-xs text-gray-500 truncate">{{ user.email }}</p>
                   </div>
                 </div>
               </td>
-              <td class="px-4 py-4">
+              <td class="px-3 py-2 whitespace-nowrap">
+                <span class="text-sm text-gray-600">{{ formatPhoneForDisplay(user.phone) || '-' }}</span>
+              </td>
+              <td class="px-3 py-2 whitespace-nowrap">
                 <span
-                  class="px-2 py-1 rounded-full text-xs font-medium"
+                  class="px-2 py-0.5 rounded-full text-[11px] font-medium"
                   :class="[getRoleBadge(user.role).bg, getRoleBadge(user.role).text]"
                 >
                   {{ getRoleLabel(user.role) }}
                 </span>
               </td>
-              <td class="px-4 py-4 hidden lg:table-cell">
-                <span class="text-sm text-gray-500">{{ formatDateShort(user.last_login_at) }}</span>
+              <td class="px-3 py-2 whitespace-nowrap hidden md:table-cell">
+                <div class="text-xs text-gray-900">
+                  {{ formatDateOnly(user.last_login_at) }}
+                  <span v-if="user.last_login_at" class="text-gray-500">{{ formatTimeOnly(user.last_login_at) }}</span>
+                </div>
               </td>
-              <td class="px-4 py-4">
+              <td class="px-3 py-2 whitespace-nowrap">
                 <button
-                  class="px-2 py-1 rounded-full text-xs font-medium transition-colors"
+                  class="px-2 py-0.5 rounded-full text-[11px] font-medium transition-colors"
                   :class="user.is_active
                     ? 'bg-green-100 text-green-800 hover:bg-green-200'
                     : 'bg-gray-100 text-gray-800 hover:bg-gray-200'"
@@ -659,23 +662,23 @@ const paginationRange = computed(() => {
                   {{ user.is_active ? 'Activo' : 'Inactivo' }}
                 </button>
               </td>
-              <td class="px-4 py-4 text-right">
-                <div class="flex items-center justify-end gap-2">
+              <td class="px-3 py-2 whitespace-nowrap text-right">
+                <div class="flex items-center justify-end gap-1">
                   <button
-                    class="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                    class="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                     title="Editar"
                     @click="openEditModal(user)"
                   >
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
                   </button>
                   <button
-                    class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                     title="Eliminar"
                     @click="openDeleteModal(user)"
                   >
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                   </button>
@@ -687,36 +690,70 @@ const paginationRange = computed(() => {
       </div>
 
       <!-- Pagination -->
-      <div v-if="totalPages > 1" class="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
-        <p class="text-sm text-gray-500">
-          Mostrando {{ (currentPage - 1) * itemsPerPage + 1 }} - {{ Math.min(currentPage * itemsPerPage, totalItems) }} de {{ totalItems }}
-        </p>
-        <div class="flex items-center gap-1">
+      <div v-if="totalPages > 1" class="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-200">
+        <div class="flex-1 flex justify-between sm:hidden">
           <button
-            class="px-3 py-1 rounded-lg text-sm font-medium transition-colors"
-            :class="currentPage === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'"
             :disabled="currentPage === 1"
+            class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             @click="currentPage--"
           >
             Anterior
           </button>
           <button
-            v-for="page in paginationRange"
-            :key="page"
-            class="w-8 h-8 rounded-lg text-sm font-medium transition-colors"
-            :class="page === currentPage ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'"
-            @click="currentPage = page"
-          >
-            {{ page }}
-          </button>
-          <button
-            class="px-3 py-1 rounded-lg text-sm font-medium transition-colors"
-            :class="currentPage === totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'"
             :disabled="currentPage === totalPages"
+            class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             @click="currentPage++"
           >
             Siguiente
           </button>
+        </div>
+        <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+          <div>
+            <p class="text-sm text-gray-700">
+              Mostrando
+              <span class="font-medium">{{ (currentPage - 1) * itemsPerPage + 1 }}</span>
+              a
+              <span class="font-medium">{{ Math.min(currentPage * itemsPerPage, totalItems) }}</span>
+              de
+              <span class="font-medium">{{ totalItems }}</span>
+              resultados
+            </p>
+          </div>
+          <div>
+            <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+              <button
+                :disabled="currentPage === 1"
+                class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                @click="currentPage--"
+              >
+                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+                </svg>
+              </button>
+              <button
+                v-for="page in paginationRange"
+                :key="page"
+                :class="[
+                  'relative inline-flex items-center px-4 py-2 border text-sm font-medium',
+                  currentPage === page
+                    ? 'z-10 bg-primary-50 border-primary-500 text-primary-600'
+                    : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                ]"
+                @click="currentPage = page"
+              >
+                {{ page }}
+              </button>
+              <button
+                :disabled="currentPage === totalPages"
+                class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                @click="currentPage++"
+              >
+                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </nav>
+          </div>
         </div>
       </div>
     </div>

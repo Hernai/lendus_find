@@ -74,6 +74,32 @@ class ApplicationController extends Controller
             $query->where('assigned_to', $assignedTo);
         }
 
+        // Filter by assignment status (assigned/unassigned)
+        if ($assignment = $request->input('assignment')) {
+            if ($assignment === 'unassigned') {
+                $query->whereNull('assigned_to');
+            } elseif ($assignment === 'assigned') {
+                $query->whereNotNull('assigned_to');
+            }
+        }
+
+        // Filter by product
+        if ($productId = $request->input('product_id')) {
+            $query->where('product_id', $productId);
+        }
+
+        // Filter by stale applications (no activity in 8+ hours on active statuses)
+        if ($request->boolean('stale')) {
+            $activeStatuses = [
+                ApplicationStatus::SUBMITTED,
+                ApplicationStatus::IN_REVIEW,
+                ApplicationStatus::DOCS_PENDING,
+                ApplicationStatus::CORRECTIONS_PENDING,
+            ];
+            $query->whereIn('status', $activeStatuses)
+                  ->where('updated_at', '<', now()->subHours(8));
+        }
+
         // Sorting
         $sortBy = $request->input('sort_by', 'created_at');
         $sortOrder = $request->input('sort_order', 'desc');

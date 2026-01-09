@@ -2647,22 +2647,8 @@ const addNote = async () => {
           </div>
 
           <template v-else>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Analista</label>
-              <select
-                v-model="selectedUserId"
-                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              >
-                <option value="">Seleccionar analista...</option>
-                <option v-for="user in staffUsers" :key="user.id" :value="user.id">
-                  {{ user.name }}
-                </option>
-              </select>
-            </div>
-
             <!-- Analysts list -->
-            <div class="mt-4 space-y-2">
-              <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Analistas disponibles</p>
+            <div class="space-y-2">
               <div
                 v-for="user in staffUsers"
                 :key="user.id"

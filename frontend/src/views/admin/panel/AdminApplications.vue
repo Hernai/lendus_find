@@ -42,18 +42,69 @@ interface ApiResponse {
   }
 }
 
+// Product interface
+interface Product {
+  id: string
+  name: string
+  type: string
+}
+
 // Filters
 const searchQuery = ref('')
 const statusFilter = ref('')
+const assignmentFilter = ref('')
+const productFilter = ref('')
+const staleFilter = ref(false)
+const activeQuickFilter = ref('')
 const currentPage = ref(1)
 const itemsPerPage = ref(20)
 
 // Data
 const applications = ref<Application[]>([])
+const products = ref<Product[]>([])
 const totalItems = ref(0)
 const totalPages = ref(1)
 const isLoading = ref(true)
 const error = ref('')
+
+// Quick filter presets
+const quickFilters = [
+  {
+    id: 'new_unassigned',
+    label: 'Nuevas sin asignar',
+    icon: 'inbox',
+    color: 'blue',
+    filters: { status: 'SUBMITTED', assignment: 'unassigned' }
+  },
+  {
+    id: 'needs_attention',
+    label: 'Requiere atención',
+    icon: 'alert',
+    color: 'red',
+    filters: { status: '', assignment: '', stale: true }
+  },
+  {
+    id: 'pending_docs',
+    label: 'Docs pendientes',
+    icon: 'document',
+    color: 'yellow',
+    filters: { status: 'DOCS_PENDING', assignment: '' }
+  },
+  {
+    id: 'in_review',
+    label: 'En revisión',
+    icon: 'eye',
+    color: 'purple',
+    filters: { status: 'IN_REVIEW', assignment: '' }
+  },
+  {
+    id: 'ready_approve',
+    label: 'Listas para aprobar',
+    icon: 'check',
+    color: 'green',
+    filters: { status: 'IN_REVIEW', assignment: 'assigned' }
+  },
+]
 
 const statusOptions = [
   { value: '', label: 'Todos los estados' },
@@ -65,6 +116,12 @@ const statusOptions = [
   { value: 'REJECTED', label: 'Rechazada' },
   { value: 'CANCELLED', label: 'Cancelada' },
   { value: 'DISBURSED', label: 'Desembolsada' }
+]
+
+const assignmentOptions = [
+  { value: '', label: 'Todas' },
+  { value: 'unassigned', label: 'Sin asignar' },
+  { value: 'assigned', label: 'Asignadas' }
 ]
 
 const fetchApplications = async () => {
@@ -85,6 +142,18 @@ const fetchApplications = async () => {
       params.search = searchQuery.value
     }
 
+    if (assignmentFilter.value) {
+      params.assignment = assignmentFilter.value
+    }
+
+    if (productFilter.value) {
+      params.product_id = productFilter.value
+    }
+
+    if (staleFilter.value) {
+      params.stale = true
+    }
+
     const response = await api.get<ApiResponse>('/admin/applications', { params })
 
     applications.value = response.data.data
@@ -98,13 +167,55 @@ const fetchApplications = async () => {
   }
 }
 
+// Apply quick filter
+const applyQuickFilter = (filterId: string) => {
+  const filter = quickFilters.find(f => f.id === filterId)
+  if (!filter) return
+
+  if (activeQuickFilter.value === filterId) {
+    // Toggle off - clear filters
+    activeQuickFilter.value = ''
+    statusFilter.value = ''
+    assignmentFilter.value = ''
+    staleFilter.value = false
+  } else {
+    activeQuickFilter.value = filterId
+    statusFilter.value = filter.filters.status
+    assignmentFilter.value = filter.filters.assignment
+    staleFilter.value = filter.filters.stale || false
+  }
+}
+
+// Fetch products for filter dropdown
+const fetchProducts = async () => {
+  try {
+    const response = await api.get<{ data: Product[] }>('/products')
+    products.value = response.data.data
+  } catch (e) {
+    console.error('Failed to fetch products:', e)
+  }
+}
+
 onMounted(() => {
   fetchApplications()
+  fetchProducts()
 })
 
 // Watch filters and refetch
-watch([statusFilter, searchQuery], () => {
+watch([statusFilter, searchQuery, assignmentFilter, productFilter, staleFilter], () => {
   currentPage.value = 1
+  // Clear quick filter if manual filters changed
+  if (activeQuickFilter.value) {
+    const currentQuickFilter = quickFilters.find(f => f.id === activeQuickFilter.value)
+    if (currentQuickFilter) {
+      const matches = currentQuickFilter.filters.status === statusFilter.value &&
+        currentQuickFilter.filters.assignment === assignmentFilter.value &&
+        (currentQuickFilter.filters.stale || false) === staleFilter.value
+      if (!matches) {
+        activeQuickFilter.value = ''
+      }
+    }
+  }
   fetchApplications()
 })
 
@@ -121,14 +232,51 @@ const formatMoney = (amount: number) => {
   }).format(amount)
 }
 
-const formatDate = (dateStr: string) => {
+const formatDateOnly = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString('es-MX', {
-    year: 'numeric',
-    month: 'short',
     day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  })
+}
+
+const formatTimeOnly = (dateStr: string) => {
+  return new Date(dateStr).toLocaleTimeString('es-MX', {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+// Format phone number for display
+const formatPhone = (phone: string | undefined | null): string => {
+  if (!phone) return '-'
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  }
+  return phone
+}
+
+// Check if application needs attention (no updates in several hours)
+const getInactivityInfo = (app: Application) => {
+  const updatedAt = new Date(app.updated_at)
+  const now = new Date()
+  const hoursInactive = (now.getTime() - updatedAt.getTime()) / (1000 * 60 * 60)
+
+  // Only show for active statuses that need follow-up
+  const activeStatuses = ['SUBMITTED', 'IN_REVIEW', 'DOCS_PENDING', 'CORRECTIONS_PENDING']
+  if (!activeStatuses.includes(app.status)) {
+    return null
+  }
+
+  if (hoursInactive >= 48) {
+    return { level: 'critical', label: '+48h sin actividad', color: 'text-red-600', bg: 'bg-red-50' }
+  } else if (hoursInactive >= 24) {
+    return { level: 'warning', label: '+24h sin actividad', color: 'text-orange-600', bg: 'bg-orange-50' }
+  } else if (hoursInactive >= 8) {
+    return { level: 'attention', label: '+8h sin actividad', color: 'text-yellow-600', bg: 'bg-yellow-50' }
+  }
+  return null
 }
 
 const getStatusBadge = (status: string) => {
@@ -154,8 +302,17 @@ const viewApplication = (app: Application) => {
 const clearFilters = () => {
   searchQuery.value = ''
   statusFilter.value = ''
+  assignmentFilter.value = ''
+  productFilter.value = ''
+  staleFilter.value = false
+  activeQuickFilter.value = ''
   currentPage.value = 1
 }
+
+// Check if any filter is active
+const hasActiveFilters = computed(() => {
+  return searchQuery.value || statusFilter.value || assignmentFilter.value || productFilter.value || staleFilter.value || activeQuickFilter.value
+})
 
 const exportToCSV = () => {
   const headers = ['Folio', 'Solicitante', 'Email', 'Teléfono', 'Monto', 'Plazo', 'Producto', 'Estado', 'Fecha']
@@ -424,33 +581,104 @@ const confirmBulkReject = async () => {
       </div>
     </transition>
 
-    <!-- Filters -->
-    <div class="bg-white rounded-xl shadow-sm p-3 mb-4">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <!-- Quick Filters -->
+    <div class="mb-4">
+      <div class="flex flex-wrap gap-2">
+        <button
+          v-for="qf in quickFilters"
+          :key="qf.id"
+          :class="[
+            'inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200',
+            activeQuickFilter === qf.id
+              ? qf.color === 'blue' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                : qf.color === 'yellow' ? 'bg-yellow-500 text-white shadow-lg shadow-yellow-200'
+                : qf.color === 'purple' ? 'bg-purple-600 text-white shadow-lg shadow-purple-200'
+                : qf.color === 'red' ? 'bg-red-600 text-white shadow-lg shadow-red-200'
+                : 'bg-green-600 text-white shadow-lg shadow-green-200'
+              : qf.color === 'blue' ? 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                : qf.color === 'yellow' ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
+                : qf.color === 'purple' ? 'bg-purple-50 text-purple-700 hover:bg-purple-100'
+                : qf.color === 'red' ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                : 'bg-green-50 text-green-700 hover:bg-green-100'
+          ]"
+          @click="applyQuickFilter(qf.id)"
+        >
+          <!-- Icons -->
+          <svg v-if="qf.icon === 'inbox'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+          </svg>
+          <svg v-else-if="qf.icon === 'alert'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <svg v-else-if="qf.icon === 'document'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <svg v-else-if="qf.icon === 'eye'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+          <svg v-else-if="qf.icon === 'check'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {{ qf.label }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Advanced Filters -->
+    <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
         <!-- Search -->
         <div class="md:col-span-1">
-          <label class="block text-xs font-medium text-gray-700 mb-1">Buscar</label>
+          <label class="block text-xs font-medium text-gray-500 mb-1.5">Buscar</label>
           <div class="relative">
-            <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
               v-model="searchQuery"
               type="text"
               placeholder="Nombre, folio, email..."
-              class="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              class="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 focus:bg-white transition-colors"
             >
           </div>
         </div>
 
         <!-- Status Filter -->
         <div>
-          <label class="block text-xs font-medium text-gray-700 mb-1">Estado</label>
+          <label class="block text-xs font-medium text-gray-500 mb-1.5">Estado</label>
           <select
             v-model="statusFilter"
-            class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 focus:bg-white transition-colors"
           >
             <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+        </div>
+
+        <!-- Product Filter -->
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1.5">Tipo de crédito</label>
+          <select
+            v-model="productFilter"
+            class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 focus:bg-white transition-colors"
+          >
+            <option value="">Todos los productos</option>
+            <option v-for="prod in products" :key="prod.id" :value="prod.id">
+              {{ prod.name }}
+            </option>
+          </select>
+        </div>
+
+        <!-- Assignment Filter -->
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1.5">Asignación</label>
+          <select
+            v-model="assignmentFilter"
+            class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 focus:bg-white transition-colors"
+          >
+            <option v-for="opt in assignmentOptions" :key="opt.value" :value="opt.value">
               {{ opt.label }}
             </option>
           </select>
@@ -459,11 +687,18 @@ const confirmBulkReject = async () => {
         <!-- Clear Filters -->
         <div class="flex items-end">
           <button
-            class="w-full px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            v-if="hasActiveFilters"
+            class="w-full px-3 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center gap-2"
             @click="clearFilters"
           >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
             Limpiar filtros
           </button>
+          <div v-else class="w-full px-3 py-2 text-sm text-gray-400 text-center">
+            {{ totalItems }} solicitudes
+          </div>
         </div>
       </div>
     </div>
@@ -525,11 +760,12 @@ const confirmBulkReject = async () => {
               :key="app.id"
               :class="[
                 'hover:bg-gray-50 cursor-pointer transition-colors',
-                isSelected(app.id) ? 'bg-primary-50' : ''
+                isSelected(app.id) ? 'bg-primary-50' : '',
+                getInactivityInfo(app)?.bg
               ]"
               @click="viewApplication(app)"
             >
-              <td class="px-3 py-2.5 whitespace-nowrap" @click.stop>
+              <td class="px-3 py-2 whitespace-nowrap" @click.stop>
                 <input
                   type="checkbox"
                   :checked="isSelected(app.id)"
@@ -537,39 +773,49 @@ const confirmBulkReject = async () => {
                   @change="toggleSelection(app.id)"
                 >
               </td>
-              <td class="px-3 py-2.5 whitespace-nowrap">
+              <td class="px-3 py-2 whitespace-nowrap">
                 <div class="font-mono text-xs text-gray-900">{{ app.folio }}</div>
                 <div class="text-[11px] text-gray-500">{{ app.product?.name || 'Sin producto' }}</div>
               </td>
-              <td class="px-3 py-2.5 whitespace-nowrap">
+              <td class="px-3 py-2 whitespace-nowrap">
                 <div>
                   <div class="text-sm font-medium text-gray-900">{{ app.applicant?.name || 'Sin nombre' }}</div>
-                  <div class="text-xs text-gray-500">{{ app.applicant?.phone || 'Sin teléfono' }}</div>
+                  <div class="text-xs text-gray-500">{{ formatPhone(app.applicant?.phone) }}</div>
                 </div>
               </td>
-              <td class="px-3 py-2.5 whitespace-nowrap">
+              <td class="px-3 py-2 whitespace-nowrap">
                 <div class="text-sm font-semibold text-gray-900">{{ formatMoney(app.requested_amount) }}</div>
                 <div class="text-xs text-gray-500">{{ app.term_months }} meses</div>
               </td>
-              <td class="px-3 py-2.5 whitespace-nowrap">
-                <span
-                  :class="[
-                    'px-2 py-0.5 text-[11px] font-medium rounded-full',
-                    getStatusBadge(app.status).bg,
-                    getStatusBadge(app.status).text
-                  ]"
-                >
-                  {{ getStatusBadge(app.status).label }}
-                </span>
-                <div class="mt-0.5">
+              <td class="px-3 py-2 whitespace-nowrap">
+                <div class="flex flex-col gap-0.5">
+                  <span
+                    :class="[
+                      'px-2 py-0.5 text-[11px] font-medium rounded-full inline-block w-fit',
+                      getStatusBadge(app.status).bg,
+                      getStatusBadge(app.status).text
+                    ]"
+                  >
+                    {{ getStatusBadge(app.status).label }}
+                  </span>
                   <span v-if="app.assigned_to" class="text-[11px] text-gray-500">{{ app.assigned_to }}</span>
                   <span v-else class="text-[11px] text-gray-400 italic">Sin asignar</span>
                 </div>
               </td>
-              <td class="px-3 py-2.5 whitespace-nowrap text-xs text-gray-500">
-                {{ formatDate(app.created_at) }}
+              <td class="px-3 py-2 whitespace-nowrap">
+                <div class="text-xs text-gray-900">{{ formatDateOnly(app.created_at) }} <span class="text-gray-500">{{ formatTimeOnly(app.created_at) }}</span></div>
+                <!-- Inactivity indicator -->
+                <div
+                  v-if="getInactivityInfo(app)"
+                  :class="['text-[10px] font-medium flex items-center gap-1 mt-0.5', getInactivityInfo(app)?.color]"
+                >
+                  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                  </svg>
+                  {{ getInactivityInfo(app)?.label }}
+                </div>
               </td>
-              <td class="px-3 py-2.5 whitespace-nowrap text-xs">
+              <td class="px-3 py-2 whitespace-nowrap text-xs">
                 <button
                   class="text-primary-600 hover:text-primary-900 font-medium"
                   @click.stop="viewApplication(app)"
