@@ -54,7 +54,13 @@ class DocumentController extends Controller
             ], 404);
         }
 
-        if (!$application->isEditable() &&
+        $type = strtoupper($request->type ?? '');
+
+        // Allow SELFIE (profile photo) uploads at any time
+        $isSelfie = $type === 'SELFIE';
+
+        if (!$isSelfie &&
+            !$application->isEditable() &&
             $application->status !== ApplicationStatus::DOCS_PENDING &&
             $application->status !== ApplicationStatus::CORRECTIONS_PENDING) {
             return response()->json([
@@ -64,7 +70,7 @@ class DocumentController extends Controller
 
         $validator = Validator::make($request->all(), [
             'type' => 'required|string|max:50',
-            'file' => 'required|file|mimes:jpg,jpeg,png,pdf|max:10240', // 10MB max
+            'file' => 'required|file|mimes:jpg,jpeg,png,webp,pdf|max:10240', // 10MB max
         ]);
 
         if ($validator->fails()) {
@@ -82,6 +88,13 @@ class DocumentController extends Controller
         $existingDoc = $application->documents()
             ->where('type', $type)
             ->first();
+
+        // Check if existing document is verified - cannot replace verified documents
+        if ($existingDoc && $existingDoc->status === DocumentStatus::APPROVED) {
+            return response()->json([
+                'message' => 'No se puede reemplazar un documento verificado'
+            ], 400);
+        }
 
         // Capture old document info BEFORE deleting (for timeline comparison)
         $oldDocInfo = null;

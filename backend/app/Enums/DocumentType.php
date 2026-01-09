@@ -15,6 +15,7 @@ enum DocumentType: string
     case PAYSLIP_2 = 'PAYSLIP_2';
     case PAYSLIP_3 = 'PAYSLIP_3';
     case VEHICLE_INVOICE = 'VEHICLE_INVOICE';
+    case SELFIE = 'SELFIE';
 
     /**
      * Get human-readable description in Spanish.
@@ -33,6 +34,7 @@ enum DocumentType: string
             self::PAYSLIP_2 => 'Recibo de nómina 2',
             self::PAYSLIP_3 => 'Recibo de nómina 3',
             self::VEHICLE_INVOICE => 'Factura del vehículo',
+            self::SELFIE => 'Foto de perfil (Selfie)',
         };
     }
 
@@ -55,6 +57,7 @@ enum DocumentType: string
     {
         return match ($this) {
             self::SIGNATURE => ['image/png', 'image/svg+xml'],
+            self::SELFIE => ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
             default => [
                 'image/jpeg',
                 'image/jpg',

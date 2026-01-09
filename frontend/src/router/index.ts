@@ -36,6 +36,7 @@ const DashboardView = () => import('@/views/applicant/dashboard/DashboardView.vu
 const ApplicationStatusView = () => import('@/views/applicant/dashboard/ApplicationStatusView.vue')
 const DocumentsUploadView = () => import('@/views/applicant/dashboard/DocumentsUploadView.vue')
 const DataCorrectionsView = () => import('@/views/applicant/dashboard/DataCorrectionsView.vue')
+const ProfileView = () => import('@/views/applicant/dashboard/ProfileView.vue')
 
 // ==============================================
 // ADMIN VIEWS (staff: agents, analysts, admins)
@@ -188,6 +189,12 @@ const routes: RouteRecordRaw[] = [
     path: '/correcciones',
     name: 'data-corrections',
     component: DataCorrectionsView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/perfil',
+    name: 'profile',
+    component: ProfileView,
     meta: { requiresAuth: true }
   },
 

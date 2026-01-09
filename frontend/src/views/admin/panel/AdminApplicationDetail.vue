@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AppButton, AppConfirmModal } from '@/components/common'
+import { AppButton } from '@/components/common'
+import AdminDocumentGallery from '@/components/admin/AdminDocumentGallery.vue'
+import ConfirmModal from '@/components/admin/ConfirmModal.vue'
 import { api } from '@/services/api'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useTenantStore } from '@/stores/tenant'
@@ -32,6 +34,22 @@ interface Reference {
   verification_result?: 'VERIFIED' | 'NOT_VERIFIED' | 'NO_ANSWER'
   verification_notes?: string
   verified_at?: string
+}
+
+interface BankAccount {
+  id: string
+  type: string
+  bank_name: string
+  bank_code: string
+  clabe: string
+  account_type: string
+  account_type_label?: string
+  holder_name: string
+  holder_rfc?: string
+  is_primary: boolean
+  is_own_account: boolean
+  is_verified: boolean
+  created_at?: string
 }
 
 interface ApplicationCompleteness {
@@ -98,6 +116,7 @@ interface Application {
   }
   documents: Document[]
   references: Reference[]
+  bank_accounts: BankAccount[]
   notes: { id: string; text: string; author: string; created_at: string }[]
   timeline: {
     id: string
@@ -202,6 +221,21 @@ const docViewerName = ref('')
 const docViewerMimeType = ref('')
 const isLoadingDocViewer = ref(false)
 
+// Selfie (profile photo) state - visible throughout the form
+const selfieUrl = ref<string | null>(null)
+const selfieStatus = ref<'PENDING' | 'APPROVED' | 'REJECTED'>('PENDING')
+const selfieDocId = ref<string | null>(null)
+const isLoadingSelfie = ref(false)
+const showSelfieViewer = ref(false)
+const showSelfieApproveModal = ref(false)
+const showSelfieRejectModal = ref(false)
+const showSelfieUnapproveModal = ref(false)
+const showSelfieUnrejectModal = ref(false)
+const isApprovingSelfie = ref(false)
+const isRejectingSelfie = ref(false)
+const isUnapprovingSelfie = ref(false)
+const isUnrejectingSelfie = ref(false)
+
 // Add note state
 const newNoteText = ref('')
 const isAddingNote = ref(false)
@@ -240,6 +274,7 @@ const tabs = [
   { id: 'general', label: 'Información General' },
   { id: 'documents', label: 'Documentos' },
   { id: 'references', label: 'Referencias' },
+  { id: 'bank_accounts', label: 'Cuentas Bancarias' },
   { id: 'timeline', label: 'Historial' }
 ]
 
@@ -298,6 +333,7 @@ const fetchApplication = async () => {
 
     // Map API response to our interface
     const data = response.data.data
+
     application.value = {
       id: data.id,
       folio: data.folio,
@@ -391,6 +427,21 @@ const fetchApplication = async () => {
         verification_notes: r.verification_notes,
         verified_at: r.verified_at
       })),
+      bank_accounts: (data.bank_accounts || []).map((ba: BankAccount) => ({
+        id: ba.id,
+        type: ba.type,
+        bank_name: ba.bank_name,
+        bank_code: ba.bank_code,
+        clabe: ba.clabe,
+        account_type: ba.account_type,
+        account_type_label: ba.account_type_label,
+        holder_name: ba.holder_name,
+        holder_rfc: ba.holder_rfc,
+        is_primary: ba.is_primary,
+        is_own_account: ba.is_own_account,
+        is_verified: ba.is_verified,
+        created_at: ba.created_at
+      })),
       notes: data.notes || [],
       timeline: data.timeline || [],
       signature: data.signature || {
@@ -419,6 +470,149 @@ const fetchApplication = async () => {
   }
 }
 
+// Load selfie (profile photo) for display throughout the form
+const loadSelfie = async () => {
+  if (!application.value) return
+
+  const selfieDoc = application.value.documents.find(d => d.type === 'SELFIE')
+
+  if (!selfieDoc) {
+    selfieUrl.value = null
+    selfieDocId.value = null
+    return
+  }
+
+  selfieDocId.value = selfieDoc.id
+  selfieStatus.value = selfieDoc.status
+  isLoadingSelfie.value = true
+
+  try {
+    // Fetch the image as blob with auth headers
+    const response = await api.get(
+      `/admin/applications/${application.value.id}/documents/${selfieDoc.id}/download`,
+      { responseType: 'blob' }
+    )
+    const blob = new Blob([response.data], { type: selfieDoc.mime_type || 'image/jpeg' })
+    selfieUrl.value = URL.createObjectURL(blob)
+  } catch (e) {
+    console.error('Failed to load selfie:', e)
+    selfieUrl.value = null
+  } finally {
+    isLoadingSelfie.value = false
+  }
+}
+
+// Approve selfie
+const approveSelfie = async () => {
+  if (!application.value || !selfieDocId.value) return
+
+  isApprovingSelfie.value = true
+
+  try {
+    await api.put(`/admin/applications/${application.value.id}/documents/${selfieDocId.value}/approve`)
+    selfieStatus.value = 'APPROVED'
+
+    // Update in documents array too
+    const doc = application.value.documents.find(d => d.id === selfieDocId.value)
+    if (doc) doc.status = 'APPROVED'
+
+    showSelfieApproveModal.value = false
+    await fetchApplication()
+  } catch (e) {
+    console.error('Failed to approve selfie:', e)
+    alert('Error al aprobar la selfie')
+  } finally {
+    isApprovingSelfie.value = false
+  }
+}
+
+// Reject selfie
+const rejectSelfie = async (data: { selectValue?: string; comment?: string }) => {
+  if (!application.value || !selfieDocId.value || !data.selectValue) return
+
+  isRejectingSelfie.value = true
+
+  try {
+    await api.put(`/admin/applications/${application.value.id}/documents/${selfieDocId.value}/reject`, {
+      reason: data.selectValue,
+      comment: data.comment || null
+    })
+    selfieStatus.value = 'REJECTED'
+
+    // Update in documents array too
+    const doc = application.value.documents.find(d => d.id === selfieDocId.value)
+    if (doc) {
+      doc.status = 'REJECTED'
+      doc.rejection_reason = data.selectValue
+      doc.rejection_comment = data.comment
+    }
+
+    showSelfieRejectModal.value = false
+    await fetchApplication()
+  } catch (e) {
+    console.error('Failed to reject selfie:', e)
+    alert('Error al rechazar la selfie')
+  } finally {
+    isRejectingSelfie.value = false
+  }
+}
+
+// Unapprove selfie (set back to pending)
+const unapproveSelfie = async () => {
+  if (!application.value || !selfieDocId.value) return
+
+  isUnapprovingSelfie.value = true
+
+  try {
+    await api.put(`/admin/applications/${application.value.id}/documents/${selfieDocId.value}/unapprove`)
+    selfieStatus.value = 'PENDING'
+
+    // Update in documents array too
+    const doc = application.value.documents.find(d => d.id === selfieDocId.value)
+    if (doc) {
+      doc.status = 'PENDING'
+      doc.rejection_reason = undefined
+      doc.rejection_comment = undefined
+    }
+
+    showSelfieUnapproveModal.value = false
+    await fetchApplication()
+  } catch (e) {
+    console.error('Failed to unapprove selfie:', e)
+    alert('Error al desaprobar la selfie')
+  } finally {
+    isUnapprovingSelfie.value = false
+  }
+}
+
+// Unreject selfie (set back to pending)
+const unrejectSelfie = async () => {
+  if (!application.value || !selfieDocId.value) return
+
+  isUnrejectingSelfie.value = true
+
+  try {
+    await api.put(`/admin/applications/${application.value.id}/documents/${selfieDocId.value}/unapprove`)
+    selfieStatus.value = 'PENDING'
+
+    // Update in documents array too
+    const doc = application.value.documents.find(d => d.id === selfieDocId.value)
+    if (doc) {
+      doc.status = 'PENDING'
+      doc.rejection_reason = undefined
+      doc.rejection_comment = undefined
+    }
+
+    showSelfieUnrejectModal.value = false
+    await fetchApplication()
+  } catch (e) {
+    console.error('Failed to unreject selfie:', e)
+    alert('Error al desrechazar la selfie')
+  } finally {
+    isUnrejectingSelfie.value = false
+  }
+}
+
 // Get document type display name
 const getDocTypeName = (type: string): string => {
   const names: Record<string, string> = {
@@ -443,8 +637,9 @@ const getDocTypeName = (type: string): string => {
   return names[type] || type
 }
 
-onMounted(() => {
-  fetchApplication()
+onMounted(async () => {
+  await fetchApplication()
+  await loadSelfie()
 })
 
 // Formatters
@@ -727,7 +922,7 @@ const viewDocument = async (doc: Document) => {
   }
 }
 
-const confirmApproveDocument = async () => {
+const confirmApproveDocument = async (_data?: { selectValue?: string; comment?: string }) => {
   if (!docToApprove.value || !application.value) return
 
   isApprovingDoc.value = true
@@ -828,12 +1023,10 @@ type VerifiableField = 'first_name' | 'last_name_1' | 'last_name_2' | 'curp' | '
 // Reject data modal state
 const showRejectDataModal = ref(false)
 const rejectDataField = ref<VerifiableField | null>(null)
-const rejectDataReason = ref('')
 
 // Unverify modal state (for removing verification/rejection)
 const showUnverifyModal = ref(false)
 const unverifyField = ref<VerifiableField | null>(null)
-const unverifyReason = ref('')
 
 // Helper to check if a field is verified
 const isFieldVerified = (field: string): boolean => {
@@ -944,36 +1137,32 @@ const verifyData = async (field: VerifiableField, action: 'verify' | 'reject' | 
 // Open reject modal
 const openRejectDataModal = (field: VerifiableField) => {
   rejectDataField.value = field
-  rejectDataReason.value = ''
   showRejectDataModal.value = true
 }
 
-// Confirm data rejection
-const confirmRejectData = async () => {
-  if (!rejectDataField.value || !rejectDataReason.value.trim()) {
-    alert('Por favor ingresa una razón para el rechazo')
+// Confirm data rejection (receives data from ConfirmModal)
+const confirmRejectData = async (data: { selectValue?: string; comment?: string }) => {
+  if (!rejectDataField.value || !data.comment?.trim()) {
     return
   }
 
-  await verifyData(rejectDataField.value, 'reject', rejectDataReason.value)
+  await verifyData(rejectDataField.value, 'reject', data.comment)
   showRejectDataModal.value = false
 }
 
 // Open unverify modal
 const openUnverifyModal = (field: VerifiableField) => {
   unverifyField.value = field
-  unverifyReason.value = ''
   showUnverifyModal.value = true
 }
 
-// Confirm unverify (remove verification/rejection)
-const confirmUnverify = async () => {
-  if (!unverifyField.value || !unverifyReason.value.trim()) {
-    alert('Por favor ingresa una razón para remover la verificación/rechazo')
+// Confirm unverify (receives data from ConfirmModal)
+const confirmUnverify = async (data: { selectValue?: string; comment?: string }) => {
+  if (!unverifyField.value || !data.comment?.trim()) {
     return
   }
 
-  await verifyData(unverifyField.value, 'unverify', unverifyReason.value)
+  await verifyData(unverifyField.value, 'unverify', data.comment)
   showUnverifyModal.value = false
 }
 
@@ -1063,9 +1252,10 @@ const addNote = async () => {
     </div>
 
     <template v-else-if="application">
-      <!-- Header -->
-      <div class="flex items-start justify-between mb-6">
-        <div>
+      <!-- Header with Selfie -->
+      <div class="flex items-start gap-6 mb-6">
+        <!-- Header info -->
+        <div class="flex-1">
           <button
             class="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-2"
             @click="goBack"
@@ -1087,7 +1277,8 @@ const addNote = async () => {
               {{ getStatusBadge(application.status).label }}
             </span>
           </div>
-          <p class="text-gray-500 mt-1">
+          <p class="text-sm text-gray-900 font-medium mt-1">{{ application.applicant.full_name }}</p>
+          <p class="text-gray-500 text-sm">
             Creada {{ formatDateTime(application.created_at) }}
             <span v-if="application.assigned_to" class="ml-2">
               · Asignada a {{ application.assigned_to }}
@@ -1095,10 +1286,12 @@ const addNote = async () => {
           </p>
         </div>
 
-        <div class="flex gap-3">
+        <!-- Application Action Buttons -->
+        <div class="flex flex-col gap-2 flex-shrink-0">
           <AppButton
             v-if="['IN_REVIEW', 'DOCS_PENDING'].includes(application.status)"
             variant="outline"
+            size="sm"
             class="!border-indigo-500 !text-indigo-600 hover:!bg-indigo-50"
             @click="openCounterOfferModal"
           >
@@ -1107,12 +1300,106 @@ const addNote = async () => {
             </svg>
             Contraoferta
           </AppButton>
-          <AppButton variant="outline" @click="openStatusModal">
+          <AppButton variant="outline" size="sm" @click="openStatusModal">
             Cambiar Estado
           </AppButton>
-          <AppButton v-if="application.status === 'APPROVED'" variant="primary">
+          <AppButton v-if="application.status === 'APPROVED'" variant="primary" size="sm">
             Generar Contrato
           </AppButton>
+        </div>
+
+        <!-- Selfie Photo - Always Visible (rightmost) -->
+        <div class="flex-shrink-0">
+          <div class="relative w-28 h-28">
+            <!-- Photo container -->
+            <button
+              class="w-full h-full rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center border-2 transition-all hover:ring-4 hover:ring-primary-200"
+              :class="{
+                'border-green-400': selfieStatus === 'APPROVED',
+                'border-red-400': selfieStatus === 'REJECTED',
+                'border-yellow-400': selfieStatus === 'PENDING' && selfieUrl,
+                'border-gray-200': !selfieUrl
+              }"
+              @click="selfieUrl ? showSelfieViewer = true : null"
+              :disabled="!selfieUrl"
+            >
+              <img
+                v-if="selfieUrl"
+                :src="selfieUrl"
+                alt="Foto del solicitante"
+                class="w-full h-full object-cover"
+              />
+              <div v-else-if="isLoadingSelfie" class="animate-spin w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full" />
+              <svg v-else class="w-10 h-10 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+              </svg>
+            </button>
+
+            <!-- Status badge -->
+            <span
+              v-if="selfieUrl"
+              class="absolute -top-1 -right-1 px-1.5 py-0.5 rounded text-xs font-medium z-10"
+              :class="{
+                'bg-green-100 text-green-800': selfieStatus === 'APPROVED',
+                'bg-red-100 text-red-800': selfieStatus === 'REJECTED',
+                'bg-yellow-100 text-yellow-800': selfieStatus === 'PENDING'
+              }"
+            >
+              {{ selfieStatus === 'APPROVED' ? 'OK' : selfieStatus === 'REJECTED' ? 'X' : '?' }}
+            </span>
+
+            <!-- Approve/Reject/Unapprove buttons inside photo box (subtle icons) -->
+            <div
+              v-if="selfieUrl"
+              class="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-1"
+            >
+              <!-- PENDING: show approve and reject -->
+              <template v-if="selfieStatus === 'PENDING'">
+                <button
+                  class="w-6 h-6 flex items-center justify-center rounded-full bg-black/40 hover:bg-green-600 text-white/80 hover:text-white transition-colors"
+                  @click.stop="showSelfieApproveModal = true"
+                  title="Aprobar"
+                >
+                  <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                  </svg>
+                </button>
+                <button
+                  class="w-6 h-6 flex items-center justify-center rounded-full bg-black/40 hover:bg-red-600 text-white/80 hover:text-white transition-colors"
+                  @click.stop="showSelfieRejectModal = true"
+                  title="Rechazar"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                </button>
+              </template>
+              <!-- APPROVED: show unapprove (back to pending) -->
+              <template v-else-if="selfieStatus === 'APPROVED'">
+                <button
+                  class="w-6 h-6 flex items-center justify-center rounded-full bg-black/40 hover:bg-yellow-600 text-white/80 hover:text-white transition-colors"
+                  @click.stop="showSelfieUnapproveModal = true"
+                  title="Desaprobar (volver a pendiente)"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
+                  </svg>
+                </button>
+              </template>
+              <!-- REJECTED: show only unreject (back to pending), no direct approve -->
+              <template v-else-if="selfieStatus === 'REJECTED'">
+                <button
+                  class="w-6 h-6 flex items-center justify-center rounded-full bg-black/40 hover:bg-yellow-600 text-white/80 hover:text-white transition-colors"
+                  @click.stop="showSelfieUnrejectModal = true"
+                  title="Quitar Rechazo (volver a pendiente)"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
+                  </svg>
+                </button>
+              </template>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1926,89 +2213,14 @@ const addNote = async () => {
             </div>
           </div>
 
-          <!-- Documents Tab -->
+          <!-- Documents Tab - Gallery View -->
           <div v-if="activeTab === 'documents'">
-            <!-- Document Stats -->
-            <div class="flex items-center gap-4 mb-4 text-sm text-gray-500">
-              <span>Requeridos: <b class="text-gray-900">{{ application.required_documents.length }}</b></span>
-              <span>Subidos: <b class="text-gray-900">{{ application.documents.length }}</b></span>
-              <span>Aprobados: <b class="text-green-600">{{ application.documents.filter(d => d.status === 'APPROVED').length }}</b></span>
-              <span>Rechazados: <b class="text-red-600">{{ application.documents.filter(d => d.status === 'REJECTED').length }}</b></span>
-              <span>Faltantes: <b class="text-orange-600">{{ allDocuments.filter(d => (d as any).missing).length }}</b></span>
-            </div>
-
-            <div v-if="allDocuments.length === 0" class="text-center py-6 text-gray-500 text-sm">
-              No hay documentos requeridos
-            </div>
-
-            <div v-else class="space-y-2">
-              <div
-                v-for="doc in allDocuments"
-                :key="doc.id"
-                :class="[
-                  'flex items-center justify-between border rounded px-3 py-2',
-                  (doc as any).missing ? 'border-orange-300 bg-orange-50' : 'border-gray-200'
-                ]"
-              >
-                <div class="flex items-center gap-2 min-w-0">
-                  <!-- Icon -->
-                  <svg v-if="(doc as any).missing" class="w-4 h-4 text-orange-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <svg v-else-if="doc.status === 'APPROVED'" class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <svg v-else-if="doc.status === 'REJECTED'" class="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <svg v-else class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span :class="['text-sm font-medium truncate', (doc as any).missing ? 'text-orange-700' : 'text-gray-900']">
-                    {{ doc.name || getDocTypeName(doc.type) }}
-                  </span>
-                  <span v-if="(doc as any).missing" class="text-xs text-orange-600 font-medium">No subido</span>
-                  <span v-else class="text-xs text-gray-400">{{ doc.uploaded_at ? formatDateTime(doc.uploaded_at) : '' }}</span>
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <span v-if="!(doc as any).missing" class="text-xs text-gray-500">{{ getDocStatusBadge(doc.status).label }}</span>
-                  <div v-if="!(doc as any).missing" class="flex items-center">
-                    <button
-                      class="p-1.5 text-gray-400 hover:text-gray-600"
-                      title="Ver"
-                      :disabled="isLoadingDocViewer"
-                      @click="viewDocument(doc)"
-                    >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                    </button>
-                    <button
-                      v-if="doc.status === 'PENDING'"
-                      class="p-1.5 text-gray-400 hover:text-gray-600"
-                      title="Aprobar"
-                      @click="openDocApproveModal(doc)"
-                    >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                      </svg>
-                    </button>
-                    <button
-                      v-if="doc.status === 'PENDING'"
-                      class="p-1.5 text-gray-400 hover:text-gray-600"
-                      title="Rechazar"
-                      @click="openDocRejectModal(doc)"
-                    >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <AdminDocumentGallery
+              :application-id="application.id"
+              :documents="application.documents"
+              :required-documents="application.required_documents"
+              @refresh="fetchApplication"
+            />
           </div>
 
           <!-- References Tab -->
@@ -2062,6 +2274,74 @@ const addNote = async () => {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bank Accounts Tab -->
+          <div v-if="activeTab === 'bank_accounts'">
+            <!-- Bank Account Stats -->
+            <div class="flex items-center gap-4 mb-4 text-sm text-gray-500">
+              <span>Total: <b class="text-gray-900">{{ application.bank_accounts.length }}</b></span>
+              <span>Verificadas: <b class="text-gray-900">{{ application.bank_accounts.filter(ba => ba.is_verified).length }}</b></span>
+            </div>
+
+            <div v-if="application.bank_accounts.length === 0" class="text-center py-6 text-gray-500 text-sm">
+              No hay cuentas bancarias registradas
+            </div>
+
+            <div v-else class="space-y-3">
+              <div
+                v-for="account in application.bank_accounts"
+                :key="account.id"
+                class="border border-gray-200 rounded-lg p-4"
+              >
+                <div class="flex items-start justify-between mb-3">
+                  <div class="flex items-center gap-2">
+                    <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div class="flex items-center gap-2">
+                        <span class="font-semibold text-gray-900">{{ account.bank_name }}</span>
+                        <span
+                          v-if="account.is_primary"
+                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
+                        >
+                          Principal
+                        </span>
+                        <span
+                          v-if="account.is_verified"
+                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                        >
+                          Verificada
+                        </span>
+                      </div>
+                      <p class="text-xs text-gray-500">{{ account.account_type_label || account.account_type }}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="space-y-2 text-sm">
+                  <div class="flex justify-between">
+                    <span class="text-gray-500">CLABE</span>
+                    <span class="text-gray-900 font-mono">{{ account.clabe }}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-500">Titular</span>
+                    <span class="text-gray-900 text-right">{{ account.holder_name }}</span>
+                  </div>
+                  <div v-if="account.holder_rfc" class="flex justify-between">
+                    <span class="text-gray-500">RFC</span>
+                    <span class="text-gray-900 font-mono">{{ account.holder_rfc }}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-500">Cuenta propia</span>
+                    <span class="text-gray-900">{{ account.is_own_account ? 'Sí' : 'No' }}</span>
                   </div>
                 </div>
               </div>
@@ -2380,94 +2660,38 @@ const addNote = async () => {
     </div>
 
     <!-- Data Rejection Modal -->
-    <div
-      v-if="showRejectDataModal && rejectDataField"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      @click.self="showRejectDataModal = false"
-    >
-      <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">Rechazar Dato</h3>
-        <p class="text-sm text-gray-500 mb-4">Rechazando campo: {{ getFieldLabel(rejectDataField || '') }}</p>
-
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              Motivo de rechazo <span class="text-red-500">*</span>
-            </label>
-            <textarea
-              v-model="rejectDataReason"
-              rows="4"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-              placeholder="Explica por qué este dato es incorrecto y qué debe corregir el solicitante..."
-            />
-          </div>
-        </div>
-
-        <div class="flex gap-3 mt-6">
-          <AppButton
-            variant="outline"
-            class="flex-1"
-            @click="showRejectDataModal = false"
-          >
-            Cancelar
-          </AppButton>
-          <AppButton
-            variant="primary"
-            class="flex-1 !bg-red-600 hover:!bg-red-700"
-            :loading="isVerifyingData"
-            :disabled="!rejectDataReason.trim()"
-            @click="confirmRejectData"
-          >
-            Rechazar
-          </AppButton>
-        </div>
-      </div>
-    </div>
+    <ConfirmModal
+      v-model:show="showRejectDataModal"
+      title="Rechazar Dato"
+      :subtitle="rejectDataField ? getFieldLabel(rejectDataField) : ''"
+      icon="x"
+      icon-color="red"
+      comment-label="Motivo de rechazo"
+      comment-placeholder="Explica por qué este dato es incorrecto y qué debe corregir el solicitante..."
+      comment-required
+      :comment-rows="4"
+      confirm-text="Rechazar"
+      confirm-color="red"
+      :loading="isVerifyingData"
+      @confirm="confirmRejectData"
+    />
 
     <!-- Unverify/Unreject Data Modal -->
-    <div
-      v-if="showUnverifyModal && unverifyField"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      @click.self="showUnverifyModal = false"
-    >
-      <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">Remover Verificación/Rechazo</h3>
-        <p class="text-sm text-gray-500 mb-4">Removiendo verificación del campo: {{ getFieldLabel(unverifyField || '') }}</p>
-
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              Motivo <span class="text-red-500">*</span>
-            </label>
-            <textarea
-              v-model="unverifyReason"
-              rows="4"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Explica por qué se está removiendo la verificación o rechazo de este dato..."
-            />
-          </div>
-        </div>
-
-        <div class="flex gap-3 mt-6">
-          <AppButton
-            variant="outline"
-            class="flex-1"
-            @click="showUnverifyModal = false"
-          >
-            Cancelar
-          </AppButton>
-          <AppButton
-            variant="primary"
-            class="flex-1"
-            :loading="isVerifyingData"
-            :disabled="!unverifyReason.trim()"
-            @click="confirmUnverify"
-          >
-            Confirmar
-          </AppButton>
-        </div>
-      </div>
-    </div>
+    <ConfirmModal
+      v-model:show="showUnverifyModal"
+      title="Remover Verificación/Rechazo"
+      :subtitle="unverifyField ? getFieldLabel(unverifyField) : ''"
+      icon="undo"
+      icon-color="yellow"
+      comment-label="Motivo"
+      comment-placeholder="Explica por qué se está removiendo la verificación o rechazo de este dato..."
+      comment-required
+      :comment-rows="4"
+      confirm-text="Confirmar"
+      confirm-color="blue"
+      :loading="isVerifyingData"
+      @confirm="confirmUnverify"
+    />
 
     <!-- Reference Verification Modal -->
     <div
@@ -2569,13 +2793,15 @@ const addNote = async () => {
     </div>
 
     <!-- Document Approval Confirmation Modal -->
-    <AppConfirmModal
+    <ConfirmModal
       v-model:show="showDocApproveModal"
       title="Aprobar Documento"
-      :message="docToApprove ? `¿Confirmas aprobar el documento '${docToApprove.name}'?` : ''"
+      :subtitle="docToApprove?.name"
+      message="¿Confirmas que el documento es válido y cumple con los requisitos?"
+      icon="check"
+      icon-color="green"
       confirm-text="Aprobar"
-      variant="success"
-      icon="success"
+      confirm-color="green"
       :loading="isApprovingDoc"
       @confirm="confirmApproveDocument"
     />
@@ -2830,5 +3056,175 @@ const addNote = async () => {
         </div>
       </div>
     </div>
+
+    <!-- Selfie Viewer Modal -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition-opacity duration-200"
+        leave-active-class="transition-opacity duration-200"
+        enter-from-class="opacity-0"
+        leave-to-class="opacity-0"
+      >
+        <div
+          v-if="showSelfieViewer && selfieUrl"
+          class="fixed inset-0 z-50 bg-black/90 flex flex-col"
+          @click="showSelfieViewer = false"
+        >
+          <!-- Header -->
+          <div class="flex items-center justify-between px-4 py-3 text-white">
+            <div class="flex items-center gap-3">
+              <h3 class="font-medium">Foto del Solicitante</h3>
+              <span
+                class="px-2 py-0.5 rounded-full text-xs font-medium"
+                :class="{
+                  'bg-green-100 text-green-800': selfieStatus === 'APPROVED',
+                  'bg-red-100 text-red-800': selfieStatus === 'REJECTED',
+                  'bg-yellow-100 text-yellow-800': selfieStatus === 'PENDING'
+                }"
+              >
+                {{ selfieStatus === 'APPROVED' ? 'Aprobada' : selfieStatus === 'REJECTED' ? 'Rechazada' : 'Pendiente' }}
+              </span>
+            </div>
+            <button
+              class="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+              @click="showSelfieViewer = false"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Image -->
+          <div class="flex-1 flex items-center justify-center p-4 overflow-auto" @click.stop>
+            <img
+              :src="selfieUrl"
+              alt="Foto del solicitante"
+              class="max-w-full max-h-full object-contain rounded-lg"
+            />
+          </div>
+
+          <!-- Footer with actions -->
+          <div v-if="selfieStatus === 'PENDING'" class="px-4 py-4 pb-safe flex justify-center gap-4">
+            <button
+              class="flex items-center gap-2 bg-green-500 text-white px-6 py-3 rounded-full shadow-lg hover:bg-green-600 active:bg-green-700 transition-colors"
+              @click.stop="showSelfieViewer = false; showSelfieApproveModal = true"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              <span class="font-medium">Aprobar</span>
+            </button>
+            <button
+              class="flex items-center gap-2 bg-red-500 text-white px-6 py-3 rounded-full shadow-lg hover:bg-red-600 active:bg-red-700 transition-colors"
+              @click.stop="showSelfieViewer = false; showSelfieRejectModal = true"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              <span class="font-medium">Rechazar</span>
+            </button>
+          </div>
+
+          <!-- APPROVED: badge + unapprove button -->
+          <div v-else-if="selfieStatus === 'APPROVED'" class="px-4 py-4 pb-safe flex justify-center gap-4">
+            <div class="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-full shadow-lg">
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+              <span class="font-medium">Aprobada</span>
+            </div>
+            <button
+              class="flex items-center gap-2 bg-yellow-500 text-white px-4 py-2 rounded-full shadow-lg hover:bg-yellow-600 active:bg-yellow-700 transition-colors"
+              @click.stop="showSelfieViewer = false; showSelfieUnapproveModal = true"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+              </svg>
+              <span class="font-medium">Desaprobar</span>
+            </button>
+          </div>
+
+          <!-- REJECTED: badge + unreject button (no direct approve) -->
+          <div v-else-if="selfieStatus === 'REJECTED'" class="px-4 py-4 pb-safe flex justify-center gap-4">
+            <div class="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-full shadow-lg">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              <span class="font-medium">Rechazada</span>
+            </div>
+            <button
+              class="flex items-center gap-2 bg-yellow-500 text-white px-4 py-2 rounded-full shadow-lg hover:bg-yellow-600 active:bg-yellow-700 transition-colors"
+              @click.stop="showSelfieViewer = false; showSelfieUnrejectModal = true"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+              </svg>
+              <span class="font-medium">Quitar Rechazo</span>
+            </button>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- Selfie Approve Modal -->
+    <ConfirmModal
+      v-model:show="showSelfieApproveModal"
+      title="Aprobar Selfie"
+      subtitle="Foto del solicitante"
+      message="¿Confirmas que la foto es válida y corresponde al solicitante?"
+      icon="check"
+      icon-color="green"
+      confirm-text="Aprobar"
+      confirm-color="green"
+      :loading="isApprovingSelfie"
+      @confirm="approveSelfie"
+    />
+
+    <!-- Selfie Reject Modal -->
+    <ConfirmModal
+      v-model:show="showSelfieRejectModal"
+      title="Rechazar Selfie"
+      subtitle="Foto del solicitante"
+      icon="x"
+      icon-color="red"
+      select-label="Motivo del rechazo"
+      :select-options="docRejectReasons"
+      select-required
+      comment-label="Comentario adicional"
+      comment-placeholder="Explica qué debe corregir el solicitante..."
+      confirm-text="Rechazar"
+      confirm-color="red"
+      :loading="isRejectingSelfie"
+      @confirm="rejectSelfie"
+    />
+
+    <!-- Selfie Unapprove Modal -->
+    <ConfirmModal
+      v-model:show="showSelfieUnapproveModal"
+      title="Desaprobar Selfie"
+      subtitle="Volver a estado pendiente"
+      message="La foto volverá a estado pendiente y podrá ser revisada nuevamente."
+      icon="undo"
+      icon-color="yellow"
+      confirm-text="Desaprobar"
+      confirm-color="yellow"
+      :loading="isUnapprovingSelfie"
+      @confirm="unapproveSelfie"
+    />
+
+    <!-- Selfie Unreject Modal -->
+    <ConfirmModal
+      v-model:show="showSelfieUnrejectModal"
+      title="Quitar Rechazo"
+      subtitle="Volver a estado pendiente"
+      message="La foto volverá a estado pendiente y podrá ser revisada nuevamente."
+      icon="undo"
+      icon-color="yellow"
+      confirm-text="Quitar Rechazo"
+      confirm-color="yellow"
+      :loading="isUnrejectingSelfie"
+      @confirm="unrejectSelfie"
+    />
   </div>
 </template>

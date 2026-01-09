@@ -29,6 +29,25 @@ interface BankAccountListResponse {
   data: BankAccount[]
 }
 
+interface DocumentResponse {
+  data: {
+    id: string
+    type: string
+    url?: string
+    signed_url?: string
+  }
+}
+
+interface DocumentListResponse {
+  data: Array<{
+    id: string
+    type: string
+    status: string
+    url?: string
+    signed_url?: string
+  }>
+}
+
 export const useApplicantStore = defineStore('applicant', () => {
   // State
   const applicant = ref<Applicant | null>(null)
@@ -216,10 +235,34 @@ export const useApplicantStore = defineStore('applicant', () => {
     }
   }
 
+  const setPrimaryBankAccount = async (accountId: string): Promise<void> => {
+    isSaving.value = true
+    try {
+      await api.patch(`/applicant/bank-accounts/${accountId}/primary`)
+    } catch (error) {
+      console.error('Failed to set primary bank account:', error)
+      throw error
+    } finally {
+      isSaving.value = false
+    }
+  }
+
+  const deleteBankAccount = async (accountId: string): Promise<void> => {
+    isSaving.value = true
+    try {
+      await api.delete(`/applicant/bank-accounts/${accountId}`)
+    } catch (error) {
+      console.error('Failed to delete bank account:', error)
+      throw error
+    } finally {
+      isSaving.value = false
+    }
+  }
+
   const validateClabe = async (clabe: string): Promise<{ valid: boolean; bank_name?: string; error?: string }> => {
     try {
       const response = await api.post<{ data: { valid: boolean; bank_name?: string; error?: string } }>(
-        '/applicant/validate-clabe',
+        '/validate-clabe',
         { clabe }
       )
       return response.data.data
@@ -293,6 +336,48 @@ export const useApplicantStore = defineStore('applicant', () => {
     }
   }
 
+  const uploadProfilePhoto = async (applicationId: string, file: File): Promise<string> => {
+    isSaving.value = true
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('type', 'SELFIE')
+
+      const response = await api.post<DocumentResponse>(
+        `/applications/${applicationId}/documents`,
+        formData
+      )
+
+      // Return the signed URL if available
+      return response.data.data.signed_url || response.data.data.url || ''
+    } catch (error) {
+      console.error('Failed to upload profile photo:', error)
+      throw error
+    } finally {
+      isSaving.value = false
+    }
+  }
+
+  const getProfilePhotoUrl = async (applicationId: string): Promise<{ url: string | null; isVerified: boolean }> => {
+    try {
+      const response = await api.get<DocumentListResponse>(`/applications/${applicationId}/documents`)
+      const selfieDoc = response.data.data.find(doc => doc.type === 'SELFIE')
+      if (selfieDoc) {
+        // Fetch the image with auth headers and create a blob URL
+        const imageResponse = await api.get(`/documents/${selfieDoc.id}/download`, {
+          responseType: 'blob'
+        })
+        const blob = new Blob([imageResponse.data], { type: imageResponse.headers['content-type'] || 'image/jpeg' })
+        const isVerified = selfieDoc.status === 'APPROVED'
+        return { url: URL.createObjectURL(blob), isVerified }
+      }
+      return { url: null, isVerified: false }
+    } catch (error) {
+      console.error('Failed to get profile photo:', error)
+      return { url: null, isVerified: false }
+    }
+  }
+
   const reset = () => {
     applicant.value = null
     references.value = []
@@ -322,11 +407,15 @@ export const useApplicantStore = defineStore('applicant', () => {
     updateBankAccount,
     loadBankAccounts,
     createBankAccount,
+    setPrimaryBankAccount,
+    deleteBankAccount,
     validateClabe,
     updateIdentification,
     saveSignature,
     addReference,
     loadReferences,
+    uploadProfilePhoto,
+    getProfilePhotoUrl,
     reset
   }
 })

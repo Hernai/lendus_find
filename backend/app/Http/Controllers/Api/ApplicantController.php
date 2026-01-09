@@ -855,6 +855,87 @@ class ApplicantController extends Controller
         ], 201);
     }
 
+    /**
+     * Set a bank account as primary.
+     */
+    public function setPrimaryBankAccount(Request $request, BankAccount $bankAccount): JsonResponse
+    {
+        $applicant = $request->user()->applicant;
+
+        if (!$applicant) {
+            return response()->json([
+                'message' => 'No applicant found'
+            ], 404);
+        }
+
+        // Verify ownership
+        if ($bankAccount->applicant_id !== $applicant->id) {
+            return response()->json([
+                'message' => 'Bank account not found'
+            ], 404);
+        }
+
+        // Unset other primaries
+        $applicant->bankAccounts()
+            ->where('is_primary', true)
+            ->update(['is_primary' => false]);
+
+        // Set this one as primary
+        $bankAccount->update(['is_primary' => true]);
+
+        return response()->json([
+            'message' => 'Bank account set as primary',
+            'data' => $this->formatBankAccount($bankAccount->fresh())
+        ]);
+    }
+
+    /**
+     * Delete a bank account (soft delete by marking as inactive).
+     */
+    public function deleteBankAccount(Request $request, BankAccount $bankAccount): JsonResponse
+    {
+        $applicant = $request->user()->applicant;
+
+        if (!$applicant) {
+            return response()->json([
+                'message' => 'No applicant found'
+            ], 404);
+        }
+
+        // Verify ownership
+        if ($bankAccount->applicant_id !== $applicant->id) {
+            return response()->json([
+                'message' => 'Bank account not found'
+            ], 404);
+        }
+
+        // Cannot delete verified bank accounts
+        if ($bankAccount->is_verified) {
+            return response()->json([
+                'message' => 'No se puede eliminar una cuenta bancaria verificada'
+            ], 400);
+        }
+
+        // Soft delete by marking as inactive
+        $bankAccount->update(['is_active' => false]);
+
+        // If this was the primary account, set another one as primary
+        if ($bankAccount->is_primary) {
+            $newPrimary = $applicant->bankAccounts()
+                ->where('is_active', true)
+                ->where('id', '!=', $bankAccount->id)
+                ->first();
+
+            if ($newPrimary) {
+                $newPrimary->update(['is_primary' => true]);
+            }
+        }
+
+        return response()->json([
+            'message' => 'Bank account deleted'
+        ]);
+    }
+
     // =========================================================================
     // Utilities
     // =========================================================================
@@ -879,7 +960,7 @@ class ApplicantController extends Controller
 
         if ($valid) {
             $bankCode = substr($request->clabe, 0, 3);
-            $bankName = BankAccount::MEXICAN_BANKS[$bankCode] ?? null;
+            $bankName = BankAccount::BANKS[$bankCode] ?? null;
         }
 
         return response()->json([

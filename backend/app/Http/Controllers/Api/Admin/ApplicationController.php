@@ -527,6 +527,81 @@ class ApplicationController extends Controller
     }
 
     /**
+     * Unapprove a document (set back to pending).
+     */
+    public function unapproveDocument(Request $request, Application $application, Document $document): JsonResponse
+    {
+        $tenant = $request->attributes->get('tenant');
+
+        if ($application->tenant_id !== $tenant->id || $document->application_id !== $application->id) {
+            return response()->json(['message' => 'Document not found'], 404);
+        }
+
+        // Can only unapprove APPROVED or REJECTED documents
+        if ($document->status === DocumentStatus::PENDING) {
+            return response()->json([
+                'message' => 'Document is already pending'
+            ], 400);
+        }
+
+        $previousStatus = $document->status;
+
+        $document->status = DocumentStatus::PENDING;
+        $document->reviewed_by = null;
+        $document->reviewed_at = null;
+        $document->rejection_reason = null;
+        $document->save();
+
+        // Broadcast document status change
+        event(new \App\Events\DocumentStatusChanged(
+            $document,
+            $previousStatus->value,
+            DocumentStatus::PENDING->value,
+            null,
+            $request->user()
+        ));
+
+        // Add to application timeline
+        $docType = $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type;
+        $docTypeLabel = $document->type instanceof \App\Enums\DocumentType ? $document->type->description() : $docType;
+
+        $history = $application->status_history ?? [];
+        $history[] = [
+            'action' => 'DOC_UNAPPROVED',
+            'document' => $docType,
+            'document_label' => $docTypeLabel,
+            'previous_status' => $previousStatus->value,
+            'user_id' => $request->user()->id,
+            'timestamp' => now()->toIso8601String(),
+        ];
+        $application->status_history = $history;
+        $application->save();
+
+        // Log document unapproval
+        $metadata = $request->attributes->get('metadata', []);
+        AuditLog::log(
+            AuditAction::DOCUMENT_REJECTED->value, // Using REJECTED as closest audit action
+            null,
+            array_merge($metadata, [
+                'user_id' => $request->user()->id,
+                'applicant_id' => $application->applicant_id,
+                'application_id' => $application->id,
+                'action_type' => 'unapprove',
+                'previous_status' => $previousStatus->value,
+            ])
+        );
+
+        return response()->json([
+            'message' => 'Document set back to pending',
+            'data' => [
+                'id' => $document->id,
+                'type' => $document->type,
+                'status' => $document->status,
+            ]
+        ]);
+    }
+
+    /**
      * Verify a reference.
      */
     public function verifyReference(Request $request, Application $application, Reference $reference): JsonResponse
@@ -733,6 +808,23 @@ class ApplicationController extends Controller
                 'is_verified' => $primaryBankAccount->is_verified,
             ] : null,
 
+            // All Bank Accounts (for admin visibility)
+            'bank_accounts' => $applicant?->bankAccounts?->where('is_active', true)->map(fn($ba) => [
+                'id' => $ba->id,
+                'type' => $ba->type,
+                'bank_name' => $ba->bank_name,
+                'bank_code' => $ba->bank_code,
+                'clabe' => $ba->clabe, // Full CLABE for admin
+                'account_type' => $ba->account_type,
+                'account_type_label' => $ba->account_type_label,
+                'holder_name' => $ba->holder_name,
+                'holder_rfc' => $ba->holder_rfc,
+                'is_primary' => $ba->is_primary,
+                'is_own_account' => $ba->is_own_account,
+                'is_verified' => $ba->is_verified,
+                'created_at' => $ba->created_at?->toIso8601String(),
+            ])->values() ?? [],
+
             // Loan details
             'loan' => [
                 'product_name' => $application->product?->name,
@@ -932,7 +1024,7 @@ class ApplicationController extends Controller
             abort(400, 'Direct download not available for this storage type');
         }
 
-        $path = \Illuminate\Support\Facades\Storage::disk('local')->path($document->file_path);
+        $path = \Illuminate\Support\Facades\Storage::disk('local')->path($document->storage_path);
 
         if (!file_exists($path)) {
             abort(404, 'File not found');

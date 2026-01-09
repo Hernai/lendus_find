@@ -54,6 +54,9 @@ Route::middleware(['tenant'])->group(function () {
         Route::post('/calculate', [SimulatorController::class, 'calculate']);
         Route::get('/amortization', [SimulatorController::class, 'amortization']);
     });
+
+    // Utilities (public)
+    Route::post('/validate-clabe', [ApplicantController::class, 'validateClabe']);
 });
 
 // Broadcasting auth (for WebSocket channel authorization)
@@ -106,9 +109,8 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'metadata'])->group(
         // Bank accounts management
         Route::get('/bank-accounts', [ApplicantController::class, 'listBankAccounts']);
         Route::post('/bank-accounts', [ApplicantController::class, 'storeBankAccount']);
-
-        // Utilities
-        Route::post('/validate-clabe', [ApplicantController::class, 'validateClabe']);
+        Route::patch('/bank-accounts/{bankAccount}/primary', [ApplicantController::class, 'setPrimaryBankAccount']);
+        Route::delete('/bank-accounts/{bankAccount}', [ApplicantController::class, 'deleteBankAccount']);
     });
 
     // Data Corrections (for rejected fields)
@@ -186,6 +188,8 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff', 'metadata']
         Route::put('/{application}/documents/{document}/approve', [AdminApplicationController::class, 'approveDocument'])
             ->middleware('permission:canReviewDocuments');
         Route::put('/{application}/documents/{document}/reject', [AdminApplicationController::class, 'rejectDocument'])
+            ->middleware('permission:canReviewDocuments');
+        Route::put('/{application}/documents/{document}/unapprove', [AdminApplicationController::class, 'unapproveDocument'])
             ->middleware('permission:canReviewDocuments');
 
         // Document view - all staff can view
