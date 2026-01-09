@@ -395,10 +395,14 @@ class ApplicationController extends Controller
         ));
 
         // Add to application timeline
+        $docType = $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type;
+        $docTypeLabel = $document->type instanceof \App\Enums\DocumentType ? $document->type->description() : $docType;
+
         $history = $application->status_history ?? [];
         $history[] = [
             'action' => 'DOC_APPROVED',
-            'document' => $document->type,
+            'document' => $docType,
+            'document_label' => $docTypeLabel,
             'user_id' => $request->user()->id,
             'timestamp' => now()->toIso8601String(),
         ];
@@ -475,10 +479,14 @@ class ApplicationController extends Controller
         ));
 
         // Add to application timeline
+        $docType = $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type;
+        $docTypeLabel = $document->type instanceof \App\Enums\DocumentType ? $document->type->description() : $docType;
+
         $history = $application->status_history ?? [];
         $history[] = [
             'action' => 'DOC_REJECTED',
-            'document' => $document->type,
+            'document' => $docType,
+            'document_label' => $docTypeLabel,
             'reason' => $request->reason,
             'user_id' => $request->user()->id,
             'timestamp' => now()->toIso8601String(),
@@ -490,7 +498,7 @@ class ApplicationController extends Controller
         if ($application->status === ApplicationStatus::IN_REVIEW) {
             $application->changeStatus(
                 ApplicationStatus::DOCS_PENDING->value,
-                "Document rejected: {$document->type}",
+                "Documento rechazado: {$docTypeLabel}",
                 $request->user()->id
             );
         }
@@ -857,6 +865,11 @@ class ApplicationController extends Controller
                                 'new_value' => $h['new_value'] ?? null,
                                 'changes' => $h['changes'] ?? null,
                                 'reason' => $h['reason'] ?? null,
+                                // Document replacement info
+                                'is_replacement' => $h['is_replacement'] ?? false,
+                                'old_file' => $h['old_file'] ?? null,
+                                'new_file' => $h['new_file'] ?? null,
+                                'document_label' => $h['document_label'] ?? null,
                             ],
                         ];
                     });
@@ -941,10 +954,10 @@ class ApplicationController extends Controller
         $action = $historyEntry['action'] ?? 'STATUS_CHANGE';
 
         return match ($action) {
-            'DOC_UPLOADED' => 'Documento subido: ' . ($historyEntry['document'] ?? ''),
-            'DOC_DELETED' => 'Documento eliminado: ' . ($historyEntry['document'] ?? ''),
-            'DOC_APPROVED' => 'Documento aprobado: ' . ($historyEntry['document'] ?? ''),
-            'DOC_REJECTED' => 'Documento rechazado: ' . ($historyEntry['document'] ?? '') .
+            'DOC_UPLOADED' => $this->formatDocUploadedDescription($historyEntry),
+            'DOC_DELETED' => 'Documento eliminado: ' . ($historyEntry['document_label'] ?? $historyEntry['document'] ?? ''),
+            'DOC_APPROVED' => 'Documento aprobado: ' . ($historyEntry['document_label'] ?? $historyEntry['document'] ?? ''),
+            'DOC_REJECTED' => 'Documento rechazado: ' . ($historyEntry['document_label'] ?? $historyEntry['document'] ?? '') .
                 ($historyEntry['reason'] ? ' - ' . $historyEntry['reason'] : ''),
             'REF_VERIFIED' => 'Referencia verificada: ' . ($historyEntry['reference'] ?? '') .
                 ' (' . $this->translateReferenceResult($historyEntry['result'] ?? '') . ')',
@@ -995,6 +1008,54 @@ class ApplicationController extends Controller
         }
 
         return "Dato corregido: {$fieldLabel}";
+    }
+
+    /**
+     * Format DOC_UPLOADED description with file comparison details.
+     */
+    private function formatDocUploadedDescription(array $historyEntry): string
+    {
+        $docLabel = $historyEntry['document_label'] ?? $historyEntry['document'] ?? 'Documento';
+        $isReplacement = $historyEntry['is_replacement'] ?? false;
+
+        // If not a replacement, simple description
+        if (!$isReplacement) {
+            $newFile = $historyEntry['new_file'] ?? null;
+            if ($newFile) {
+                return "Documento subido: {$docLabel} ({$newFile['filename']}, " . $this->formatFileSize($newFile['size'] ?? 0) . ")";
+            }
+            return "Documento subido: {$docLabel}";
+        }
+
+        // For replacement, show old vs new
+        $oldFile = $historyEntry['old_file'] ?? null;
+        $newFile = $historyEntry['new_file'] ?? null;
+
+        $parts = ["Documento actualizado: {$docLabel}"];
+
+        if ($oldFile && $newFile) {
+            $oldInfo = $oldFile['filename'] . ' (' . $this->formatFileSize($oldFile['size'] ?? 0) . ')';
+            $newInfo = $newFile['filename'] . ' (' . $this->formatFileSize($newFile['size'] ?? 0) . ')';
+            $parts[] = "({$oldInfo} → {$newInfo})";
+        } elseif ($newFile) {
+            $parts[] = "({$newFile['filename']}, " . $this->formatFileSize($newFile['size'] ?? 0) . ")";
+        }
+
+        return implode(' ', $parts);
+    }
+
+    /**
+     * Format file size for human reading.
+     */
+    private function formatFileSize(int $bytes): string
+    {
+        if ($bytes < 1024) {
+            return $bytes . ' B';
+        }
+        if ($bytes < 1024 * 1024) {
+            return round($bytes / 1024, 1) . ' KB';
+        }
+        return round($bytes / (1024 * 1024), 1) . ' MB';
     }
 
     /**

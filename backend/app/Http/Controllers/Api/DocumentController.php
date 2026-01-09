@@ -5,10 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Enums\ApplicationStatus;
 use App\Enums\AuditAction;
 use App\Enums\DocumentStatus;
+use App\Enums\DocumentType;
+use App\Enums\VerificationStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\AuditLog;
+use App\Models\DataVerification;
 use App\Models\Document;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -50,7 +54,9 @@ class DocumentController extends Controller
             ], 404);
         }
 
-        if (!$application->isEditable() && $application->status !== ApplicationStatus::DOCS_PENDING) {
+        if (!$application->isEditable() &&
+            $application->status !== ApplicationStatus::DOCS_PENDING &&
+            $application->status !== ApplicationStatus::CORRECTIONS_PENDING) {
             return response()->json([
                 'message' => 'Cannot upload documents in current status'
             ], 400);
@@ -77,7 +83,19 @@ class DocumentController extends Controller
             ->where('type', $type)
             ->first();
 
+        // Capture old document info BEFORE deleting (for timeline comparison)
+        $oldDocInfo = null;
+        $isReplacement = false;
         if ($existingDoc) {
+            $isReplacement = true;
+            $oldDocInfo = [
+                'filename' => $existingDoc->original_name ?? $existingDoc->file_name ?? 'unknown',
+                'size' => $existingDoc->size ?? $existingDoc->file_size ?? 0,
+                'mime_type' => $existingDoc->mime_type,
+                'status' => $existingDoc->status instanceof DocumentStatus ? $existingDoc->status->value : $existingDoc->status,
+                'rejection_reason' => $existingDoc->rejection_reason,
+            ];
+
             // Delete old file
             if ($existingDoc->storage_path) {
                 Storage::disk($existingDoc->storage_disk)->delete($existingDoc->storage_path);
@@ -108,20 +126,49 @@ class DocumentController extends Controller
             'status' => DocumentStatus::PENDING,
         ]);
 
-        // Add to application timeline
+        // Get metadata for timeline
+        $metadata = $request->attributes->get('metadata', []);
+        $ipAddress = $metadata['ip_address'] ?? $request->ip();
+        $userAgent = $metadata['user_agent'] ?? $request->userAgent();
+        $approximateLocation = $this->getApproximateLocation($ipAddress);
+
+        // Get document type label
+        $docTypeEnum = DocumentType::tryFrom($type);
+        $docTypeLabel = $docTypeEnum ? $docTypeEnum->description() : $type;
+
+        // Build new document info
+        $newDocInfo = [
+            'filename' => $file->getClientOriginalName(),
+            'size' => $file->getSize(),
+            'mime_type' => $file->getMimeType(),
+            'extension' => strtoupper($extension),
+        ];
+
+        // Add to application timeline with metadata
         $history = $application->status_history ?? [];
-        $history[] = [
+        $timelineEntry = [
             'action' => 'DOC_UPLOADED',
             'document' => $type,
-            'filename' => $file->getClientOriginalName(),
+            'document_label' => $docTypeLabel,
+            'is_replacement' => $isReplacement,
+            'new_file' => $newDocInfo,
             'user_id' => $request->user()->id,
             'timestamp' => now()->toIso8601String(),
+            'ip_address' => $ipAddress,
+            'user_agent' => $userAgent,
+            'location' => $approximateLocation,
         ];
+
+        // Add old file info if this was a replacement
+        if ($isReplacement && $oldDocInfo) {
+            $timelineEntry['old_file'] = $oldDocInfo;
+        }
+
+        $history[] = $timelineEntry;
         $application->status_history = $history;
         $application->save();
 
         // Add to audit log with full metadata
-        $metadata = $request->attributes->get('metadata', []);
         AuditLog::log(
             AuditAction::DOCUMENT_UPLOADED->value,
             $tenant->id,
@@ -142,6 +189,11 @@ class DocumentController extends Controller
 
         // Broadcast document uploaded event
         event(new \App\Events\DocumentUploaded($document, $request->user()));
+
+        // Check if all corrections are complete and update status
+        if ($application->status === ApplicationStatus::CORRECTIONS_PENDING) {
+            $this->checkAndUpdateCorrectionStatus($application, $applicant, $request->user());
+        }
 
         return response()->json([
             'message' => 'Document uploaded successfully',
@@ -300,5 +352,176 @@ class DocumentController extends Controller
             'size' => $document->size,
             'uploaded_at' => $document->created_at->toIso8601String(),
         ];
+    }
+
+    /**
+     * Get approximate location from IP address using a free geolocation service.
+     */
+    private function getApproximateLocation(string $ip): ?string
+    {
+        // Skip for localhost/private IPs
+        if (in_array($ip, ['127.0.0.1', '::1']) ||
+            str_starts_with($ip, '192.168.') ||
+            str_starts_with($ip, '10.') ||
+            str_starts_with($ip, '172.')) {
+            return 'Local/Privada';
+        }
+
+        try {
+            $response = @file_get_contents("http://ip-api.com/json/{$ip}?fields=status,city,regionName,country&lang=es");
+            if ($response) {
+                $data = json_decode($response, true);
+                if ($data && ($data['status'] ?? '') === 'success') {
+                    $parts = array_filter([
+                        $data['city'] ?? null,
+                        $data['regionName'] ?? null,
+                        $data['country'] ?? null,
+                    ]);
+                    return implode(', ', $parts) ?: null;
+                }
+            }
+        } catch (\Exception $e) {
+            // Silently fail, location is optional
+        }
+
+        return null;
+    }
+
+    /**
+     * Check if all corrections (data fields and documents) are complete and update application status.
+     */
+    private function checkAndUpdateCorrectionStatus(Application $application, $applicant, $user): void
+    {
+        // Check if there are still rejected data fields
+        $stillRejectedFields = DataVerification::where('applicant_id', $applicant->id)
+            ->where('status', VerificationStatus::REJECTED)
+            ->exists();
+
+        if ($stillRejectedFields) {
+            return; // Still has field corrections pending
+        }
+
+        // Check if there are still rejected documents for this applicant's applications
+        $applicationIds = Application::where('applicant_id', $applicant->id)->pluck('id');
+        $stillRejectedDocs = Document::whereIn('application_id', $applicationIds)
+            ->where('status', DocumentStatus::REJECTED)
+            ->exists();
+
+        if ($stillRejectedDocs) {
+            return; // Still has document corrections pending
+        }
+
+        // Find when the application entered CORRECTIONS_PENDING status
+        $correctionStartDate = $this->getCorrectionCycleStartDate($application);
+
+        // Get fields corrected AFTER entering CORRECTIONS_PENDING
+        $correctedFieldLabels = [];
+        if ($correctionStartDate) {
+            $correctedFields = DataVerification::where('applicant_id', $applicant->id)
+                ->where('status', VerificationStatus::CORRECTED)
+                ->where('corrected_at', '>=', $correctionStartDate)
+                ->pluck('field_name')
+                ->unique();
+
+            foreach ($correctedFields as $fieldName) {
+                $correctedFieldLabels[] = DataVerification::getFieldLabel($fieldName);
+            }
+        }
+
+        // Get documents uploaded AFTER entering CORRECTIONS_PENDING (from timeline)
+        $uploadedDocLabels = $this->getUploadedDocumentsDuringCorrection($application, $correctionStartDate);
+
+        // Build reason message based on what was actually corrected
+        $reason = $this->buildCorrectionReasonMessage($correctedFieldLabels, $uploadedDocLabels);
+
+        // Update all applications in CORRECTIONS_PENDING status
+        $pendingApplications = Application::where('applicant_id', $applicant->id)
+            ->where('status', ApplicationStatus::CORRECTIONS_PENDING)
+            ->get();
+
+        foreach ($pendingApplications as $app) {
+            $app->changeStatus(
+                ApplicationStatus::IN_REVIEW->value,
+                $reason,
+                $user->id
+            );
+        }
+    }
+
+    /**
+     * Get the date when the application entered CORRECTIONS_PENDING status.
+     */
+    private function getCorrectionCycleStartDate(Application $application): ?Carbon
+    {
+        $history = $application->status_history ?? [];
+
+        // Find the most recent entry where status changed TO CORRECTIONS_PENDING
+        $correctionEntries = collect($history)
+            ->filter(fn ($entry) => ($entry['to'] ?? null) === ApplicationStatus::CORRECTIONS_PENDING->value)
+            ->sortByDesc('timestamp');
+
+        $lastEntry = $correctionEntries->first();
+
+        if ($lastEntry && isset($lastEntry['timestamp'])) {
+            return Carbon::parse($lastEntry['timestamp']);
+        }
+
+        return null;
+    }
+
+    /**
+     * Get list of documents uploaded during the correction cycle.
+     */
+    private function getUploadedDocumentsDuringCorrection(Application $application, ?Carbon $startDate): array
+    {
+        if (!$startDate) {
+            return [];
+        }
+
+        $history = $application->status_history ?? [];
+
+        $uploadedDocs = collect($history)
+            ->filter(function ($entry) use ($startDate) {
+                if (($entry['action'] ?? null) !== 'DOC_UPLOADED') {
+                    return false;
+                }
+                if (!isset($entry['timestamp'])) {
+                    return false;
+                }
+                return Carbon::parse($entry['timestamp'])->gte($startDate);
+            })
+            ->pluck('document')
+            ->unique()
+            ->map(function ($docType) {
+                // Convert document type to human-readable label
+                $enumType = DocumentType::tryFrom($docType);
+                return $enumType ? $enumType->description() : $docType;
+            })
+            ->values()
+            ->toArray();
+
+        return $uploadedDocs;
+    }
+
+    /**
+     * Build a reason message for the status change based on what was corrected.
+     */
+    private function buildCorrectionReasonMessage(array $correctedFields, array $uploadedDocs): string
+    {
+        $parts = [];
+
+        if (!empty($correctedFields)) {
+            $parts[] = 'Datos corregidos: ' . implode(', ', $correctedFields);
+        }
+
+        if (!empty($uploadedDocs)) {
+            $parts[] = 'Documentos actualizados: ' . implode(', ', $uploadedDocs);
+        }
+
+        if (empty($parts)) {
+            return 'Correcciones completadas';
+        }
+
+        return implode('. ', $parts);
     }
 }

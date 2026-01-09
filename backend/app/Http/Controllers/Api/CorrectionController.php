@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\ApplicationStatus;
 use App\Enums\AuditAction;
+use App\Enums\DocumentStatus;
+use App\Enums\DocumentType;
 use App\Enums\EmploymentType;
 use App\Enums\VerifiableField;
 use App\Enums\VerificationStatus;
@@ -12,6 +14,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\AuditLog;
 use App\Models\DataVerification;
+use App\Models\Document;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -81,6 +85,21 @@ class CorrectionController extends Controller
             ->where('status', ApplicationStatus::CORRECTIONS_PENDING)
             ->get(['id', 'folio', 'status', 'updated_at']);
 
+        // Get rejected documents from all applications
+        $applicationIds = Application::where('applicant_id', $applicant->id)->pluck('id');
+        $rejectedDocuments = Document::whereIn('application_id', $applicationIds)
+            ->where('status', DocumentStatus::REJECTED)
+            ->get()
+            ->map(fn ($doc) => [
+                'id' => $doc->id,
+                'application_id' => $doc->application_id,
+                'type' => $doc->type->value,
+                'type_label' => $doc->type->description(),
+                'name' => $doc->name ?? $doc->original_name,
+                'rejection_reason' => $doc->rejection_reason,
+                'rejected_at' => $doc->reviewed_at?->toIso8601String(),
+            ]);
+
         // Get applicant data for form population
         $applicant->load(['primaryAddress', 'currentEmployment']);
         $personalData = $applicant->personal_data ?? [];
@@ -125,10 +144,11 @@ class CorrectionController extends Controller
         return response()->json([
             'data' => [
                 'rejected_fields' => $rejectedFields,
+                'rejected_documents' => $rejectedDocuments,
                 'correction_history' => $correctionHistory,
                 'applicant_data' => $applicantData,
                 'pending_applications' => $pendingApplications,
-                'has_corrections_pending' => $rejectedFields->count() > 0,
+                'has_corrections_pending' => $rejectedFields->count() > 0 || $rejectedDocuments->count() > 0,
             ],
         ]);
     }
@@ -404,34 +424,69 @@ class CorrectionController extends Controller
     protected function checkAndUpdateApplicationStatus($applicant, $user, string $fieldLabel, $oldValue, $newValue): void
     {
         // Check if there are still rejected fields
-        $stillRejected = DataVerification::where('applicant_id', $applicant->id)
+        $stillRejectedFields = DataVerification::where('applicant_id', $applicant->id)
             ->rejected()
             ->exists();
 
-        if ($stillRejected) {
-            return; // Still has corrections pending
+        if ($stillRejectedFields) {
+            return; // Still has field corrections pending
         }
 
-        // Get all recently corrected fields to include in the status change reason
-        $correctedFields = DataVerification::where('applicant_id', $applicant->id)
-            ->where('status', VerificationStatus::CORRECTED)
-            ->whereNotNull('correction_history')
-            ->get();
+        // Check if there are still rejected documents
+        $applicationIds = Application::where('applicant_id', $applicant->id)->pluck('id');
+        $stillRejectedDocs = Document::whereIn('application_id', $applicationIds)
+            ->where('status', DocumentStatus::REJECTED)
+            ->exists();
 
-        // Build a simple list of corrected field names (no values - those are in individual timeline entries)
-        $nameFields = [
-            VerifiableField::FIRST_NAME->value,
-            VerifiableField::LAST_NAME_1->value,
-            VerifiableField::LAST_NAME_2->value,
-        ];
+        if ($stillRejectedDocs) {
+            return; // Still has document corrections pending
+        }
 
-        $correctedFieldNames = $correctedFields->map(function ($verification) use ($nameFields) {
-            return in_array($verification->field_name, $nameFields)
-                ? 'Nombre Completo'
-                : DataVerification::getFieldLabel($verification->field_name);
-        })->unique()->implode(', ');
+        // Get the first pending application to determine correction cycle start date
+        $firstApplication = Application::where('applicant_id', $applicant->id)
+            ->where('status', ApplicationStatus::CORRECTIONS_PENDING)
+            ->first();
 
-        $reason = "Correcciones completadas: {$correctedFieldNames}";
+        if (!$firstApplication) {
+            return; // No pending applications
+        }
+
+        // Find when the application entered CORRECTIONS_PENDING status
+        $correctionStartDate = $this->getCorrectionCycleStartDate($firstApplication);
+
+        // Get fields corrected AFTER entering CORRECTIONS_PENDING
+        $correctedFieldLabels = [];
+        if ($correctionStartDate) {
+            $nameFields = [
+                VerifiableField::FIRST_NAME->value,
+                VerifiableField::LAST_NAME_1->value,
+                VerifiableField::LAST_NAME_2->value,
+            ];
+
+            $correctedFields = DataVerification::where('applicant_id', $applicant->id)
+                ->where('status', VerificationStatus::CORRECTED)
+                ->where('corrected_at', '>=', $correctionStartDate)
+                ->pluck('field_name')
+                ->unique();
+
+            $hasNameCorrection = false;
+            foreach ($correctedFields as $fieldName) {
+                if (in_array($fieldName, $nameFields)) {
+                    if (!$hasNameCorrection) {
+                        $correctedFieldLabels[] = 'Nombre Completo';
+                        $hasNameCorrection = true;
+                    }
+                } else {
+                    $correctedFieldLabels[] = DataVerification::getFieldLabel($fieldName);
+                }
+            }
+        }
+
+        // Get documents uploaded AFTER entering CORRECTIONS_PENDING (from timeline)
+        $uploadedDocLabels = $this->getUploadedDocumentsDuringCorrection($firstApplication, $correctionStartDate);
+
+        // Build reason message based on what was actually corrected
+        $reason = $this->buildCorrectionReasonMessage($correctedFieldLabels, $uploadedDocLabels);
 
         // Update any applications in CORRECTIONS_PENDING status
         $applications = Application::where('applicant_id', $applicant->id)
@@ -446,6 +501,83 @@ class CorrectionController extends Controller
                 $user->id
             );
         }
+    }
+
+    /**
+     * Get the date when the application entered CORRECTIONS_PENDING status.
+     */
+    protected function getCorrectionCycleStartDate(Application $application): ?Carbon
+    {
+        $history = $application->status_history ?? [];
+
+        // Find the most recent entry where status changed TO CORRECTIONS_PENDING
+        $correctionEntries = collect($history)
+            ->filter(fn ($entry) => ($entry['to'] ?? null) === ApplicationStatus::CORRECTIONS_PENDING->value)
+            ->sortByDesc('timestamp');
+
+        $lastEntry = $correctionEntries->first();
+
+        if ($lastEntry && isset($lastEntry['timestamp'])) {
+            return Carbon::parse($lastEntry['timestamp']);
+        }
+
+        return null;
+    }
+
+    /**
+     * Get list of documents uploaded during the correction cycle.
+     */
+    protected function getUploadedDocumentsDuringCorrection(Application $application, ?Carbon $startDate): array
+    {
+        if (!$startDate) {
+            return [];
+        }
+
+        $history = $application->status_history ?? [];
+
+        $uploadedDocs = collect($history)
+            ->filter(function ($entry) use ($startDate) {
+                if (($entry['action'] ?? null) !== 'DOC_UPLOADED') {
+                    return false;
+                }
+                if (!isset($entry['timestamp'])) {
+                    return false;
+                }
+                return Carbon::parse($entry['timestamp'])->gte($startDate);
+            })
+            ->pluck('document')
+            ->unique()
+            ->map(function ($docType) {
+                // Convert document type to human-readable label
+                $enumType = DocumentType::tryFrom($docType);
+                return $enumType ? $enumType->description() : $docType;
+            })
+            ->values()
+            ->toArray();
+
+        return $uploadedDocs;
+    }
+
+    /**
+     * Build a reason message for the status change based on what was corrected.
+     */
+    protected function buildCorrectionReasonMessage(array $correctedFields, array $uploadedDocs): string
+    {
+        $parts = [];
+
+        if (!empty($correctedFields)) {
+            $parts[] = 'Datos corregidos: ' . implode(', ', $correctedFields);
+        }
+
+        if (!empty($uploadedDocs)) {
+            $parts[] = 'Documentos actualizados: ' . implode(', ', $uploadedDocs);
+        }
+
+        if (empty($parts)) {
+            return 'Correcciones completadas';
+        }
+
+        return implode('. ', $parts);
     }
 
     /**

@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { AppButton } from '@/components/common'
 import api from '@/services/api'
+import applicationService from '@/services/application.service'
 import { useTenantStore } from '@/stores/tenant'
 import { useApplicantStore } from '@/stores/applicant'
 import { getEcho, type EchoInstance } from '@/plugins/echo'
@@ -68,8 +69,22 @@ interface CorrectionHistoryEntry {
   corrected_at: string
 }
 
+interface RejectedDocument {
+  id: string
+  application_id: string
+  type: string
+  type_label: string
+  name: string
+  rejection_reason: string
+  rejected_at: string
+  isUploading?: boolean
+  uploadError?: string
+  uploadSuccess?: boolean
+}
+
 interface CorrectionsData {
   rejected_fields: RejectedField[]
+  rejected_documents: RejectedDocument[]
   correction_history: CorrectionHistoryEntry[]
   applicant_data?: ApplicantData
   pending_applications: Array<{
@@ -278,8 +293,9 @@ const groupedSections = computed(() => {
   return sections
 })
 
-const hasCorrections = computed(() => groupedSections.value.length > 0)
+const hasCorrections = computed(() => groupedSections.value.length > 0 || (correctionsData.value?.rejected_documents?.length || 0) > 0)
 const totalRejectedFields = computed(() => correctionsData.value?.rejected_fields?.length || 0)
+const totalRejectedDocuments = computed(() => correctionsData.value?.rejected_documents?.length || 0)
 
 // Check if a specific field is rejected
 const isFieldRejected = (sectionId: string, fieldName: string): boolean => {
@@ -405,6 +421,58 @@ const goBack = () => {
 // Correction history computed
 const correctionHistory = computed(() => correctionsData.value?.correction_history || [])
 const hasCorrectionHistory = computed(() => correctionHistory.value.length > 0)
+
+// Rejected documents computed
+const rejectedDocuments = computed(() => correctionsData.value?.rejected_documents || [])
+const hasRejectedDocuments = computed(() => rejectedDocuments.value.length > 0)
+
+// Document upload handler
+const handleDocumentUpload = async (doc: RejectedDocument, event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (!input.files || !input.files[0]) return
+
+  const file = input.files[0]
+
+  // Validate file size (10MB max)
+  if (file.size > 10 * 1024 * 1024) {
+    doc.uploadError = 'El archivo excede el tamaño máximo de 10MB'
+    return
+  }
+
+  // Validate file type
+  const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']
+  if (!validTypes.includes(file.type)) {
+    doc.uploadError = 'Formato no válido. Usa PDF, JPG o PNG'
+    return
+  }
+
+  doc.isUploading = true
+  doc.uploadError = undefined
+
+  try {
+    await applicationService.uploadDocument(doc.application_id, doc.type, file)
+    doc.uploadSuccess = true
+    successMessage.value = `${doc.type_label} subido correctamente`
+
+    // Reload corrections to update the list
+    setTimeout(() => {
+      loadCorrections()
+    }, 1500)
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } } }
+    doc.uploadError = err.response?.data?.message || 'Error al subir el documento'
+    console.error('Failed to upload document:', e)
+  } finally {
+    doc.isUploading = false
+  }
+}
+
+// Format file size
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
 
 // Format value for display
 const formatValue = (value: unknown): string => {
@@ -621,7 +689,17 @@ onMounted(() => {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
               <div class="text-sm text-amber-800">
-                <p class="font-medium">Tienes {{ totalRejectedFields }} campo(s) en {{ groupedSections.length }} sección(es) que requieren corrección</p>
+                <p class="font-medium">
+                  <template v-if="totalRejectedFields > 0 && totalRejectedDocuments > 0">
+                    Tienes {{ totalRejectedFields }} campo(s) y {{ totalRejectedDocuments }} documento(s) que requieren corrección
+                  </template>
+                  <template v-else-if="totalRejectedFields > 0">
+                    Tienes {{ totalRejectedFields }} campo(s) en {{ groupedSections.length }} sección(es) que requieren corrección
+                  </template>
+                  <template v-else>
+                    Tienes {{ totalRejectedDocuments }} documento(s) que requieren corrección
+                  </template>
+                </p>
                 <p class="text-amber-700 mt-1">Por favor revisa y corrige la información marcada para continuar con tu solicitud.</p>
               </div>
             </div>
@@ -1066,6 +1144,110 @@ onMounted(() => {
                   </div>
                 </div>
               </template>
+            </div>
+          </div>
+
+          <!-- Rejected Documents Section -->
+          <div v-if="hasRejectedDocuments" class="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="p-4 border-b bg-gray-50">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
+                    <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 class="font-semibold text-gray-900">Documentos Rechazados</h3>
+                    <p class="text-xs text-gray-500">{{ rejectedDocuments.length }} documento(s) por corregir</p>
+                  </div>
+                </div>
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                  <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                  </svg>
+                  Requiere corrección
+                </span>
+              </div>
+            </div>
+
+            <div class="divide-y">
+              <div
+                v-for="doc in rejectedDocuments"
+                :key="doc.id"
+                class="p-4"
+              >
+                <!-- Document Info -->
+                <div class="flex items-start gap-3 mb-3">
+                  <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <p class="font-medium text-gray-900">{{ doc.type_label }}</p>
+                    <p class="text-sm text-gray-500 truncate">{{ doc.name }}</p>
+                  </div>
+                </div>
+
+                <!-- Rejection Reason -->
+                <div class="bg-red-50 rounded-lg p-3 mb-4">
+                  <div class="flex items-start gap-2">
+                    <svg class="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                    <div class="flex-1">
+                      <p class="text-sm font-medium text-red-800">Motivo del rechazo</p>
+                      <p class="text-sm text-red-700">{{ doc.rejection_reason }}</p>
+                      <p class="text-xs text-red-500 mt-1">Rechazado {{ formatDate(doc.rejected_at) }}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Upload Success State -->
+                <div v-if="doc.uploadSuccess" class="bg-green-50 rounded-xl p-4 text-center">
+                  <svg class="w-8 h-8 text-green-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p class="text-sm font-medium text-green-800">Documento subido correctamente</p>
+                  <p class="text-xs text-green-600 mt-1">Pendiente de revisión</p>
+                </div>
+
+                <!-- Upload Area -->
+                <template v-else>
+                  <!-- Error Message -->
+                  <div v-if="doc.uploadError" class="bg-red-50 rounded-lg p-3 mb-3">
+                    <p class="text-sm text-red-600">{{ doc.uploadError }}</p>
+                  </div>
+
+                  <!-- Upload Button -->
+                  <label class="block">
+                    <div
+                      class="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition-colors"
+                      :class="{ 'opacity-50 pointer-events-none': doc.isUploading }"
+                    >
+                      <template v-if="doc.isUploading">
+                        <div class="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto mb-2" />
+                        <p class="text-sm text-gray-600">Subiendo documento...</p>
+                      </template>
+                      <template v-else>
+                        <svg class="w-10 h-10 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <p class="text-sm font-medium text-gray-700">Toca para subir nuevo documento</p>
+                        <p class="text-xs text-gray-500 mt-1">PDF, JPG o PNG (máx. 10MB)</p>
+                      </template>
+                    </div>
+                    <input
+                      type="file"
+                      class="hidden"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      :disabled="doc.isUploading"
+                      @change="handleDocumentUpload(doc, $event)"
+                    />
+                  </label>
+                </template>
+              </div>
             </div>
           </div>
 
