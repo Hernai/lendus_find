@@ -34,14 +34,6 @@ const errors = reactive({
 
 const submitError = ref('')
 
-// Calculate date limits dynamically
-// Min: 100 years ago, Max: 18 years ago (user must be at least 18)
-const today = new Date()
-const minYear = today.getFullYear() - 100
-const maxYear = today.getFullYear() - 18
-const minDate = `${minYear}-01-01`
-const maxDate = `${maxYear}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-
 // Sync form from store on mount
 onMounted(async () => {
   await onboardingStore.init()
@@ -377,13 +369,9 @@ const handleSubmit = async () => {
           label="Fecha de nacimiento"
           placeholder="Selecciona tu fecha"
           :error="errors.birth_date"
-          :min="minDate"
-          :max="maxDate"
+          hint="Debes tener al menos 18 años"
           required
         />
-
-        <!-- Age requirement info -->
-        <p class="text-xs text-gray-500 -mt-2">Debes tener al menos 18 años</p>
 
         <AppRadioGroup
           v-model="form.gender"
