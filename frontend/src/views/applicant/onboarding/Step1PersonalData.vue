@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, computed, onMounted, watch } from 'vue'
+import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOnboardingStore, useApplicationStore, useTenantStore } from '@/stores'
 import { AppButton, AppInput, AppRadioGroup, AppSelect, AppDatePicker } from '@/components/common'
@@ -31,6 +31,16 @@ const errors = reactive({
   birth_state: '',
   nationality: ''
 })
+
+const submitError = ref('')
+
+// Calculate date limits dynamically
+// Min: 100 years ago, Max: 18 years ago (user must be at least 18)
+const today = new Date()
+const minYear = today.getFullYear() - 100
+const maxYear = today.getFullYear() - 18
+const minDate = `${minYear}-01-01`
+const maxDate = `${maxYear}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
 // Sync form from store on mount
 onMounted(async () => {
@@ -165,7 +175,20 @@ const validate = () => {
     errors.birth_date = 'La fecha de nacimiento es requerida'
     isValid = false
   } else {
-    errors.birth_date = ''
+    // Validate age (must be at least 18 years old)
+    const birthDate = new Date(form.birth_date)
+    const today = new Date()
+    let age = today.getFullYear() - birthDate.getFullYear()
+    const monthDiff = today.getMonth() - birthDate.getMonth()
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--
+    }
+    if (age < 18) {
+      errors.birth_date = 'Debes tener al menos 18 años para solicitar un crédito'
+      isValid = false
+    } else {
+      errors.birth_date = ''
+    }
   }
 
   if (!form.gender) {
@@ -201,8 +224,34 @@ const validate = () => {
   return isValid
 }
 
+// Helper to extract error message from API response
+const getErrorMessage = (e: unknown): string => {
+  const error = e as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } }
+  const validationErrors = error.response?.data?.errors
+  if (validationErrors) {
+    // Get first validation error
+    const keys = Object.keys(validationErrors)
+    const firstKey = keys[0]
+    if (firstKey) {
+      const messages = validationErrors[firstKey]
+      // Translate common backend messages
+      const msg = messages?.[0] || ''
+      if (msg.includes('before') && msg.includes('18 years')) {
+        return 'Debes tener al menos 18 años para solicitar un crédito'
+      }
+      if (msg.includes('required')) {
+        return 'Faltan campos requeridos'
+      }
+      return msg || 'Error de validación'
+    }
+  }
+  return error.response?.data?.message || 'Error al guardar. Intenta de nuevo.'
+}
+
 const handleSubmit = async () => {
   if (!validate()) return
+
+  submitError.value = ''
 
   try {
     // Save step 1 explicitly - this creates the applicant record
@@ -273,14 +322,15 @@ const handleSubmit = async () => {
         }
       } catch (createError) {
         console.error('❌ Failed to create application after step 1:', createError)
-        // Show error to user but don't block navigation
-        alert('No se pudo crear la solicitud. Por favor intenta de nuevo o contacta soporte.')
+        submitError.value = 'No se pudo crear la solicitud. Por favor intenta de nuevo.'
+        return
       }
     }
 
     router.push('/solicitud/paso-2')
   } catch (e) {
     console.error('Failed to save step 1:', e)
+    submitError.value = getErrorMessage(e)
   }
 }
 </script>
@@ -327,10 +377,13 @@ const handleSubmit = async () => {
           label="Fecha de nacimiento"
           placeholder="Selecciona tu fecha"
           :error="errors.birth_date"
-          min="1940-01-01"
-          max="2008-12-31"
+          :min="minDate"
+          :max="maxDate"
           required
         />
+
+        <!-- Age requirement info -->
+        <p class="text-xs text-gray-500 -mt-2">Debes tener al menos 18 años</p>
 
         <AppRadioGroup
           v-model="form.gender"
@@ -384,6 +437,23 @@ const handleSubmit = async () => {
           </div>
         </div>
 
+        <!-- Error alert -->
+        <div v-if="submitError" class="bg-red-50 border border-red-200 rounded-xl p-4 flex gap-3">
+          <svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div class="flex-1">
+            <p class="text-sm text-red-800 font-medium">{{ submitError }}</p>
+            <button
+              type="button"
+              class="text-xs text-red-600 underline mt-1"
+              @click="submitError = ''"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+
         <!-- Auto-save indicator -->
         <div v-if="onboardingStore.isSaving || onboardingStore.lastSavedAt" class="text-xs text-right">
           <span v-if="onboardingStore.isSaving" class="text-primary-600 flex items-center justify-end gap-1">
@@ -394,7 +464,7 @@ const handleSubmit = async () => {
             Guardando...
           </span>
           <span v-else class="text-gray-400">
-            ✓ Guardado automáticamente
+            Guardado
           </span>
         </div>
 
