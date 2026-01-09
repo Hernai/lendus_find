@@ -392,8 +392,9 @@ const goBack = () => {
                   <input
                     :id="`file-${doc.type}`"
                     type="file"
-                    class="hidden"
-                    accept=".pdf,.jpg,.jpeg,.png"
+                    class="sr-only"
+                    accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
+                    capture="environment"
                     @change="handleFileSelect(doc, $event)"
                   >
                 </label>

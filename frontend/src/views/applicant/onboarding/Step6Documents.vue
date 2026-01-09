@@ -267,8 +267,9 @@ const prevStep = () => router.push('/solicitud/paso-5')
                   Subir archivo
                   <input
                     type="file"
-                    accept="image/*,.pdf"
-                    class="hidden"
+                    accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
+                    capture="environment"
+                    class="sr-only"
                     @change="handleFileSelect(doc, $event)"
                   >
                 </label>
