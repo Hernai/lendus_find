@@ -62,7 +62,9 @@ class DocumentController extends Controller
         if (!$isSelfie &&
             !$application->isEditable() &&
             $application->status !== ApplicationStatus::DOCS_PENDING &&
-            $application->status !== ApplicationStatus::CORRECTIONS_PENDING) {
+            $application->status !== ApplicationStatus::CORRECTIONS_PENDING &&
+            $application->status !== ApplicationStatus::SUBMITTED &&
+            $application->status !== ApplicationStatus::IN_REVIEW) {
             return response()->json([
                 'message' => 'Cannot upload documents in current status'
             ], 400);

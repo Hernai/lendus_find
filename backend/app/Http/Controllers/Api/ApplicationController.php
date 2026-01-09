@@ -31,12 +31,12 @@ class ApplicationController extends Controller
         }
 
         $applications = $applicant->applications()
-            ->with(['product:id,name,type'])
+            ->with(['product', 'documents'])
             ->orderByDesc('created_at')
             ->get();
 
         return response()->json([
-            'data' => $applications->map(fn($app) => $this->formatApplication($app)),
+            'data' => $applications->map(fn($app) => $this->formatApplicationWithPending($app)),
             'meta' => ['total' => $applications->count()]
         ]);
     }
@@ -541,6 +541,37 @@ class ApplicationController extends Controller
             'created_at' => $application->created_at->toIso8601String(),
             'updated_at' => $application->updated_at->toIso8601String(),
         ];
+    }
+
+    /**
+     * Format application for list response with pending documents.
+     */
+    private function formatApplicationWithPending(Application $application): array
+    {
+        $data = $this->formatApplication($application);
+
+        // Calculate pending documents for applications that need them
+        if (in_array($application->status, [ApplicationStatus::DOCS_PENDING->value, ApplicationStatus::DOCS_PENDING, 'DOCS_PENDING', ApplicationStatus::SUBMITTED->value, ApplicationStatus::SUBMITTED, 'SUBMITTED', ApplicationStatus::DRAFT->value, ApplicationStatus::DRAFT, 'DRAFT'])) {
+            $requiredDocs = $application->product->required_docs ?? $application->product->required_documents ?? [];
+            $uploadedTypes = $application->documents->pluck('type')->map(fn($t) => $t instanceof \App\Enums\DocumentType ? $t->value : $t)->toArray();
+
+            $pendingDocs = collect($requiredDocs)
+                ->filter(fn($type) => !in_array($type, $uploadedTypes))
+                ->map(fn($type) => [
+                    'type' => $type,
+                    'label' => $this->getDocumentLabel($type),
+                    'description' => $this->getDocumentDescription($type),
+                    'required' => true,
+                ])
+                ->values()
+                ->toArray();
+
+            if (!empty($pendingDocs)) {
+                $data['pending_documents'] = $pendingDocs;
+            }
+        }
+
+        return $data;
     }
 
     /**

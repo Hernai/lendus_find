@@ -420,7 +420,7 @@ const getStatusBadge = (status: string) => {
       </div>
 
       <!-- Grid -->
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 items-start">
         <!-- Uploaded Documents -->
         <div
           v-for="doc in documents"
@@ -434,34 +434,37 @@ const getStatusBadge = (status: string) => {
         >
           <!-- Thumbnail -->
           <button
-            class="w-full aspect-[4/3] bg-gray-100 flex items-center justify-center relative"
+            class="w-full aspect-square bg-gray-100 relative overflow-hidden"
             @click="viewDocument(doc)"
           >
-            <!-- Image thumbnail -->
+            <!-- Image thumbnail (absolutely positioned to ensure cropping) -->
             <img
               v-if="documentThumbnails[doc.id]"
               :src="documentThumbnails[doc.id]"
               :alt="doc.name"
-              class="w-full h-full object-cover"
+              class="absolute inset-0 w-full h-full object-cover"
             />
-            <!-- Loading -->
-            <div v-else-if="loadingThumbnails[doc.id]" class="animate-spin w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full" />
-            <!-- PDF Icon -->
-            <svg v-else-if="isPdf(doc.mime_type)" class="w-12 h-12 text-red-500" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm-1 2l5 5h-5V4zM8.5 13a.5.5 0 01.5.5v3a.5.5 0 01-1 0v-3a.5.5 0 01.5-.5zm3 0c.828 0 1.5.672 1.5 1.5v1c0 .828-.672 1.5-1.5 1.5H11v1h1.5a.5.5 0 010 1H11a1 1 0 01-1-1v-4h1.5zm0 3a.5.5 0 00.5-.5v-1a.5.5 0 00-.5-.5H11v2h.5zm3.5-3h2a.5.5 0 010 1h-1.5v1h1a.5.5 0 010 1h-1v1.5a.5.5 0 01-1 0V13.5a.5.5 0 01.5-.5z"/>
-            </svg>
-            <!-- Person icon for SELFIE -->
-            <svg v-else-if="doc.type === 'SELFIE'" class="w-12 h-12 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-            </svg>
-            <!-- Image icon for images not yet loaded -->
-            <svg v-else-if="isImage(doc.mime_type)" class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <!-- Generic document -->
-            <svg v-else class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
+            <!-- Fallback content (centered) -->
+            <div v-if="!documentThumbnails[doc.id]" class="absolute inset-0 flex items-center justify-center">
+              <!-- Loading -->
+              <div v-if="loadingThumbnails[doc.id]" class="animate-spin w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full" />
+              <!-- PDF Icon -->
+              <svg v-else-if="isPdf(doc.mime_type)" class="w-12 h-12 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm-1 2l5 5h-5V4zM8.5 13a.5.5 0 01.5.5v3a.5.5 0 01-1 0v-3a.5.5 0 01.5-.5zm3 0c.828 0 1.5.672 1.5 1.5v1c0 .828-.672 1.5-1.5 1.5H11v1h1.5a.5.5 0 010 1H11a1 1 0 01-1-1v-4h1.5zm0 3a.5.5 0 00.5-.5v-1a.5.5 0 00-.5-.5H11v2h.5zm3.5-3h2a.5.5 0 010 1h-1.5v1h1a.5.5 0 010 1h-1v1.5a.5.5 0 01-1 0V13.5a.5.5 0 01.5-.5z"/>
+              </svg>
+              <!-- Person icon for SELFIE -->
+              <svg v-else-if="doc.type === 'SELFIE'" class="w-12 h-12 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+              </svg>
+              <!-- Image icon for images not yet loaded -->
+              <svg v-else-if="isImage(doc.mime_type)" class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <!-- Generic document -->
+              <svg v-else class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
 
             <!-- Hover overlay -->
             <div class="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
@@ -541,7 +544,7 @@ const getStatusBadge = (status: string) => {
           class="border-2 border-dashed border-orange-300 rounded-xl overflow-hidden bg-orange-50/50 flex flex-col"
         >
           <!-- Thumbnail placeholder -->
-          <div class="w-full aspect-[4/3] flex items-center justify-center bg-orange-100/50">
+          <div class="w-full aspect-square flex items-center justify-center bg-orange-100/50">
             <div class="text-center">
               <svg class="w-10 h-10 text-orange-400 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -664,7 +667,7 @@ const getStatusBadge = (status: string) => {
               <button
                 v-for="doc in imageDocuments"
                 :key="doc.id"
-                class="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all"
+                class="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all bg-gray-800"
                 :class="[
                   selectedDocument?.id === doc.id
                     ? 'border-white ring-2 ring-white/50'

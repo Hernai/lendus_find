@@ -12,6 +12,13 @@ const authStore = useAuthStore()
 const tenantStore = useTenantStore()
 const applicantStore = useApplicantStore()
 
+interface PendingDocument {
+  type: string
+  label: string
+  description: string
+  required: boolean
+}
+
 interface Application {
   id: string
   folio: string
@@ -22,7 +29,7 @@ interface Application {
   created_at: string
   updated_at: string
   next_action?: string
-  pending_docs?: string[]
+  pending_documents?: PendingDocument[]
 }
 
 const isLoading = ref(true)
@@ -75,7 +82,7 @@ const loadApplications = async () => {
       created_at: app.created_at,
       updated_at: app.updated_at,
       next_action: getNextAction(app.status),
-      pending_docs: app.status === 'DOCS_PENDING' ? ['Documentos pendientes'] : undefined
+      pending_documents: app.pending_documents
     }))
   } catch (e) {
     console.error('Failed to load applications:', e)
@@ -312,7 +319,7 @@ const handleCancelApplication = async () => {
     if (app) {
       app.status = 'CANCELLED'
       app.next_action = undefined
-      app.pending_docs = undefined
+      app.pending_documents = undefined
     }
     showCancelConfirm.value = false
     applicationToCancel.value = null
@@ -435,15 +442,20 @@ const handleCancelApplication = async () => {
                 </div>
 
                 <!-- Pending Documents Alert -->
-                <div v-if="app.pending_docs && app.pending_docs.length > 0" class="bg-orange-50 rounded-xl p-4 mb-4">
+                <div v-if="app.pending_documents && app.pending_documents.length > 0" class="bg-orange-50 rounded-xl p-4 mb-4">
                   <div class="flex items-start gap-3">
-                    <svg class="w-5 h-5 text-orange-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
-                    <div>
-                      <p class="font-medium text-orange-800">Documentos pendientes</p>
-                      <ul class="text-sm text-orange-700 mt-1 list-disc list-inside">
-                        <li v-for="doc in app.pending_docs" :key="doc">{{ doc }}</li>
+                    <div class="min-w-0 flex-1">
+                      <p class="font-medium text-orange-800">Faltan {{ app.pending_documents.length }} documento{{ app.pending_documents.length > 1 ? 's' : '' }}</p>
+                      <ul class="text-sm text-orange-700 mt-1 space-y-1">
+                        <li v-for="doc in app.pending_documents" :key="doc.type" class="flex items-start gap-2">
+                          <svg class="w-4 h-4 text-orange-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span>{{ doc.label }}</span>
+                        </li>
                       </ul>
                     </div>
                   </div>
@@ -467,7 +479,7 @@ const handleCancelApplication = async () => {
                 <!-- Actions -->
                 <div class="flex gap-3">
                   <AppButton
-                    v-if="app.status === 'DOCS_PENDING'"
+                    v-if="app.pending_documents && app.pending_documents.length > 0"
                     variant="primary"
                     class="flex-1"
                     @click="uploadDocs(app)"
@@ -511,7 +523,7 @@ const handleCancelApplication = async () => {
                     Rechazar
                   </AppButton>
                   <AppButton
-                    v-if="!['DOCS_PENDING', 'CORRECTIONS_PENDING', 'COUNTER_OFFERED'].includes(app.status)"
+                    v-if="!['CORRECTIONS_PENDING', 'COUNTER_OFFERED'].includes(app.status) && !(app.pending_documents && app.pending_documents.length > 0)"
                     variant="outline"
                     class="flex-1"
                     @click="viewApplication(app)"
