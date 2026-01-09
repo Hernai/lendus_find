@@ -2,7 +2,7 @@
 import { reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOnboardingStore, useApplicationStore, useTenantStore } from '@/stores'
-import { AppButton, AppInput, AppRadioGroup, AppSelect } from '@/components/common'
+import { AppButton, AppInput, AppRadioGroup, AppSelect, AppDatePicker } from '@/components/common'
 import type { PaymentFrequency } from '@/types'
 
 const router = useRouter()
@@ -322,11 +322,13 @@ const handleSubmit = async () => {
           />
         </div>
 
-        <AppInput
+        <AppDatePicker
           v-model="form.birth_date"
-          type="date"
           label="Fecha de nacimiento"
+          placeholder="Selecciona tu fecha"
           :error="errors.birth_date"
+          min="1940-01-01"
+          max="2008-12-31"
           required
         />
 

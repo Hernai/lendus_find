@@ -94,3 +94,16 @@ export interface DataCorrectionSubmittedEvent {
   correction_count: number
   corrected_at: string
 }
+
+export interface BankAccountVerifiedEvent {
+  bank_account_id: string
+  application_id: string
+  applicant_id: string
+  bank_name: string
+  is_verified: boolean
+  verified_by?: {
+    id: string
+    name: string
+  }
+  verified_at: string
+}

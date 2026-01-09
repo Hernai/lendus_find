@@ -82,12 +82,12 @@ onMounted(async () => {
               </p>
 
               <div class="flex flex-col sm:flex-row gap-4 mb-8">
-                <router-link to="/simulador">
-                  <AppButton variant="primary" size="lg">
+                <router-link to="/simulador" class="w-full sm:w-auto">
+                  <AppButton variant="primary" size="lg" fullWidth class="sm:w-auto">
                     Comenzar Solicitud →
                   </AppButton>
                 </router-link>
-                <AppButton variant="outline" size="lg" @click="showRequirementsModal = true">
+                <AppButton variant="outline" size="lg" fullWidth class="sm:w-auto" @click="showRequirementsModal = true">
                   Ver Requisitos
                 </AppButton>
               </div>
@@ -145,24 +145,24 @@ onMounted(async () => {
               <!-- Simulator (when product is selected) -->
               <div v-else>
                 <!-- Selected product header -->
-                <div class="flex items-center gap-3 mb-4">
+                <div class="flex items-center gap-2 sm:gap-3 mb-4 bg-white rounded-xl p-3 shadow-sm">
                   <button
-                    class="p-2 hover:bg-white/80 rounded-lg transition-colors"
+                    class="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
                     @click="goBackToProducts"
                   >
                     <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                     </svg>
                   </button>
-                  <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center">
+                  <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                    <div class="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
                       <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getProductIcon(selectedProduct.icon || 'user')" />
                       </svg>
                     </div>
-                    <div>
-                      <p class="font-semibold text-gray-900">{{ selectedProduct.name }}</p>
-                      <p class="text-sm text-gray-500">{{ selectedProduct.description }}</p>
+                    <div class="min-w-0 flex-1">
+                      <p class="font-semibold text-gray-900 truncate">{{ selectedProduct.name }}</p>
+                      <p class="text-sm text-gray-500 truncate">{{ selectedProduct.description }}</p>
                     </div>
                   </div>
                 </div>

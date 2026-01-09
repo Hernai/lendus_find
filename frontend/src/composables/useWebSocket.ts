@@ -7,6 +7,7 @@ import type {
   DocumentUploadedEvent,
   ReferenceVerifiedEvent,
   ApplicationAssignedEvent,
+  BankAccountVerifiedEvent,
 } from '@/types/realtime'
 
 type MaybeRef<T> = T | Ref<T> | ComputedRef<T>
@@ -22,6 +23,7 @@ interface UseWebSocketOptions {
   onDocumentUploaded?: (event: DocumentUploadedEvent) => void
   onReferenceVerified?: (event: ReferenceVerifiedEvent) => void
   onApplicationAssigned?: (event: ApplicationAssignedEvent) => void
+  onBankAccountVerified?: (event: BankAccountVerifiedEvent) => void
 }
 
 // Helper para verificar si un valor es reactivo (Ref o ComputedRef)
@@ -101,6 +103,10 @@ export function useWebSocket(options: UseWebSocketOptions) {
 
       if (options.onReferenceVerified) {
         appChannel.listen('.reference.verified', options.onReferenceVerified)
+      }
+
+      if (options.onBankAccountVerified) {
+        appChannel.listen('.bank_account.verified', options.onBankAccountVerified)
       }
 
       channels.push(appChannel)

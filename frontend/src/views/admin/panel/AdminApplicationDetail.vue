@@ -7,7 +7,7 @@ import ConfirmModal from '@/components/admin/ConfirmModal.vue'
 import { api } from '@/services/api'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useTenantStore } from '@/stores/tenant'
-import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent, DocumentDeletedEvent, DocumentUploadedEvent, ReferenceVerifiedEvent } from '@/types/realtime'
+import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent, DocumentDeletedEvent, DocumentUploadedEvent, ReferenceVerifiedEvent, BankAccountVerifiedEvent } from '@/types/realtime'
 
 const route = useRoute()
 const router = useRouter()
@@ -240,6 +240,13 @@ const isUnrejectingSelfie = ref(false)
 const newNoteText = ref('')
 const isAddingNote = ref(false)
 
+// Bank account verification state
+const showBankAccountVerifyModal = ref(false)
+const showBankAccountUnverifyModal = ref(false)
+const selectedBankAccount = ref<BankAccount | null>(null)
+const isVerifyingBankAccount = ref(false)
+const isUnverifyingBankAccount = ref(false)
+
 // Calculated values for counter-offer
 const counterOfferCalculation = computed(() => {
   const amount = counterOffer.value.amount
@@ -319,6 +326,10 @@ useWebSocket({
   onReferenceVerified: (event: ReferenceVerifiedEvent) => {
     console.log('✅ Reference verified:', event.full_name, event.result)
     fetchApplication() // Recargar aplicación
+  },
+  onBankAccountVerified: (event: BankAccountVerifiedEvent) => {
+    console.log('🏦 Bank account verification changed:', event.bank_name, event.is_verified ? 'verified' : 'unverified')
+    fetchApplication() // Recargar aplicación para actualizar timeline
   },
 })
 
@@ -610,6 +621,70 @@ const unrejectSelfie = async () => {
     alert('Error al desrechazar la selfie')
   } finally {
     isUnrejectingSelfie.value = false
+  }
+}
+
+// Open bank account verify modal
+const openBankAccountVerifyModal = (account: BankAccount) => {
+  selectedBankAccount.value = account
+  showBankAccountVerifyModal.value = true
+}
+
+// Open bank account unverify modal
+const openBankAccountUnverifyModal = (account: BankAccount) => {
+  selectedBankAccount.value = account
+  showBankAccountUnverifyModal.value = true
+}
+
+// Verify bank account
+const verifyBankAccount = async () => {
+  if (!application.value || !selectedBankAccount.value) return
+
+  isVerifyingBankAccount.value = true
+
+  try {
+    await api.put(`/admin/applications/${application.value.id}/bank-accounts/${selectedBankAccount.value.id}/verify`)
+
+    // Update in bank_accounts array
+    const account = application.value.bank_accounts.find(ba => ba.id === selectedBankAccount.value?.id)
+    if (account) {
+      account.is_verified = true
+    }
+
+    showBankAccountVerifyModal.value = false
+    selectedBankAccount.value = null
+    await fetchApplication()
+  } catch (e) {
+    console.error('Failed to verify bank account:', e)
+    alert('Error al verificar la cuenta bancaria')
+  } finally {
+    isVerifyingBankAccount.value = false
+  }
+}
+
+// Unverify bank account
+const unverifyBankAccount = async () => {
+  if (!application.value || !selectedBankAccount.value) return
+
+  isUnverifyingBankAccount.value = true
+
+  try {
+    await api.put(`/admin/applications/${application.value.id}/bank-accounts/${selectedBankAccount.value.id}/unverify`)
+
+    // Update in bank_accounts array
+    const account = application.value.bank_accounts.find(ba => ba.id === selectedBankAccount.value?.id)
+    if (account) {
+      account.is_verified = false
+    }
+
+    showBankAccountUnverifyModal.value = false
+    selectedBankAccount.value = null
+    await fetchApplication()
+  } catch (e) {
+    console.error('Failed to unverify bank account:', e)
+    alert('Error al desverificar la cuenta bancaria')
+  } finally {
+    isUnverifyingBankAccount.value = false
   }
 }
 
@@ -2320,6 +2395,12 @@ const addNote = async () => {
                         >
                           Verificada
                         </span>
+                        <span
+                          v-else
+                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
+                        >
+                          Sin verificar
+                        </span>
                       </div>
                       <p class="text-xs text-gray-500">{{ account.account_type_label || account.account_type }}</p>
                     </div>
@@ -2343,6 +2424,24 @@ const addNote = async () => {
                     <span class="text-gray-500">Cuenta propia</span>
                     <span class="text-gray-900">{{ account.is_own_account ? 'Sí' : 'No' }}</span>
                   </div>
+                </div>
+
+                <!-- Verification actions -->
+                <div class="mt-4 pt-3 border-t border-gray-100 flex gap-2">
+                  <button
+                    v-if="!account.is_verified"
+                    class="flex-1 px-3 py-1.5 text-sm text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors font-medium"
+                    @click="openBankAccountVerifyModal(account)"
+                  >
+                    Verificar
+                  </button>
+                  <button
+                    v-else
+                    class="flex-1 px-3 py-1.5 text-sm text-yellow-700 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors font-medium"
+                    @click="openBankAccountUnverifyModal(account)"
+                  >
+                    Quitar verificación
+                  </button>
                 </div>
               </div>
             </div>
@@ -2804,6 +2903,34 @@ const addNote = async () => {
       confirm-color="green"
       :loading="isApprovingDoc"
       @confirm="confirmApproveDocument"
+    />
+
+    <!-- Bank Account Verify Modal -->
+    <ConfirmModal
+      v-model:show="showBankAccountVerifyModal"
+      title="Verificar Cuenta Bancaria"
+      :subtitle="selectedBankAccount?.bank_name"
+      :message="`¿Confirmas que la cuenta CLABE ${selectedBankAccount?.clabe} pertenece al solicitante y es válida?`"
+      icon="check"
+      icon-color="green"
+      confirm-text="Verificar"
+      confirm-color="green"
+      :loading="isVerifyingBankAccount"
+      @confirm="verifyBankAccount"
+    />
+
+    <!-- Bank Account Unverify Modal -->
+    <ConfirmModal
+      v-model:show="showBankAccountUnverifyModal"
+      title="Quitar Verificación"
+      :subtitle="selectedBankAccount?.bank_name"
+      :message="`¿Confirmas que deseas quitar la verificación de la cuenta CLABE ${selectedBankAccount?.clabe}?`"
+      icon="undo"
+      icon-color="yellow"
+      confirm-text="Quitar verificación"
+      confirm-color="yellow"
+      :loading="isUnverifyingBankAccount"
+      @confirm="unverifyBankAccount"
     />
 
     <!-- Document Viewer Modal -->

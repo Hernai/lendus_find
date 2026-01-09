@@ -204,6 +204,12 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff', 'metadata']
         // Data verification - requires canVerifyReferences (analyst+)
         Route::put('/{application}/verify-data', [AdminApplicationController::class, 'verifyData'])
             ->middleware('permission:canVerifyReferences');
+
+        // Bank account verification - requires canVerifyReferences (analyst+)
+        Route::put('/{application}/bank-accounts/{bankAccount}/verify', [AdminApplicationController::class, 'verifyBankAccount'])
+            ->middleware('permission:canVerifyReferences');
+        Route::put('/{application}/bank-accounts/{bankAccount}/unverify', [AdminApplicationController::class, 'unverifyBankAccount'])
+            ->middleware('permission:canVerifyReferences');
     });
 
     // =============================================

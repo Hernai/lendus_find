@@ -13,6 +13,8 @@ use App\Models\AuditLog;
 use App\Models\DataVerification;
 use App\Models\Document;
 use App\Models\Reference;
+use App\Models\BankAccount;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -675,6 +677,149 @@ class ApplicationController extends Controller
     }
 
     /**
+     * Verify a bank account.
+     */
+    public function verifyBankAccount(Request $request, Application $application, BankAccount $bankAccount): JsonResponse
+    {
+        $tenant = $request->attributes->get('tenant');
+
+        if ($application->tenant_id !== $tenant->id) {
+            return response()->json(['message' => 'Application not found'], 404);
+        }
+
+        // Verify the bank account belongs to the applicant of this application
+        if ($bankAccount->applicant_id !== $application->applicant_id) {
+            return response()->json(['message' => 'Bank account not found for this applicant'], 404);
+        }
+
+        if ($bankAccount->is_verified) {
+            return response()->json([
+                'message' => 'Bank account is already verified'
+            ], 400);
+        }
+
+        $bankAccount->is_verified = true;
+        $bankAccount->verified_at = now();
+        $bankAccount->verification_method = 'MANUAL';
+        $bankAccount->save();
+
+        // Broadcast bank account verification
+        event(new \App\Events\BankAccountVerified(
+            $bankAccount,
+            $application->id,
+            true,
+            $request->user()
+        ));
+
+        // Add to application timeline
+        $history = $application->status_history ?? [];
+        $history[] = [
+            'action' => 'BANK_ACCOUNT_VERIFIED',
+            'bank_name' => $bankAccount->bank_name,
+            'clabe_last4' => substr($bankAccount->clabe, -4),
+            'user_id' => $request->user()->id,
+            'timestamp' => now()->toIso8601String(),
+        ];
+        $application->status_history = $history;
+        $application->save();
+
+        // Log verification
+        $metadata = $request->attributes->get('metadata', []);
+        AuditLog::log(
+            AuditAction::DATA_VERIFIED->value,
+            null,
+            array_merge($metadata, [
+                'user_id' => $request->user()->id,
+                'applicant_id' => $application->applicant_id,
+                'application_id' => $application->id,
+                'bank_account_id' => $bankAccount->id,
+                'action_type' => 'bank_account_verify',
+            ])
+        );
+
+        return response()->json([
+            'message' => 'Bank account verified',
+            'data' => [
+                'id' => $bankAccount->id,
+                'bank_name' => $bankAccount->bank_name,
+                'is_verified' => $bankAccount->is_verified,
+                'verified_at' => $bankAccount->verified_at?->toIso8601String(),
+            ]
+        ]);
+    }
+
+    /**
+     * Unverify a bank account (set back to unverified).
+     */
+    public function unverifyBankAccount(Request $request, Application $application, BankAccount $bankAccount): JsonResponse
+    {
+        $tenant = $request->attributes->get('tenant');
+
+        if ($application->tenant_id !== $tenant->id) {
+            return response()->json(['message' => 'Application not found'], 404);
+        }
+
+        // Verify the bank account belongs to the applicant of this application
+        if ($bankAccount->applicant_id !== $application->applicant_id) {
+            return response()->json(['message' => 'Bank account not found for this applicant'], 404);
+        }
+
+        if (!$bankAccount->is_verified) {
+            return response()->json([
+                'message' => 'Bank account is not verified'
+            ], 400);
+        }
+
+        $bankAccount->is_verified = false;
+        $bankAccount->verified_at = null;
+        $bankAccount->verification_method = null;
+        $bankAccount->save();
+
+        // Broadcast bank account unverification
+        event(new \App\Events\BankAccountVerified(
+            $bankAccount,
+            $application->id,
+            false,
+            $request->user()
+        ));
+
+        // Add to application timeline
+        $history = $application->status_history ?? [];
+        $history[] = [
+            'action' => 'BANK_ACCOUNT_UNVERIFIED',
+            'bank_name' => $bankAccount->bank_name,
+            'clabe_last4' => substr($bankAccount->clabe, -4),
+            'user_id' => $request->user()->id,
+            'timestamp' => now()->toIso8601String(),
+        ];
+        $application->status_history = $history;
+        $application->save();
+
+        // Log unverification
+        $metadata = $request->attributes->get('metadata', []);
+        AuditLog::log(
+            AuditAction::DATA_VERIFIED->value,
+            null,
+            array_merge($metadata, [
+                'user_id' => $request->user()->id,
+                'applicant_id' => $application->applicant_id,
+                'application_id' => $application->id,
+                'bank_account_id' => $bankAccount->id,
+                'action_type' => 'bank_account_unverify',
+            ])
+        );
+
+        return response()->json([
+            'message' => 'Bank account verification removed',
+            'data' => [
+                'id' => $bankAccount->id,
+                'bank_name' => $bankAccount->bank_name,
+                'is_verified' => $bankAccount->is_verified,
+            ]
+        ]);
+    }
+
+    /**
      * Format application for list response.
      */
     private function formatApplication(Application $application): array
@@ -1051,6 +1196,7 @@ class ApplicationController extends Controller
             'DOC_APPROVED' => 'Documento aprobado: ' . ($historyEntry['document_label'] ?? $historyEntry['document'] ?? ''),
             'DOC_REJECTED' => 'Documento rechazado: ' . ($historyEntry['document_label'] ?? $historyEntry['document'] ?? '') .
                 ($historyEntry['reason'] ? ' - ' . $historyEntry['reason'] : ''),
+            'DOC_UNAPPROVED' => 'Documento devuelto a pendiente: ' . ($historyEntry['document_label'] ?? $historyEntry['document'] ?? ''),
             'REF_VERIFIED' => 'Referencia verificada: ' . ($historyEntry['reference'] ?? '') .
                 ' (' . $this->translateReferenceResult($historyEntry['result'] ?? '') . ')',
             'NOTE_ADDED' => 'Nota agregada: ' . ($historyEntry['note_preview'] ?? ''),
@@ -1058,6 +1204,10 @@ class ApplicationController extends Controller
                 ? 'Dato verificado: ' . ($historyEntry['field_label'] ?? $historyEntry['field'] ?? '')
                 : 'Verificación removida: ' . ($historyEntry['field_label'] ?? $historyEntry['field'] ?? ''),
             'DATA_CORRECTED' => $this->formatDataCorrectedDescription($historyEntry),
+            'BANK_ACCOUNT_VERIFIED' => 'Cuenta bancaria verificada: ' . ($historyEntry['bank_name'] ?? '') .
+                ' (****' . ($historyEntry['clabe_last4'] ?? '') . ')',
+            'BANK_ACCOUNT_UNVERIFIED' => 'Verificación de cuenta removida: ' . ($historyEntry['bank_name'] ?? '') .
+                ' (****' . ($historyEntry['clabe_last4'] ?? '') . ')',
             default => isset($historyEntry['to']) ?
                 'Estado cambiado a ' . $historyEntry['to'] .
                     ($historyEntry['reason'] ? ': ' . $historyEntry['reason'] : '') :

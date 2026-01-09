@@ -3,6 +3,7 @@ import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOnboardingStore, useApplicationStore, useTenantStore } from '@/stores'
 import { AppButton } from '@/components/common'
+import { api } from '@/services/api'
 import type { Product } from '@/types'
 
 const router = useRouter()
@@ -153,13 +154,25 @@ const handleFileSelect = async (doc: DocumentUpload, event: Event) => {
     doc.preview = null
   }
 
-  // Simulate upload
+  // Upload to backend
   try {
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    const applicationId = applicationStore.currentApplication?.id
+    if (!applicationId) {
+      throw new Error('No hay solicitud activa')
+    }
+
+    // Create FormData for file upload
+    const formData = new FormData()
+    formData.append('type', doc.id.toUpperCase())
+    formData.append('file', file)
+
+    await api.post(`/applications/${applicationId}/documents`, formData)
     doc.status = 'uploaded'
-  } catch (e) {
+  } catch (e: unknown) {
+    console.error('Error uploading document:', e)
     doc.status = 'error'
-    error.value = 'Error al subir el archivo. Intenta de nuevo.'
+    const errorObj = e as { response?: { data?: { message?: string } } }
+    error.value = errorObj.response?.data?.message || 'Error al subir el archivo. Intenta de nuevo.'
   }
 }
 
