@@ -7,9 +7,35 @@
 
 /* CSS Variables for tenant theming */
 :root {
-  --tenant-primary: #6366f1;
+  /* Tenant base colors (can be overridden by tenant branding) */
+  --tenant-primary: #4f46e5;
   --tenant-secondary: #10b981;
   --tenant-accent: #f59e0b;
+
+  /* Tenant font settings */
+  --tenant-font-family: 'Inter', sans-serif;
+  --tenant-heading-font: 'Inter', sans-serif;
+  --tenant-button-radius: 0.75rem;
+  --tenant-radius: 12px;
+
+  /* Dark tinted color for footer/dark sections */
+  --tenant-dark-rgb: 23 25 35;
+
+  /* Text color */
+  --tenant-text-color: #1f2937;
+
+  /* Primary color palette as RGB triplets (for Tailwind opacity support) */
+  /* Default: Indigo palette */
+  --primary-50-rgb: 240 244 255;
+  --primary-100-rgb: 224 231 255;
+  --primary-200-rgb: 199 210 254;
+  --primary-300-rgb: 165 180 252;
+  --primary-400-rgb: 129 140 248;
+  --primary-500-rgb: 99 102 241;
+  --primary-600-rgb: 79 70 229;
+  --primary-700-rgb: 67 56 202;
+  --primary-800-rgb: 55 48 163;
+  --primary-900-rgb: 49 46 129;
 }
 
 body {
@@ -51,4 +77,30 @@ body {
 /* Gradient background utility */
 .gradient-bg {
   background: linear-gradient(135deg, var(--tenant-primary) 0%, #4338ca 100%);
+}
+
+/* Tenant-aware button radius */
+.btn-tenant-radius {
+  border-radius: var(--tenant-button-radius, 0.75rem);
+}
+
+/* Tenant-aware border radius for cards/inputs */
+.tenant-radius {
+  border-radius: var(--tenant-radius, 12px);
+}
+
+/* Tenant text color utility */
+.text-tenant {
+  color: var(--tenant-text-color, #1f2937);
+}
+
+/* Apply tenant text color to common text elements in public pages */
+.tenant-theme h1,
+.tenant-theme h2,
+.tenant-theme h3,
+.tenant-theme h4,
+.tenant-theme p,
+.tenant-theme span,
+.tenant-theme label {
+  color: var(--tenant-text-color, #1f2937);
 }

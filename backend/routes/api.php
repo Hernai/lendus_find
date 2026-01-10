@@ -239,4 +239,38 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff', 'metadata']
         Route::get('/disbursements/export', [DashboardController::class, 'exportDisbursements']);
         Route::get('/portfolio/export', [DashboardController::class, 'exportPortfolio']);
     });
+
+    // =============================================
+    // TENANT CONFIGURATION - Admin can configure their own tenant
+    // =============================================
+    Route::middleware('permission:canManageProducts')->prefix('config')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\Admin\TenantConfigController::class, 'show']);
+        Route::put('/tenant', [\App\Http\Controllers\Api\Admin\TenantConfigController::class, 'updateTenant']);
+        Route::put('/branding', [\App\Http\Controllers\Api\Admin\TenantConfigController::class, 'updateBranding']);
+        Route::get('/api-configs', [\App\Http\Controllers\Api\Admin\TenantConfigController::class, 'listApiConfigs']);
+        Route::post('/api-configs', [\App\Http\Controllers\Api\Admin\TenantConfigController::class, 'saveApiConfig']);
+        Route::delete('/api-configs/{config}', [\App\Http\Controllers\Api\Admin\TenantConfigController::class, 'deleteApiConfig']);
+        Route::post('/api-configs/{config}/test', [\App\Http\Controllers\Api\Admin\TenantConfigController::class, 'testApiConfig']);
+    });
+
+    // =============================================
+    // TENANTS MANAGEMENT - Super Admin only
+    // =============================================
+    Route::middleware('permission:canConfigureTenant')->prefix('tenants')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\Admin\TenantController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\Admin\TenantController::class, 'store']);
+        Route::get('/{tenant}', [\App\Http\Controllers\Api\Admin\TenantController::class, 'show']);
+        Route::put('/{tenant}', [\App\Http\Controllers\Api\Admin\TenantController::class, 'update']);
+        Route::delete('/{tenant}', [\App\Http\Controllers\Api\Admin\TenantController::class, 'destroy']);
+        Route::get('/{tenant}/stats', [\App\Http\Controllers\Api\Admin\TenantController::class, 'stats']);
+
+        // Tenant-specific configuration (including API configs)
+        Route::get('/{tenant}/config', [\App\Http\Controllers\Api\Admin\TenantController::class, 'getConfig']);
+        Route::put('/{tenant}/branding', [\App\Http\Controllers\Api\Admin\TenantController::class, 'updateBranding']);
+        Route::post('/{tenant}/upload-logo', [\App\Http\Controllers\Api\Admin\TenantController::class, 'uploadLogo']);
+        Route::get('/{tenant}/api-configs', [\App\Http\Controllers\Api\Admin\TenantController::class, 'listApiConfigs']);
+        Route::post('/{tenant}/api-configs', [\App\Http\Controllers\Api\Admin\TenantController::class, 'saveApiConfig']);
+        Route::delete('/{tenant}/api-configs/{config}', [\App\Http\Controllers\Api\Admin\TenantController::class, 'deleteApiConfig']);
+        Route::post('/{tenant}/api-configs/{config}/test', [\App\Http\Controllers\Api\Admin\TenantController::class, 'testApiConfig']);
+    });
 });

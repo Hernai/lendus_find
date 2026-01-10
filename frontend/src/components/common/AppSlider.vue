@@ -48,7 +48,7 @@ const handleInput = (event: Event) => {
   <div class="w-full">
     <!-- Label and value -->
     <div v-if="label" class="flex justify-between items-baseline mb-2">
-      <label class="text-sm font-medium text-gray-700">{{ label }}</label>
+      <label class="text-sm font-medium text-tenant">{{ label }}</label>
       <span class="text-2xl font-bold text-primary-600">{{ displayValue }}</span>
     </div>
 
@@ -62,7 +62,7 @@ const handleInput = (event: Event) => {
         :value="modelValue"
         class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
         :style="{
-          background: `linear-gradient(to right, rgb(99 102 241) 0%, rgb(99 102 241) ${percentage}%, rgb(229 231 235) ${percentage}%, rgb(229 231 235) 100%)`
+          background: `linear-gradient(to right, rgb(var(--primary-600-rgb)) 0%, rgb(var(--primary-600-rgb)) ${percentage}%, rgb(229 231 235) ${percentage}%, rgb(229 231 235) 100%)`
         }"
         @input="handleInput"
       />
@@ -84,7 +84,7 @@ const handleInput = (event: Event) => {
   height: 24px;
   border-radius: 50%;
   background: white;
-  border: 4px solid rgb(99 102 241);
+  border: 4px solid rgb(var(--primary-600-rgb));
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   transition: transform 0.2s;
@@ -99,7 +99,7 @@ const handleInput = (event: Event) => {
   height: 24px;
   border-radius: 50%;
   background: white;
-  border: 4px solid rgb(99 102 241);
+  border: 4px solid rgb(var(--primary-600-rgb));
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }

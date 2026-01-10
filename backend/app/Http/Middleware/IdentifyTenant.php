@@ -55,9 +55,18 @@ class IdentifyTenant
     {
         // 1. Check header (highest priority for API calls)
         if ($tenantId = $request->header('X-Tenant-ID')) {
-            // Try by slug first (most common), then by UUID
-            return Tenant::where('slug', $tenantId)->first()
-                ?? Tenant::find($tenantId);
+            // Try by slug first (most common)
+            $tenant = Tenant::where('slug', $tenantId)->first();
+            if ($tenant) {
+                return $tenant;
+            }
+
+            // Only try by UUID if it looks like a valid UUID format
+            if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $tenantId)) {
+                return Tenant::find($tenantId);
+            }
+
+            return null;
         }
 
         // 2. Check subdomain

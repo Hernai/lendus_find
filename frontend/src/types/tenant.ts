@@ -4,10 +4,17 @@ export interface Branding {
   primary_color: string
   secondary_color: string
   accent_color: string
-  logo_url: string
-  favicon_url: string
+  background_color: string
+  text_color: string
+  logo_url: string | null
+  logo_dark_url: string | null
+  favicon_url: string | null
+  login_background_url: string | null
   font_family: string
+  heading_font_family: string | null
   border_radius: string
+  button_style: 'rounded' | 'pill' | 'square'
+  custom_css: string | null
 }
 
 export interface WebhookConfig {

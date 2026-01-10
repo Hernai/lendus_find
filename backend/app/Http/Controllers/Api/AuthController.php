@@ -502,6 +502,7 @@ class AuthController extends Controller
                     'canManageProducts' => $user->canManageProducts(),
                     'canManageUsers' => $user->canManageUsers(),
                     'canViewReports' => $user->canViewReports(),
+                    'canConfigureTenant' => $user->canConfigureTenant(),
                 ],
             ],
         ]);
@@ -614,6 +615,7 @@ class AuthController extends Controller
                     'canManageProducts' => $user->canManageProducts(),
                     'canManageUsers' => $user->canManageUsers(),
                     'canViewReports' => $user->canViewReports(),
+                    'canConfigureTenant' => $user->canConfigureTenant(),
                 ],
             ],
         ]);
@@ -787,6 +789,7 @@ class AuthController extends Controller
                 'canManageProducts' => $user->canManageProducts(),
                 'canManageUsers' => $user->canManageUsers(),
                 'canViewReports' => $user->canViewReports(),
+                'canConfigureTenant' => $user->canConfigureTenant(),
             ];
         }
 

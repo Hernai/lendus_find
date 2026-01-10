@@ -6,6 +6,7 @@ use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Tenant extends Model
@@ -67,6 +68,34 @@ class Tenant extends Model
     public function applications(): HasMany
     {
         return $this->hasMany(Application::class);
+    }
+
+    /**
+     * Get the branding configuration.
+     */
+    public function brandingConfig(): HasOne
+    {
+        return $this->hasOne(TenantBranding::class);
+    }
+
+    /**
+     * Get the API configurations.
+     */
+    public function apiConfigs(): HasMany
+    {
+        return $this->hasMany(TenantApiConfig::class);
+    }
+
+    /**
+     * Get API config for a specific provider and service.
+     */
+    public function getApiConfig(string $provider, string $serviceType): ?TenantApiConfig
+    {
+        return $this->apiConfigs()
+            ->where('provider', $provider)
+            ->where('service_type', $serviceType)
+            ->where('is_active', true)
+            ->first();
     }
 
     /**

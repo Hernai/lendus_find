@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useTenantStore } from '@/stores/tenant'
 
 // ==============================================
 // PUBLIC VIEWS (no authentication required)
@@ -51,9 +52,130 @@ const AdminDashboard = () => import('@/views/admin/panel/AdminDashboard.vue')
 const AdminApplications = () => import('@/views/admin/panel/AdminApplications.vue')
 const AdminApplicationDetail = () => import('@/views/admin/panel/AdminApplicationDetail.vue')
 const AdminUsers = () => import('@/views/admin/panel/AdminUsers.vue')
+const AdminTenants = () => import('@/views/admin/panel/AdminTenants.vue')
+const AdminSettings = () => import('@/views/admin/panel/AdminSettings.vue')
 const AdminUnderConstruction = () => import('@/views/admin/panel/AdminUnderConstruction.vue')
 
+// Reserved paths that are NOT tenant slugs (must match tenant.ts)
+const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones']
+
+// Helper to check if a path segment is a tenant slug
+const isTenantSlug = (segment: string): boolean => {
+  return !!segment && !RESERVED_PATHS.includes(segment.toLowerCase())
+}
+
 const routes: RouteRecordRaw[] = [
+  // ==============================================
+  // TENANT-PREFIXED ROUTES (e.g., /demo/simulador)
+  // These must come BEFORE the non-prefixed routes
+  // ==============================================
+  {
+    path: '/:tenant',
+    name: 'tenant-landing',
+    component: LandingView,
+    meta: { public: true },
+    beforeEnter: (to, _from, next) => {
+      // Only allow if it's a valid tenant slug
+      if (isTenantSlug(to.params.tenant as string)) {
+        next()
+      } else {
+        next('/')
+      }
+    }
+  },
+  {
+    path: '/:tenant/simulador',
+    name: 'tenant-simulator',
+    component: SimulatorView,
+    meta: { public: true }
+  },
+  {
+    path: '/:tenant/auth',
+    name: 'tenant-auth',
+    component: AuthMethodView,
+    meta: { public: true, guest: true }
+  },
+  {
+    path: '/:tenant/auth/phone',
+    name: 'tenant-auth-phone',
+    component: AuthPhoneView,
+    meta: { public: true, guest: true }
+  },
+  {
+    path: '/:tenant/auth/email',
+    name: 'tenant-auth-email',
+    component: AuthEmailView,
+    meta: { public: true, guest: true }
+  },
+  {
+    path: '/:tenant/auth/verify',
+    name: 'tenant-auth-otp',
+    component: AuthOtpView,
+    meta: { public: true, guest: true }
+  },
+  {
+    path: '/:tenant/auth/pin/setup',
+    name: 'tenant-auth-pin-setup',
+    component: AuthPinSetupView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/:tenant/auth/pin/login',
+    name: 'tenant-auth-pin-login',
+    component: AuthPinLoginView,
+    meta: { public: true, guest: true }
+  },
+  {
+    path: '/:tenant/solicitud',
+    component: OnboardingLayout,
+    meta: { requiresAuth: true },
+    children: [
+      { path: '', redirect: (to) => `/${to.params.tenant}/solicitud/paso-1` },
+      { path: 'paso-1', name: 'tenant-onboarding-step-1', component: Step1PersonalData, meta: { step: 1, title: '¿Cómo te llamas?' } },
+      { path: 'paso-2', name: 'tenant-onboarding-step-2', component: Step2Identification, meta: { step: 2, title: 'Tu identificación' } },
+      { path: 'paso-3', name: 'tenant-onboarding-step-3', component: Step3Address, meta: { step: 3, title: '¿Dónde vives?' } },
+      { path: 'paso-4', name: 'tenant-onboarding-step-4', component: Step4Employment, meta: { step: 4, title: '¿A qué te dedicas?' } },
+      { path: 'paso-5', name: 'tenant-onboarding-step-5', component: Step5LoanDetails, meta: { step: 5, title: 'Tu crédito' } },
+      { path: 'paso-6', name: 'tenant-onboarding-step-6', component: Step6Documents, meta: { step: 6, title: 'Documentos' } },
+      { path: 'paso-7', name: 'tenant-onboarding-step-7', component: Step7References, meta: { step: 7, title: 'Referencias' } },
+      { path: 'paso-8', name: 'tenant-onboarding-step-8', component: Step8Review, meta: { step: 8, title: 'Revisión y firma' } }
+    ]
+  },
+  {
+    path: '/:tenant/dashboard',
+    name: 'tenant-dashboard',
+    component: DashboardView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/:tenant/solicitud/:id/estado',
+    name: 'tenant-application-status',
+    component: ApplicationStatusView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/:tenant/solicitud/:id/documentos',
+    name: 'tenant-application-documents',
+    component: DocumentsUploadView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/:tenant/correcciones',
+    name: 'tenant-data-corrections',
+    component: DataCorrectionsView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/:tenant/perfil',
+    name: 'tenant-profile',
+    component: ProfileView,
+    meta: { requiresAuth: true }
+  },
+
+  // ==============================================
+  // NON-PREFIXED ROUTES (default tenant from env/subdomain)
+  // ==============================================
+
   // Public routes
   {
     path: '/',
@@ -242,6 +364,16 @@ const routes: RouteRecordRaw[] = [
         path: 'reportes',
         name: 'admin-reports',
         component: AdminUnderConstruction
+      },
+      {
+        path: 'configuracion',
+        name: 'admin-settings',
+        component: AdminSettings
+      },
+      {
+        path: 'tenants',
+        name: 'admin-tenants',
+        component: AdminTenants
       }
     ]
   },
@@ -267,6 +399,13 @@ const router = createRouter({
 // Navigation guards
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
+  const tenantStore = useTenantStore()
+
+  // Load tenant config on first navigation (for public/applicant routes)
+  const isAdminRoute = to.path.startsWith('/admin')
+  if (!isAdminRoute && !tenantStore.isLoaded) {
+    await tenantStore.loadConfig()
+  }
 
   // Check if route requires authentication
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
@@ -323,6 +462,13 @@ router.beforeEach(async (to, from, next) => {
   }
 
   next()
+})
+
+// Apply theme based on route (admin uses default, others use tenant branding)
+router.afterEach((to) => {
+  const tenantStore = useTenantStore()
+  const isAdminRoute = to.path.startsWith('/admin')
+  tenantStore.applyTheme(isAdminRoute)
 })
 
 export default router

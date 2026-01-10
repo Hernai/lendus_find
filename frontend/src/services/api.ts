@@ -1,4 +1,5 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios'
+import { detectTenantSlug } from '@/utils/tenant'
 
 // API base URL
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
@@ -6,8 +7,8 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 // Base URL without /api for CSRF cookie
 const BASE_URL = API_BASE_URL.replace('/api', '')
 
-// Tenant header (can be configured per deployment)
-const TENANT_HEADER = import.meta.env.VITE_TENANT_ID || 'demo'
+// Get tenant slug dynamically (supports path prefix or env variable)
+const getTenantSlug = (): string => detectTenantSlug()
 
 // Helper to get cookie value
 const getCookie = (name: string): string | null => {
@@ -21,7 +22,6 @@ const apiClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'X-Tenant-ID': TENANT_HEADER,
   },
   timeout: 30000,
   withCredentials: true, // Required for Sanctum CSRF cookies
@@ -47,7 +47,7 @@ export const initCsrf = async (): Promise<void> => {
       await axios.get(`${BASE_URL}/sanctum/csrf-cookie`, {
         withCredentials: true,
         headers: {
-          'X-Tenant-ID': TENANT_HEADER,
+          'X-Tenant-ID': getTenantSlug(),
         },
       })
       csrfInitialized = true
@@ -64,6 +64,13 @@ export const initCsrf = async (): Promise<void> => {
 // Request interceptor - add auth token, handle FormData, and ensure CSRF
 apiClient.interceptors.request.use(
   async (config) => {
+    // Add tenant header dynamically (evaluated per request for hybrid detection)
+    const tenantSlug = getTenantSlug()
+    console.log('[API] Request to:', config.url, '| Tenant:', tenantSlug)
+    if (config.headers) {
+      config.headers['X-Tenant-ID'] = tenantSlug
+    }
+
     // Ensure CSRF cookie is set before POST/PUT/PATCH/DELETE requests
     if (config.method && ['post', 'put', 'patch', 'delete'].includes(config.method.toLowerCase())) {
       await initCsrf()

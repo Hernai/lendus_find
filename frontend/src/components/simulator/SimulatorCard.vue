@@ -182,7 +182,7 @@ const paymentLabel = computed(() => {
 
 <template>
   <div class="bg-white rounded-2xl shadow-2xl p-6 md:p-8">
-    <h2 v-if="!compact" class="text-2xl font-bold text-gray-900 mb-6">
+    <h2 v-if="!compact" class="text-2xl font-bold text-tenant mb-6">
       Simula tu crédito
     </h2>
 
@@ -200,7 +200,7 @@ const paymentLabel = computed(() => {
 
     <!-- Payment frequency (shown first when multiple options) -->
     <div v-if="availableFrequencies.length > 1" class="mb-6">
-      <label class="block text-sm font-medium text-gray-700 mb-3">
+      <label class="block text-sm font-medium text-tenant mb-3">
         ¿Cada cuándo pagas?
       </label>
       <div class="flex bg-gray-100 rounded-xl p-1">
@@ -222,7 +222,7 @@ const paymentLabel = computed(() => {
 
     <!-- Payment count selection -->
     <div class="mb-6">
-      <label class="block text-sm font-medium text-gray-700 mb-2">
+      <label class="block text-sm font-medium text-tenant mb-2">
         ¿En cuántos pagos?
       </label>
       <div class="flex flex-wrap gap-2">

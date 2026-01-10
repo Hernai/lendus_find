@@ -71,12 +71,12 @@ onMounted(async () => {
                 100% Digital
               </span>
 
-              <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold text-gray-900 mb-6 leading-tight">
+              <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold text-tenant mb-6 leading-tight">
                 Tu crédito aprobado en
                 <span class="text-primary-600">minutos</span>
               </h1>
 
-              <p class="text-xl text-gray-600 mb-8">
+              <p class="text-xl text-tenant opacity-70 mb-8">
                 Sin papeleos, sin filas, sin complicaciones.
                 Solicita desde $5,000 hasta $500,000 MXN.
               </p>

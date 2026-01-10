@@ -15,12 +15,17 @@ class ConfigController extends Controller
     {
         $tenant = app('tenant');
 
+        // Use tenant_branding table if available, fallback to legacy branding column
+        $branding = $tenant->brandingConfig
+            ? $tenant->brandingConfig->toApiArray()
+            : $this->formatBranding($tenant->branding);
+
         return response()->json([
             'tenant' => [
                 'id' => $tenant->id,
                 'name' => $tenant->name,
                 'slug' => $tenant->slug,
-                'branding' => $this->formatBranding($tenant->branding),
+                'branding' => $branding,
                 'webhook_config' => $tenant->webhook_config,
                 'settings' => $this->formatSettings($tenant->settings),
                 'is_active' => $tenant->is_active,
@@ -43,7 +48,7 @@ class ConfigController extends Controller
     }
 
     /**
-     * Format branding with defaults.
+     * Format branding with defaults (legacy support).
      */
     private function formatBranding(?array $branding): array
     {
@@ -51,10 +56,17 @@ class ConfigController extends Controller
             'primary_color' => $branding['primary_color'] ?? '#6366f1',
             'secondary_color' => $branding['secondary_color'] ?? '#10b981',
             'accent_color' => $branding['accent_color'] ?? '#f59e0b',
-            'logo_url' => $branding['logo_url'] ?? '/logo.svg',
-            'favicon_url' => $branding['favicon_url'] ?? '/favicon.ico',
+            'background_color' => $branding['background_color'] ?? '#ffffff',
+            'text_color' => $branding['text_color'] ?? '#1f2937',
+            'logo_url' => $branding['logo_url'] ?? null,
+            'logo_dark_url' => $branding['logo_dark_url'] ?? null,
+            'favicon_url' => $branding['favicon_url'] ?? null,
+            'login_background_url' => $branding['login_background_url'] ?? null,
             'font_family' => $branding['font_family'] ?? 'Inter, sans-serif',
+            'heading_font_family' => $branding['heading_font_family'] ?? null,
             'border_radius' => $branding['border_radius'] ?? '12px',
+            'button_style' => $branding['button_style'] ?? 'rounded',
+            'custom_css' => $branding['custom_css'] ?? null,
         ];
     }
 

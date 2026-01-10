@@ -54,6 +54,7 @@ interface UserPermissions {
   canManageProducts: boolean
   canManageUsers: boolean
   canViewReports: boolean
+  canConfigureTenant: boolean
 }
 
 interface PasswordLoginApiResponse {
