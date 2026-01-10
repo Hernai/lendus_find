@@ -185,7 +185,7 @@ class DemoDataSeeder extends Seeder
                 'phone' => '550000000' . ($index + 2),
                 'password' => Hash::make('password'),
                 'tenant_id' => $tenant->id,
-                'type' => 'AGENT',
+                'type' => 'SUPERVISOR',
                 'is_active' => true,
                 'email_verified_at' => now(),
                 'phone_verified_at' => now(),

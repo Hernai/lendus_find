@@ -29,7 +29,7 @@ const roleLabels: Record<string, string> = {
   SUPER_ADMIN: 'Super Admin',
   ADMIN: 'Administrador',
   ANALYST: 'Analista',
-  AGENT: 'Supervisor',
+  SUPERVISOR: 'Supervisor',
   VIEWER: 'Visor'
 }
 
@@ -65,7 +65,7 @@ const form = ref({
   name: '',
   email: '',
   phone: '',
-  role: 'AGENT',
+  role: 'SUPERVISOR',
   password: '',
   password_confirmation: '',
   is_active: true
@@ -127,13 +127,13 @@ const generatePassword = () => {
 // Role options
 const roleFilterOptions = [
   { value: '', label: 'Todos los roles' },
-  { value: 'AGENT', label: 'Supervisor' },
+  { value: 'SUPERVISOR', label: 'Supervisor' },
   { value: 'ANALYST', label: 'Analista' },
   { value: 'ADMIN', label: 'Administrador' }
 ]
 
 const roleOptions = [
-  { value: 'AGENT', label: 'Supervisor' },
+  { value: 'SUPERVISOR', label: 'Supervisor' },
   { value: 'ANALYST', label: 'Analista' },
   { value: 'ADMIN', label: 'Administrador' }
 ]
@@ -218,7 +218,7 @@ const getRoleBadge = (type: string) => {
     SUPER_ADMIN: { bg: 'bg-purple-100', text: 'text-purple-800' },
     ADMIN: { bg: 'bg-red-100', text: 'text-red-800' },
     ANALYST: { bg: 'bg-blue-100', text: 'text-blue-800' },
-    AGENT: { bg: 'bg-green-100', text: 'text-green-800' }
+    SUPERVISOR: { bg: 'bg-green-100', text: 'text-green-800' }
   }
   return badges[type] || { bg: 'bg-gray-100', text: 'text-gray-800' }
 }
@@ -230,7 +230,7 @@ const openCreateModal = () => {
     name: '',
     email: '',
     phone: '',
-    role: 'AGENT',
+    role: 'SUPERVISOR',
     password: '',
     password_confirmation: '',
     is_active: true

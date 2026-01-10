@@ -15,11 +15,14 @@ interface Document {
   mime_type?: string
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   applicationId: string
   documents: Document[]
   requiredDocuments: string[]
-}>()
+  canReview?: boolean
+}>(), {
+  canReview: true
+})
 
 const emit = defineEmits<{
   'document-approved': [doc: Document]
@@ -496,8 +499,8 @@ const getStatusBadge = (status: string) => {
               </p>
             </div>
 
-            <!-- Actions (always at bottom) -->
-            <div class="mt-2">
+            <!-- Actions (always at bottom) - Solo con permiso de revisar documentos -->
+            <div v-if="canReview" class="mt-2">
               <!-- PENDING: Aprobar / Rechazar -->
               <div v-if="doc.status === 'PENDING'" class="flex gap-1">
                 <button
@@ -694,8 +697,8 @@ const getStatusBadge = (status: string) => {
             </p>
           </div>
 
-          <!-- Footer with actions -->
-          <div v-if="selectedDocument?.status === 'PENDING'" class="px-4 py-4 pb-safe flex justify-center gap-4">
+          <!-- Footer with actions - Solo con permiso de revisar documentos -->
+          <div v-if="canReview && selectedDocument?.status === 'PENDING'" class="px-4 py-4 pb-safe flex justify-center gap-4">
             <button
               class="flex items-center gap-2 bg-green-500 text-white px-6 py-3 rounded-full shadow-lg hover:bg-green-600 active:bg-green-700 transition-colors"
               @click.stop="viewerApprove"
@@ -716,7 +719,7 @@ const getStatusBadge = (status: string) => {
             </button>
           </div>
 
-          <!-- APPROVED: badge + unapprove button -->
+          <!-- APPROVED: badge + unapprove button (si tiene permiso) -->
           <div v-else-if="selectedDocument?.status === 'APPROVED'" class="px-4 py-4 pb-safe flex justify-center gap-4">
             <div class="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-full shadow-lg">
               <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -725,6 +728,7 @@ const getStatusBadge = (status: string) => {
               <span class="font-medium">Aprobado</span>
             </div>
             <button
+              v-if="canReview"
               class="flex items-center gap-2 bg-yellow-500 text-white px-4 py-2 rounded-full shadow-lg hover:bg-yellow-600 active:bg-yellow-700 transition-colors"
               @click.stop="viewerUnapprove"
             >
@@ -735,7 +739,7 @@ const getStatusBadge = (status: string) => {
             </button>
           </div>
 
-          <!-- REJECTED: badge + unreject button (no approve option) -->
+          <!-- REJECTED: badge + unreject button (si tiene permiso) -->
           <div v-else-if="selectedDocument?.status === 'REJECTED'" class="px-4 py-4 pb-safe flex justify-center gap-4">
             <div class="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-full shadow-lg">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -744,6 +748,7 @@ const getStatusBadge = (status: string) => {
               <span class="font-medium">Rechazado</span>
             </div>
             <button
+              v-if="canReview"
               class="flex items-center gap-2 bg-yellow-500 text-white px-4 py-2 rounded-full shadow-lg hover:bg-yellow-600 active:bg-yellow-700 transition-colors"
               @click.stop="viewerUnreject"
             >

@@ -123,7 +123,7 @@ Tenant identification via subdomain (`tenant.losapp.com`) or `X-Tenant-Slug` hea
 
 - **tenants**: Company configuration, branding (JSONB), webhook config
 - **products**: Credit product types (SIMPLE, NOMINA, ARRENDAMIENTO, HIPOTECARIO, PYME) with rules and required docs as JSONB
-- **users**: Authentication with roles (APPLICANT, AGENT, ANALYST, ADMIN, SUPER_ADMIN)
+- **users**: Authentication with roles (APPLICANT, SUPERVISOR, ANALYST, ADMIN, SUPER_ADMIN)
 - **applicants**: Client data (PERSONA_FISICA or PERSONA_MORAL) with JSONB fields for personal_data, address, employment_info
 - **applications**: Credit applications with status workflow (DRAFT → SUBMITTED → IN_REVIEW → DOCS_PENDING → APPROVED/REJECTED → SYNCED)
 - **documents**: Uploaded files with OCR data, status tracking
@@ -170,16 +170,16 @@ El sistema tiene 5 tipos de usuario. Solo los roles de staff pueden acceder al p
 | Rol | Descripción | Acceso Admin |
 |-----|-------------|--------------|
 | `APPLICANT` | Solicitante de crédito | No |
-| `AGENT` | Supervisor (asigna y autoriza) | Sí |
+| `SUPERVISOR` | Supervisor (asigna y autoriza) | Sí |
 | `ANALYST` | Analista de crédito (revisa solicitudes) | Sí |
 | `ADMIN` | Administrador | Sí |
 | `SUPER_ADMIN` | Super Administrador | Sí |
 
 ### Matriz de Permisos
 
-| Permiso | ANALYST | AGENT (Supervisor) | ADMIN | SUPER_ADMIN |
-|---------|---------|-------------------|-------|-------------|
-| Ver solicitudes | Todas | Todas | Todas | Todas |
+| Permiso | ANALYST | SUPERVISOR | ADMIN | SUPER_ADMIN |
+|---------|---------|------------|-------|-------------|
+| Ver solicitudes | Solo asignadas | Todas | Todas | Todas |
 | Revisar documentos | ✅ | ✅ | ✅ | ✅ |
 | Verificar referencias | ✅ | ✅ | ✅ | ✅ |
 | Cambiar status | ✅ | ✅ | ✅ | ✅ |
@@ -193,12 +193,12 @@ El sistema tiene 5 tipos de usuario. Solo los roles de staff pueden acceder al p
 ### Implementación
 
 **Backend (Laravel):**
-- Constantes en `User.php`: `TYPE_APPLICANT`, `TYPE_AGENT`, `TYPE_ANALYST`, `TYPE_ADMIN`, `TYPE_SUPER_ADMIN`
-- Métodos de permiso: `canReviewDocuments()`, `canVerifyReferences()`, `canChangeApplicationStatus()`, etc.
+- Enum `UserType`: `APPLICANT`, `SUPERVISOR`, `ANALYST`, `ADMIN`, `SUPER_ADMIN`
+- Métodos de permiso: `canReviewDocuments()`, `canVerifyReferences()`, `canChangeApplicationStatus()`, `canApproveRejectApplications()`, etc.
 - Middlewares: `staff` (verifica que sea staff), `permission:methodName` (verifica permiso específico)
 
 **Frontend (Vue):**
-- Store `auth.ts`: expone `isStaff`, `isAgent`, `isAnalyst`, `isAdmin`, `permissions`
+- Store `auth.ts`: expone `isStaff`, `isSupervisor`, `isAnalyst`, `isAdmin`, `permissions`
 - Router: usa `requiresStaff` en meta para proteger rutas admin
 - `AdminLayout.vue`: filtra navegación según `permissions`
 

@@ -21,7 +21,7 @@ const permissions = computed(() => authStore.permissions)
 
 // Role labels for display
 const roleLabels: Record<string, string> = {
-  'AGENT': 'Supervisor',
+  'SUPERVISOR': 'Supervisor',
   'ANALYST': 'Analista',
   'ADMIN': 'Administrador',
   'SUPER_ADMIN': 'Super Admin'

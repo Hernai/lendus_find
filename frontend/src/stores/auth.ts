@@ -63,7 +63,7 @@ interface PasswordLoginApiResponse {
     id: string
     name: string
     email: string
-    role: string  // AGENT, ANALYST, ADMIN, SUPER_ADMIN
+    role: string  // SUPERVISOR, ANALYST, ADMIN, SUPER_ADMIN
     is_staff: boolean
     permissions: UserPermissions
   }
@@ -106,10 +106,10 @@ export const useAuthStore = defineStore('auth', () => {
   // Getters
   const isAuthenticated = computed(() => !!token.value && !!user.value)
   const isApplicant = computed(() => user.value?.role === 'APPLICANT')
-  const isAgent = computed(() => user.value?.role === 'AGENT')
+  const isSupervisor = computed(() => user.value?.role === 'SUPERVISOR')
   const isAnalyst = computed(() => user.value?.role === 'ANALYST')
   const isAdmin = computed(() => ['ADMIN', 'SUPER_ADMIN'].includes(user.value?.role || ''))
-  const isStaff = computed(() => ['AGENT', 'ANALYST', 'ADMIN', 'SUPER_ADMIN'].includes(user.value?.role || ''))
+  const isStaff = computed(() => ['SUPERVISOR', 'ANALYST', 'ADMIN', 'SUPER_ADMIN'].includes(user.value?.role || ''))
 
   // Helper to map backend user type to frontend role
   const mapUserType = (type: string, isAdmin: boolean): User['role'] => {
@@ -647,7 +647,7 @@ export const useAuthStore = defineStore('auth', () => {
     isApplicant,
     isAnalyst,
     isAdmin,
-    isAgent,
+    isSupervisor,
     isStaff,
     // Permissions
     permissions,

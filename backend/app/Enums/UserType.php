@@ -5,7 +5,7 @@ namespace App\Enums;
 enum UserType: string
 {
     case APPLICANT = 'APPLICANT';
-    case AGENT = 'AGENT';
+    case SUPERVISOR = 'SUPERVISOR';
     case ANALYST = 'ANALYST';
     case ADMIN = 'ADMIN';
     case SUPER_ADMIN = 'SUPER_ADMIN';
@@ -16,7 +16,7 @@ enum UserType: string
     public static function staffRoles(): array
     {
         return [
-            self::AGENT,
+            self::SUPERVISOR,
             self::ANALYST,
             self::ADMIN,
             self::SUPER_ADMIN,
@@ -38,7 +38,7 @@ enum UserType: string
     {
         return match ($this) {
             self::APPLICANT => 'Solicitante',
-            self::AGENT => 'Supervisor',
+            self::SUPERVISOR => 'Supervisor',
             self::ANALYST => 'Analista',
             self::ADMIN => 'Administrador',
             self::SUPER_ADMIN => 'Super Administrador',

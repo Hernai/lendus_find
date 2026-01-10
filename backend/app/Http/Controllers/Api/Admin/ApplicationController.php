@@ -37,8 +37,9 @@ class ApplicationController extends Controller
                 'assignedAgent:id,name',
             ]);
 
-        // Agents only see assigned applications
-        if ($user->isAgent() && !$user->canViewAllApplications()) {
+        // Filter by user's permission to view all applications
+        // Analysts only see assigned applications, Supervisors and above see all
+        if (!$user->canViewAllApplications()) {
             $query->where('assigned_to', $user->id);
         }
 
@@ -126,6 +127,7 @@ class ApplicationController extends Controller
     public function show(Request $request, Application $application): JsonResponse
     {
         $tenant = $request->attributes->get('tenant');
+        $user = $request->user();
 
         if ($application->tenant_id !== $tenant->id) {
             return response()->json(['message' => 'Application not found'], 404);
@@ -143,9 +145,54 @@ class ApplicationController extends Controller
             'assignedAgent:id,name,email',
         ]);
 
+        // Build allowed statuses based on user permissions
+        $allowedStatuses = $this->getAllowedStatusesForUser($user);
+
         return response()->json([
-            'data' => $this->formatApplicationDetailed($application)
+            'data' => $this->formatApplicationDetailed($application),
+            'allowed_statuses' => $allowedStatuses,
         ]);
+    }
+
+    /**
+     * Get allowed status options based on user permissions.
+     */
+    private function getAllowedStatusesForUser($user): array
+    {
+        // All statuses that can be changed to via admin
+        $allStatuses = [
+            ['value' => ApplicationStatus::IN_REVIEW->value, 'label' => ApplicationStatus::IN_REVIEW->label()],
+            ['value' => ApplicationStatus::DOCS_PENDING->value, 'label' => ApplicationStatus::DOCS_PENDING->label()],
+            ['value' => ApplicationStatus::CORRECTIONS_PENDING->value, 'label' => ApplicationStatus::CORRECTIONS_PENDING->label()],
+            ['value' => ApplicationStatus::COUNTER_OFFERED->value, 'label' => ApplicationStatus::COUNTER_OFFERED->label()],
+            ['value' => ApplicationStatus::APPROVED->value, 'label' => ApplicationStatus::APPROVED->label()],
+            ['value' => ApplicationStatus::REJECTED->value, 'label' => ApplicationStatus::REJECTED->label()],
+            ['value' => ApplicationStatus::CANCELLED->value, 'label' => ApplicationStatus::CANCELLED->label()],
+            ['value' => ApplicationStatus::DISBURSED->value, 'label' => ApplicationStatus::DISBURSED->label()],
+            ['value' => ApplicationStatus::ACTIVE->value, 'label' => ApplicationStatus::ACTIVE->label()],
+            ['value' => ApplicationStatus::COMPLETED->value, 'label' => ApplicationStatus::COMPLETED->label()],
+            ['value' => ApplicationStatus::DEFAULT->value, 'label' => ApplicationStatus::DEFAULT->label()],
+        ];
+
+        // If user can approve/reject, they can access all statuses
+        if ($user->canApproveRejectApplications()) {
+            return $allStatuses;
+        }
+
+        // Otherwise, filter out restricted statuses
+        $restrictedStatuses = [
+            ApplicationStatus::APPROVED->value,
+            ApplicationStatus::REJECTED->value,
+            ApplicationStatus::CANCELLED->value,
+            ApplicationStatus::DISBURSED->value,
+            ApplicationStatus::ACTIVE->value,
+            ApplicationStatus::COMPLETED->value,
+            ApplicationStatus::DEFAULT->value,
+        ];
+
+        return array_values(array_filter($allStatuses, fn($status) =>
+            !in_array($status['value'], $restrictedStatuses)
+        ));
     }
 
     /**
@@ -187,6 +234,26 @@ class ApplicationController extends Controller
 
         $newStatus = $request->status;
         $reason = $request->input('reason', $request->rejection_reason);
+        $user = $request->user();
+
+        // Estados que requieren permiso de aprobar/rechazar (decisiones finales)
+        $restrictedStatuses = [
+            ApplicationStatus::APPROVED->value,
+            ApplicationStatus::REJECTED->value,
+            ApplicationStatus::CANCELLED->value,
+            ApplicationStatus::DISBURSED->value,
+            ApplicationStatus::ACTIVE->value,
+            ApplicationStatus::COMPLETED->value,
+            ApplicationStatus::DEFAULT->value,
+        ];
+
+        // Validar que el usuario tenga permiso para estados restringidos
+        if (in_array($newStatus, $restrictedStatuses) && !$user->canApproveRejectApplications()) {
+            return response()->json([
+                'message' => 'No tienes permiso para cambiar a este estado',
+                'error' => 'Forbidden',
+            ], 403);
+        }
 
         // Additional validations based on status transition
         if ($newStatus === ApplicationStatus::DISBURSED->value) {

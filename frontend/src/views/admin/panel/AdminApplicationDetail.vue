@@ -15,8 +15,15 @@ const router = useRouter()
 const tenantStore = useTenantStore()
 const authStore = useAuthStore()
 
-// Permission checks
+// Permission checks (from backend via authStore)
 const canAssign = computed(() => authStore.permissions?.canAssignApplications ?? false)
+const canChangeStatus = computed(() => authStore.permissions?.canChangeApplicationStatus ?? false)
+const canApproveReject = computed(() => authStore.permissions?.canApproveRejectApplications ?? false)
+const canReviewDocs = computed(() => authStore.permissions?.canReviewDocuments ?? false)
+const canVerifyRefs = computed(() => authStore.permissions?.canVerifyReferences ?? false)
+
+// Allowed statuses from backend (based on user permissions)
+const allowedStatuses = ref<{ value: string; label: string }[]>([])
 
 interface Document {
   id: string
@@ -264,7 +271,7 @@ const roleLabels: Record<string, string> = {
   SUPER_ADMIN: 'Super Admin',
   ADMIN: 'Administrador',
   ANALYST: 'Analista',
-  AGENT: 'Supervisor'
+  SUPERVISOR: 'Supervisor'
 }
 
 const getRoleLabel = (role: string) => roleLabels[role] || role
@@ -312,7 +319,7 @@ const tabs = [
   { id: 'timeline', label: 'Historial' }
 ]
 
-const statusOptions = [
+const allStatusOptions = [
   { value: 'SUBMITTED', label: 'Nueva', color: 'blue' },
   { value: 'IN_REVIEW', label: 'En Revisión', color: 'yellow' },
   { value: 'DOCS_PENDING', label: 'Docs Pendientes', color: 'orange' },
@@ -323,6 +330,19 @@ const statusOptions = [
   { value: 'CANCELLED', label: 'Cancelada', color: 'gray' },
   { value: 'DISBURSED', label: 'Desembolsada', color: 'purple' }
 ]
+
+// Status options come from backend based on user permissions
+const statusOptions = computed(() => {
+  // Use backend-provided allowed statuses, adding colors from local definitions
+  return allowedStatuses.value.map(status => {
+    const local = allStatusOptions.find(opt => opt.value === status.value)
+    return {
+      value: status.value,
+      label: status.label,
+      color: local?.color || 'gray'
+    }
+  })
+})
 
 // Error state
 const error = ref('')
@@ -367,7 +387,10 @@ const fetchApplication = async () => {
 
   try {
     const appId = route.params.id as string
-    const response = await api.get<{ data: Application }>(`/admin/applications/${appId}`)
+    const response = await api.get<{ data: Application; allowed_statuses: { value: string; label: string }[] }>(`/admin/applications/${appId}`)
+
+    // Store allowed statuses from backend (based on user permissions)
+    allowedStatuses.value = response.data.allowed_statuses || []
 
     // Map API response to our interface
     const data = response.data.data
@@ -1429,8 +1452,9 @@ const addNote = async () => {
 
         <!-- Application Action Buttons -->
         <div class="flex flex-col gap-2 flex-shrink-0">
+          <!-- Contraoferta: Solo supervisores/admins que pueden aprobar/rechazar -->
           <AppButton
-            v-if="['IN_REVIEW', 'DOCS_PENDING'].includes(application.status)"
+            v-if="canApproveReject && ['IN_REVIEW', 'DOCS_PENDING'].includes(application.status)"
             variant="outline"
             size="sm"
             class="!border-indigo-500 !text-indigo-600 hover:!bg-indigo-50"
@@ -1441,16 +1465,19 @@ const addNote = async () => {
             </svg>
             Contraoferta
           </AppButton>
+          <!-- Asignar: Solo supervisores/admins -->
           <AppButton v-if="canAssign" variant="outline" size="sm" @click="openAssignModal">
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
             Asignar
           </AppButton>
-          <AppButton variant="outline" size="sm" @click="openStatusModal">
+          <!-- Cambiar Estado: Analistas y superiores -->
+          <AppButton v-if="canChangeStatus" variant="outline" size="sm" @click="openStatusModal">
             Cambiar Estado
           </AppButton>
-          <AppButton v-if="application.status === 'APPROVED'" variant="primary" size="sm">
+          <!-- Generar Contrato: Solo supervisores/admins con solicitud aprobada -->
+          <AppButton v-if="canApproveReject && application.status === 'APPROVED'" variant="primary" size="sm">
             Generar Contrato
           </AppButton>
         </div>
@@ -1495,9 +1522,9 @@ const addNote = async () => {
               {{ selfieStatus === 'APPROVED' ? 'OK' : selfieStatus === 'REJECTED' ? 'X' : '?' }}
             </span>
 
-            <!-- Approve/Reject/Unapprove buttons inside photo box (subtle icons) -->
+            <!-- Approve/Reject/Unapprove buttons inside photo box (subtle icons) - Solo con permiso de revisar documentos -->
             <div
-              v-if="selfieUrl"
+              v-if="selfieUrl && canReviewDocs"
               class="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-1"
             >
               <!-- PENDING: show approve and reject -->
@@ -2366,6 +2393,7 @@ const addNote = async () => {
               :application-id="application.id"
               :documents="application.documents"
               :required-documents="application.required_documents"
+              :can-review="canReviewDocs"
               @refresh="fetchApplication"
             />
           </div>
@@ -2412,7 +2440,7 @@ const addNote = async () => {
                       </svg>
                     </a>
                     <button
-                      v-if="!ref.verified"
+                      v-if="!ref.verified && canVerifyRefs"
                       class="p-1.5 text-gray-400 hover:text-gray-600"
                       title="Verificar"
                       @click="openVerifyRefModal(ref)"
@@ -2498,8 +2526,8 @@ const addNote = async () => {
                   </div>
                 </div>
 
-                <!-- Verification actions -->
-                <div class="mt-4 pt-3 border-t border-gray-100 flex gap-2">
+                <!-- Verification actions - Solo con permiso de verificar -->
+                <div v-if="canVerifyRefs" class="mt-4 pt-3 border-t border-gray-100 flex gap-2">
                   <button
                     v-if="!account.is_verified"
                     class="flex-1 px-3 py-1.5 text-sm text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors font-medium"

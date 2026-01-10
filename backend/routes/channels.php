@@ -23,7 +23,7 @@ Broadcast::channel('tenant.{tenantId}.application.{applicationId}', function (Us
     // Staff puede ver cualquier aplicación en su tenant
     if ($user->isStaff()) {
         // Supervisores solo ven aplicaciones asignadas (a menos que tengan permiso)
-        if ($user->isAgent() && !$user->canViewAllApplications()) {
+        if ($user->isSupervisor() && !$user->canViewAllApplications()) {
             $application = Application::find($applicationId);
             return $application && (string) $application->assigned_to === (string) $user->id;
         }

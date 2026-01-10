@@ -125,11 +125,11 @@ class User extends Authenticatable
     }
 
     /**
-     * Check if user is a supervisor (formerly agent).
+     * Check if user is a supervisor.
      */
-    public function isAgent(): bool
+    public function isSupervisor(): bool
     {
-        return $this->type === UserType::AGENT;
+        return $this->type === UserType::SUPERVISOR;
     }
 
     /**
@@ -138,7 +138,7 @@ class User extends Authenticatable
     public function isSupervisorOrAbove(): bool
     {
         return in_array($this->type, [
-            UserType::AGENT,  // Supervisor
+            UserType::SUPERVISOR,
             UserType::ADMIN,
             UserType::SUPER_ADMIN,
         ]);
@@ -186,29 +186,29 @@ class User extends Authenticatable
 
     /**
      * Can view all applications (not just assigned).
-     * Analysts, supervisors, and admins can see all.
+     * Supervisors and admins can see all. Analysts only see assigned.
      */
     public function canViewAllApplications(): bool
     {
-        return $this->isAtLeastAnalyst() || $this->isAgent();
+        return $this->isSupervisorOrAbove();
     }
 
     /**
      * Can review documents (approve/reject).
-     * Agents can review docs for their assigned applications.
+     * All staff can review docs.
      */
     public function canReviewDocuments(): bool
     {
-        return $this->isStaff(); // All staff including agents
+        return $this->isStaff();
     }
 
     /**
      * Can verify references.
-     * Agents are typically the ones calling references.
+     * All staff can verify references.
      */
     public function canVerifyReferences(): bool
     {
-        return $this->isStaff(); // All staff including agents
+        return $this->isStaff();
     }
 
     /**
@@ -217,7 +217,7 @@ class User extends Authenticatable
      */
     public function canChangeApplicationStatus(): bool
     {
-        return $this->isAtLeastAnalyst() || $this->isAgent();
+        return $this->isAtLeastAnalyst() || $this->isSupervisor();
     }
 
     /**

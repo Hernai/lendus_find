@@ -11,7 +11,7 @@ export interface User {
   updated_at: string
 }
 
-export type UserRole = 'APPLICANT' | 'AGENT' | 'ANALYST' | 'ADMIN' | 'SUPER_ADMIN'
+export type UserRole = 'APPLICANT' | 'SUPERVISOR' | 'ANALYST' | 'ADMIN' | 'SUPER_ADMIN'
 
 export type OtpMethod = 'sms' | 'whatsapp' | 'email'
 

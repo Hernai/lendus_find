@@ -73,7 +73,7 @@ class UserController extends Controller
             'name' => 'required|string|max:100',
             'email' => 'required|email|unique:users,email',
             'phone' => 'nullable|string|size:10|unique:users,phone',
-            'role' => 'required|in:ADMIN,AGENT,ANALYST',
+            'role' => 'required|in:ADMIN,SUPERVISOR,ANALYST',
             'password' => 'nullable|string|min:8',
         ], [
             'email.unique' => 'Este correo electrónico ya está registrado',
@@ -159,7 +159,7 @@ class UserController extends Controller
             'name' => 'sometimes|string|max:100',
             'email' => 'sometimes|email|unique:users,email,' . $user->id,
             'phone' => 'nullable|string|size:10|unique:users,phone,' . $user->id,
-            'role' => 'sometimes|in:ADMIN,AGENT,ANALYST',
+            'role' => 'sometimes|in:ADMIN,SUPERVISOR,ANALYST',
             'password' => 'nullable|string|min:8',
             'is_active' => 'sometimes|boolean',
         ], [
