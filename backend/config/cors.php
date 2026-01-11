@@ -22,6 +22,7 @@ return [
     'allowed_origins' => [
         'http://localhost:5173',
         'http://127.0.0.1:5173',
+        'http://192.168.1.65:5173',
         'https://f6a07823cbf3.ngrok-free.app',
         'https://eaac7437a876.ngrok-free.app',
         'https://*.ngrok-free.app',

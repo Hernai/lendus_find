@@ -226,7 +226,8 @@ class DocumentService
         $applicant = $document->applicant;
         $application = $document->application;
 
-        $path = $this->generatePath($tenant, $applicant, $application, $document->type, $file);
+        $docType = $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type;
+        $path = $this->generatePath($tenant, $applicant, $application, $docType, $file);
 
         // Process and upload
         $fileContent = $this->processFile($file);
@@ -450,9 +451,9 @@ class DocumentService
     {
         return [
             'id' => $document->uuid,
-            'type' => $document->type,
+            'type' => $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type,
             'name' => $document->original_name,
-            'status' => $document->status,
+            'status' => $document->status instanceof \App\Enums\DocumentStatus ? $document->status->value : $document->status,
             'rejection_reason' => $document->rejection_reason,
             'rejection_comment' => $document->rejection_comment,
             'mime_type' => $document->mime_type,

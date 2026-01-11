@@ -24,6 +24,12 @@ return Application::configure(basePath: dirname(__DIR__))
             'metadata' => \App\Http\Middleware\CaptureMetadata::class,
         ]);
 
+        // Exclude API routes from CSRF verification (they use Bearer token auth)
+        $middleware->validateCsrfTokens(except: [
+            'api/*',
+            'broadcasting/*',
+        ]);
+
         // Apply tenant middleware to API routes
         $middleware->api(prepend: [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,

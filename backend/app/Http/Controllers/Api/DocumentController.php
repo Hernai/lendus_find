@@ -359,9 +359,9 @@ class DocumentController extends Controller
     {
         return [
             'id' => $document->id,
-            'type' => $document->type,
+            'type' => $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type,
             'name' => $document->original_name,
-            'status' => $document->status,
+            'status' => $document->status instanceof \App\Enums\DocumentStatus ? $document->status->value : $document->status,
             'rejection_reason' => $document->rejection_reason,
             'mime_type' => $document->mime_type,
             'size' => $document->size,

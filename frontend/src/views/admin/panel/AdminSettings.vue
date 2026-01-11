@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { api } from '@/services/api'
-import { AppButton, AppInput } from '@/components/common'
+import { AppInput } from '@/components/common'
+import TenantBrandingEditor, { type Branding, type TenantPreviewInfo } from '@/components/admin/TenantBrandingEditor.vue'
 
 interface TenantInfo {
   id: string
@@ -12,23 +13,6 @@ interface TenantInfo {
   email: string | null
   phone: string | null
   website: string | null
-}
-
-interface Branding {
-  primary_color: string
-  secondary_color: string
-  accent_color: string
-  background_color: string
-  text_color: string
-  logo_url: string | null
-  logo_dark_url: string | null
-  favicon_url: string | null
-  login_background_url: string | null
-  font_family: string
-  heading_font_family: string | null
-  border_radius: string
-  button_style: string
-  custom_css: string | null
 }
 
 interface ApiConfig {
@@ -52,7 +36,7 @@ interface ApiConfig {
 // State
 const isLoading = ref(true)
 const error = ref('')
-const activeTab = ref<'general' | 'branding' | 'apis'>('general')
+const activeTab = ref<'general' | 'branding' | 'apis'>('branding')
 
 // Data
 const tenant = ref<TenantInfo | null>(null)
@@ -83,6 +67,9 @@ const apiForm = ref({
   is_sandbox: false
 })
 
+// Computed tenant info for preview
+const tenantPreviewInfo = ref<TenantPreviewInfo>({ name: '', slug: '' })
+
 // Load data
 const loadConfig = async () => {
   isLoading.value = true
@@ -104,9 +91,15 @@ const loadConfig = async () => {
     apiConfigs.value = response.data.data.api_configs
     availableProviders.value = response.data.data.available_providers
     availableServiceTypes.value = response.data.data.available_service_types
+
+    // Update preview info
+    tenantPreviewInfo.value = {
+      name: tenant.value.name,
+      slug: tenant.value.slug
+    }
   } catch (e) {
     console.error('Failed to load config:', e)
-    error.value = 'Error al cargar la configuración'
+    error.value = 'Error al cargar la configuracion'
   } finally {
     isLoading.value = false
   }
@@ -131,7 +124,7 @@ const saveTenant = async () => {
       phone: tenant.value.phone || null,
       website: tenant.value.website || null
     })
-    saveMessage.value = 'Información guardada'
+    saveMessage.value = 'Informacion guardada'
     setTimeout(() => saveMessage.value = '', 3000)
   } catch (e) {
     saveError.value = 'Error al guardar'
@@ -157,6 +150,13 @@ const saveBranding = async () => {
   } finally {
     isSaving.value = false
   }
+}
+
+// Handle logo upload from component
+const handleLogoUpload = (field: string, file: File) => {
+  // In a full implementation, this would upload to S3
+  // For now the component handles base64 conversion internally
+  console.log('Logo upload requested:', field, file.name)
 }
 
 // API Config methods
@@ -201,7 +201,6 @@ const saveApiConfig = async () => {
   saveError.value = ''
 
   try {
-    // Only send credentials if they were filled
     const payload: Record<string, unknown> = {
       provider: apiForm.value.provider,
       service_type: apiForm.value.service_type,
@@ -212,107 +211,148 @@ const saveApiConfig = async () => {
       is_sandbox: apiForm.value.is_sandbox
     }
 
+    // Only include credentials if provided
     if (apiForm.value.api_key) payload.api_key = apiForm.value.api_key
     if (apiForm.value.api_secret) payload.api_secret = apiForm.value.api_secret
     if (apiForm.value.account_sid) payload.account_sid = apiForm.value.account_sid
     if (apiForm.value.auth_token) payload.auth_token = apiForm.value.auth_token
 
-    await api.post('/admin/config/api-configs', payload)
-    showApiModal.value = false
+    await api.post('/admin/config/api', payload)
     await loadConfig()
-    saveMessage.value = 'Configuración guardada'
+    showApiModal.value = false
+    saveMessage.value = 'Configuracion guardada'
     setTimeout(() => saveMessage.value = '', 3000)
   } catch (e) {
-    saveError.value = 'Error al guardar'
+    saveError.value = 'Error al guardar configuracion'
   } finally {
     isSaving.value = false
   }
 }
 
+const deleteApiConfig = async (config: ApiConfig) => {
+  if (!confirm('¿Eliminar esta configuracion?')) return
+
+  try {
+    await api.delete(`/admin/config/api/${config.id}`)
+    await loadConfig()
+    saveMessage.value = 'Configuracion eliminada'
+    setTimeout(() => saveMessage.value = '', 3000)
+  } catch (e) {
+    saveError.value = 'Error al eliminar'
+  }
+}
+
 const testApiConfig = async (config: ApiConfig) => {
   try {
-    const response = await api.post<{ success: boolean; message: string }>(`/admin/config/api-configs/${config.id}/test`)
+    const response = await api.post<{ success: boolean; message: string }>(`/admin/config/api/${config.id}/test`)
+    if (response.data.success) {
+      saveMessage.value = 'Conexion exitosa'
+    } else {
+      saveError.value = response.data.message || 'Error en la prueba'
+    }
     await loadConfig()
-    alert(response.data.message)
+    setTimeout(() => {
+      saveMessage.value = ''
+      saveError.value = ''
+    }, 3000)
   } catch (e) {
-    alert('Error al probar la conexión')
+    saveError.value = 'Error al probar conexion'
   }
 }
 
-const deleteApiConfig = async (config: ApiConfig) => {
-  if (!confirm(`¿Eliminar la configuración de ${config.provider_label}?`)) return
-
-  try {
-    await api.delete(`/admin/config/api-configs/${config.id}`)
-    await loadConfig()
-  } catch (e) {
-    alert('Error al eliminar')
-  }
-}
-
-// Get fields needed for each provider
-const providerFields = computed(() => {
-  const provider = apiForm.value.provider
+// Get provider fields
+const getProviderFields = (provider: string) => {
   switch (provider) {
     case 'twilio':
       return ['account_sid', 'auth_token', 'from_number']
-    case 'mailgun':
-      return ['api_key', 'domain', 'from_email']
+    case 'messagebird':
+      return ['api_key', 'from_number']
     case 'sendgrid':
       return ['api_key', 'from_email']
-    case 'nubarium':
+    case 'mailgun':
+      return ['api_key', 'domain', 'from_email']
     case 'mati':
-    case 'onfido':
-    case 'jumio':
+    case 'incode':
+    case 'truora':
       return ['api_key', 'api_secret']
+    case 'buro_credito':
     case 'circulo_credito':
       return ['api_key', 'api_secret']
     default:
       return ['api_key']
   }
-})
+}
 </script>
 
 <template>
-  <div>
-    <!-- Header -->
-    <div class="mb-6">
-      <h1 class="text-2xl font-bold text-gray-900">Configuración</h1>
-      <p class="text-gray-500">Configura tu empresa, branding e integraciones</p>
-    </div>
-
+  <div class="min-h-screen bg-gray-50">
     <!-- Loading -->
-    <div v-if="isLoading" class="flex justify-center py-12">
+    <div v-if="isLoading" class="flex items-center justify-center h-64">
       <div class="animate-spin w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full"></div>
     </div>
 
     <!-- Error -->
-    <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-      <p class="text-red-600">{{ error }}</p>
-      <AppButton variant="outline" size="sm" class="mt-4" @click="loadConfig">Reintentar</AppButton>
+    <div v-else-if="error" class="p-6">
+      <div class="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+        {{ error }}
+      </div>
     </div>
 
     <!-- Content -->
-    <div v-else>
+    <div v-else-if="tenant && branding" class="max-w-6xl mx-auto">
+      <!-- Header -->
+      <div class="bg-white border-b border-gray-200 px-6 py-4">
+        <div class="flex items-center gap-4">
+          <div
+            class="w-12 h-12 rounded-xl flex items-center justify-center text-white text-lg font-bold shadow-md"
+            :style="{ backgroundColor: branding.primary_color }"
+          >
+            {{ tenant.name?.charAt(0) }}
+          </div>
+          <div>
+            <h1 class="text-xl font-bold text-gray-900">{{ tenant.name }}</h1>
+            <p class="text-sm text-gray-500">{{ tenant.slug }}.losapp.com</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div v-if="saveMessage" class="mx-6 mt-4">
+        <div class="bg-green-50 border border-green-200 rounded-lg p-3 text-green-700 text-sm flex items-center gap-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          {{ saveMessage }}
+        </div>
+      </div>
+      <div v-if="saveError" class="mx-6 mt-4">
+        <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm flex items-center gap-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {{ saveError }}
+        </div>
+      </div>
+
       <!-- Tabs -->
-      <div class="border-b border-gray-200 mb-6">
-        <div class="flex gap-8">
+      <div class="px-6 pt-4 border-b border-gray-200 bg-white">
+        <div class="flex gap-1">
           <button
             v-for="tab in [
-              { id: 'general', label: 'Información General', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16' },
+              { id: 'general', label: 'General', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
               { id: 'branding', label: 'Branding', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01' },
-              { id: 'apis', label: 'Integraciones API', icon: 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4' }
+              { id: 'apis', label: 'Integraciones', icon: 'M13 10V3L4 14h7v7l9-11h-7z' }
             ]"
             :key="tab.id"
-            @click="activeTab = tab.id as typeof activeTab"
+            @click="activeTab = tab.id as 'general' | 'branding' | 'apis'"
             :class="[
-              'flex items-center gap-2 py-3 px-1 border-b-2 text-sm font-medium transition-colors',
+              'flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all border-b-2 -mb-px',
               activeTab === tab.id
                 ? 'border-primary-500 text-primary-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             ]"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="tab.icon" />
             </svg>
             {{ tab.label }}
@@ -320,277 +360,217 @@ const providerFields = computed(() => {
         </div>
       </div>
 
-      <!-- Success/Error Messages -->
-      <div v-if="saveMessage" class="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
-        {{ saveMessage }}
-      </div>
-      <div v-if="saveError" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-        {{ saveError }}
-      </div>
-
       <!-- General Tab -->
-      <div v-if="activeTab === 'general' && tenant" class="bg-white rounded-xl shadow-sm p-6">
-        <h2 class="text-lg font-semibold text-gray-900 mb-4">Información de la Empresa</h2>
+      <div v-show="activeTab === 'general'" class="p-6">
+        <div class="bg-white rounded-xl border border-gray-200 p-6 max-w-2xl">
+          <h2 class="text-lg font-semibold text-gray-900 mb-4">Informacion de la Empresa</h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
-            <AppInput v-model="tenant.name" />
-          </div>
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <AppInput
+                v-model="tenant.name"
+                label="Nombre comercial"
+                placeholder="Mi Empresa"
+              />
+              <AppInput
+                v-model="tenant.slug"
+                label="Slug (URL)"
+                placeholder="mi-empresa"
+                disabled
+                hint="No se puede cambiar"
+              />
+            </div>
 
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Subdominio</label>
-            <div class="flex items-center">
-              <span class="text-gray-500 mr-2">{{ tenant.slug }}</span>
-              <span class="text-gray-400">.losapp.com</span>
+            <AppInput
+              v-model="tenant.legal_name"
+              label="Razon social"
+              placeholder="Mi Empresa S.A. de C.V."
+            />
+
+            <div class="grid grid-cols-2 gap-4">
+              <AppInput
+                v-model="tenant.rfc"
+                label="RFC"
+                placeholder="XAXX010101000"
+                maxlength="13"
+              />
+              <AppInput
+                v-model="tenant.phone"
+                label="Telefono"
+                placeholder="55 1234 5678"
+                type="tel"
+              />
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <AppInput
+                v-model="tenant.email"
+                label="Email de contacto"
+                placeholder="contacto@miempresa.com"
+                type="email"
+              />
+              <AppInput
+                v-model="tenant.website"
+                label="Sitio web"
+                placeholder="https://miempresa.com"
+                type="url"
+              />
             </div>
           </div>
 
-          <div class="md:col-span-2">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Razón Social</label>
-            <AppInput v-model="tenant.legal_name" placeholder="Empresa S.A. de C.V. SOFOM E.N.R." />
+          <div class="mt-6 pt-4 border-t border-gray-100 flex justify-end">
+            <button
+              @click="saveTenant"
+              class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium text-sm"
+              :disabled="isSaving"
+            >
+              {{ isSaving ? 'Guardando...' : 'Guardar Cambios' }}
+            </button>
           </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">RFC</label>
-            <AppInput v-model="tenant.rfc" placeholder="ABC123456789" :maxlength="13" />
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
-            <AppInput v-model="tenant.phone" placeholder="5555555555" />
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <AppInput v-model="tenant.email" type="email" placeholder="contacto@empresa.mx" />
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Sitio Web</label>
-            <AppInput v-model="tenant.website" placeholder="https://empresa.mx" />
-          </div>
-        </div>
-
-        <div class="mt-6 flex justify-end">
-          <AppButton variant="primary" @click="saveTenant" :loading="isSaving">
-            Guardar Cambios
-          </AppButton>
         </div>
       </div>
 
-      <!-- Branding Tab -->
-      <div v-if="activeTab === 'branding' && branding" class="bg-white rounded-xl shadow-sm p-6">
-        <h2 class="text-lg font-semibold text-gray-900 mb-4">Personalización Visual</h2>
+      <!-- Branding Tab - Using Component -->
+      <div v-show="activeTab === 'branding'" class="bg-white border-b border-gray-200">
+        <TenantBrandingEditor
+          v-model="branding"
+          :tenant="tenantPreviewInfo"
+          @logo-upload="handleLogoUpload"
+        />
 
-        <!-- Colors -->
-        <div class="mb-8">
-          <h3 class="text-sm font-medium text-gray-700 mb-3">Colores</h3>
-          <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <div v-for="color in [
-              { key: 'primary_color', label: 'Primario' },
-              { key: 'secondary_color', label: 'Secundario' },
-              { key: 'accent_color', label: 'Acento' },
-              { key: 'background_color', label: 'Fondo' },
-              { key: 'text_color', label: 'Texto' }
-            ]" :key="color.key">
-              <label class="block text-xs text-gray-500 mb-1">{{ color.label }}</label>
-              <div class="flex items-center gap-2">
-                <input
-                  type="color"
-                  v-model="(branding as Record<string, string>)[color.key]"
-                  class="w-10 h-10 rounded border border-gray-300 cursor-pointer"
-                />
-                <input
-                  type="text"
-                  v-model="(branding as Record<string, string>)[color.key]"
-                  class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Logos -->
-        <div class="mb-8">
-          <h3 class="text-sm font-medium text-gray-700 mb-3">Logos e Imágenes</h3>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Logo Principal (URL)</label>
-              <AppInput v-model="branding.logo_url" placeholder="/images/logo.svg" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Logo Oscuro (URL)</label>
-              <AppInput v-model="branding.logo_dark_url" placeholder="/images/logo-dark.svg" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Favicon (URL)</label>
-              <AppInput v-model="branding.favicon_url" placeholder="/favicon.ico" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Fondo de Login (URL)</label>
-              <AppInput v-model="branding.login_background_url" placeholder="/images/login-bg.jpg" />
-            </div>
-          </div>
-        </div>
-
-        <!-- Typography & Style -->
-        <div class="mb-8">
-          <h3 class="text-sm font-medium text-gray-700 mb-3">Tipografía y Estilo</h3>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Fuente Principal</label>
-              <AppInput v-model="branding.font_family" placeholder="Inter, sans-serif" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Radio de Bordes</label>
-              <AppInput v-model="branding.border_radius" placeholder="12px" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Estilo de Botones</label>
-              <select
-                v-model="branding.button_style"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
-              >
-                <option value="rounded">Redondeado</option>
-                <option value="pill">Pill</option>
-                <option value="square">Cuadrado</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <!-- Preview -->
-        <div class="mb-6 p-4 bg-gray-50 rounded-lg">
-          <p class="text-sm font-medium text-gray-700 mb-3">Vista Previa</p>
-          <div class="flex gap-3">
-            <button
-              class="px-4 py-2 text-white text-sm font-medium"
-              :style="{
-                backgroundColor: branding.primary_color,
-                borderRadius: branding.border_radius
-              }"
-            >
-              Primario
-            </button>
-            <button
-              class="px-4 py-2 text-white text-sm font-medium"
-              :style="{
-                backgroundColor: branding.secondary_color,
-                borderRadius: branding.border_radius
-              }"
-            >
-              Secundario
-            </button>
-            <button
-              class="px-4 py-2 text-white text-sm font-medium"
-              :style="{
-                backgroundColor: branding.accent_color,
-                borderRadius: branding.border_radius
-              }"
-            >
-              Acento
-            </button>
-          </div>
-        </div>
-
-        <div class="flex justify-end">
-          <AppButton variant="primary" @click="saveBranding" :loading="isSaving">
-            Guardar Branding
-          </AppButton>
+        <!-- Save Button -->
+        <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end">
+          <button
+            @click="saveBranding"
+            class="px-6 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium text-sm shadow-sm"
+            :disabled="isSaving"
+          >
+            {{ isSaving ? 'Guardando...' : 'Guardar Branding' }}
+          </button>
         </div>
       </div>
 
       <!-- APIs Tab -->
-      <div v-if="activeTab === 'apis'" class="space-y-6">
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-gray-900">Integraciones API</h2>
-          <AppButton variant="primary" @click="openAddApiModal">
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div v-show="activeTab === 'apis'" class="p-6">
+        <!-- Empty State -->
+        <div v-if="apiConfigs.length === 0" class="text-center py-12 bg-white rounded-xl border border-gray-200">
+          <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
+            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-gray-900 mb-2">Sin integraciones</h3>
+          <p class="text-gray-500 mb-6">Configura proveedores de SMS, Email, KYC y Buro de credito.</p>
+          <button
+            @click="openAddApiModal"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
             </svg>
-            Agregar Integración
-          </AppButton>
+            Agregar Integracion
+          </button>
         </div>
 
-        <!-- API Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div
-            v-for="config in apiConfigs"
-            :key="config.id"
-            class="bg-white rounded-xl shadow-sm p-5 border-l-4"
-            :class="config.is_active ? 'border-green-500' : 'border-gray-300'"
-          >
-            <div class="flex items-start justify-between mb-3">
-              <div>
-                <h3 class="font-medium text-gray-900">{{ config.provider_label }}</h3>
-                <p class="text-sm text-gray-500">{{ config.service_type_label }}</p>
+        <!-- Configs List -->
+        <div v-else class="space-y-4">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-gray-900">Integraciones configuradas</h2>
+            <button
+              @click="openAddApiModal"
+              class="flex items-center gap-2 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium text-sm"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+              Agregar
+            </button>
+          </div>
+
+          <div class="grid gap-4">
+            <div
+              v-for="config in apiConfigs"
+              :key="config.id"
+              class="bg-white rounded-xl border border-gray-200 p-4"
+            >
+              <div class="flex items-start justify-between">
+                <div class="flex items-center gap-3">
+                  <div
+                    class="w-10 h-10 rounded-lg flex items-center justify-center"
+                    :class="config.is_active ? 'bg-green-100' : 'bg-gray-100'"
+                  >
+                    <svg
+                      class="w-5 h-5"
+                      :class="config.is_active ? 'text-green-600' : 'text-gray-400'"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-medium text-gray-900">{{ config.provider_label }}</span>
+                      <span class="px-2 py-0.5 text-xs font-medium rounded-full" :class="config.is_sandbox ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'">
+                        {{ config.is_sandbox ? 'Sandbox' : 'Produccion' }}
+                      </span>
+                    </div>
+                    <p class="text-sm text-gray-500">{{ config.service_type_label }}</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button
+                    @click="testApiConfig(config)"
+                    class="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                    title="Probar conexion"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </button>
+                  <button
+                    @click="openEditApiModal(config)"
+                    class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Editar"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                  <button
+                    @click="deleteApiConfig(config)"
+                    class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Eliminar"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <div class="flex gap-2">
-                <span
-                  :class="[
-                    'px-2 py-0.5 rounded-full text-xs font-medium',
-                    config.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
-                  ]"
-                >
-                  {{ config.is_active ? 'Activo' : 'Inactivo' }}
+
+              <!-- Status indicators -->
+              <div class="mt-3 pt-3 border-t border-gray-100 flex items-center gap-4 text-xs">
+                <span v-if="config.has_credentials" class="flex items-center gap-1 text-green-600">
+                  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                  </svg>
+                  Credenciales configuradas
                 </span>
-                <span
-                  v-if="config.is_sandbox"
-                  class="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
-                >
-                  Sandbox
+                <span v-else class="flex items-center gap-1 text-amber-600">
+                  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                  </svg>
+                  Sin credenciales
+                </span>
+                <span v-if="config.last_tested_at" class="text-gray-400">
+                  Ultima prueba: {{ new Date(config.last_tested_at).toLocaleDateString() }}
                 </span>
               </div>
-            </div>
-
-            <div class="text-sm text-gray-600 mb-3">
-              <div v-if="config.from_number">Tel: {{ config.from_number }}</div>
-              <div v-if="config.from_email">Email: {{ config.from_email }}</div>
-              <div v-if="config.domain">Dominio: {{ config.domain }}</div>
-              <div class="mt-2" :class="config.has_credentials ? 'text-green-600' : 'text-red-600'">
-                {{ config.has_credentials ? '✓ Credenciales configuradas' : '✗ Sin credenciales' }}
-              </div>
-            </div>
-
-            <div v-if="config.last_tested_at" class="text-xs text-gray-400 mb-3">
-              Última prueba: {{ new Date(config.last_tested_at).toLocaleString('es-MX') }}
-              <span :class="config.last_test_success ? 'text-green-600' : 'text-red-600'">
-                {{ config.last_test_success ? '(Exitosa)' : '(Fallida)' }}
-              </span>
-            </div>
-
-            <div class="flex gap-2">
-              <button
-                @click="openEditApiModal(config)"
-                class="text-sm text-primary-600 hover:text-primary-800"
-              >
-                Editar
-              </button>
-              <button
-                @click="testApiConfig(config)"
-                class="text-sm text-blue-600 hover:text-blue-800"
-              >
-                Probar
-              </button>
-              <button
-                @click="deleteApiConfig(config)"
-                class="text-sm text-red-600 hover:text-red-800"
-              >
-                Eliminar
-              </button>
             </div>
           </div>
-        </div>
-
-        <!-- Empty state -->
-        <div v-if="apiConfigs.length === 0" class="bg-white rounded-xl p-12 text-center">
-          <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-          </svg>
-          <h3 class="text-lg font-medium text-gray-900 mb-2">Sin integraciones</h3>
-          <p class="text-gray-500 mb-4">Configura tus proveedores de SMS, Email, KYC y más</p>
-          <AppButton variant="primary" @click="openAddApiModal">Agregar Integración</AppButton>
         </div>
       </div>
     </div>
@@ -602,26 +582,29 @@ const providerFields = computed(() => {
         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
         @click.self="showApiModal = false"
       >
-        <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden">
           <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-gray-900">
-              {{ editingApiConfig ? 'Editar Integración' : 'Nueva Integración' }}
-            </h2>
-            <button @click="showApiModal = false" class="text-gray-400 hover:text-gray-600">
+            <h3 class="text-lg font-semibold text-gray-900">
+              {{ editingApiConfig ? 'Editar Integracion' : 'Nueva Integracion' }}
+            </h3>
+            <button
+              @click="showApiModal = false"
+              class="p-2 text-gray-400 hover:text-gray-600 rounded-lg transition-colors"
+            >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
 
-          <div class="px-6 py-5 space-y-4">
+          <div class="p-6 space-y-4 overflow-y-auto max-h-[60vh]">
             <div class="grid grid-cols-2 gap-4">
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Proveedor *</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Proveedor</label>
                 <select
                   v-model="apiForm.provider"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   :disabled="!!editingApiConfig"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 >
                   <option value="">Seleccionar...</option>
                   <option v-for="(label, key) in availableProviders" :key="key" :value="key">
@@ -630,11 +613,11 @@ const providerFields = computed(() => {
                 </select>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de Servicio *</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de servicio</label>
                 <select
                   v-model="apiForm.service_type"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   :disabled="!!editingApiConfig"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 >
                   <option value="">Seleccionar...</option>
                   <option v-for="(label, key) in availableServiceTypes" :key="key" :value="key">
@@ -646,68 +629,111 @@ const providerFields = computed(() => {
 
             <!-- Dynamic fields based on provider -->
             <div v-if="apiForm.provider" class="space-y-4">
-              <div v-if="providerFields.includes('account_sid')">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Account SID</label>
-                <AppInput v-model="apiForm.account_sid" :placeholder="editingApiConfig ? '(sin cambios)' : ''" />
-              </div>
-
-              <div v-if="providerFields.includes('auth_token')">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Auth Token</label>
-                <AppInput v-model="apiForm.auth_token" type="password" :placeholder="editingApiConfig ? '(sin cambios)' : ''" />
-              </div>
-
-              <div v-if="providerFields.includes('api_key')">
+              <div v-if="getProviderFields(apiForm.provider).includes('api_key')">
                 <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-                <AppInput v-model="apiForm.api_key" :placeholder="editingApiConfig ? '(sin cambios)' : ''" />
+                <input
+                  v-model="apiForm.api_key"
+                  type="password"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  :placeholder="editingApiConfig ? '(sin cambios)' : 'sk-...'"
+                />
               </div>
 
-              <div v-if="providerFields.includes('api_secret')">
+              <div v-if="getProviderFields(apiForm.provider).includes('api_secret')">
                 <label class="block text-sm font-medium text-gray-700 mb-1">API Secret</label>
-                <AppInput v-model="apiForm.api_secret" type="password" :placeholder="editingApiConfig ? '(sin cambios)' : ''" />
+                <input
+                  v-model="apiForm.api_secret"
+                  type="password"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  :placeholder="editingApiConfig ? '(sin cambios)' : '...'"
+                />
               </div>
 
-              <div v-if="providerFields.includes('from_number')">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Número de Origen</label>
-                <AppInput v-model="apiForm.from_number" placeholder="+521234567890" />
+              <div v-if="getProviderFields(apiForm.provider).includes('account_sid')">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Account SID</label>
+                <input
+                  v-model="apiForm.account_sid"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="AC..."
+                />
               </div>
 
-              <div v-if="providerFields.includes('from_email')">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Email de Origen</label>
-                <AppInput v-model="apiForm.from_email" placeholder="noreply@empresa.mx" />
+              <div v-if="getProviderFields(apiForm.provider).includes('auth_token')">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Auth Token</label>
+                <input
+                  v-model="apiForm.auth_token"
+                  type="password"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  :placeholder="editingApiConfig ? '(sin cambios)' : '...'"
+                />
               </div>
 
-              <div v-if="providerFields.includes('domain')">
+              <div v-if="getProviderFields(apiForm.provider).includes('from_number')">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Numero de origen</label>
+                <input
+                  v-model="apiForm.from_number"
+                  type="tel"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="+521234567890"
+                />
+              </div>
+
+              <div v-if="getProviderFields(apiForm.provider).includes('from_email')">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Email de origen</label>
+                <input
+                  v-model="apiForm.from_email"
+                  type="email"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="noreply@miempresa.com"
+                />
+              </div>
+
+              <div v-if="getProviderFields(apiForm.provider).includes('domain')">
                 <label class="block text-sm font-medium text-gray-700 mb-1">Dominio</label>
-                <AppInput v-model="apiForm.domain" placeholder="mg.empresa.mx" />
+                <input
+                  v-model="apiForm.domain"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="mg.miempresa.com"
+                />
               </div>
             </div>
 
-            <div class="flex gap-4 pt-2">
-              <label class="flex items-center gap-2">
-                <input type="checkbox" v-model="apiForm.is_active" class="w-4 h-4 text-primary-600 rounded" />
+            <div class="flex items-center gap-6 pt-2">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  v-model="apiForm.is_active"
+                  class="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
                 <span class="text-sm text-gray-700">Activo</span>
               </label>
-              <label class="flex items-center gap-2">
-                <input type="checkbox" v-model="apiForm.is_sandbox" class="w-4 h-4 text-primary-600 rounded" />
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  v-model="apiForm.is_sandbox"
+                  class="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
                 <span class="text-sm text-gray-700">Modo Sandbox</span>
               </label>
-            </div>
-
-            <div v-if="saveError" class="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
-              {{ saveError }}
             </div>
           </div>
 
           <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-            <AppButton variant="outline" @click="showApiModal = false">Cancelar</AppButton>
-            <AppButton
-              variant="primary"
-              @click="saveApiConfig"
-              :loading="isSaving"
-              :disabled="!apiForm.provider || !apiForm.service_type"
+            <button
+              @click="showApiModal = false"
+              class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
             >
-              Guardar
-            </AppButton>
+              Cancelar
+            </button>
+            <button
+              @click="saveApiConfig"
+              :disabled="!apiForm.provider || !apiForm.service_type || isSaving"
+              class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {{ isSaving ? 'Guardando...' : 'Guardar' }}
+            </button>
           </div>
         </div>
       </div>

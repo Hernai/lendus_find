@@ -54,6 +54,14 @@ class SimulatorController extends Controller
 
         $product = Product::find($request->product_id);
 
+        // Verify product exists and belongs to current tenant
+        if (!$product) {
+            return response()->json([
+                'error' => 'Product not found',
+                'message' => 'El producto seleccionado no está disponible para este tenant.',
+            ], 404);
+        }
+
         // Validate amount and term against product rules
         if (!$product->isAmountValid($request->amount)) {
             return response()->json([

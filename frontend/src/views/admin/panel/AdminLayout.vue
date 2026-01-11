@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore, useTenantStore } from '@/stores'
+import TenantSwitcher from '@/components/admin/TenantSwitcher.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -95,7 +96,7 @@ const isActive = (path: string) => {
 
 const handleLogout = async () => {
   await authStore.logout()
-  router.push('/')
+  router.push('/admin/login')
 }
 </script>
 
@@ -103,71 +104,66 @@ const handleLogout = async () => {
   <div class="min-h-screen bg-gray-100">
     <!-- Top Navigation -->
     <nav class="bg-gray-900 text-white shadow-lg">
-      <div class="max-w-7xl mx-auto px-4">
-        <div class="flex items-center justify-between h-16">
-          <!-- Logo & Brand -->
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center">
-              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div class="px-4">
+        <div class="flex items-center justify-between h-14">
+          <!-- Logo & Brand (compact) -->
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 bg-primary-500 rounded-md flex items-center justify-center">
+              <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
             </div>
-            <div>
-              <p class="font-bold text-lg">{{ tenantName }}</p>
-              <p class="text-xs text-gray-400">Mesa de Control</p>
-            </div>
+            <span class="font-semibold text-sm hidden sm:block">{{ tenantName }}</span>
           </div>
 
-          <!-- Navigation Links -->
-          <div class="hidden md:flex items-center gap-1">
+          <!-- Navigation Links (compact) -->
+          <div class="hidden md:flex items-center">
             <router-link
               v-for="item in navItems"
               :key="item.path"
               :to="item.path"
               :class="[
-                'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
                 isActive(item.path)
                   ? 'bg-gray-800 text-white'
-                  : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
               ]"
             >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="item.icon" />
               </svg>
-              {{ item.label }}
+              <span class="hidden lg:inline">{{ item.label }}</span>
             </router-link>
           </div>
 
-          <!-- Right side: Notifications & User Menu -->
-          <div class="flex items-center gap-4">
+          <!-- Right side: Tenant Switcher, Notifications & User Menu -->
+          <div class="flex items-center gap-2">
+            <!-- Tenant Switcher (Super Admin only) -->
+            <TenantSwitcher />
+
             <!-- Notifications -->
-            <button class="relative p-2 text-gray-400 hover:text-white transition-colors">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button class="relative p-1.5 text-gray-400 hover:text-white transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
-              <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+              <span class="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full"></span>
             </button>
 
-            <!-- User Menu -->
+            <!-- User Menu (compact) -->
             <div class="relative">
               <button
-                class="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                class="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-gray-800 transition-colors"
                 @click="showUserMenu = !showUserMenu"
               >
-                <div class="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center">
-                  <span class="text-sm font-medium text-white">
+                <div class="w-6 h-6 bg-primary-600 rounded-full flex items-center justify-center">
+                  <span class="text-xs font-medium text-white">
                     {{ currentUser?.email?.charAt(0).toUpperCase() || 'A' }}
                   </span>
                 </div>
-                <div class="hidden sm:block text-left">
-                  <span class="block text-sm text-gray-300">
-                    {{ currentUser?.email || 'Admin' }}
-                  </span>
-                  <span class="block text-xs text-gray-500">
-                    {{ userRole }}
-                  </span>
-                </div>
-                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <span class="hidden lg:block text-xs text-gray-300 max-w-[120px] truncate">
+                  {{ currentUser?.email?.split('@')[0] || 'Admin' }}
+                </span>
+                <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
@@ -175,18 +171,21 @@ const handleLogout = async () => {
               <!-- Dropdown -->
               <div
                 v-if="showUserMenu"
-                class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 z-50"
+                class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg py-1 z-50"
               >
+                <div class="px-3 py-2 border-b">
+                  <p class="text-xs text-gray-500">{{ userRole }}</p>
+                  <p class="text-sm text-gray-900 truncate">{{ currentUser?.email }}</p>
+                </div>
                 <router-link
                   to="/admin/configuracion"
-                  class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  class="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
                   @click="showUserMenu = false"
                 >
                   Configuración
                 </router-link>
-                <hr class="my-1">
                 <button
-                  class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                  class="block w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-gray-100"
                   @click="handleLogout"
                 >
                   Cerrar sesión
@@ -198,20 +197,20 @@ const handleLogout = async () => {
       </div>
 
       <!-- Mobile Navigation -->
-      <div class="md:hidden border-t border-gray-800 px-2 py-2">
-        <div class="flex gap-1 overflow-x-auto">
+      <div class="md:hidden border-t border-gray-800 px-2 py-1.5">
+        <div class="flex gap-0.5 overflow-x-auto">
           <router-link
             v-for="item in navItems"
             :key="item.path"
             :to="item.path"
             :class="[
-              'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors',
+              'flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors',
               isActive(item.path)
                 ? 'bg-gray-800 text-white'
                 : 'text-gray-400 hover:bg-gray-800 hover:text-white'
             ]"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="item.icon" />
             </svg>
             {{ item.label }}

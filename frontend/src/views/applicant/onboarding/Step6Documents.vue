@@ -44,8 +44,9 @@ const getRequiredDocuments = (): DocumentUpload[] => {
     (p: Product) => p.id === product?.id
   )
 
-  // Get required_docs from product (either selected or from config)
-  const requiredDocs = productFromConfig?.required_docs ?? product?.required_docs ?? []
+  // Get required_documents from product (either selected or from config)
+  const requiredDocs = productFromConfig?.required_documents ?? product?.required_documents ??
+                       productFromConfig?.required_docs ?? product?.required_docs ?? []
 
   if (requiredDocs.length > 0) {
     return requiredDocs.map((doc: { type: string; required: boolean; description?: string } | string) => {

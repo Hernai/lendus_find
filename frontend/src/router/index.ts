@@ -52,6 +52,7 @@ const AdminDashboard = () => import('@/views/admin/panel/AdminDashboard.vue')
 const AdminApplications = () => import('@/views/admin/panel/AdminApplications.vue')
 const AdminApplicationDetail = () => import('@/views/admin/panel/AdminApplicationDetail.vue')
 const AdminUsers = () => import('@/views/admin/panel/AdminUsers.vue')
+const AdminProducts = () => import('@/views/admin/panel/AdminProducts.vue')
 const AdminTenants = () => import('@/views/admin/panel/AdminTenants.vue')
 const AdminSettings = () => import('@/views/admin/panel/AdminSettings.vue')
 const AdminUnderConstruction = () => import('@/views/admin/panel/AdminUnderConstruction.vue')
@@ -353,7 +354,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'productos',
         name: 'admin-products',
-        component: AdminUnderConstruction
+        component: AdminProducts
       },
       {
         path: 'usuarios',
@@ -407,6 +408,21 @@ router.beforeEach(async (to, from, next) => {
     await tenantStore.loadConfig()
   }
 
+  // Redirect non-prefixed routes to tenant-prefixed versions
+  // This handles hardcoded paths like /solicitud/paso-1 -> /demo/solicitud/paso-1
+  if (!isAdminRoute && !to.params.tenant && tenantStore.slug) {
+    const nonPrefixedPaths = ['/auth', '/solicitud', '/dashboard', '/correcciones', '/perfil', '/simulador']
+    const matchingPath = nonPrefixedPaths.find(p => to.path.startsWith(p) || to.path === p)
+    if (matchingPath) {
+      const newPath = `/${tenantStore.slug}${to.path}`
+      return next({ path: newPath, query: to.query, replace: true })
+    }
+    // Also handle root path
+    if (to.path === '/') {
+      return next({ path: `/${tenantStore.slug}`, replace: true })
+    }
+  }
+
   // Check if route requires authentication
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
   const requiresStaff = to.matched.some(record => record.meta.requiresStaff)
@@ -431,6 +447,10 @@ router.beforeEach(async (to, from, next) => {
 
   // If authenticated regular user trying to access guest-only page (like login)
   if (isGuestOnly && !isAdminGuest && authStore.isAuthenticated) {
+    const tenantSlug = to.params.tenant as string || tenantStore.slug
+    if (tenantSlug) {
+      return next({ name: 'tenant-dashboard', params: { tenant: tenantSlug } })
+    }
     return next({ name: 'dashboard' })
   }
 
@@ -445,18 +465,32 @@ router.beforeEach(async (to, from, next) => {
         if (requiresStaff) {
           return next({ name: 'admin-login', query: { redirect: to.fullPath } })
         }
+        // Use tenant-prefixed route if tenant is available
+        const tenantSlug = to.params.tenant as string || tenantStore.slug
+        if (tenantSlug) {
+          return next({ name: 'tenant-auth', params: { tenant: tenantSlug }, query: { redirect: to.fullPath } })
+        }
         return next({ name: 'auth', query: { redirect: to.fullPath } })
       }
     }
 
     // Check if user needs to setup PIN (for applicants only, not staff)
-    if (!requiresStaff && authStore.needsPinSetup && to.name !== 'auth-pin-setup') {
+    if (!requiresStaff && authStore.needsPinSetup && to.name !== 'auth-pin-setup' && to.name !== 'tenant-auth-pin-setup') {
+      // Use tenant-prefixed route if tenant is available
+      const tenantSlug = to.params.tenant as string || tenantStore.slug
+      if (tenantSlug) {
+        return next({ name: 'tenant-auth-pin-setup', params: { tenant: tenantSlug }, query: { redirect: to.fullPath } })
+      }
       return next({ name: 'auth-pin-setup', query: { redirect: to.fullPath } })
     }
 
     // Check staff requirement (agents, analysts, admins can access admin panel)
     if (requiresStaff && !authStore.isStaff) {
       // User is logged in but not staff - redirect to user dashboard
+      const tenantSlug = to.params.tenant as string || tenantStore.slug
+      if (tenantSlug) {
+        return next({ name: 'tenant-dashboard', params: { tenant: tenantSlug } })
+      }
       return next({ name: 'dashboard' })
     }
   }

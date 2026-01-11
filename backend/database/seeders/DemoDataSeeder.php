@@ -52,18 +52,18 @@ class DemoDataSeeder extends Seeder
                 'id' => Str::uuid(),
                 'tenant_id' => $tenant->id,
                 'name' => 'Crédito Personal',
+                'code' => 'PERS-001',
                 'type' => 'PERSONAL',
                 'description' => 'Crédito personal para cualquier necesidad',
-                'rules' => [
-                    'min_amount' => 5000,
-                    'max_amount' => 150000,
-                    'min_term' => 3,
-                    'max_term' => 36,
-                    'interest_rate' => 36.0,
-                    'opening_commission' => 3.0,
-                    'payment_frequencies' => ['WEEKLY', 'BIWEEKLY', 'MONTHLY'],
-                ],
-                'required_docs' => ['INE_FRONT', 'INE_BACK', 'PROOF_ADDRESS', 'PROOF_INCOME'],
+                'min_amount' => 5000,
+                'max_amount' => 150000,
+                'min_term_months' => 3,
+                'max_term_months' => 36,
+                'interest_rate' => 36.0,
+                'opening_commission' => 3.0,
+                'late_fee_rate' => 5.0,
+                'payment_frequencies' => ['WEEKLY', 'BIWEEKLY', 'MONTHLY'],
+                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_ADDRESS', 'PROOF_INCOME'],
                 'is_active' => true,
                 'display_order' => 1,
             ],
@@ -71,18 +71,18 @@ class DemoDataSeeder extends Seeder
                 'id' => Str::uuid(),
                 'tenant_id' => $tenant->id,
                 'name' => 'Crédito Nómina',
-                'type' => 'PAYROLL',
+                'code' => 'NOMI-001',
+                'type' => 'NOMINA',
                 'description' => 'Crédito con descuento vía nómina',
-                'rules' => [
-                    'min_amount' => 10000,
-                    'max_amount' => 300000,
-                    'min_term' => 6,
-                    'max_term' => 48,
-                    'interest_rate' => 24.0,
-                    'opening_commission' => 2.0,
-                    'payment_frequencies' => ['BIWEEKLY', 'MONTHLY'],
-                ],
-                'required_docs' => ['INE_FRONT', 'INE_BACK', 'PROOF_ADDRESS', 'PAYSLIP_1', 'PAYSLIP_2', 'PAYSLIP_3'],
+                'min_amount' => 10000,
+                'max_amount' => 300000,
+                'min_term_months' => 6,
+                'max_term_months' => 48,
+                'interest_rate' => 24.0,
+                'opening_commission' => 2.0,
+                'late_fee_rate' => 3.0,
+                'payment_frequencies' => ['BIWEEKLY', 'MONTHLY'],
+                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_ADDRESS', 'PAYSLIP_1', 'PAYSLIP_2', 'PAYSLIP_3'],
                 'is_active' => true,
                 'display_order' => 2,
             ],
@@ -90,18 +90,18 @@ class DemoDataSeeder extends Seeder
                 'id' => Str::uuid(),
                 'tenant_id' => $tenant->id,
                 'name' => 'Arrendamiento',
-                'type' => 'LEASING',
+                'code' => 'ARRE-001',
+                'type' => 'ARRENDAMIENTO',
                 'description' => 'Arrendamiento de vehículos y maquinaria',
-                'rules' => [
-                    'min_amount' => 50000,
-                    'max_amount' => 1000000,
-                    'min_term' => 12,
-                    'max_term' => 60,
-                    'interest_rate' => 18.0,
-                    'opening_commission' => 2.5,
-                    'payment_frequencies' => ['MONTHLY'],
-                ],
-                'required_docs' => ['INE_FRONT', 'INE_BACK', 'PROOF_ADDRESS', 'PROOF_INCOME', 'VEHICLE_INVOICE'],
+                'min_amount' => 50000,
+                'max_amount' => 1000000,
+                'min_term_months' => 12,
+                'max_term_months' => 60,
+                'interest_rate' => 18.0,
+                'opening_commission' => 2.5,
+                'late_fee_rate' => 4.0,
+                'payment_frequencies' => ['MONTHLY'],
+                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_ADDRESS', 'PROOF_INCOME', 'VEHICLE_INVOICE'],
                 'is_active' => true,
                 'display_order' => 3,
             ],
@@ -112,7 +112,7 @@ class DemoDataSeeder extends Seeder
         }
 
         $personalProduct = Product::where('type', 'PERSONAL')->first();
-        $payrollProduct = Product::where('type', 'PAYROLL')->first();
+        $nominaProduct = Product::where('type', 'NOMINA')->first();
 
         // Create Super Admin User
         $superAdminUser = User::create([
@@ -383,7 +383,7 @@ class DemoDataSeeder extends Seeder
             $numApplications = min($index + 1, 2);
             for ($appIndex = 0; $appIndex < $numApplications; $appIndex++) {
                 $status = $statuses[($index + $appIndex) % count($statuses)];
-                $product = $appIndex === 0 ? $personalProduct : $payrollProduct;
+                $product = $appIndex === 0 ? $personalProduct : $nominaProduct;
                 $amount = 50000 + ($index * 20000) + ($appIndex * 10000);
 
                 $application = Application::create([

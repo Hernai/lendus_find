@@ -1416,12 +1416,26 @@ const addNote = async () => {
     </div>
 
     <template v-else-if="application">
-      <!-- Header with Selfie -->
-      <div class="flex items-start gap-6 mb-6">
-        <!-- Header info -->
-        <div class="flex-1">
+      <!-- Header with gradient and decorative pattern -->
+      <div class="relative bg-gradient-to-r from-primary-600 to-primary-800 rounded-2xl overflow-hidden mb-6">
+        <!-- Decorative wave pattern -->
+        <div class="absolute inset-0 overflow-hidden">
+          <svg class="absolute w-full h-full" viewBox="0 0 400 200" preserveAspectRatio="none">
+            <!-- Large blob top right -->
+            <ellipse cx="380" cy="30" rx="150" ry="100" fill="white" opacity="0.08"/>
+            <!-- Medium wave across -->
+            <path d="M0,140 Q100,100 200,120 T400,100 L400,200 L0,200 Z" fill="white" opacity="0.06"/>
+            <!-- Small blob bottom left -->
+            <ellipse cx="60" cy="170" rx="100" ry="60" fill="white" opacity="0.07"/>
+            <!-- Top accent curve -->
+            <ellipse cx="250" cy="50" rx="120" ry="70" fill="white" opacity="0.05"/>
+          </svg>
+        </div>
+
+        <!-- Back button -->
+        <div class="relative px-6 pt-4">
           <button
-            class="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-2"
+            class="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
             @click="goBack"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1429,149 +1443,165 @@ const addNote = async () => {
             </svg>
             Volver a solicitudes
           </button>
-          <div class="flex items-center gap-4">
-            <h1 class="text-2xl font-bold text-gray-900">{{ application.folio }}</h1>
-            <span
-              :class="[
-                'px-3 py-1 text-sm font-medium rounded-full',
-                getStatusBadge(application.status).bg,
-                getStatusBadge(application.status).text
-              ]"
-            >
-              {{ getStatusBadge(application.status).label }}
-            </span>
+        </div>
+
+        <!-- Header content -->
+        <div class="relative flex items-start gap-6 px-6 py-5">
+          <!-- Header info -->
+          <div class="flex-1">
+            <div class="flex items-center gap-4">
+              <h1 class="text-2xl font-bold text-white">{{ application.folio }}</h1>
+              <span
+                :class="[
+                  'px-3 py-1 text-sm font-medium rounded-full',
+                  getStatusBadge(application.status).bg,
+                  getStatusBadge(application.status).text
+                ]"
+              >
+                {{ getStatusBadge(application.status).label }}
+              </span>
+            </div>
+            <p class="text-lg text-white font-medium mt-1">{{ application.applicant.full_name }}</p>
+            <p class="text-white/70 text-sm">
+              Creada {{ formatDateTime(application.created_at) }}
+              <span v-if="application.assigned_to" class="ml-2">
+                · Asignada a {{ application.assigned_to }}
+              </span>
+            </p>
           </div>
-          <p class="text-sm text-gray-900 font-medium mt-1">{{ application.applicant.full_name }}</p>
-          <p class="text-gray-500 text-sm">
-            Creada {{ formatDateTime(application.created_at) }}
-            <span v-if="application.assigned_to" class="ml-2">
-              · Asignada a {{ application.assigned_to }}
-            </span>
-          </p>
-        </div>
 
-        <!-- Application Action Buttons -->
-        <div class="flex flex-col gap-2 flex-shrink-0">
-          <!-- Contraoferta: Solo supervisores/admins que pueden aprobar/rechazar -->
-          <AppButton
-            v-if="canApproveReject && ['IN_REVIEW', 'DOCS_PENDING'].includes(application.status)"
-            variant="outline"
-            size="sm"
-            class="!border-indigo-500 !text-indigo-600 hover:!bg-indigo-50"
-            @click="openCounterOfferModal"
-          >
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-            </svg>
-            Contraoferta
-          </AppButton>
-          <!-- Asignar: Solo supervisores/admins -->
-          <AppButton v-if="canAssign" variant="outline" size="sm" @click="openAssignModal">
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-            Asignar
-          </AppButton>
-          <!-- Cambiar Estado: Analistas y superiores -->
-          <AppButton v-if="canChangeStatus" variant="outline" size="sm" @click="openStatusModal">
-            Cambiar Estado
-          </AppButton>
-          <!-- Generar Contrato: Solo supervisores/admins con solicitud aprobada -->
-          <AppButton v-if="canApproveReject && application.status === 'APPROVED'" variant="primary" size="sm">
-            Generar Contrato
-          </AppButton>
-        </div>
-
-        <!-- Selfie Photo - Always Visible (rightmost) -->
-        <div class="flex-shrink-0">
-          <div class="relative w-28 h-28">
-            <!-- Photo container -->
+          <!-- Application Action Buttons -->
+          <div class="flex flex-wrap gap-2 flex-shrink-0">
+            <!-- Contraoferta: Solo supervisores/admins que pueden aprobar/rechazar -->
             <button
-              class="w-full h-full rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center border-2 transition-all hover:ring-4 hover:ring-primary-200"
-              :class="{
-                'border-green-400': selfieStatus === 'APPROVED',
-                'border-red-400': selfieStatus === 'REJECTED',
-                'border-yellow-400': selfieStatus === 'PENDING' && selfieUrl,
-                'border-gray-200': !selfieUrl
-              }"
-              @click="selfieUrl ? showSelfieViewer = true : null"
-              :disabled="!selfieUrl"
+              v-if="canApproveReject && ['IN_REVIEW', 'DOCS_PENDING'].includes(application.status)"
+              class="px-4 py-2 text-sm font-medium bg-white/20 hover:bg-white/30 text-white rounded-lg border border-white/30 transition-colors flex items-center"
+              @click="openCounterOfferModal"
             >
-              <img
-                v-if="selfieUrl"
-                :src="selfieUrl"
-                alt="Foto del solicitante"
-                class="w-full h-full object-cover"
-              />
-              <div v-else-if="isLoadingSelfie" class="animate-spin w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full" />
-              <svg v-else class="w-10 h-10 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
               </svg>
+              Contraoferta
             </button>
-
-            <!-- Status badge -->
-            <span
-              v-if="selfieUrl"
-              class="absolute -top-1 -right-1 px-1.5 py-0.5 rounded text-xs font-medium z-10"
-              :class="{
-                'bg-green-100 text-green-800': selfieStatus === 'APPROVED',
-                'bg-red-100 text-red-800': selfieStatus === 'REJECTED',
-                'bg-yellow-100 text-yellow-800': selfieStatus === 'PENDING'
-              }"
+            <!-- Asignar: Solo supervisores/admins -->
+            <button
+              v-if="canAssign"
+              class="px-4 py-2 text-sm font-medium bg-white/20 hover:bg-white/30 text-white rounded-lg border border-white/30 transition-colors flex items-center"
+              @click="openAssignModal"
             >
-              {{ selfieStatus === 'APPROVED' ? 'OK' : selfieStatus === 'REJECTED' ? 'X' : '?' }}
-            </span>
-
-            <!-- Approve/Reject/Unapprove buttons inside photo box (subtle icons) - Solo con permiso de revisar documentos -->
-            <div
-              v-if="selfieUrl && canReviewDocs"
-              class="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-1"
+              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              Asignar
+            </button>
+            <!-- Cambiar Estado: Analistas y superiores -->
+            <button
+              v-if="canChangeStatus"
+              class="px-4 py-2 text-sm font-medium bg-white/20 hover:bg-white/30 text-white rounded-lg border border-white/30 transition-colors"
+              @click="openStatusModal"
             >
-              <!-- PENDING: show approve and reject -->
-              <template v-if="selfieStatus === 'PENDING'">
-                <button
-                  class="w-6 h-6 flex items-center justify-center rounded-full bg-black/40 hover:bg-green-600 text-white/80 hover:text-white transition-colors"
-                  @click.stop="showSelfieApproveModal = true"
-                  title="Aprobar"
-                >
-                  <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                  </svg>
-                </button>
-                <button
-                  class="w-6 h-6 flex items-center justify-center rounded-full bg-black/40 hover:bg-red-600 text-white/80 hover:text-white transition-colors"
-                  @click.stop="showSelfieRejectModal = true"
-                  title="Rechazar"
-                >
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
-                  </svg>
-                </button>
-              </template>
-              <!-- APPROVED: show unapprove (back to pending) -->
-              <template v-else-if="selfieStatus === 'APPROVED'">
-                <button
-                  class="w-6 h-6 flex items-center justify-center rounded-full bg-black/40 hover:bg-yellow-600 text-white/80 hover:text-white transition-colors"
-                  @click.stop="showSelfieUnapproveModal = true"
-                  title="Desaprobar (volver a pendiente)"
-                >
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
-                  </svg>
-                </button>
-              </template>
-              <!-- REJECTED: show only unreject (back to pending), no direct approve -->
-              <template v-else-if="selfieStatus === 'REJECTED'">
-                <button
-                  class="w-6 h-6 flex items-center justify-center rounded-full bg-black/40 hover:bg-yellow-600 text-white/80 hover:text-white transition-colors"
-                  @click.stop="showSelfieUnrejectModal = true"
-                  title="Quitar Rechazo (volver a pendiente)"
-                >
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
-                  </svg>
-                </button>
-              </template>
+              Cambiar Estado
+            </button>
+            <!-- Generar Contrato: Solo supervisores/admins con solicitud aprobada -->
+            <button
+              v-if="canApproveReject && application.status === 'APPROVED'"
+              class="px-4 py-2 text-sm font-medium bg-white text-primary-700 hover:bg-white/90 rounded-lg transition-colors"
+            >
+              Generar Contrato
+            </button>
+          </div>
+
+          <!-- Selfie Photo - Always Visible (rightmost) -->
+          <div class="flex-shrink-0">
+            <div class="relative w-28 h-28">
+              <!-- Photo container -->
+              <button
+                class="w-full h-full rounded-xl overflow-hidden bg-white/20 flex items-center justify-center border-2 transition-all hover:ring-4 hover:ring-white/30"
+                :class="{
+                  'border-green-400': selfieStatus === 'APPROVED',
+                  'border-red-400': selfieStatus === 'REJECTED',
+                  'border-yellow-400': selfieStatus === 'PENDING' && selfieUrl,
+                  'border-white/40': !selfieUrl
+                }"
+                @click="selfieUrl ? showSelfieViewer = true : null"
+                :disabled="!selfieUrl"
+              >
+                <img
+                  v-if="selfieUrl"
+                  :src="selfieUrl"
+                  alt="Foto del solicitante"
+                  class="w-full h-full object-cover"
+                />
+                <div v-else-if="isLoadingSelfie" class="animate-spin w-6 h-6 border-2 border-white border-t-transparent rounded-full" />
+                <svg v-else class="w-10 h-10 text-white/50" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+              </button>
+
+              <!-- Status badge -->
+              <span
+                v-if="selfieUrl"
+                class="absolute -top-1 -right-1 px-1.5 py-0.5 rounded text-xs font-medium z-10"
+                :class="{
+                  'bg-green-100 text-green-800': selfieStatus === 'APPROVED',
+                  'bg-red-100 text-red-800': selfieStatus === 'REJECTED',
+                  'bg-yellow-100 text-yellow-800': selfieStatus === 'PENDING'
+                }"
+              >
+                {{ selfieStatus === 'APPROVED' ? 'OK' : selfieStatus === 'REJECTED' ? 'X' : '?' }}
+              </span>
+
+              <!-- Approve/Reject/Unapprove buttons inside photo box (subtle icons) - Solo con permiso de revisar documentos -->
+              <div
+                v-if="selfieUrl && canReviewDocs"
+                class="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-1"
+              >
+                <!-- PENDING: show approve and reject -->
+                <template v-if="selfieStatus === 'PENDING'">
+                  <button
+                    class="w-6 h-6 flex items-center justify-center rounded-full bg-black/40 hover:bg-green-600 text-white/80 hover:text-white transition-colors"
+                    @click.stop="showSelfieApproveModal = true"
+                    title="Aprobar"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                    </svg>
+                  </button>
+                  <button
+                    class="w-6 h-6 flex items-center justify-center rounded-full bg-black/40 hover:bg-red-600 text-white/80 hover:text-white transition-colors"
+                    @click.stop="showSelfieRejectModal = true"
+                    title="Rechazar"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
+                </template>
+                <!-- APPROVED: show unapprove (back to pending) -->
+                <template v-else-if="selfieStatus === 'APPROVED'">
+                  <button
+                    class="w-6 h-6 flex items-center justify-center rounded-full bg-black/40 hover:bg-yellow-600 text-white/80 hover:text-white transition-colors"
+                    @click.stop="showSelfieUnapproveModal = true"
+                    title="Desaprobar (volver a pendiente)"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
+                    </svg>
+                  </button>
+                </template>
+                <!-- REJECTED: show only unreject (back to pending), no direct approve -->
+                <template v-else-if="selfieStatus === 'REJECTED'">
+                  <button
+                    class="w-6 h-6 flex items-center justify-center rounded-full bg-black/40 hover:bg-yellow-600 text-white/80 hover:text-white transition-colors"
+                    @click.stop="showSelfieUnrejectModal = true"
+                    title="Quitar Rechazo (volver a pendiente)"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
+                    </svg>
+                  </button>
+                </template>
+              </div>
             </div>
           </div>
         </div>

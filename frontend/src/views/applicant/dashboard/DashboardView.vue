@@ -394,7 +394,7 @@ const handleCancelApplication = async () => {
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-2xl mx-auto px-4 -mt-10">
+    <main class="max-w-2xl mx-auto px-4 -mt-6">
       <!-- Loading State -->
       <div v-if="isLoading" class="bg-white rounded-2xl shadow-lg p-8 text-center">
         <div class="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto" />

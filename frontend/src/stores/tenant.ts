@@ -58,27 +58,41 @@ function generateDarkTinted(baseColor: string): string {
 }
 
 // Generate a full color palette from a base color (returns RGB triplets for Tailwind)
+// This algorithm preserves the original color's lightness for shade 600
+// and scales other shades relative to it
 function generateColorPalette(baseColor: string): Record<string, string> {
-  const { h, s } = hexToHSL(baseColor)
+  const { h, s, l } = hexToHSL(baseColor)
 
-  // Lightness values for each shade (tuned to match Tailwind's indigo palette)
-  const shades: Record<string, number> = {
-    50: 97,
-    100: 94,
-    200: 87,
-    300: 76,
-    400: 63,
-    500: 53,
-    600: 46,  // Base color typically around here
-    700: 40,
-    800: 34,
-    900: 28,
+  // Use the original lightness for shade 600, and scale others relative to it
+  // This preserves dark colors as dark and light colors as light
+  const baseLightness = l
+
+  // Define lightness offsets from the base (600)
+  // Lighter shades go up, darker shades go down
+  const lightnessScale: Record<string, number> = {
+    50: Math.min(97, baseLightness + 55),   // Very light
+    100: Math.min(94, baseLightness + 48),  // Light
+    200: Math.min(87, baseLightness + 38),  // Light-medium
+    300: Math.min(76, baseLightness + 28),  // Medium-light
+    400: Math.min(63, baseLightness + 18),  // Medium
+    500: Math.min(53, baseLightness + 8),   // Slightly lighter than base
+    600: baseLightness,                      // Base color (original)
+    700: Math.max(15, baseLightness - 6),   // Slightly darker
+    800: Math.max(10, baseLightness - 12),  // Darker
+    900: Math.max(5, baseLightness - 18),   // Very dark
   }
 
   const palette: Record<string, string> = {}
-  for (const [shade, lightness] of Object.entries(shades)) {
-    // Adjust saturation slightly for lighter/darker shades
-    const adjustedSat = shade === '50' || shade === '100' ? s * 0.9 : s
+  for (const [shade, lightness] of Object.entries(lightnessScale)) {
+    // Adjust saturation: lighter shades have less saturation, darker can have more
+    let adjustedSat = s
+    if (shade === '50' || shade === '100') {
+      adjustedSat = s * 0.7  // Much less saturated for very light shades
+    } else if (shade === '200' || shade === '300') {
+      adjustedSat = s * 0.85  // Slightly less saturated
+    } else if (shade === '800' || shade === '900') {
+      adjustedSat = Math.min(100, s * 1.1)  // Slightly more saturated for dark
+    }
     palette[shade] = hslToRgbTriplet(h, adjustedSat, lightness)
   }
 

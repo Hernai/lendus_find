@@ -520,8 +520,8 @@ class ApplicationController extends Controller
             'message' => 'Document approved',
             'data' => [
                 'id' => $document->id,
-                'type' => $document->type,
-                'status' => $document->status,
+                'type' => $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type,
+                'status' => $document->status instanceof \App\Enums\DocumentStatus ? $document->status->value : $document->status,
             ]
         ]);
     }
@@ -614,8 +614,8 @@ class ApplicationController extends Controller
             'message' => 'Document rejected',
             'data' => [
                 'id' => $document->id,
-                'type' => $document->type,
-                'status' => $document->status,
+                'type' => $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type,
+                'status' => $document->status instanceof \App\Enums\DocumentStatus ? $document->status->value : $document->status,
                 'rejection_reason' => $document->rejection_reason,
             ]
         ]);
@@ -690,8 +690,8 @@ class ApplicationController extends Controller
             'message' => 'Document set back to pending',
             'data' => [
                 'id' => $document->id,
-                'type' => $document->type,
-                'status' => $document->status,
+                'type' => $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type,
+                'status' => $document->status instanceof \App\Enums\DocumentStatus ? $document->status->value : $document->status,
             ]
         ]);
     }
@@ -1124,14 +1124,14 @@ class ApplicationController extends Controller
             ],
 
             // Required documents from product
-            'required_documents' => $application->product?->required_docs ?? [],
+            'required_documents' => $application->product?->required_documents ?? $application->product?->required_docs ?? [],
 
             // Documents (uploaded)
             'documents' => $application->documents->map(fn($doc) => [
                 'id' => $doc->id,
-                'type' => $doc->type,
+                'type' => $doc->type instanceof \App\Enums\DocumentType ? $doc->type->value : $doc->type,
                 'name' => $doc->name ?? $doc->file_name,
-                'status' => $doc->status,
+                'status' => $doc->status instanceof \App\Enums\DocumentStatus ? $doc->status->value : $doc->status,
                 'rejection_reason' => $doc->rejection_reason,
                 'rejection_comment' => $doc->rejection_comment,
                 'uploaded_at' => $doc->created_at->toIso8601String(),

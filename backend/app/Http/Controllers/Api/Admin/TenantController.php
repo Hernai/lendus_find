@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Applicant;
+use App\Models\Application;
+use App\Models\Product;
 use App\Models\Tenant;
 use App\Models\TenantApiConfig;
 use App\Models\TenantBranding;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -19,7 +23,7 @@ class TenantController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Tenant::query();
+        $query = Tenant::with('brandingConfig');
 
         // Search filter
         if ($search = $request->input('search')) {
@@ -255,18 +259,48 @@ class TenantController extends Controller
      */
     public function stats(Tenant $tenant): JsonResponse
     {
+        // Bypass global tenant scope to get accurate counts for the specified tenant
+        $usersCount = User::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->count();
+
+        $staffCount = User::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->whereIn('type', ['SUPERVISOR', 'ANALYST', 'ADMIN', 'SUPER_ADMIN'])
+            ->count();
+
+        $applicantsCount = Applicant::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->count();
+
+        $applicationsCount = Application::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->count();
+
+        $applicationsByStatus = Application::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->selectRaw('status, count(*) as count')
+            ->groupBy('status')
+            ->pluck('count', 'status');
+
+        $productsCount = Product::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->count();
+
+        $activeProductsCount = Product::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->where('is_active', true)
+            ->count();
+
         return response()->json([
             'data' => [
-                'users_count' => $tenant->users()->count(),
-                'staff_count' => $tenant->users()->whereIn('type', ['SUPERVISOR', 'ANALYST', 'ADMIN', 'SUPER_ADMIN'])->count(),
-                'applicants_count' => $tenant->applicants()->count(),
-                'applications_count' => $tenant->applications()->count(),
-                'applications_by_status' => $tenant->applications()
-                    ->selectRaw('status, count(*) as count')
-                    ->groupBy('status')
-                    ->pluck('count', 'status'),
-                'products_count' => $tenant->products()->count(),
-                'active_products_count' => $tenant->products()->where('is_active', true)->count(),
+                'users_count' => $usersCount,
+                'staff_count' => $staffCount,
+                'applicants_count' => $applicantsCount,
+                'applications_count' => $applicationsCount,
+                'applications_by_status' => $applicationsByStatus,
+                'products_count' => $productsCount,
+                'active_products_count' => $activeProductsCount,
             ]
         ]);
     }
@@ -524,6 +558,15 @@ class TenantController extends Controller
      */
     private function formatTenant(Tenant $tenant): array
     {
+        // Use withoutGlobalScope to bypass tenant filtering when counting across tenants
+        $usersCount = User::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->count();
+
+        $applicationsCount = Application::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->count();
+
         return [
             'id' => $tenant->id,
             'name' => $tenant->name,
@@ -535,11 +578,11 @@ class TenantController extends Controller
             'website' => $tenant->website,
             'is_active' => $tenant->is_active,
             'branding' => [
-                'primary_color' => $tenant->branding['primary_color'] ?? '#6366f1',
-                'logo_url' => $tenant->branding['logo_url'] ?? null,
+                'primary_color' => $tenant->brandingConfig?->primary_color ?? $tenant->branding['primary_color'] ?? '#6366f1',
+                'logo_url' => $tenant->brandingConfig?->logo_url ?? $tenant->branding['logo_url'] ?? null,
             ],
-            'users_count' => $tenant->users()->count(),
-            'applications_count' => $tenant->applications()->count(),
+            'users_count' => $usersCount,
+            'applications_count' => $applicationsCount,
             'created_at' => $tenant->created_at?->toISOString(),
             'activated_at' => $tenant->activated_at?->toISOString(),
             'suspended_at' => $tenant->suspended_at?->toISOString(),

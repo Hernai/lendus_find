@@ -104,13 +104,32 @@ export const useAuthStore = defineStore('auth', () => {
   // Permissions state (for staff users)
   const permissions = ref<UserPermissions | null>(null)
 
+  // Super admin tenant switching
+  const selectedTenantId = ref<string | null>(localStorage.getItem('selected_tenant_id'))
+
   // Getters
   const isAuthenticated = computed(() => !!token.value && !!user.value)
   const isApplicant = computed(() => user.value?.role === 'APPLICANT')
   const isSupervisor = computed(() => user.value?.role === 'SUPERVISOR')
   const isAnalyst = computed(() => user.value?.role === 'ANALYST')
   const isAdmin = computed(() => ['ADMIN', 'SUPER_ADMIN'].includes(user.value?.role || ''))
+  const isSuperAdmin = computed(() => user.value?.role === 'SUPER_ADMIN')
   const isStaff = computed(() => ['SUPERVISOR', 'ANALYST', 'ADMIN', 'SUPER_ADMIN'].includes(user.value?.role || ''))
+
+  // Actions for tenant switching (super admin only)
+  const setSelectedTenant = (tenantId: string | null) => {
+    selectedTenantId.value = tenantId
+    if (tenantId) {
+      localStorage.setItem('selected_tenant_id', tenantId)
+    } else {
+      localStorage.removeItem('selected_tenant_id')
+    }
+  }
+
+  const clearSelectedTenant = () => {
+    selectedTenantId.value = null
+    localStorage.removeItem('selected_tenant_id')
+  }
 
   // Helper to map backend user type to frontend role
   const mapUserType = (type: string, isAdmin: boolean): User['role'] => {
@@ -281,6 +300,7 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.removeItem('auth_token')
       localStorage.removeItem('current_user_id')
       clearOnboardingCache()
+      clearSelectedTenant()
       otpDestination.value = null
       otpMethod.value = null
       otpExpiresAt.value = null
@@ -643,11 +663,14 @@ export const useAuthStore = defineStore('auth', () => {
     pinLockoutMinutes,
     // Applicant State
     hasApplicant,
+    // Super Admin Tenant Switching
+    selectedTenantId,
     // Getters
     isAuthenticated,
     isApplicant,
     isAnalyst,
     isAdmin,
+    isSuperAdmin,
     isSupervisor,
     isStaff,
     // Permissions
@@ -659,6 +682,9 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     checkAuth,
     clearOnboardingCache,
+    // Tenant Switching Actions
+    setSelectedTenant,
+    clearSelectedTenant,
     // PIN Actions
     checkUser,
     loginWithPin,

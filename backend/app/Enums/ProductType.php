@@ -5,19 +5,21 @@ namespace App\Enums;
 enum ProductType: string
 {
     case PERSONAL = 'PERSONAL';
-    case PAYROLL = 'PAYROLL';
-    case SME = 'SME';
-    case LEASING = 'LEASING';
-    case FACTORING = 'FACTORING';
+    case AUTO = 'AUTO';
+    case HIPOTECARIO = 'HIPOTECARIO';
+    case PYME = 'PYME';
+    case NOMINA = 'NOMINA';
+    case ARRENDAMIENTO = 'ARRENDAMIENTO';
 
     public function label(): string
     {
         return match ($this) {
             self::PERSONAL => 'Crédito Personal',
-            self::PAYROLL => 'Crédito Nómina',
-            self::SME => 'Crédito PyME',
-            self::LEASING => 'Arrendamiento',
-            self::FACTORING => 'Factoraje',
+            self::AUTO => 'Crédito Automotriz',
+            self::HIPOTECARIO => 'Crédito Hipotecario',
+            self::PYME => 'Crédito PyME',
+            self::NOMINA => 'Crédito Nómina',
+            self::ARRENDAMIENTO => 'Arrendamiento',
         };
     }
 
@@ -25,10 +27,11 @@ enum ProductType: string
     {
         return match ($this) {
             self::PERSONAL => 'user',
-            self::PAYROLL => 'briefcase',
-            self::SME => 'building',
-            self::LEASING => 'truck',
-            self::FACTORING => 'file-text',
+            self::AUTO => 'car',
+            self::HIPOTECARIO => 'home',
+            self::PYME => 'building',
+            self::NOMINA => 'banknotes',
+            self::ARRENDAMIENTO => 'key',
         };
     }
 

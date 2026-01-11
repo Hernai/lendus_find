@@ -329,8 +329,17 @@ class ApplicationController extends Controller
         }
 
         // Validate required documents
-        $requiredDocs = $application->product->required_documents ?? [];
-        $uploadedDocTypes = $application->documents()->pluck('type')->toArray();
+        // Normalize document types to handle aliases (RFC = RFC_CONSTANCIA)
+        $normalizeDocType = fn($type) => match($type) {
+            'RFC' => 'RFC_CONSTANCIA',
+            default => $type,
+        };
+
+        $requiredDocs = array_map($normalizeDocType, $application->product->required_documents ?? []);
+        $uploadedDocTypes = $application->documents()->pluck('type')
+            ->map(fn($t) => $t instanceof \App\Enums\DocumentType ? $t->value : $t)
+            ->map($normalizeDocType)
+            ->toArray();
         $missingDocs = array_diff($requiredDocs, $uploadedDocTypes);
 
         if (!empty($missingDocs)) {
@@ -552,11 +561,16 @@ class ApplicationController extends Controller
 
         // Calculate pending documents for applications that need them
         if (in_array($application->status, [ApplicationStatus::DOCS_PENDING->value, ApplicationStatus::DOCS_PENDING, 'DOCS_PENDING', ApplicationStatus::SUBMITTED->value, ApplicationStatus::SUBMITTED, 'SUBMITTED', ApplicationStatus::DRAFT->value, ApplicationStatus::DRAFT, 'DRAFT'])) {
+            // Normalize RFC/RFC_CONSTANCIA for comparison
+            $normalizeDoc = fn($t) => $t === 'RFC' ? 'RFC_CONSTANCIA' : $t;
             $requiredDocs = $application->product->required_docs ?? $application->product->required_documents ?? [];
-            $uploadedTypes = $application->documents->pluck('type')->map(fn($t) => $t instanceof \App\Enums\DocumentType ? $t->value : $t)->toArray();
+            $uploadedTypes = $application->documents->pluck('type')
+                ->map(fn($t) => $t instanceof \App\Enums\DocumentType ? $t->value : $t)
+                ->map($normalizeDoc)
+                ->toArray();
 
             $pendingDocs = collect($requiredDocs)
-                ->filter(fn($type) => !in_array($type, $uploadedTypes))
+                ->filter(fn($type) => !in_array($normalizeDoc($type), $uploadedTypes))
                 ->map(fn($type) => [
                     'type' => $type,
                     'label' => $this->getDocumentLabel($type),
@@ -589,19 +603,24 @@ class ApplicationController extends Controller
         // Documents
         $data['documents'] = $application->documents->map(fn($doc) => [
             'id' => $doc->id,
-            'type' => $doc->type,
+            'type' => $doc->type instanceof \App\Enums\DocumentType ? $doc->type->value : $doc->type,
             'name' => $doc->original_name,
-            'status' => $doc->status,
+            'status' => $doc->status instanceof \App\Enums\DocumentStatus ? $doc->status->value : $doc->status,
             'rejection_reason' => $doc->rejection_reason,
             'uploaded_at' => $doc->created_at->toIso8601String(),
         ]);
 
         // Pending documents (required but not uploaded)
+        // Normalize RFC/RFC_CONSTANCIA for comparison
+        $normalizeDoc = fn($t) => $t === 'RFC' ? 'RFC_CONSTANCIA' : $t;
         $requiredDocs = $application->product->required_docs ?? $application->product->required_documents ?? [];
         // Convert enum values to strings for comparison
-        $uploadedTypes = $application->documents->pluck('type')->map(fn($t) => $t instanceof \App\Enums\DocumentType ? $t->value : $t)->toArray();
+        $uploadedTypes = $application->documents->pluck('type')
+            ->map(fn($t) => $t instanceof \App\Enums\DocumentType ? $t->value : $t)
+            ->map($normalizeDoc)
+            ->toArray();
         $data['pending_documents'] = collect($requiredDocs)
-            ->filter(fn($type) => !in_array($type, $uploadedTypes))
+            ->filter(fn($type) => !in_array($normalizeDoc($type), $uploadedTypes))
             ->map(fn($type) => [
                 'type' => $type,
                 'label' => $this->getDocumentLabel($type),

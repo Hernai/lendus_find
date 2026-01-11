@@ -8,7 +8,19 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 const BASE_URL = API_BASE_URL.replace('/api', '')
 
 // Get tenant slug dynamically (supports path prefix or env variable)
-const getTenantSlug = (): string => detectTenantSlug()
+// For super admins, check if there's a selected tenant ID override
+const getTenantSlug = (): string => {
+  // Only use selected_tenant_id override if user is authenticated
+  // This prevents login issues when the override points to a different tenant
+  const authToken = localStorage.getItem('auth_token')
+  if (authToken) {
+    const selectedTenantId = localStorage.getItem('selected_tenant_id')
+    if (selectedTenantId) {
+      return selectedTenantId
+    }
+  }
+  return detectTenantSlug()
+}
 
 // Helper to get cookie value
 const getCookie = (name: string): string | null => {
@@ -102,10 +114,14 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response) {
-      const { status } = error.response
+      const { status, config } = error.response
+      const requestUrl = config?.url || ''
 
-      // Handle 401 Unauthorized - redirect to login
-      if (status === 401) {
+      // Don't auto-redirect for login/auth endpoints - let the component handle the error
+      const isAuthEndpoint = requestUrl.includes('/auth/') || requestUrl.includes('/login')
+
+      // Handle 401 Unauthorized - redirect to login (except for auth endpoints)
+      if (status === 401 && !isAuthEndpoint) {
         localStorage.removeItem('auth_token')
         window.location.href = '/auth'
       }

@@ -16,7 +16,7 @@ class TenantConfigController extends Controller
      */
     public function show(Request $request): JsonResponse
     {
-        $tenant = $request->tenant;
+        $tenant = $request->attributes->get('tenant');
 
         return response()->json([
             'data' => [
@@ -43,7 +43,7 @@ class TenantConfigController extends Controller
      */
     public function updateTenant(Request $request): JsonResponse
     {
-        $tenant = $request->tenant;
+        $tenant = $request->attributes->get('tenant');
 
         $validator = Validator::make($request->all(), [
             'name' => 'sometimes|string|max:100',
@@ -85,7 +85,7 @@ class TenantConfigController extends Controller
      */
     public function updateBranding(Request $request): JsonResponse
     {
-        $tenant = $request->tenant;
+        $tenant = $request->attributes->get('tenant');
 
         $validator = Validator::make($request->all(), [
             'primary_color' => 'nullable|string|regex:/^#[0-9A-Fa-f]{6}$/',
@@ -133,7 +133,7 @@ class TenantConfigController extends Controller
      */
     public function listApiConfigs(Request $request): JsonResponse
     {
-        $tenant = $request->tenant;
+        $tenant = $request->attributes->get('tenant');
 
         return response()->json([
             'data' => $tenant->apiConfigs->map->toApiArray(),
@@ -147,7 +147,7 @@ class TenantConfigController extends Controller
      */
     public function saveApiConfig(Request $request): JsonResponse
     {
-        $tenant = $request->tenant;
+        $tenant = $request->attributes->get('tenant');
 
         $validator = Validator::make($request->all(), [
             'provider' => 'required|string|max:50',
@@ -198,7 +198,7 @@ class TenantConfigController extends Controller
      */
     public function deleteApiConfig(Request $request, TenantApiConfig $config): JsonResponse
     {
-        $tenant = $request->tenant;
+        $tenant = $request->attributes->get('tenant');
 
         if ($config->tenant_id !== $tenant->id) {
             return response()->json(['message' => 'No autorizado'], 403);
@@ -216,7 +216,7 @@ class TenantConfigController extends Controller
      */
     public function testApiConfig(Request $request, TenantApiConfig $config): JsonResponse
     {
-        $tenant = $request->tenant;
+        $tenant = $request->attributes->get('tenant');
 
         if ($config->tenant_id !== $tenant->id) {
             return response()->json(['message' => 'No autorizado'], 403);

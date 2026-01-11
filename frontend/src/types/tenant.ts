@@ -55,29 +55,48 @@ export interface Product {
   id: string
   tenant_id: string
   name: string
+  code?: string
   type: ProductType
   description?: string
   icon?: string
-  rules: ProductRules
-  required_docs: RequiredDocument[]
-  extra_fields: DynamicField[]
+  // New flat structure
+  min_amount?: number
+  max_amount?: number
+  min_term_months?: number
+  max_term_months?: number
+  interest_rate?: number
+  opening_commission?: number
+  late_fee_rate?: number
+  payment_frequencies?: PaymentFrequency[]
+  required_documents?: (RequiredDocument | string)[]
+  eligibility_rules?: Record<string, unknown>
+  // Legacy nested structure (backwards compatibility)
+  rules?: ProductRules
+  required_docs?: (RequiredDocument | string)[]
+  extra_fields?: DynamicField[]
   is_active: boolean
+  applications_count?: number
+  created_at?: string
+  updated_at?: string
 }
 
-export type ProductType = 'SIMPLE' | 'PERSONAL' | 'PAYROLL' | 'SME' | 'LEASING' | 'FACTORING' | 'NOMINA' | 'ARRENDAMIENTO' | 'HIPOTECARIO' | 'PYME'
+export type ProductType = 'PERSONAL' | 'AUTO' | 'HIPOTECARIO' | 'PYME' | 'NOMINA' | 'ARRENDAMIENTO'
 
 export interface ProductRules {
   min_amount: number
   max_amount: number
-  min_term_months: number
-  max_term_months: number
-  annual_rate: number
-  opening_commission: number
-  amortization_type: AmortizationType
-  payment_frequencies: PaymentFrequency[]
-  min_age: number
-  max_age: number
-  min_income: number
+  min_term?: number
+  max_term?: number
+  min_term_months?: number
+  max_term_months?: number
+  annual_rate?: number
+  interest_rate?: number
+  opening_commission?: number
+  amortization_type?: AmortizationType
+  payment_frequencies?: PaymentFrequency[]
+  min_age?: number
+  max_age?: number
+  min_income?: number
 }
 
 export type AmortizationType = 'FRENCH' | 'GERMAN' | 'AMERICAN' | 'BULLET'
@@ -98,12 +117,18 @@ export type DocumentType =
   | 'RFC_CONSTANCIA'
   | 'PROOF_ADDRESS'
   | 'PROOF_INCOME'
+  | 'PAYSLIP_1'
+  | 'PAYSLIP_2'
+  | 'PAYSLIP_3'
   | 'PAYROLL_STUBS'
+  | 'BANK_STATEMENT'
   | 'BANK_STATEMENTS'
+  | 'VEHICLE_INVOICE'
   | 'ACTA_CONSTITUTIVA'
   | 'COTIZACION'
   | 'FACTURAS'
   | 'SIGNATURE'
+  | 'SELFIE'
 
 export interface DynamicField {
   name: string

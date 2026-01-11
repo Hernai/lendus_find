@@ -15,6 +15,11 @@ class Product extends Model
 {
     use HasFactory, HasUuid, HasTenant, SoftDeletes;
 
+    protected $attributes = [
+        'rules' => '{}',
+        'eligibility_rules' => '[]',
+    ];
+
     protected $fillable = [
         'tenant_id',
         'name',
