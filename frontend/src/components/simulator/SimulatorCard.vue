@@ -26,10 +26,31 @@ const minAmount = computed(() => activeProduct.value?.rules.min_amount ?? 5000)
 const maxAmount = computed(() => activeProduct.value?.rules.max_amount ?? 500000)
 const minTerm = computed(() => activeProduct.value?.rules.min_term_months ?? 3)
 const maxTerm = computed(() => activeProduct.value?.rules.max_term_months ?? 48)
-const availableFrequencies = computed(() => activeProduct.value?.rules.payment_frequencies ?? ['WEEKLY', 'BIWEEKLY', 'MONTHLY'])
+
+// Get term_config from product (could be in rules or directly on product)
+const termConfig = computed(() =>
+  activeProduct.value?.term_config || activeProduct.value?.rules?.term_config || null
+)
+
+// Filter out empty values and deduplicate frequencies (SEMANAL=WEEKLY, QUINCENAL=BIWEEKLY, MENSUAL=MONTHLY)
+const availableFrequencies = computed(() => {
+  const rawFrequencies = activeProduct.value?.rules?.payment_frequencies ?? ['MONTHLY']
+  const seen = new Set<string>()
+  return rawFrequencies.filter(freq => {
+    if (!freq || freq.trim() === '') return false
+    // Normalize equivalent values for deduplication
+    const normalized = freq === 'SEMANAL' ? 'WEEKLY' :
+                       freq === 'QUINCENAL' ? 'BIWEEKLY' :
+                       freq === 'MENSUAL' ? 'MONTHLY' : freq
+    if (seen.has(normalized)) return false
+    seen.add(normalized)
+    return true
+  })
+})
 
 // Conversion factors: payments per month
 const frequencyMultiplier: Record<PaymentFrequency, number> = {
+  SEMANAL: 4.33,
   WEEKLY: 4.33,
   BIWEEKLY: 2,
   QUINCENAL: 2,
@@ -37,17 +58,41 @@ const frequencyMultiplier: Record<PaymentFrequency, number> = {
   MENSUAL: 1
 }
 
-// Generate payment count options based on frequency and term limits
+// Normalize frequency key for term_config lookup (admin saves with English keys)
+const normalizeFrequencyKey = (freq: PaymentFrequency): string => {
+  switch (freq) {
+    case 'SEMANAL':
+    case 'WEEKLY':
+      return 'WEEKLY'
+    case 'QUINCENAL':
+    case 'BIWEEKLY':
+      return 'BIWEEKLY'
+    case 'MENSUAL':
+    case 'MONTHLY':
+    default:
+      return 'MONTHLY'
+  }
+}
+
+// Generate payment count options based on term_config or fallback to defaults
 const paymentCountOptions = computed(() => {
+  const config = termConfig.value
+  const freqKey = normalizeFrequencyKey(paymentFrequency.value)
+
+  // If term_config exists and has config for this frequency, use it
+  if (config && config[freqKey]?.available_terms?.length) {
+    return [...config[freqKey].available_terms].sort((a, b) => a - b)
+  }
+
+  // Fallback to legacy behavior
   const multiplier = frequencyMultiplier[paymentFrequency.value]
   const minPayments = Math.round(minTerm.value * multiplier)
   const maxPayments = Math.round(maxTerm.value * multiplier)
 
-  // Generate sensible payment options based on frequency
   let options: number[] = []
-  if (paymentFrequency.value === 'WEEKLY') {
+  if (paymentFrequency.value === 'SEMANAL' || paymentFrequency.value === 'WEEKLY') {
     options = [13, 26, 39, 52, 78, 104, 156, 208]
-  } else if (paymentFrequency.value === 'BIWEEKLY') {
+  } else if (paymentFrequency.value === 'QUINCENAL' || paymentFrequency.value === 'BIWEEKLY') {
     options = [6, 12, 18, 24, 36, 48, 72, 96]
   } else {
     options = [3, 6, 12, 18, 24, 36, 48, 60]
@@ -167,6 +212,7 @@ const handleRequestCredit = async () => {
 }
 
 const frequencyLabels: Record<PaymentFrequency, string> = {
+  SEMANAL: 'Semanal',
   WEEKLY: 'Semanal',
   BIWEEKLY: 'Quincenal',
   QUINCENAL: 'Quincenal',
@@ -175,8 +221,10 @@ const frequencyLabels: Record<PaymentFrequency, string> = {
 }
 
 const paymentLabel = computed(() => {
-  return paymentFrequency.value === 'WEEKLY' ? 'semanal' :
-         paymentFrequency.value === 'BIWEEKLY' ? 'quincenal' : 'mensual'
+  const freq = paymentFrequency.value
+  if (freq === 'SEMANAL' || freq === 'WEEKLY') return 'semanal'
+  if (freq === 'QUINCENAL' || freq === 'BIWEEKLY') return 'quincenal'
+  return 'mensual'
 })
 </script>
 

@@ -2,12 +2,14 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useTenantStore } from '@/stores/tenant'
+import { detectTenantSlug } from '@/utils/tenant'
 
 // ==============================================
 // PUBLIC VIEWS (no authentication required)
 // ==============================================
 const LandingView = () => import('@/views/public/LandingView.vue')
 const SimulatorView = () => import('@/views/public/SimulatorView.vue')
+const LendusFindLanding = () => import('@/views/public/LendusFindLanding.vue')
 
 // ==============================================
 // APPLICANT VIEWS (solicitantes de crédito)
@@ -58,7 +60,7 @@ const AdminSettings = () => import('@/views/admin/panel/AdminSettings.vue')
 const AdminUnderConstruction = () => import('@/views/admin/panel/AdminUnderConstruction.vue')
 
 // Reserved paths that are NOT tenant slugs (must match tenant.ts)
-const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones']
+const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones', 'find']
 
 // Helper to check if a path segment is a tenant slug
 const isTenantSlug = (segment: string): boolean => {
@@ -176,6 +178,14 @@ const routes: RouteRecordRaw[] = [
   // ==============================================
   // NON-PREFIXED ROUTES (default tenant from env/subdomain)
   // ==============================================
+
+  // LendusFind landing (no tenant required)
+  {
+    path: '/find',
+    name: 'lendusfind-landing',
+    component: LendusFindLanding,
+    meta: { public: true, noTenant: true }
+  },
 
   // Public routes
   {
@@ -402,23 +412,27 @@ router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   const tenantStore = useTenantStore()
 
-  // Load tenant config on first navigation (for public/applicant routes)
+  // Load tenant config on navigation (for public/applicant routes)
+  // Skip for admin routes and noTenant routes (like /find)
   const isAdminRoute = to.path.startsWith('/admin')
-  if (!isAdminRoute && !tenantStore.isLoaded) {
+  const isNoTenantRoute = to.matched.some(record => record.meta.noTenant)
+  if (!isAdminRoute && !isNoTenantRoute) {
     await tenantStore.loadConfig()
   }
 
   // Redirect non-prefixed routes to tenant-prefixed versions
   // This handles hardcoded paths like /solicitud/paso-1 -> /demo/solicitud/paso-1
-  if (!isAdminRoute && !to.params.tenant && tenantStore.slug) {
+  // IMPORTANT: Only redirect if there's a tenant detected in the current URL
+  const currentTenantSlug = detectTenantSlug()
+  if (!isAdminRoute && !to.params.tenant && currentTenantSlug && tenantStore.slug) {
     const nonPrefixedPaths = ['/auth', '/solicitud', '/dashboard', '/correcciones', '/perfil', '/simulador']
     const matchingPath = nonPrefixedPaths.find(p => to.path.startsWith(p) || to.path === p)
     if (matchingPath) {
       const newPath = `/${tenantStore.slug}${to.path}`
       return next({ path: newPath, query: to.query, replace: true })
     }
-    // Also handle root path
-    if (to.path === '/') {
+    // Also handle root path - but only if a tenant is in the URL
+    if (to.path === '/' && currentTenantSlug) {
       return next({ path: `/${tenantStore.slug}`, replace: true })
     }
   }

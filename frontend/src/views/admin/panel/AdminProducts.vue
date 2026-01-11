@@ -3,6 +3,10 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '@/services/api'
 import { AppButton } from '@/components/common'
 
+interface TermConfig {
+  available_terms: number[]
+}
+
 interface Product {
   id: string
   name: string
@@ -17,6 +21,7 @@ interface Product {
   opening_commission: number
   late_fee_rate: number
   payment_frequencies: string[]
+  term_config?: Record<string, TermConfig>
   required_documents: string[]
   eligibility_rules: Record<string, unknown>
   is_active: boolean
@@ -127,13 +132,18 @@ const termUnitLabels: Record<string, string> = {
 const newTermInput = ref<Record<string, number | null>>({})
 
 const addTerm = (freq: string) => {
-  const value = newTermInput.value[freq]
-  if (value && value > 0 && !form.value.term_config[freq]?.available_terms.includes(value)) {
+  const rawValue = newTermInput.value[freq]
+  const value = typeof rawValue === 'number' && !isNaN(rawValue) ? rawValue : 0
+
+  if (value > 0) {
     if (!form.value.term_config[freq]) {
       form.value.term_config[freq] = { available_terms: [] }
     }
-    form.value.term_config[freq].available_terms.push(value)
-    form.value.term_config[freq].available_terms.sort((a, b) => a - b)
+    // Only add if not already in the list
+    if (!form.value.term_config[freq].available_terms.includes(value)) {
+      form.value.term_config[freq].available_terms.push(value)
+      form.value.term_config[freq].available_terms.sort((a, b) => a - b)
+    }
     newTermInput.value[freq] = null
   }
 }
@@ -143,6 +153,26 @@ const removeTerm = (freq: string, term: number) => {
   if (config) {
     config.available_terms = config.available_terms.filter(t => t !== term)
   }
+}
+
+// Check if a term is within the valid range (converted to months)
+// Using exact conversion: 52 weeks = 12 months, 24 biweekly = 12 months
+const isTermInRange = (freq: string, term: number): boolean => {
+  const minMonths = form.value.min_term_months || 1
+  const maxMonths = form.value.max_term_months || 999
+
+  // Convert term to months based on frequency
+  let termInMonths: number
+  if (freq === 'WEEKLY') {
+    termInMonths = term * 12 / 52 // 52 weeks = 12 months (e.g., 52 weeks = 12 months)
+  } else if (freq === 'BIWEEKLY') {
+    termInMonths = term / 2 // 24 biweekly = 12 months
+  } else {
+    termInMonths = term // already in months
+  }
+
+  // Round to allow for slight variations (e.g., 13 weeks ≈ 3 months)
+  return Math.round(termInMonths) >= minMonths && Math.round(termInMonths) <= maxMonths
 }
 
 // Form state
@@ -241,7 +271,12 @@ const openCreateModal = () => {
     required_documents: ['INE_FRONT', 'INE_BACK', 'PROOF_ADDRESS'],
     is_active: true
   }
-  newTermInput.value = {}
+  // Initialize newTermInput for all frequencies for proper reactivity
+  newTermInput.value = {
+    WEEKLY: null,
+    BIWEEKLY: null,
+    MONTHLY: null
+  }
   formErrors.value = {}
   formError.value = ''
   showProductModal.value = true
@@ -290,7 +325,12 @@ const openEditModal = (product: Product) => {
     required_documents: product.required_documents || [],
     is_active: product.is_active
   }
-  newTermInput.value = {}
+  // Initialize newTermInput for all frequencies for proper reactivity
+  newTermInput.value = {
+    WEEKLY: null,
+    BIWEEKLY: null,
+    MONTHLY: null
+  }
   formErrors.value = {}
   formError.value = ''
   showProductModal.value = true
@@ -437,6 +477,8 @@ const toggleFrequency = (freq: string) => {
     // Add frequency with default term config (copy the array)
     form.value.payment_frequencies.push(freq)
     form.value.term_config[freq] = { available_terms: [...(defaultTermConfig[freq]?.available_terms || [])] }
+    // Initialize input for reactivity
+    newTermInput.value[freq] = null
   }
 }
 
@@ -932,38 +974,63 @@ onMounted(fetchProducts)
                       </div>
                       <div v-if="form.payment_frequencies.includes('WEEKLY')" class="px-4 pb-3 border-t border-gray-100">
                         <div class="flex flex-wrap gap-1.5 pt-3">
-                          <button
-                            v-for="term in quickTermOptions['WEEKLY']"
-                            :key="term"
-                            type="button"
-                            @click="() => {
-                              if (!form.term_config['WEEKLY']) form.term_config['WEEKLY'] = { available_terms: [] }
-                              const idx = form.term_config['WEEKLY'].available_terms.indexOf(term)
-                              if (idx >= 0) form.term_config['WEEKLY'].available_terms.splice(idx, 1)
-                              else { form.term_config['WEEKLY'].available_terms.push(term); form.term_config['WEEKLY'].available_terms.sort((a, b) => a - b) }
-                            }"
-                            :class="['w-10 h-8 text-xs rounded-md transition-all font-medium', form.term_config['WEEKLY']?.available_terms?.includes(term) ? 'bg-primary-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']"
-                          >{{ term }}</button>
-                          <div class="flex items-center ml-2 border border-dashed border-gray-300 rounded-md overflow-hidden">
-                            <input
-                              v-model.number="newTermInput['WEEKLY']"
-                              type="number"
-                              min="1"
-                              placeholder="Otro"
-                              class="w-14 h-8 px-2 text-xs text-center border-0 focus:ring-0 bg-transparent"
-                              @keyup.enter="addTerm('WEEKLY')"
-                            />
+                          <!-- All terms (selected + quick options) sorted together -->
+                          <template v-for="term in [...new Set([...(form.term_config['WEEKLY']?.available_terms || []), ...quickTermOptions['WEEKLY']])].sort((a, b) => a - b)" :key="`${term}-${form.min_term_months}-${form.max_term_months}`">
+                            <!-- Selected term from quick options -->
                             <button
+                              v-if="form.term_config['WEEKLY']?.available_terms?.includes(term) && quickTermOptions['WEEKLY'].includes(term)"
                               type="button"
-                              @click="addTerm('WEEKLY')"
-                              class="h-8 px-2 bg-gray-100 hover:bg-primary-100 hover:text-primary-600 text-gray-500 transition-colors"
-                              :disabled="!newTermInput['WEEKLY'] || newTermInput['WEEKLY'] < 1"
+                              @click="removeTerm('WEEKLY', term)"
+                              :class="[
+                                'w-10 h-8 text-xs rounded-md transition-all font-medium',
+                                isTermInRange('WEEKLY', term) ? 'bg-primary-600 text-white shadow-sm' : 'bg-red-500 text-white shadow-sm'
+                              ]"
+                            >{{ term }}</button>
+                            <!-- Selected custom term -->
+                            <button
+                              v-else-if="form.term_config['WEEKLY']?.available_terms?.includes(term)"
+                              type="button"
+                              @click="removeTerm('WEEKLY', term)"
+                              :class="[
+                                'h-8 px-2 text-xs rounded-md font-medium text-white shadow-sm flex items-center gap-1',
+                                isTermInRange('WEEKLY', term) ? 'bg-green-600 hover:bg-green-700' : 'bg-red-500 hover:bg-red-600'
+                              ]"
                             >
-                              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                              {{ term }}
+                              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                               </svg>
                             </button>
-                          </div>
+                            <!-- Unselected quick option -->
+                            <button
+                              v-else
+                              type="button"
+                              @click="() => {
+                                if (!form.term_config['WEEKLY']) form.term_config['WEEKLY'] = { available_terms: [] }
+                                form.term_config['WEEKLY'].available_terms.push(term)
+                                form.term_config['WEEKLY'].available_terms.sort((a, b) => a - b)
+                              }"
+                              class="w-10 h-8 text-xs rounded-md transition-all font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            >{{ term }}</button>
+                          </template>
+                          <!-- Add custom input -->
+                          <input
+                            v-model.number="newTermInput['WEEKLY']"
+                            type="number"
+                            min="1"
+                            placeholder="Otro"
+                            class="w-16 h-8 ml-2 px-2 text-xs text-center border border-dashed border-gray-300 rounded-md focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                            @keyup.enter="addTerm('WEEKLY')"
+                          />
+                          <button
+                            type="button"
+                            class="h-8 w-8 ml-1 flex items-center justify-center bg-primary-100 hover:bg-primary-200 text-primary-600 rounded-md transition-colors"
+                            @click="addTerm('WEEKLY')"
+                          >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                          </button>
                         </div>
                         <p v-if="formErrors['term_WEEKLY']" class="mt-2 text-xs text-red-500">{{ formErrors['term_WEEKLY'] }}</p>
                       </div>
@@ -985,38 +1052,63 @@ onMounted(fetchProducts)
                       </div>
                       <div v-if="form.payment_frequencies.includes('BIWEEKLY')" class="px-4 pb-3 border-t border-gray-100">
                         <div class="flex flex-wrap gap-1.5 pt-3">
-                          <button
-                            v-for="term in quickTermOptions['BIWEEKLY']"
-                            :key="term"
-                            type="button"
-                            @click="() => {
-                              if (!form.term_config['BIWEEKLY']) form.term_config['BIWEEKLY'] = { available_terms: [] }
-                              const idx = form.term_config['BIWEEKLY'].available_terms.indexOf(term)
-                              if (idx >= 0) form.term_config['BIWEEKLY'].available_terms.splice(idx, 1)
-                              else { form.term_config['BIWEEKLY'].available_terms.push(term); form.term_config['BIWEEKLY'].available_terms.sort((a, b) => a - b) }
-                            }"
-                            :class="['w-10 h-8 text-xs rounded-md transition-all font-medium', form.term_config['BIWEEKLY']?.available_terms?.includes(term) ? 'bg-primary-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']"
-                          >{{ term }}</button>
-                          <div class="flex items-center ml-2 border border-dashed border-gray-300 rounded-md overflow-hidden">
-                            <input
-                              v-model.number="newTermInput['BIWEEKLY']"
-                              type="number"
-                              min="1"
-                              placeholder="Otro"
-                              class="w-14 h-8 px-2 text-xs text-center border-0 focus:ring-0 bg-transparent"
-                              @keyup.enter="addTerm('BIWEEKLY')"
-                            />
+                          <!-- All terms (selected + quick options) sorted together -->
+                          <template v-for="term in [...new Set([...(form.term_config['BIWEEKLY']?.available_terms || []), ...quickTermOptions['BIWEEKLY']])].sort((a, b) => a - b)" :key="`${term}-${form.min_term_months}-${form.max_term_months}`">
+                            <!-- Selected term from quick options -->
                             <button
+                              v-if="form.term_config['BIWEEKLY']?.available_terms?.includes(term) && quickTermOptions['BIWEEKLY'].includes(term)"
                               type="button"
-                              @click="addTerm('BIWEEKLY')"
-                              class="h-8 px-2 bg-gray-100 hover:bg-primary-100 hover:text-primary-600 text-gray-500 transition-colors"
-                              :disabled="!newTermInput['BIWEEKLY'] || newTermInput['BIWEEKLY'] < 1"
+                              @click="removeTerm('BIWEEKLY', term)"
+                              :class="[
+                                'w-10 h-8 text-xs rounded-md transition-all font-medium',
+                                isTermInRange('BIWEEKLY', term) ? 'bg-primary-600 text-white shadow-sm' : 'bg-red-500 text-white shadow-sm'
+                              ]"
+                            >{{ term }}</button>
+                            <!-- Selected custom term -->
+                            <button
+                              v-else-if="form.term_config['BIWEEKLY']?.available_terms?.includes(term)"
+                              type="button"
+                              @click="removeTerm('BIWEEKLY', term)"
+                              :class="[
+                                'h-8 px-2 text-xs rounded-md font-medium text-white shadow-sm flex items-center gap-1',
+                                isTermInRange('BIWEEKLY', term) ? 'bg-green-600 hover:bg-green-700' : 'bg-red-500 hover:bg-red-600'
+                              ]"
                             >
-                              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                              {{ term }}
+                              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                               </svg>
                             </button>
-                          </div>
+                            <!-- Unselected quick option -->
+                            <button
+                              v-else
+                              type="button"
+                              @click="() => {
+                                if (!form.term_config['BIWEEKLY']) form.term_config['BIWEEKLY'] = { available_terms: [] }
+                                form.term_config['BIWEEKLY'].available_terms.push(term)
+                                form.term_config['BIWEEKLY'].available_terms.sort((a, b) => a - b)
+                              }"
+                              class="w-10 h-8 text-xs rounded-md transition-all font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            >{{ term }}</button>
+                          </template>
+                          <!-- Add custom input -->
+                          <input
+                            v-model.number="newTermInput['BIWEEKLY']"
+                            type="number"
+                            min="1"
+                            placeholder="Otro"
+                            class="w-16 h-8 ml-2 px-2 text-xs text-center border border-dashed border-gray-300 rounded-md focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                            @keyup.enter="addTerm('BIWEEKLY')"
+                          />
+                          <button
+                            type="button"
+                            class="h-8 w-8 ml-1 flex items-center justify-center bg-primary-100 hover:bg-primary-200 text-primary-600 rounded-md transition-colors"
+                            @click="addTerm('BIWEEKLY')"
+                          >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                          </button>
                         </div>
                         <p v-if="formErrors['term_BIWEEKLY']" class="mt-2 text-xs text-red-500">{{ formErrors['term_BIWEEKLY'] }}</p>
                       </div>
@@ -1038,38 +1130,63 @@ onMounted(fetchProducts)
                       </div>
                       <div v-if="form.payment_frequencies.includes('MONTHLY')" class="px-4 pb-3 border-t border-gray-100">
                         <div class="flex flex-wrap gap-1.5 pt-3">
-                          <button
-                            v-for="term in quickTermOptions['MONTHLY']"
-                            :key="term"
-                            type="button"
-                            @click="() => {
-                              if (!form.term_config['MONTHLY']) form.term_config['MONTHLY'] = { available_terms: [] }
-                              const idx = form.term_config['MONTHLY'].available_terms.indexOf(term)
-                              if (idx >= 0) form.term_config['MONTHLY'].available_terms.splice(idx, 1)
-                              else { form.term_config['MONTHLY'].available_terms.push(term); form.term_config['MONTHLY'].available_terms.sort((a, b) => a - b) }
-                            }"
-                            :class="['w-10 h-8 text-xs rounded-md transition-all font-medium', form.term_config['MONTHLY']?.available_terms?.includes(term) ? 'bg-primary-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200']"
-                          >{{ term }}</button>
-                          <div class="flex items-center ml-2 border border-dashed border-gray-300 rounded-md overflow-hidden">
-                            <input
-                              v-model.number="newTermInput['MONTHLY']"
-                              type="number"
-                              min="1"
-                              placeholder="Otro"
-                              class="w-14 h-8 px-2 text-xs text-center border-0 focus:ring-0 bg-transparent"
-                              @keyup.enter="addTerm('MONTHLY')"
-                            />
+                          <!-- All terms (selected + quick options) sorted together -->
+                          <template v-for="term in [...new Set([...(form.term_config['MONTHLY']?.available_terms || []), ...quickTermOptions['MONTHLY']])].sort((a, b) => a - b)" :key="`${term}-${form.min_term_months}-${form.max_term_months}`">
+                            <!-- Selected term from quick options -->
                             <button
+                              v-if="form.term_config['MONTHLY']?.available_terms?.includes(term) && quickTermOptions['MONTHLY'].includes(term)"
                               type="button"
-                              @click="addTerm('MONTHLY')"
-                              class="h-8 px-2 bg-gray-100 hover:bg-primary-100 hover:text-primary-600 text-gray-500 transition-colors"
-                              :disabled="!newTermInput['MONTHLY'] || newTermInput['MONTHLY'] < 1"
+                              @click="removeTerm('MONTHLY', term)"
+                              :class="[
+                                'w-10 h-8 text-xs rounded-md transition-all font-medium',
+                                isTermInRange('MONTHLY', term) ? 'bg-primary-600 text-white shadow-sm' : 'bg-red-500 text-white shadow-sm'
+                              ]"
+                            >{{ term }}</button>
+                            <!-- Selected custom term -->
+                            <button
+                              v-else-if="form.term_config['MONTHLY']?.available_terms?.includes(term)"
+                              type="button"
+                              @click="removeTerm('MONTHLY', term)"
+                              :class="[
+                                'h-8 px-2 text-xs rounded-md font-medium text-white shadow-sm flex items-center gap-1',
+                                isTermInRange('MONTHLY', term) ? 'bg-green-600 hover:bg-green-700' : 'bg-red-500 hover:bg-red-600'
+                              ]"
                             >
-                              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                              {{ term }}
+                              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                               </svg>
                             </button>
-                          </div>
+                            <!-- Unselected quick option -->
+                            <button
+                              v-else
+                              type="button"
+                              @click="() => {
+                                if (!form.term_config['MONTHLY']) form.term_config['MONTHLY'] = { available_terms: [] }
+                                form.term_config['MONTHLY'].available_terms.push(term)
+                                form.term_config['MONTHLY'].available_terms.sort((a, b) => a - b)
+                              }"
+                              class="w-10 h-8 text-xs rounded-md transition-all font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            >{{ term }}</button>
+                          </template>
+                          <!-- Add custom input -->
+                          <input
+                            v-model.number="newTermInput['MONTHLY']"
+                            type="number"
+                            min="1"
+                            placeholder="Otro"
+                            class="w-16 h-8 ml-2 px-2 text-xs text-center border border-dashed border-gray-300 rounded-md focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                            @keyup.enter="addTerm('MONTHLY')"
+                          />
+                          <button
+                            type="button"
+                            class="h-8 w-8 ml-1 flex items-center justify-center bg-primary-100 hover:bg-primary-200 text-primary-600 rounded-md transition-colors"
+                            @click="addTerm('MONTHLY')"
+                          >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                          </button>
                         </div>
                         <p v-if="formErrors['term_MONTHLY']" class="mt-2 text-xs text-red-500">{{ formErrors['term_MONTHLY'] }}</p>
                       </div>

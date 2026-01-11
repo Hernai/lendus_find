@@ -120,6 +120,7 @@ class ConfigController extends Controller
             'opening_commission' => $product->opening_commission_rate,
             'amortization_type' => $rules['amortization_type'] ?? 'FRENCH',
             'payment_frequencies' => $product->payment_frequencies ?? $rules['payment_frequencies'] ?? ['MONTHLY'],
+            'term_config' => $rules['term_config'] ?? null,
             'min_age' => $rules['min_age'] ?? 18,
             'max_age' => $rules['max_age'] ?? 75,
             'min_income' => $rules['min_income'] ?? 8000,

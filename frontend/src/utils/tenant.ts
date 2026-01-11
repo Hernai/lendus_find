@@ -14,7 +14,7 @@ const RESERVED_SUBDOMAINS = ['www', 'app', 'api', 'admin', 'localhost']
 const EXCLUDED_PARENT_DOMAINS = ['ngrok-free.app', 'ngrok.io', 'localhost']
 
 // Reserved paths that are NOT tenant slugs
-const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones']
+const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones', 'find']
 
 /**
  * Get subdomain from current hostname
@@ -64,7 +64,15 @@ function getPathTenant(): string | null {
 }
 
 /**
+ * Check if tenant was explicitly detected from URL (subdomain or path)
+ */
+export function hasTenantInUrl(): boolean {
+  return getSubdomain() !== null || getPathTenant() !== null
+}
+
+/**
  * Detect tenant slug from URL or environment (hybrid approach)
+ * Returns empty string if no tenant is detected anywhere
  */
 export function detectTenantSlug(): string {
   // 1. Try subdomain first (production)
@@ -79,8 +87,14 @@ export function detectTenantSlug(): string {
     return pathTenant
   }
 
-  // 3. Fall back to environment variable
-  return import.meta.env.VITE_TENANT_ID || 'demo'
+  // 3. Fall back to environment variable (only if explicitly set)
+  const envTenant = import.meta.env.VITE_TENANT_ID
+  if (envTenant) {
+    return envTenant
+  }
+
+  // 4. No tenant detected - return empty string
+  return ''
 }
 
 /**

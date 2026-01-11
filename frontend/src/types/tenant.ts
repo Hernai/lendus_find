@@ -70,6 +70,7 @@ export interface Product {
   payment_frequencies?: PaymentFrequency[]
   required_documents?: (RequiredDocument | string)[]
   eligibility_rules?: Record<string, unknown>
+  term_config?: Record<string, TermConfig>
   // Legacy nested structure (backwards compatibility)
   rules?: ProductRules
   required_docs?: (RequiredDocument | string)[]
@@ -94,6 +95,7 @@ export interface ProductRules {
   opening_commission?: number
   amortization_type?: AmortizationType
   payment_frequencies?: PaymentFrequency[]
+  term_config?: Record<string, TermConfig>
   min_age?: number
   max_age?: number
   min_income?: number
@@ -101,7 +103,11 @@ export interface ProductRules {
 
 export type AmortizationType = 'FRENCH' | 'GERMAN' | 'AMERICAN' | 'BULLET'
 
-export type PaymentFrequency = 'WEEKLY' | 'BIWEEKLY' | 'QUINCENAL' | 'MONTHLY' | 'MENSUAL'
+export type PaymentFrequency = 'SEMANAL' | 'WEEKLY' | 'BIWEEKLY' | 'QUINCENAL' | 'MONTHLY' | 'MENSUAL'
+
+export interface TermConfig {
+  available_terms: number[]
+}
 
 export interface RequiredDocument {
   type: DocumentType

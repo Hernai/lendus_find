@@ -81,7 +81,8 @@ class Product extends Model
      */
     public function getMinAmountAttribute(): float
     {
-        return $this->rules['min_amount'] ?? 5000;
+        // First check database column, then fall back to rules
+        return $this->attributes['min_amount'] ?? $this->rules['min_amount'] ?? 5000;
     }
 
     /**
@@ -89,7 +90,8 @@ class Product extends Model
      */
     public function getMaxAmountAttribute(): float
     {
-        return $this->rules['max_amount'] ?? 500000;
+        // First check database column, then fall back to rules
+        return $this->attributes['max_amount'] ?? $this->rules['max_amount'] ?? 500000;
     }
 
     /**
@@ -97,8 +99,11 @@ class Product extends Model
      */
     public function getAnnualRateAttribute(): float
     {
-        // Support both 'annual_rate' and 'interest_rate' field names
-        return $this->rules['annual_rate'] ?? $this->rules['interest_rate'] ?? 45.0;
+        // First check database column, then fall back to rules
+        return $this->attributes['interest_rate']
+            ?? $this->rules['annual_rate']
+            ?? $this->rules['interest_rate']
+            ?? 45.0;
     }
 
     /**
@@ -106,7 +111,11 @@ class Product extends Model
      */
     public function getMinTermMonthsAttribute(): int
     {
-        return $this->rules['min_term_months'] ?? $this->rules['min_term'] ?? 3;
+        // First check database column, then fall back to rules
+        return $this->attributes['min_term_months']
+            ?? $this->rules['min_term_months']
+            ?? $this->rules['min_term']
+            ?? 3;
     }
 
     /**
@@ -114,7 +123,11 @@ class Product extends Model
      */
     public function getMaxTermMonthsAttribute(): int
     {
-        return $this->rules['max_term_months'] ?? $this->rules['max_term'] ?? 48;
+        // First check database column, then fall back to rules
+        return $this->attributes['max_term_months']
+            ?? $this->rules['max_term_months']
+            ?? $this->rules['max_term']
+            ?? 48;
     }
 
     /**
@@ -122,7 +135,10 @@ class Product extends Model
      */
     public function getOpeningCommissionRateAttribute(): float
     {
-        return $this->rules['opening_commission'] ?? 0;
+        // First check database column, then fall back to rules
+        return $this->attributes['opening_commission']
+            ?? $this->rules['opening_commission']
+            ?? 0;
     }
 
     /**

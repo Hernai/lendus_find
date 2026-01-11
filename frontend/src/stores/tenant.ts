@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/services/api'
+import { detectTenantSlug } from '@/utils/tenant'
 import type { Tenant, Product } from '@/types'
 
 interface TenantConfigResponse {
@@ -105,9 +106,12 @@ export const useTenantStore = defineStore('tenant', () => {
   const products = ref<Product[]>([])
   const isLoading = ref(false)
   const isLoaded = ref(false)
+  const loadFailed = ref(false)
   const error = ref<string | null>(null)
 
   // Getters
+  const hasTenant = computed(() => isLoaded.value && tenant.value !== null && !loadFailed.value)
+  const noTenantDetected = computed(() => isLoaded.value && (tenant.value === null || loadFailed.value))
   const branding = computed(() => tenant.value?.branding ?? null)
   const name = computed(() => tenant.value?.name ?? '')
   const slug = computed(() => tenant.value?.slug ?? '')
@@ -124,23 +128,47 @@ export const useTenantStore = defineStore('tenant', () => {
 
   // Actions
   const loadConfig = async () => {
-    if (isLoaded.value) return
+    // Check if there's a tenant to load
+    const tenantSlug = detectTenantSlug()
+
+    // If already loaded with the same tenant, skip
+    if (isLoaded.value && tenant.value?.slug === tenantSlug) {
+      return
+    }
+
+    // If tenant changed, reset first
+    if (isLoaded.value && tenantSlug && tenant.value?.slug !== tenantSlug) {
+      console.log('[TenantStore] URL tenant changed from', tenant.value?.slug, 'to', tenantSlug, '- reloading')
+      reset()
+    }
+
+    // No tenant in URL - fail gracefully (user should go to /find)
+    if (!tenantSlug) {
+      console.log('[TenantStore] No tenant detected')
+      loadFailed.value = true
+      isLoaded.value = true
+      return
+    }
 
     isLoading.value = true
     error.value = null
+    loadFailed.value = false
 
     try {
-      console.log('[TenantStore] Loading config...')
+      console.log('[TenantStore] Loading config for tenant:', tenantSlug)
       const response = await api.get<TenantConfigResponse>('/config')
       tenant.value = response.data.tenant
       products.value = response.data.products
       isLoaded.value = true
+      loadFailed.value = false
       console.log('[TenantStore] Config loaded:', {
         tenantName: tenant.value?.name,
         primaryColor: tenant.value?.branding?.primary_color
       })
     } catch (e) {
       error.value = 'Error al cargar la configuración'
+      loadFailed.value = true
+      isLoaded.value = true
       console.error('[TenantStore] Failed to load tenant config:', e)
     } finally {
       isLoading.value = false
@@ -314,6 +342,7 @@ export const useTenantStore = defineStore('tenant', () => {
     tenant.value = null
     products.value = []
     isLoaded.value = false
+    loadFailed.value = false
     error.value = null
   }
 
@@ -323,8 +352,11 @@ export const useTenantStore = defineStore('tenant', () => {
     products,
     isLoading,
     isLoaded,
+    loadFailed,
     error,
     // Getters
+    hasTenant,
+    noTenantDetected,
     branding,
     name,
     slug,

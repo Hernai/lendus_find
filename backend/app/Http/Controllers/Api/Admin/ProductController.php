@@ -11,6 +11,55 @@ use Illuminate\Support\Facades\Validator;
 class ProductController extends Controller
 {
     /**
+     * Normalize frequency codes to English standard (WEEKLY, BIWEEKLY, MONTHLY).
+     */
+    private function normalizeFrequency(string $freq): string
+    {
+        return match ($freq) {
+            'SEMANAL' => 'WEEKLY',
+            'QUINCENAL' => 'BIWEEKLY',
+            'MENSUAL' => 'MONTHLY',
+            default => $freq,
+        };
+    }
+
+    /**
+     * Normalize payment frequencies array to English standard.
+     */
+    private function normalizeFrequencies(array $frequencies): array
+    {
+        $normalized = array_map(fn($f) => $this->normalizeFrequency($f), $frequencies);
+        return array_values(array_unique($normalized));
+    }
+
+    /**
+     * Normalize term_config keys to English standard.
+     */
+    private function normalizeTermConfig(?array $termConfig): array
+    {
+        if (empty($termConfig)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($termConfig as $key => $config) {
+            $normalizedKey = $this->normalizeFrequency($key);
+            // If key already exists, merge available_terms
+            if (isset($normalized[$normalizedKey])) {
+                $existing = $normalized[$normalizedKey]['available_terms'] ?? [];
+                $new = $config['available_terms'] ?? [];
+                $merged = array_values(array_unique(array_merge($existing, $new)));
+                sort($merged);
+                $normalized[$normalizedKey]['available_terms'] = $merged;
+            } else {
+                $normalized[$normalizedKey] = $config;
+            }
+        }
+
+        return $normalized;
+    }
+
+    /**
      * List all products.
      */
     public function index(Request $request): JsonResponse
@@ -59,7 +108,7 @@ class ProductController extends Controller
             'opening_commission' => 'required|numeric|min:0|max:100',
             'late_fee_rate' => 'nullable|numeric|min:0|max:100',
             'payment_frequencies' => 'required|array|min:1',
-            'payment_frequencies.*' => 'in:WEEKLY,BIWEEKLY,QUINCENAL,MONTHLY,MENSUAL',
+            'payment_frequencies.*' => 'in:SEMANAL,WEEKLY,BIWEEKLY,QUINCENAL,MONTHLY,MENSUAL',
             'term_config' => 'nullable|array',
             'term_config.*.available_terms' => 'required_with:term_config|array|min:1',
             'term_config.*.available_terms.*' => 'integer|min:1',
@@ -75,25 +124,34 @@ class ProductController extends Controller
             ], 422);
         }
 
-        // Extract min/max terms from term_config for backwards compatibility
-        $termConfig = $request->term_config ?? [];
-        $minTermMonths = $request->min_term_months ?? 3;
-        $maxTermMonths = $request->max_term_months ?? 48;
+        // Normalize frequencies to English standard (WEEKLY, BIWEEKLY, MONTHLY)
+        $frequencies = $this->normalizeFrequencies($request->payment_frequencies);
+        $termConfig = $this->normalizeTermConfig($request->term_config ?? []);
 
-        // Get min/max from MONTHLY available_terms if available, otherwise use first config
-        if (!empty($termConfig)) {
-            if (isset($termConfig['MONTHLY']['available_terms']) && !empty($termConfig['MONTHLY']['available_terms'])) {
-                $terms = $termConfig['MONTHLY']['available_terms'];
-                $minTermMonths = min($terms);
-                $maxTermMonths = max($terms);
-            } elseif (!empty($termConfig)) {
-                $firstConfig = reset($termConfig);
-                if (isset($firstConfig['available_terms']) && !empty($firstConfig['available_terms'])) {
-                    $minTermMonths = min($firstConfig['available_terms']);
-                    $maxTermMonths = max($firstConfig['available_terms']);
+        // Use explicit min/max if provided, otherwise calculate from term_config
+        $minTermMonths = $request->min_term_months;
+        $maxTermMonths = $request->max_term_months;
+
+        // Only calculate from term_config if not explicitly provided
+        if ($minTermMonths === null || $maxTermMonths === null) {
+            if (!empty($termConfig)) {
+                if (isset($termConfig['MONTHLY']['available_terms']) && !empty($termConfig['MONTHLY']['available_terms'])) {
+                    $terms = $termConfig['MONTHLY']['available_terms'];
+                    $minTermMonths = $minTermMonths ?? min($terms);
+                    $maxTermMonths = $maxTermMonths ?? max($terms);
+                } elseif (!empty($termConfig)) {
+                    $firstConfig = reset($termConfig);
+                    if (isset($firstConfig['available_terms']) && !empty($firstConfig['available_terms'])) {
+                        $minTermMonths = $minTermMonths ?? min($firstConfig['available_terms']);
+                        $maxTermMonths = $maxTermMonths ?? max($firstConfig['available_terms']);
+                    }
                 }
             }
         }
+
+        // Fallback defaults
+        $minTermMonths = $minTermMonths ?? 3;
+        $maxTermMonths = $maxTermMonths ?? 48;
 
         $product = Product::create([
             'tenant_id' => $tenant->id,
@@ -108,7 +166,7 @@ class ProductController extends Controller
             'interest_rate' => $request->interest_rate,
             'opening_commission' => $request->opening_commission,
             'late_fee_rate' => $request->late_fee_rate ?? 0,
-            'payment_frequencies' => $request->payment_frequencies,
+            'payment_frequencies' => $frequencies,
             'required_documents' => $request->required_documents ?? [],
             'eligibility_rules' => $request->eligibility_rules ?? [],
             'rules' => ['term_config' => $termConfig],
@@ -161,7 +219,7 @@ class ProductController extends Controller
             'opening_commission' => 'sometimes|numeric|min:0|max:100',
             'late_fee_rate' => 'nullable|numeric|min:0|max:100',
             'payment_frequencies' => 'sometimes|array|min:1',
-            'payment_frequencies.*' => 'in:WEEKLY,BIWEEKLY,QUINCENAL,MONTHLY,MENSUAL',
+            'payment_frequencies.*' => 'in:SEMANAL,WEEKLY,BIWEEKLY,QUINCENAL,MONTHLY,MENSUAL',
             'term_config' => 'nullable|array',
             'term_config.*.available_terms' => 'array|min:1',
             'term_config.*.available_terms.*' => 'integer|min:1',
@@ -181,7 +239,7 @@ class ProductController extends Controller
             'name', 'code', 'type', 'description',
             'min_amount', 'max_amount', 'min_term_months', 'max_term_months',
             'interest_rate', 'opening_commission', 'late_fee_rate',
-            'payment_frequencies', 'required_documents', 'eligibility_rules',
+            'required_documents', 'eligibility_rules',
             'is_active'
         ]));
 
@@ -189,26 +247,41 @@ class ProductController extends Controller
             $product->code = strtoupper($request->code);
         }
 
-        // Handle term_config
+        // Normalize and save payment_frequencies
+        if ($request->has('payment_frequencies')) {
+            $product->payment_frequencies = $this->normalizeFrequencies($request->payment_frequencies);
+        }
+
+        // Handle term_config with normalization
         if ($request->has('term_config')) {
-            $termConfig = $request->term_config;
+            $termConfig = $this->normalizeTermConfig($request->term_config);
 
             // Store in rules column
             $rules = $product->rules ?? [];
             $rules['term_config'] = $termConfig;
             $product->rules = $rules;
 
-            // Update legacy min/max term fields for backwards compatibility
-            if (!empty($termConfig)) {
-                if (isset($termConfig['MONTHLY']['available_terms']) && !empty($termConfig['MONTHLY']['available_terms'])) {
-                    $terms = $termConfig['MONTHLY']['available_terms'];
-                    $product->min_term_months = min($terms);
-                    $product->max_term_months = max($terms);
-                } elseif (!empty($termConfig)) {
-                    $firstConfig = reset($termConfig);
-                    if (isset($firstConfig['available_terms']) && !empty($firstConfig['available_terms'])) {
-                        $product->min_term_months = min($firstConfig['available_terms']);
-                        $product->max_term_months = max($firstConfig['available_terms']);
+            // Only update min/max from term_config if NOT explicitly provided in request
+            if (!$request->has('min_term_months') || !$request->has('max_term_months')) {
+                if (!empty($termConfig)) {
+                    if (isset($termConfig['MONTHLY']['available_terms']) && !empty($termConfig['MONTHLY']['available_terms'])) {
+                        $terms = $termConfig['MONTHLY']['available_terms'];
+                        if (!$request->has('min_term_months')) {
+                            $product->min_term_months = min($terms);
+                        }
+                        if (!$request->has('max_term_months')) {
+                            $product->max_term_months = max($terms);
+                        }
+                    } elseif (!empty($termConfig)) {
+                        $firstConfig = reset($termConfig);
+                        if (isset($firstConfig['available_terms']) && !empty($firstConfig['available_terms'])) {
+                            if (!$request->has('min_term_months')) {
+                                $product->min_term_months = min($firstConfig['available_terms']);
+                            }
+                            if (!$request->has('max_term_months')) {
+                                $product->max_term_months = max($firstConfig['available_terms']);
+                            }
+                        }
                     }
                 }
             }

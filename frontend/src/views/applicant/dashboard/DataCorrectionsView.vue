@@ -499,7 +499,7 @@ const formatValue = (value: unknown): string => {
 }
 
 // WebSocket channel reference
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 let echoChannel: ReturnType<EchoInstance['private']> | null = null
 
 // Setup WebSocket listener
