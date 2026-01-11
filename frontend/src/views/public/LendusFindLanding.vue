@@ -8,6 +8,15 @@ const isVisible = ref(false)
 const heroVisible = ref(false)
 
 onMounted(() => {
+  // Set favicon for LendusFind
+  const favicon = document.querySelector<HTMLLinkElement>("link[rel~='icon']")
+  if (favicon) {
+    favicon.href = 'https://lendus.com.mx/img/logos/find-icon.png'
+  }
+
+  // Set page title
+  document.title = 'LendusFind - Plataforma de Originación de Crédito'
+
   // Trigger hero animation after mount
   setTimeout(() => {
     heroVisible.value = true

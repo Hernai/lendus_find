@@ -59,6 +59,15 @@ const brandingSections = ref({
 // Logo upload refs
 const logoUploadRefs = ref<Record<string, HTMLInputElement | null>>({})
 const uploadingLogo = ref<string | null>(null)
+const uploadError = ref<string | null>(null)
+
+// Clear error after a few seconds
+const showUploadError = (message: string) => {
+  uploadError.value = message
+  setTimeout(() => {
+    uploadError.value = null
+  }, 5000)
+}
 
 // Suggested fonts
 const suggestedFonts = [
@@ -95,30 +104,84 @@ const triggerLogoUpload = (field: string) => {
   logoUploadRefs.value[field]?.click()
 }
 
+const compressImage = (file: File, maxWidth: number, quality: number): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let width = img.width
+        let height = img.height
+
+        // Resize if needed
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width
+          width = maxWidth
+        }
+
+        canvas.width = width
+        canvas.height = height
+
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          reject(new Error('Could not get canvas context'))
+          return
+        }
+
+        ctx.drawImage(img, 0, 0, width, height)
+
+        // Export as JPEG for better compression (unless it's an SVG or has transparency)
+        const isSvgOrPng = file.type === 'image/svg+xml' || file.type === 'image/png'
+        const outputType = isSvgOrPng ? 'image/png' : 'image/jpeg'
+        const dataUrl = canvas.toDataURL(outputType, quality)
+        resolve(dataUrl)
+      }
+      img.onerror = () => reject(new Error('Failed to load image'))
+      img.src = e.target?.result as string
+    }
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsDataURL(file)
+  })
+}
+
 const handleLogoUpload = async (event: Event, field: string) => {
   const input = event.target as HTMLInputElement
   if (!input.files?.length) return
 
   const file = input.files[0]
-  if (file.size > 2 * 1024 * 1024) {
-    alert('El archivo es muy grande. Máximo 2MB.')
+  uploadError.value = null
+
+  if (file.size > 5 * 1024 * 1024) {
+    showUploadError('El archivo es muy grande. Máximo 5MB.')
+    input.value = ''
     return
   }
 
   uploadingLogo.value = field
 
-  // Convert to base64 for preview
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    const result = e.target?.result as string
-    updateField(field as keyof Branding, result)
+  try {
+    // Determine max size based on field type (favicons should be very small)
+    const maxWidth = field === 'favicon_url' ? 64 : 400
+    const quality = field === 'favicon_url' ? 0.8 : 0.85
+
+    // Compress image before converting to base64
+    const compressedDataUrl = await compressImage(file, maxWidth, quality)
+
+    // Check if compressed size is still too large (max ~400KB for safety)
+    const maxBase64Length = 400000
+    if (compressedDataUrl.length > maxBase64Length) {
+      showUploadError(`La imagen comprimida sigue siendo muy grande (${Math.round(compressedDataUrl.length / 1000)}KB). Intenta con una imagen más pequeña.`)
+      return
+    }
+
+    updateField(field as keyof Branding, compressedDataUrl)
+  } catch (error) {
+    console.error('Error compressing image:', error)
+    showUploadError('Error al procesar la imagen. Intenta con otro formato (PNG, JPG).')
+  } finally {
     uploadingLogo.value = null
   }
-  reader.onerror = () => {
-    uploadingLogo.value = null
-    alert('Error al cargar la imagen')
-  }
-  reader.readAsDataURL(file)
 
   // Emit event for parent to handle actual upload
   emit('logo-upload', field, file)
@@ -178,6 +241,17 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
         </button>
 
         <div v-show="brandingSections.logos" class="space-y-3 mt-4">
+          <!-- Error Message -->
+          <div
+            v-if="uploadError"
+            class="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-start gap-2"
+          >
+            <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>{{ uploadError }}</span>
+          </div>
+
           <!-- Logo Principal -->
           <div class="flex items-center gap-3">
             <div
@@ -191,7 +265,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
             </div>
             <div class="flex-1">
               <p class="text-sm font-medium text-gray-700">Logo Principal</p>
-              <p class="text-xs text-gray-400">PNG, SVG o JPG (max 2MB)</p>
+              <p class="text-xs text-gray-400">PNG, SVG o JPG (max 5MB)</p>
             </div>
           </div>
 
