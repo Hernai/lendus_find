@@ -183,7 +183,13 @@ export const useTenantStore = defineStore('tenant', () => {
       console.log('[TenantStore] Dark tinted color:', darkTinted)
     }
 
+    // Generate color palette from secondary color (RGB triplets for Tailwind)
     if (b.secondary_color) {
+      const secondaryPalette = generateColorPalette(b.secondary_color)
+      console.log('[TenantStore] Generated secondary palette (RGB):', secondaryPalette)
+      for (const [shade, rgbTriplet] of Object.entries(secondaryPalette)) {
+        root.style.setProperty(`--secondary-${shade}-rgb`, rgbTriplet)
+      }
       root.style.setProperty('--tenant-secondary', b.secondary_color)
     }
 
@@ -258,7 +264,7 @@ export const useTenantStore = defineStore('tenant', () => {
   const resetTheme = () => {
     const root = document.documentElement
     // Default indigo palette (RGB triplets for Tailwind)
-    const defaults: Record<string, string> = {
+    const primaryDefaults: Record<string, string> = {
       '50': '240 244 255',
       '100': '224 231 255',
       '200': '199 210 254',
@@ -270,8 +276,24 @@ export const useTenantStore = defineStore('tenant', () => {
       '800': '55 48 163',
       '900': '49 46 129',
     }
-    for (const [shade, rgbTriplet] of Object.entries(defaults)) {
+    for (const [shade, rgbTriplet] of Object.entries(primaryDefaults)) {
       root.style.setProperty(`--primary-${shade}-rgb`, rgbTriplet)
+    }
+    // Default emerald palette for secondary (RGB triplets for Tailwind)
+    const secondaryDefaults: Record<string, string> = {
+      '50': '236 253 245',
+      '100': '209 250 229',
+      '200': '167 243 208',
+      '300': '110 231 183',
+      '400': '52 211 153',
+      '500': '16 185 129',
+      '600': '5 150 105',
+      '700': '4 120 87',
+      '800': '6 95 70',
+      '900': '6 78 59',
+    }
+    for (const [shade, rgbTriplet] of Object.entries(secondaryDefaults)) {
+      root.style.setProperty(`--secondary-${shade}-rgb`, rgbTriplet)
     }
     root.style.setProperty('--tenant-primary', '#4f46e5')
     root.style.setProperty('--tenant-secondary', '#10b981')
