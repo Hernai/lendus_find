@@ -301,7 +301,7 @@ const prevStep = () => router.push('/solicitud/paso-6')
                   type="tel"
                   inputmode="numeric"
                   placeholder="55 1234 5678"
-                  :maxlength="14"
+                  maxlength="12"
                   class="w-full pl-12 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   :class="{
                     'border-gray-300': !errors[`phone_${index}`],

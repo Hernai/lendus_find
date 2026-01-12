@@ -281,7 +281,7 @@ class ApplicantController extends Controller
 
         $validator = Validator::make($request->all(), [
             'street' => 'required|string|max:200',
-            'ext_number' => 'required|string|max:20',
+            'ext_number' => 'nullable|string|max:20', // Optional for INE addresses
             'int_number' => 'nullable|string|max:20',
             'neighborhood' => 'required|string|max:100',
             'municipality' => 'nullable|string|max:100',
@@ -567,7 +567,7 @@ class ApplicantController extends Controller
             'type' => 'required|in:HOME,WORK,FISCAL,CORRESPONDENCE',
             'is_primary' => 'sometimes|boolean',
             'street' => 'required|string|max:200',
-            'ext_number' => 'required|string|max:20',
+            'ext_number' => 'nullable|string|max:20', // Optional for INE addresses
             'int_number' => 'nullable|string|max:20',
             'neighborhood' => 'required|string|max:100',
             'municipality' => 'nullable|string|max:100',

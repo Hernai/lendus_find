@@ -40,6 +40,7 @@ interface Step3Data {
   housing_type: string
   years_at_address: number
   months_at_address: number
+  is_ine_address?: boolean // Flag to indicate address came from INE
 }
 
 interface Step4Data {
@@ -376,8 +377,14 @@ export const useOnboardingStore = defineStore('onboarding', () => {
 
         case 3: {
           // Validate required fields for step 3
+          // ext_number is optional when using INE address (is_ine_address flag)
           const s3 = data.value.step3
-          if (!s3.street || !s3.ext_number || !s3.neighborhood || !s3.postal_code || !s3.state || !s3.housing_type) {
+          const isIneAddress = s3.is_ine_address === true
+          if (!s3.street || !s3.neighborhood || !s3.postal_code || !s3.state || !s3.housing_type) {
+            throw new Error('Faltan campos requeridos en dirección')
+          }
+          // ext_number is required only for non-INE addresses
+          if (!isIneAddress && !s3.ext_number) {
             throw new Error('Faltan campos requeridos en dirección')
           }
           await applicantStore.updateAddress({
@@ -596,6 +603,19 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     currentStep.value = 1
     lastSavedAt.value = null
     localStorage.removeItem(STORAGE_KEY)
+    // Also clear application reference
+    localStorage.removeItem('current_application_id')
+  }
+
+  // Handle application not found (404) - reset to appropriate state
+  const handleApplicationNotFound = () => {
+    console.warn('⚠️ Application not found. Resetting onboarding to step 1.')
+    // Clear application reference
+    localStorage.removeItem('current_application_id')
+    // Reset to step 1 but keep data for steps 1-4 (applicant data)
+    currentStep.value = 1
+    completedSteps.value = completedSteps.value.filter(s => s <= 4)
+    saveToStorage()
   }
 
   // Initialize
@@ -638,6 +658,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     nextStep,
     prevStep,
     updateStepData,
-    reset
+    reset,
+    handleApplicationNotFound
   }
 })

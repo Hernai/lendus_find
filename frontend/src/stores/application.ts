@@ -144,8 +144,16 @@ export const useApplicationStore = defineStore('application', () => {
 
       currentApplication.value = app
       return currentApplication.value
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error loading application:', error)
+
+      // Handle 404 - clear stale references
+      const axiosError = error as { response?: { status?: number } }
+      if (axiosError.response?.status === 404) {
+        console.warn('⚠️ Application not found (404). Clearing localStorage reference.')
+        localStorage.removeItem('current_application_id')
+      }
+
       return null
     } finally {
       isLoading.value = false
@@ -232,8 +240,20 @@ export const useApplicationStore = defineStore('application', () => {
 
       currentApplication.value = response.data.data
       console.log('✅ Application updated:', currentApplication.value?.id)
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('❌ Error updating application:', error)
+
+      // Handle 404 - application no longer exists (possibly changed tenant or deleted)
+      const axiosError = error as { response?: { status?: number } }
+      if (axiosError.response?.status === 404) {
+        console.warn('⚠️ Application not found (404). Clearing stale state...')
+        // Clear the stale application reference
+        currentApplication.value = null
+        localStorage.removeItem('current_application_id')
+        // Throw a user-friendly error
+        throw new Error('La solicitud no fue encontrada. Es posible que haya expirado o ya no exista. Por favor, inicia una nueva solicitud.')
+      }
+
       throw error
     } finally {
       isSaving.value = false

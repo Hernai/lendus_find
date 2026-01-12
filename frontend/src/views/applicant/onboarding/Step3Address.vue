@@ -2,7 +2,7 @@
 import { reactive, ref, watch, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOnboardingStore, useKycStore } from '@/stores'
-import { AppButton, AppInput, AppSelect, AppRadioGroup } from '@/components/common'
+import { AppButton, AppInput, AppSelect } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
 
 const router = useRouter()
@@ -15,12 +15,104 @@ const hasIneAddress = computed(() =>
   isKycVerified.value && !!kycStore.lockedData.direccion_ine.calle
 )
 
+// Mexican state abbreviations mapping
+const stateAbbreviations: Record<string, string> = {
+  'AGS.': 'AGUASCALIENTES', 'AGS': 'AGUASCALIENTES',
+  'B.C.': 'BAJA CALIFORNIA', 'BC': 'BAJA CALIFORNIA', 'BCN': 'BAJA CALIFORNIA',
+  'B.C.S.': 'BAJA CALIFORNIA SUR', 'BCS': 'BAJA CALIFORNIA SUR',
+  'CAMP.': 'CAMPECHE', 'CAMP': 'CAMPECHE', 'CAM': 'CAMPECHE',
+  'CHIS.': 'CHIAPAS', 'CHIS': 'CHIAPAS', 'CHS': 'CHIAPAS',
+  'CHIH.': 'CHIHUAHUA', 'CHIH': 'CHIHUAHUA', 'CHH': 'CHIHUAHUA',
+  'CDMX': 'CIUDAD DE MEXICO', 'D.F.': 'CIUDAD DE MEXICO', 'DF': 'CIUDAD DE MEXICO',
+  'COAH.': 'COAHUILA', 'COAH': 'COAHUILA', 'COA': 'COAHUILA',
+  'COL.': 'COLIMA', 'COL': 'COLIMA',
+  'DGO.': 'DURANGO', 'DGO': 'DURANGO', 'DUR': 'DURANGO',
+  'GTO.': 'GUANAJUATO', 'GTO': 'GUANAJUATO', 'GUA': 'GUANAJUATO',
+  'GRO.': 'GUERRERO', 'GRO': 'GUERRERO',
+  'HGO.': 'HIDALGO', 'HGO': 'HIDALGO', 'HID': 'HIDALGO',
+  'JAL.': 'JALISCO', 'JAL': 'JALISCO',
+  'MEX.': 'ESTADO DE MEXICO', 'MEX': 'ESTADO DE MEXICO', 'EDO. MEX.': 'ESTADO DE MEXICO',
+  'MICH.': 'MICHOACAN', 'MICH': 'MICHOACAN', 'MIC': 'MICHOACAN',
+  'MOR.': 'MORELOS', 'MOR': 'MORELOS',
+  'NAY.': 'NAYARIT', 'NAY': 'NAYARIT',
+  'N.L.': 'NUEVO LEON', 'NL': 'NUEVO LEON', 'NLE': 'NUEVO LEON',
+  'OAX.': 'OAXACA', 'OAX': 'OAXACA',
+  'PUE.': 'PUEBLA', 'PUE': 'PUEBLA',
+  'QRO.': 'QUERETARO', 'QRO': 'QUERETARO', 'QUE': 'QUERETARO',
+  'Q.R.': 'QUINTANA ROO', 'QR': 'QUINTANA ROO', 'Q. ROO': 'QUINTANA ROO', 'ROO': 'QUINTANA ROO',
+  'S.L.P.': 'SAN LUIS POTOSI', 'SLP': 'SAN LUIS POTOSI',
+  'SIN.': 'SINALOA', 'SIN': 'SINALOA',
+  'SON.': 'SONORA', 'SON': 'SONORA',
+  'TAB.': 'TABASCO', 'TAB': 'TABASCO',
+  'TAMPS.': 'TAMAULIPAS', 'TAMPS': 'TAMAULIPAS', 'TAM': 'TAMAULIPAS',
+  'TLAX.': 'TLAXCALA', 'TLAX': 'TLAXCALA', 'TLA': 'TLAXCALA',
+  'VER.': 'VERACRUZ', 'VER': 'VERACRUZ',
+  'YUC.': 'YUCATAN', 'YUC': 'YUCATAN',
+  'ZAC.': 'ZACATECAS', 'ZAC': 'ZACATECAS'
+}
+
+// Parse INE address - extract CP from colonia, num_ext from calle if concatenated
+const parsedIneAddress = computed(() => {
+  const addr = kycStore.lockedData.direccion_ine
+  let calle = addr.calle || ''
+  let numExt = ''
+  let colonia = addr.colonia || ''
+  let cp = addr.cp || ''
+  let municipio = addr.municipio || addr.ciudad || addr.localidad || ''
+  let estado = addr.estado || ''
+
+  // Try to extract exterior number from calle (e.g., "BLVD PASO LIMON 19" or "AV REFORMA NO. 123")
+  // Patterns: "CALLE 123", "CALLE NO 123", "CALLE NO. 123", "CALLE NUM 123", "CALLE # 123"
+  const numExtMatch = calle.match(/^(.+?)\s+(?:NO\.?\s*|NUM\.?\s*|#\s*)?(\d+[A-Z]?)$/i)
+  if (numExtMatch) {
+    calle = numExtMatch[1].trim()
+    numExt = numExtMatch[2]
+  }
+
+  // Try to extract CP from colonia if it ends with 5 digits (with or without space)
+  const cpMatch = colonia.match(/\s*(\d{5})$/)
+  if (cpMatch && !cp) {
+    cp = cpMatch[1]
+    colonia = colonia.replace(/\s*\d{5}$/, '').trim()
+  }
+
+  // Try to extract state abbreviation from municipio (e.g., "TUXTLA GUTIERREZ, CHIS.")
+  if (municipio && !estado) {
+    // Check for comma-separated format: "MUNICIPIO, ESTADO"
+    const commaMatch = municipio.match(/^(.+?),\s*(.+)$/)
+    if (commaMatch) {
+      const possibleMunicipio = commaMatch[1].trim()
+      const possibleEstado = commaMatch[2].trim().toUpperCase()
+      // Check if it's a known abbreviation
+      const fullEstado = stateAbbreviations[possibleEstado]
+      if (fullEstado) {
+        municipio = possibleMunicipio
+        estado = fullEstado
+      } else if (possibleEstado.length > 3) {
+        // Might be full state name
+        municipio = possibleMunicipio
+        estado = possibleEstado
+      }
+    }
+  }
+
+  // Expand state abbreviation if needed
+  if (estado && stateAbbreviations[estado.toUpperCase()]) {
+    estado = stateAbbreviations[estado.toUpperCase()]
+  }
+
+  return {
+    calle,
+    numExt,
+    colonia,
+    cp,
+    municipio,
+    estado
+  }
+})
+
 // User indicates if current address is different from INE
 const addressIsDifferent = ref<'same' | 'different' | ''>('')
-const addressOptions = [
-  { value: 'same', label: 'Sí, vivo en esta dirección' },
-  { value: 'different', label: 'No, mi domicilio actual es diferente' }
-]
 
 // Show address form when: no KYC, address is different, or no INE address
 const showAddressForm = computed(() => {
@@ -323,21 +415,21 @@ const handleSubmit = async () => {
   try {
     // Use INE address if same, otherwise use form data
     if (hasIneAddress.value && addressIsDifferent.value === 'same') {
-      // Use INE address data
-      const ineAddr = kycStore.lockedData.direccion_ine
+      // Use parsed INE address data
+      const addr = parsedIneAddress.value
       onboardingStore.updateStepData('step3', {
-        street: ineAddr.calle?.toUpperCase() || '',
-        ext_number: '', // INE doesn't have this, mark as not provided
+        street: addr.calle?.toUpperCase() || '',
+        ext_number: addr.numExt || '', // Use extracted number from street
         int_number: '',
-        neighborhood: ineAddr.colonia?.toUpperCase() || '',
-        postal_code: ineAddr.cp || '',
-        city: ineAddr.municipio?.toUpperCase() || '',
-        state: ineAddr.estado?.toUpperCase() || '',
-        municipality: ineAddr.municipio?.toUpperCase() || '',
+        neighborhood: addr.colonia?.toUpperCase() || '',
+        postal_code: addr.cp || '',
+        city: addr.municipio?.toUpperCase() || '',
+        state: addr.estado?.toUpperCase() || '',
+        municipality: addr.municipio?.toUpperCase() || '',
         housing_type: form.housing_type,
         years_at_address: form.years_at_address,
         months_at_address: form.months_at_address,
-        is_ine_address: true // Mark as INE address
+        is_ine_address: !addr.numExt // Only mark as INE address if we couldn't extract number
       })
     } else {
       // Use form data (normalize to uppercase)
@@ -382,53 +474,68 @@ const prevStep = () => router.push('/solicitud/paso-2')
       <form v-else class="space-y-4" @submit.prevent="handleSubmit">
         <!-- KYC Verified: Show INE address and ask if different -->
         <template v-if="hasIneAddress">
-          <!-- Locked INE address -->
-          <div class="bg-gray-50 rounded-xl p-4 border border-gray-200">
-            <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide mb-4 flex items-center gap-2">
-              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
-              </svg>
-              Dirección en tu INE
-            </h3>
-            <div class="space-y-3">
-              <LockedField
-                label="Calle"
-                :value="kycStore.lockedData.direccion_ine.calle"
-                format="uppercase"
-              />
-              <div class="grid grid-cols-2 gap-3">
-                <LockedField
-                  label="Colonia"
-                  :value="kycStore.lockedData.direccion_ine.colonia"
-                  format="uppercase"
-                />
-                <LockedField
-                  label="C.P."
-                  :value="kycStore.lockedData.direccion_ine.cp"
-                />
+          <!-- Locked INE address - cleaner card design -->
+          <div class="bg-green-50 border border-green-200 rounded-xl p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+                </svg>
               </div>
-              <div class="grid grid-cols-2 gap-3">
-                <LockedField
-                  label="Municipio"
-                  :value="kycStore.lockedData.direccion_ine.municipio"
-                  format="uppercase"
-                />
-                <LockedField
-                  label="Estado"
-                  :value="kycStore.lockedData.direccion_ine.estado"
-                  format="uppercase"
-                />
+              <div>
+                <p class="text-sm font-medium text-green-800">Dirección en tu INE</p>
+                <p class="text-xs text-green-600">Datos extraídos automáticamente</p>
+              </div>
+            </div>
+
+            <!-- Address as a formatted block -->
+            <div class="bg-white rounded-lg p-4 border border-green-100 space-y-2">
+              <p class="text-gray-900 font-medium">
+                {{ parsedIneAddress.calle }}
+                <span v-if="parsedIneAddress.numExt" class="text-gray-600 font-normal"> No. {{ parsedIneAddress.numExt }}</span>
+              </p>
+              <p class="text-gray-700">{{ parsedIneAddress.colonia }}</p>
+              <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
+                <span v-if="parsedIneAddress.cp" class="flex items-center gap-1">
+                  <span class="text-gray-400">C.P.</span> {{ parsedIneAddress.cp }}
+                </span>
+                <span v-if="parsedIneAddress.municipio">{{ parsedIneAddress.municipio }}</span>
+                <span v-if="parsedIneAddress.estado">{{ parsedIneAddress.estado }}</span>
               </div>
             </div>
           </div>
 
           <!-- Ask if address is the same -->
-          <div class="border-t border-gray-200 pt-4">
-            <AppRadioGroup
-              v-model="addressIsDifferent"
-              :options="addressOptions"
-              label="¿Actualmente vives en esta dirección?"
-            />
+          <div class="pt-4">
+            <p class="text-sm font-medium text-gray-700 mb-3">¿Actualmente vives en esta dirección?</p>
+            <div class="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                class="flex items-center justify-center gap-2 px-4 py-4 rounded-xl border-2 transition-all duration-200 font-medium"
+                :class="addressIsDifferent === 'same'
+                  ? 'bg-green-50 border-green-500 text-green-700'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'"
+                @click="addressIsDifferent = 'same'"
+              >
+                <svg class="w-5 h-5" :class="addressIsDifferent === 'same' ? 'text-green-500' : 'text-gray-400'" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
+                Sí
+              </button>
+              <button
+                type="button"
+                class="flex items-center justify-center gap-2 px-4 py-4 rounded-xl border-2 transition-all duration-200 font-medium"
+                :class="addressIsDifferent === 'different'
+                  ? 'bg-orange-50 border-orange-500 text-orange-700'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'"
+                @click="addressIsDifferent = 'different'"
+              >
+                <svg class="w-5 h-5" :class="addressIsDifferent === 'different' ? 'text-orange-500' : 'text-gray-400'" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                </svg>
+                No
+              </button>
+            </div>
           </div>
 
           <!-- If same address, show housing type and time -->

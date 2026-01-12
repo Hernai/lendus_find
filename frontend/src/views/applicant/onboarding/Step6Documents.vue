@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore, useApplicationStore, useTenantStore } from '@/stores'
+import { useOnboardingStore, useApplicationStore, useTenantStore, useKycStore } from '@/stores'
 import { AppButton } from '@/components/common'
 import { api } from '@/services/api'
 import type { Product } from '@/types'
@@ -10,6 +10,7 @@ const router = useRouter()
 const onboardingStore = useOnboardingStore()
 const applicationStore = useApplicationStore()
 const tenantStore = useTenantStore()
+const kycStore = useKycStore()
 
 interface DocumentUpload {
   id: string
@@ -19,6 +20,7 @@ interface DocumentUpload {
   file: File | null
   preview: string | null
   status: 'pending' | 'uploading' | 'uploaded' | 'error'
+  fromKyc?: boolean // Flag to indicate document was captured during KYC verification
 }
 
 // Document labels for display (maps type codes to human-readable names)
@@ -78,20 +80,135 @@ const documents = reactive<DocumentUpload[]>([])
 
 const error = ref('')
 
+// Check which documents were already captured during KYC
+const getKycDocuments = (): Set<string> => {
+  const kycDocs = new Set<string>()
+
+  // If KYC verification was completed, INE images are already captured
+  if (kycStore.verified && kycStore.lockedData.curp) {
+    if (kycStore.ineFrontImage) {
+      kycDocs.add('ine_front')
+    }
+    if (kycStore.ineBackImage) {
+      kycDocs.add('ine_back')
+    }
+    if (kycStore.selfieImage) {
+      kycDocs.add('selfie')
+    }
+  }
+
+  return kycDocs
+}
+
 // Initialize documents from product on mount
 const initDocuments = () => {
   const requiredDocs = getRequiredDocuments()
-  documents.length = 0 // Clear array
-  documents.push(...requiredDocs)
+  const kycDocs = getKycDocuments()
 
-  // Restore uploaded status from store
+  documents.length = 0 // Clear array
+
+  // Helper to ensure base64 image has data URL prefix
+  const ensureDataUrl = (base64: string): string => {
+    if (base64.startsWith('data:')) {
+      return base64
+    }
+    return `data:image/jpeg;base64,${base64}`
+  }
+
+  // Add documents, marking KYC ones with preview but NOT as uploaded yet
+  // (they will be uploaded to backend by uploadKycDocuments)
+  requiredDocs.forEach(doc => {
+    const docIdLower = doc.id.toLowerCase()
+    if (kycDocs.has(docIdLower)) {
+      // Mark as pending but with KYC flag - will be uploaded automatically
+      doc.fromKyc = true
+      // Set preview from KYC images (ensure proper data URL format)
+      if (docIdLower === 'ine_front' && kycStore.ineFrontImage) {
+        doc.preview = ensureDataUrl(kycStore.ineFrontImage)
+      } else if (docIdLower === 'ine_back' && kycStore.ineBackImage) {
+        doc.preview = ensureDataUrl(kycStore.ineBackImage)
+      } else if (docIdLower === 'selfie' && kycStore.selfieImage) {
+        doc.preview = ensureDataUrl(kycStore.selfieImage)
+      }
+    }
+    documents.push(doc)
+  })
+
+  // Restore uploaded status from store (for non-KYC docs)
   const step6 = onboardingStore.data.step6
   if (step6.documents_uploaded && step6.documents_uploaded.length > 0) {
     documents.forEach(doc => {
-      if (step6.documents_uploaded.includes(doc.id)) {
+      if (!doc.fromKyc && step6.documents_uploaded.includes(doc.id)) {
         doc.status = 'uploaded'
       }
     })
+  }
+}
+
+// Upload KYC images to backend as documents (if not already uploaded)
+const uploadKycDocuments = async () => {
+  const applicationId = applicationStore.currentApplication?.id
+  if (!applicationId) {
+    console.warn('No application ID for KYC document upload')
+    return
+  }
+
+  // Check if KYC is verified and has images
+  if (!kycStore.verified || !kycStore.lockedData.curp) {
+    return
+  }
+
+  const kycImages: { type: string; image: string | null }[] = [
+    { type: 'INE_FRONT', image: kycStore.ineFrontImage },
+    { type: 'INE_BACK', image: kycStore.ineBackImage },
+    { type: 'SELFIE', image: kycStore.selfieImage }
+  ]
+
+  for (const { type, image } of kycImages) {
+    if (!image) continue
+
+    // Find the document in our list (by type, case-insensitive)
+    const doc = documents.find(d => d.id.toUpperCase() === type)
+    if (!doc) continue
+
+    // Only upload if it's a KYC document that hasn't been uploaded yet
+    if (doc.status === 'uploaded') {
+      console.log(`⏭️ Skipping ${type} - already uploaded`)
+      continue
+    }
+
+    try {
+      doc.status = 'uploading'
+
+      // Convert base64 to Blob
+      const base64Data = image.startsWith('data:') ? image.split(',')[1] || image : image
+      const byteCharacters = atob(base64Data)
+      const byteNumbers = new Array(byteCharacters.length)
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i)
+      }
+      const byteArray = new Uint8Array(byteNumbers)
+      const blob = new Blob([byteArray], { type: 'image/jpeg' })
+
+      // Create File from Blob
+      const file = new File([blob], `${type.toLowerCase()}.jpg`, { type: 'image/jpeg' })
+
+      // Upload to backend
+      const formData = new FormData()
+      formData.append('type', type)
+      formData.append('file', file)
+
+      await api.post(`/applications/${applicationId}/documents`, formData)
+
+      doc.status = 'uploaded'
+      doc.fromKyc = true
+      console.log(`✅ KYC document ${type} uploaded successfully`)
+    } catch (e: unknown) {
+      console.error(`Error uploading KYC document ${type}:`, e)
+      // Don't mark as error - user can still upload manually
+      doc.status = 'pending'
+      doc.fromKyc = false
+    }
   }
 }
 
@@ -99,6 +216,8 @@ const initDocuments = () => {
 onMounted(async () => {
   await onboardingStore.init()
   initDocuments()
+  // Auto-upload KYC documents to backend
+  await uploadKycDocuments()
 })
 
 // Auto-save to store when document status changes
@@ -230,7 +349,8 @@ const prevStep = () => router.push('/solicitud/paso-5')
             :class="{
               'border-gray-200': doc.status === 'pending',
               'border-primary-500 bg-primary-50/30': doc.status === 'uploading',
-              'border-green-500 bg-green-50/30': doc.status === 'uploaded',
+              'border-green-500 bg-green-50/30': doc.status === 'uploaded' && !doc.fromKyc,
+              'border-green-600 bg-green-100/50': doc.status === 'uploaded' && doc.fromKyc,
               'border-red-500 bg-red-50/30': doc.status === 'error'
             }"
           >
@@ -282,19 +402,27 @@ const prevStep = () => router.push('/solicitud/paso-5')
               </div>
 
               <div v-else-if="doc.status === 'uploaded'" class="flex items-center gap-3">
-                <span class="text-sm text-green-600 flex items-center gap-1">
+                <span v-if="doc.fromKyc" class="text-sm text-green-600 flex items-center gap-1">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                   </svg>
-                  Subido
+                  Verificado con KYC
                 </span>
-                <button
-                  type="button"
-                  class="text-sm text-gray-500 hover:text-red-600"
-                  @click="removeFile(doc)"
-                >
-                  Eliminar
-                </button>
+                <template v-else>
+                  <span class="text-sm text-green-600 flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Subido
+                  </span>
+                  <button
+                    type="button"
+                    class="text-sm text-gray-500 hover:text-red-600"
+                    @click="removeFile(doc)"
+                  >
+                    Eliminar
+                  </button>
+                </template>
               </div>
             </div>
           </div>
