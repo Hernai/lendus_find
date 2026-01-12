@@ -67,6 +67,10 @@ const apiForm = ref({
   is_sandbox: false
 })
 
+// Visibility toggles for credential fields
+const showApiKey = ref(false)
+const showApiSecret = ref(false)
+
 // Computed tenant info for preview
 const tenantPreviewInfo = ref<TenantPreviewInfo>({ name: '', slug: '' })
 
@@ -175,6 +179,9 @@ const openAddApiModal = () => {
     is_active: true,
     is_sandbox: false
   }
+  // Reset visibility toggles
+  showApiKey.value = false
+  showApiSecret.value = false
   showApiModal.value = true
 }
 
@@ -193,6 +200,9 @@ const openEditApiModal = (config: ApiConfig) => {
     is_active: config.is_active,
     is_sandbox: config.is_sandbox
   }
+  // Reset visibility toggles
+  showApiKey.value = false
+  showApiSecret.value = false
   showApiModal.value = true
 }
 
@@ -217,7 +227,7 @@ const saveApiConfig = async () => {
     if (apiForm.value.account_sid) payload.account_sid = apiForm.value.account_sid
     if (apiForm.value.auth_token) payload.auth_token = apiForm.value.auth_token
 
-    await api.post('/admin/config/api', payload)
+    await api.post('/admin/config/api-configs', payload)
     await loadConfig()
     showApiModal.value = false
     saveMessage.value = 'Configuracion guardada'
@@ -233,7 +243,7 @@ const deleteApiConfig = async (config: ApiConfig) => {
   if (!confirm('¿Eliminar esta configuracion?')) return
 
   try {
-    await api.delete(`/admin/config/api/${config.id}`)
+    await api.delete(`/admin/config/api-configs/${config.id}`)
     await loadConfig()
     saveMessage.value = 'Configuracion eliminada'
     setTimeout(() => saveMessage.value = '', 3000)
@@ -244,7 +254,7 @@ const deleteApiConfig = async (config: ApiConfig) => {
 
 const testApiConfig = async (config: ApiConfig) => {
   try {
-    const response = await api.post<{ success: boolean; message: string }>(`/admin/config/api/${config.id}/test`)
+    const response = await api.post<{ success: boolean; message: string }>(`/admin/config/api-configs/${config.id}/test`)
     if (response.data.success) {
       saveMessage.value = 'Conexion exitosa'
     } else {
@@ -271,15 +281,50 @@ const getProviderFields = (provider: string) => {
       return ['api_key', 'from_email']
     case 'mailgun':
       return ['api_key', 'domain', 'from_email']
+    case 'nubarium':
     case 'mati':
     case 'incode':
     case 'truora':
+    case 'onfido':
+    case 'jumio':
       return ['api_key', 'api_secret']
     case 'buro_credito':
     case 'circulo_credito':
       return ['api_key', 'api_secret']
     default:
       return ['api_key']
+  }
+}
+
+// Get provider-specific labels for fields
+const getProviderLabels = (provider: string) => {
+  switch (provider) {
+    case 'nubarium':
+      return {
+        api_key: 'Usuario (Username)',
+        api_secret: 'Contraseña (Password)'
+      }
+    default:
+      return {
+        api_key: 'API Key',
+        api_secret: 'API Secret'
+      }
+  }
+}
+
+// Get provider-specific help text
+const getProviderHelpText = (provider: string) => {
+  switch (provider) {
+    case 'nubarium':
+      return {
+        api_key: 'Usuario proporcionado por Nubarium para autenticación Basic Auth',
+        api_secret: 'Contraseña proporcionada por Nubarium para autenticación Basic Auth'
+      }
+    default:
+      return {
+        api_key: null,
+        api_secret: null
+      }
   }
 }
 </script>
@@ -630,23 +675,59 @@ const getProviderFields = (provider: string) => {
             <!-- Dynamic fields based on provider -->
             <div v-if="apiForm.provider" class="space-y-4">
               <div v-if="getProviderFields(apiForm.provider).includes('api_key')">
-                <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-                <input
-                  v-model="apiForm.api_key"
-                  type="password"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  :placeholder="editingApiConfig ? '(sin cambios)' : 'sk-...'"
-                />
+                <label class="block text-sm font-medium text-gray-700 mb-1">{{ getProviderLabels(apiForm.provider).api_key }}</label>
+                <div class="relative">
+                  <input
+                    v-model="apiForm.api_key"
+                    :type="showApiKey ? 'text' : 'password'"
+                    class="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    :placeholder="editingApiConfig ? '(sin cambios)' : apiForm.provider === 'nubarium' ? 'ej: nubarium' : 'sk-...'"
+                  />
+                  <button
+                    type="button"
+                    @click="showApiKey = !showApiKey"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                  >
+                    <svg v-if="!showApiKey" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                  </button>
+                </div>
+                <p v-if="getProviderHelpText(apiForm.provider).api_key" class="mt-1 text-xs text-gray-500">
+                  {{ getProviderHelpText(apiForm.provider).api_key }}
+                </p>
               </div>
 
               <div v-if="getProviderFields(apiForm.provider).includes('api_secret')">
-                <label class="block text-sm font-medium text-gray-700 mb-1">API Secret</label>
-                <input
-                  v-model="apiForm.api_secret"
-                  type="password"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  :placeholder="editingApiConfig ? '(sin cambios)' : '...'"
-                />
+                <label class="block text-sm font-medium text-gray-700 mb-1">{{ getProviderLabels(apiForm.provider).api_secret }}</label>
+                <div class="relative">
+                  <input
+                    v-model="apiForm.api_secret"
+                    :type="showApiSecret ? 'text' : 'password'"
+                    class="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    :placeholder="editingApiConfig ? '(sin cambios)' : '...'"
+                  />
+                  <button
+                    type="button"
+                    @click="showApiSecret = !showApiSecret"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                  >
+                    <svg v-if="!showApiSecret" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                  </button>
+                </div>
+                <p v-if="getProviderHelpText(apiForm.provider).api_secret" class="mt-1 text-xs text-gray-500">
+                  {{ getProviderHelpText(apiForm.provider).api_secret }}
+                </p>
               </div>
 
               <div v-if="getProviderFields(apiForm.provider).includes('account_sid')">

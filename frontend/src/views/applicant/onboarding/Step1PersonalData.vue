@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore, useApplicationStore, useTenantStore } from '@/stores'
+import { useOnboardingStore, useApplicationStore, useTenantStore, useKycStore } from '@/stores'
 import { AppButton, AppInput, AppRadioGroup, AppSelect, AppDatePicker } from '@/components/common'
+import LockedField from '@/components/common/LockedField.vue'
 import type { PaymentFrequency } from '@/types'
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
 const applicationStore = useApplicationStore()
 const tenantStore = useTenantStore()
+const kycStore = useKycStore()
+
+// Check if KYC is verified
+const isKycVerified = computed(() => kycStore.verified && !!kycStore.lockedData.curp)
 
 // Local form state (reactive copy from store)
 const form = reactive({
@@ -39,19 +44,41 @@ onMounted(async () => {
   await onboardingStore.init()
 
   const step1 = onboardingStore.data.step1
-  form.first_name = step1.first_name
-  form.last_name = step1.last_name
-  form.second_last_name = step1.second_last_name
-  form.birth_date = step1.birth_date
-  form.gender = step1.gender
-  form.birth_state = step1.birth_state
-  form.nationality = step1.nationality
 
-  // Determine if mexican based on nationality
-  if (step1.nationality === 'MX' || step1.nationality === '') {
-    form.is_mexican = step1.first_name ? 'SI' : ''
+  // If KYC is verified, use locked data from KYC store
+  if (isKycVerified.value) {
+    form.first_name = kycStore.lockedData.nombres || step1.first_name
+    form.last_name = kycStore.lockedData.apellido_paterno || step1.last_name
+    form.second_last_name = kycStore.lockedData.apellido_materno || step1.second_last_name
+    form.birth_date = kycStore.lockedData.fecha_nacimiento || step1.birth_date
+    // Convert KYC gender format (H/M) to form format (M/F)
+    if (kycStore.lockedData.sexo === 'H') {
+      form.gender = 'M'
+    } else if (kycStore.lockedData.sexo === 'M') {
+      form.gender = 'F'
+    } else {
+      form.gender = step1.gender
+    }
+    // KYC verified = Mexican by definition (INE)
+    form.is_mexican = 'SI'
+    // Use entidad de nacimiento from CURP if available
+    form.birth_state = kycStore.lockedData.entidad_nacimiento || step1.birth_state
+    form.nationality = 'MX'
   } else {
-    form.is_mexican = 'NO'
+    form.first_name = step1.first_name
+    form.last_name = step1.last_name
+    form.second_last_name = step1.second_last_name
+    form.birth_date = step1.birth_date
+    form.gender = step1.gender
+    form.birth_state = step1.birth_state
+    form.nationality = step1.nationality
+
+    // Determine if mexican based on nationality
+    if (step1.nationality === 'MX' || step1.nationality === '') {
+      form.is_mexican = step1.first_name ? 'SI' : ''
+    } else {
+      form.is_mexican = 'NO'
+    }
   }
 })
 
@@ -79,40 +106,40 @@ const mexicanOptions = [
   { value: 'NO', label: 'No' }
 ]
 
-// Entidades federativas de México
+// Entidades federativas de México (códigos CURP)
 const mexicanStates = [
-  { value: 'AGS', label: 'Aguascalientes' },
+  { value: 'AS', label: 'Aguascalientes' },
   { value: 'BC', label: 'Baja California' },
-  { value: 'BCS', label: 'Baja California Sur' },
-  { value: 'CAM', label: 'Campeche' },
-  { value: 'CHIS', label: 'Chiapas' },
-  { value: 'CHIH', label: 'Chihuahua' },
-  { value: 'CDMX', label: 'Ciudad de México' },
-  { value: 'COAH', label: 'Coahuila' },
-  { value: 'COL', label: 'Colima' },
-  { value: 'DGO', label: 'Durango' },
-  { value: 'GTO', label: 'Guanajuato' },
-  { value: 'GRO', label: 'Guerrero' },
-  { value: 'HGO', label: 'Hidalgo' },
-  { value: 'JAL', label: 'Jalisco' },
-  { value: 'MEX', label: 'Estado de México' },
-  { value: 'MICH', label: 'Michoacán' },
-  { value: 'MOR', label: 'Morelos' },
-  { value: 'NAY', label: 'Nayarit' },
+  { value: 'BS', label: 'Baja California Sur' },
+  { value: 'CC', label: 'Campeche' },
+  { value: 'CS', label: 'Chiapas' },
+  { value: 'CH', label: 'Chihuahua' },
+  { value: 'DF', label: 'Ciudad de México' },
+  { value: 'CL', label: 'Coahuila' },
+  { value: 'CM', label: 'Colima' },
+  { value: 'DG', label: 'Durango' },
+  { value: 'GT', label: 'Guanajuato' },
+  { value: 'GR', label: 'Guerrero' },
+  { value: 'HG', label: 'Hidalgo' },
+  { value: 'JC', label: 'Jalisco' },
+  { value: 'MC', label: 'Estado de México' },
+  { value: 'MN', label: 'Michoacán' },
+  { value: 'MS', label: 'Morelos' },
+  { value: 'NT', label: 'Nayarit' },
   { value: 'NL', label: 'Nuevo León' },
-  { value: 'OAX', label: 'Oaxaca' },
-  { value: 'PUE', label: 'Puebla' },
-  { value: 'QRO', label: 'Querétaro' },
-  { value: 'QROO', label: 'Quintana Roo' },
-  { value: 'SLP', label: 'San Luis Potosí' },
-  { value: 'SIN', label: 'Sinaloa' },
-  { value: 'SON', label: 'Sonora' },
-  { value: 'TAB', label: 'Tabasco' },
-  { value: 'TAM', label: 'Tamaulipas' },
-  { value: 'TLAX', label: 'Tlaxcala' },
-  { value: 'VER', label: 'Veracruz' },
-  { value: 'YUC', label: 'Yucatán' },
-  { value: 'ZAC', label: 'Zacatecas' },
+  { value: 'OC', label: 'Oaxaca' },
+  { value: 'PL', label: 'Puebla' },
+  { value: 'QT', label: 'Querétaro' },
+  { value: 'QR', label: 'Quintana Roo' },
+  { value: 'SP', label: 'San Luis Potosí' },
+  { value: 'SL', label: 'Sinaloa' },
+  { value: 'SR', label: 'Sonora' },
+  { value: 'TC', label: 'Tabasco' },
+  { value: 'TS', label: 'Tamaulipas' },
+  { value: 'TL', label: 'Tlaxcala' },
+  { value: 'VZ', label: 'Veracruz' },
+  { value: 'YN', label: 'Yucatán' },
+  { value: 'ZS', label: 'Zacatecas' },
   { value: 'NE', label: 'Nacido en el Extranjero' }
 ]
 
@@ -149,68 +176,71 @@ const isForeigner = computed(() => form.is_mexican === 'NO')
 const validate = () => {
   let isValid = true
 
-  if (!form.first_name.trim()) {
-    errors.first_name = 'El nombre es requerido'
-    isValid = false
-  } else {
-    errors.first_name = ''
-  }
-
-  if (!form.last_name.trim()) {
-    errors.last_name = 'El primer apellido es requerido'
-    isValid = false
-  } else {
-    errors.last_name = ''
-  }
-
-  if (!form.birth_date) {
-    errors.birth_date = 'La fecha de nacimiento es requerida'
-    isValid = false
-  } else {
-    // Validate age (must be at least 18 years old)
-    const birthDate = new Date(form.birth_date)
-    const today = new Date()
-    let age = today.getFullYear() - birthDate.getFullYear()
-    const monthDiff = today.getMonth() - birthDate.getMonth()
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--
-    }
-    if (age < 18) {
-      errors.birth_date = 'Debes tener al menos 18 años para solicitar un crédito'
+  // If KYC is verified, locked fields are already validated
+  if (!isKycVerified.value) {
+    if (!form.first_name.trim()) {
+      errors.first_name = 'El nombre es requerido'
       isValid = false
     } else {
-      errors.birth_date = ''
+      errors.first_name = ''
+    }
+
+    if (!form.last_name.trim()) {
+      errors.last_name = 'El primer apellido es requerido'
+      isValid = false
+    } else {
+      errors.last_name = ''
+    }
+
+    if (!form.birth_date) {
+      errors.birth_date = 'La fecha de nacimiento es requerida'
+      isValid = false
+    } else {
+      // Validate age (must be at least 18 years old)
+      const birthDate = new Date(form.birth_date)
+      const today = new Date()
+      let age = today.getFullYear() - birthDate.getFullYear()
+      const monthDiff = today.getMonth() - birthDate.getMonth()
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--
+      }
+      if (age < 18) {
+        errors.birth_date = 'Debes tener al menos 18 años para solicitar un crédito'
+        isValid = false
+      } else {
+        errors.birth_date = ''
+      }
+    }
+
+    if (!form.gender) {
+      errors.gender = 'Selecciona tu género'
+      isValid = false
+    } else {
+      errors.gender = ''
+    }
+
+    if (!form.is_mexican) {
+      errors.is_mexican = 'Indica si eres mexicano'
+      isValid = false
+    } else {
+      errors.is_mexican = ''
+    }
+
+    // Validar nacionalidad para extranjeros
+    if (isForeigner.value && !form.nationality) {
+      errors.nationality = 'Selecciona tu nacionalidad'
+      isValid = false
+    } else {
+      errors.nationality = ''
     }
   }
 
-  if (!form.gender) {
-    errors.gender = 'Selecciona tu género'
-    isValid = false
-  } else {
-    errors.gender = ''
-  }
-
-  if (!form.is_mexican) {
-    errors.is_mexican = 'Indica si eres mexicano'
-    isValid = false
-  } else {
-    errors.is_mexican = ''
-  }
-
-  // Validar entidad de nacimiento para mexicanos
+  // Validar entidad de nacimiento para mexicanos (siempre requerido, incluso con KYC)
   if (isMexican.value && !form.birth_state) {
     errors.birth_state = 'Selecciona tu entidad de nacimiento'
     isValid = false
   } else {
     errors.birth_state = ''
-  }
-
-  // Validar nacionalidad para extranjeros
-  if (isForeigner.value && !form.nationality) {
-    errors.nationality = 'Selecciona tu nacionalidad'
-    isValid = false
-  } else {
-    errors.nationality = ''
   }
 
   return isValid
@@ -338,61 +368,141 @@ const handleSubmit = async () => {
       </div>
 
       <form v-else class="space-y-4" @submit.prevent="handleSubmit">
-        <AppInput
-          v-model="form.first_name"
-          label="Nombre(s)"
-          placeholder="JUAN CARLOS"
-          :error="errors.first_name"
-          uppercase
-          required
-        />
+        <!-- KYC Verified: Show locked fields -->
+        <template v-if="isKycVerified">
+          <!-- Verified badge -->
+          <div class="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3 mb-2">
+            <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-sm font-medium text-green-800">Identidad verificada</p>
+              <p class="text-xs text-green-600">Tus datos fueron extraídos de tu INE</p>
+            </div>
+          </div>
 
-        <div class="grid grid-cols-2 gap-3">
+          <!-- Locked personal data fields -->
+          <div class="space-y-3">
+            <LockedField
+              label="Nombre(s)"
+              :value="form.first_name"
+              format="uppercase"
+            />
+            <div class="grid grid-cols-2 gap-3">
+              <LockedField
+                label="Primer Apellido"
+                :value="form.last_name"
+                format="uppercase"
+              />
+              <LockedField
+                label="Segundo Apellido"
+                :value="form.second_last_name"
+                format="uppercase"
+              />
+            </div>
+            <LockedField
+              label="Fecha de nacimiento"
+              :value="form.birth_date"
+              format="date"
+            />
+            <LockedField
+              label="Género"
+              :value="form.gender === 'M' ? 'Masculino' : form.gender === 'F' ? 'Femenino' : '-'"
+            />
+            <LockedField
+              label="CURP"
+              :value="kycStore.lockedData.curp"
+              format="curp"
+            />
+          </div>
+
+          <!-- Entidad de nacimiento: locked if from CURP, editable otherwise -->
+          <LockedField
+            v-if="kycStore.lockedData.entidad_nacimiento"
+            label="Entidad de nacimiento"
+            :value="mexicanStates.find(s => s.value === form.birth_state)?.label || form.birth_state"
+            format="uppercase"
+            :verified="true"
+            hint="Extraído de tu CURP"
+          />
+          <template v-else>
+            <!-- Divider -->
+            <div class="border-t border-gray-200 my-6 pt-4">
+              <p class="text-sm text-gray-500 mb-4">Completa la siguiente información:</p>
+            </div>
+
+            <!-- Editable: Birth state (not in INE OCR usually) -->
+            <AppSelect
+              v-model="form.birth_state"
+              :options="mexicanStates"
+              label="Entidad de nacimiento"
+              placeholder="Selecciona tu estado"
+              :error="errors.birth_state"
+              required
+            />
+          </template>
+        </template>
+
+        <!-- Normal flow: All fields editable -->
+        <template v-else>
           <AppInput
-            v-model="form.last_name"
-            label="Primer Apellido"
-            placeholder="PÉREZ"
-            :error="errors.last_name"
+            v-model="form.first_name"
+            label="Nombre(s)"
+            placeholder="JUAN CARLOS"
+            :error="errors.first_name"
             uppercase
             required
           />
-          <AppInput
-            v-model="form.second_last_name"
-            label="Segundo Apellido"
-            placeholder="GARCÍA"
-            uppercase
+
+          <div class="grid grid-cols-2 gap-3">
+            <AppInput
+              v-model="form.last_name"
+              label="Primer Apellido"
+              placeholder="PÉREZ"
+              :error="errors.last_name"
+              uppercase
+              required
+            />
+            <AppInput
+              v-model="form.second_last_name"
+              label="Segundo Apellido"
+              placeholder="GARCÍA"
+              uppercase
+            />
+          </div>
+
+          <AppDatePicker
+            v-model="form.birth_date"
+            label="Fecha de nacimiento"
+            placeholder="Selecciona tu fecha"
+            :error="errors.birth_date"
+            hint="Debes tener al menos 18 años"
+            required
           />
-        </div>
 
-        <AppDatePicker
-          v-model="form.birth_date"
-          label="Fecha de nacimiento"
-          placeholder="Selecciona tu fecha"
-          :error="errors.birth_date"
-          hint="Debes tener al menos 18 años"
-          required
-        />
+          <AppRadioGroup
+            v-model="form.gender"
+            :options="genderOptions"
+            label="Género"
+            :error="errors.gender"
+            required
+          />
 
-        <AppRadioGroup
-          v-model="form.gender"
-          :options="genderOptions"
-          label="Género"
-          :error="errors.gender"
-          required
-        />
+          <!-- Nacionalidad -->
+          <AppRadioGroup
+            v-model="form.is_mexican"
+            :options="mexicanOptions"
+            label="¿Eres mexicano por nacimiento?"
+            :error="errors.is_mexican"
+            required
+          />
+        </template>
 
-        <!-- Nacionalidad -->
-        <AppRadioGroup
-          v-model="form.is_mexican"
-          :options="mexicanOptions"
-          label="¿Eres mexicano por nacimiento?"
-          :error="errors.is_mexican"
-          required
-        />
-
-        <!-- Entidad de nacimiento (solo mexicanos) -->
+        <!-- Entidad de nacimiento (solo mexicanos y sin KYC verificado) -->
         <AppSelect
-          v-if="isMexican"
+          v-if="isMexican && !isKycVerified"
           v-model="form.birth_state"
           :options="mexicanStates"
           label="Entidad de nacimiento"
@@ -403,7 +513,7 @@ const handleSubmit = async () => {
 
         <!-- Nacionalidad (solo extranjeros) -->
         <AppSelect
-          v-if="isForeigner"
+          v-if="isForeigner && !isKycVerified"
           v-model="form.nationality"
           :options="countries"
           label="Nacionalidad"
@@ -413,7 +523,7 @@ const handleSubmit = async () => {
         />
 
         <!-- Nota informativa para extranjeros -->
-        <div v-if="isForeigner" class="bg-blue-50 rounded-xl p-4 flex gap-3">
+        <div v-if="isForeigner && !isKycVerified" class="bg-blue-50 rounded-xl p-4 flex gap-3">
           <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>

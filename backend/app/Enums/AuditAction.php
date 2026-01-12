@@ -31,6 +31,17 @@ enum AuditAction: string
     case REFERENCE_VERIFIED = 'REFERENCE_VERIFIED';
     case STEP_COMPLETED = 'STEP_COMPLETED';
 
+    // KYC Validation Actions
+    case KYC_CURP_VALIDATION = 'kyc.curp_validation';
+    case KYC_CURP_LOOKUP = 'kyc.curp_lookup';
+    case KYC_RFC_VALIDATION = 'kyc.rfc_validation';
+    case KYC_INE_VALIDATION = 'kyc.ine_validation';
+    case KYC_CEP_VALIDATION = 'kyc.cep_validation';
+    case KYC_OFAC_CHECK = 'kyc.ofac_check';
+    case KYC_PLD_BLACKLISTS_CHECK = 'kyc.pld_blacklists_check';
+    case KYC_IMSS_HISTORY = 'kyc.imss_history';
+    case KYC_CEDULA_VALIDATION = 'kyc.cedula_validation';
+
     public function label(): string
     {
         return match ($this) {
@@ -60,6 +71,15 @@ enum AuditAction: string
             self::DATA_CORRECTED => 'Dato corregido',
             self::REFERENCE_VERIFIED => 'Referencia verificada',
             self::STEP_COMPLETED => 'Paso completado',
+            self::KYC_CURP_VALIDATION => 'Validación de CURP',
+            self::KYC_CURP_LOOKUP => 'Búsqueda de CURP',
+            self::KYC_RFC_VALIDATION => 'Validación de RFC',
+            self::KYC_INE_VALIDATION => 'Validación de INE',
+            self::KYC_CEP_VALIDATION => 'Validación de CEP',
+            self::KYC_OFAC_CHECK => 'Consulta OFAC',
+            self::KYC_PLD_BLACKLISTS_CHECK => 'Consulta Listas Negras PLD',
+            self::KYC_IMSS_HISTORY => 'Historial IMSS',
+            self::KYC_CEDULA_VALIDATION => 'Validación de Cédula Profesional',
         };
     }
 

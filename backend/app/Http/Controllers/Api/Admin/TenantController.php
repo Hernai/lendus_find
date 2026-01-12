@@ -466,21 +466,47 @@ class TenantController extends Controller
             return response()->json(['message' => 'No autorizado'], 403);
         }
 
-        // TODO: Implement actual API testing per provider
-        $success = $config->hasCredentials();
-        $error = $success ? null : 'Credenciales incompletas';
+        // First check if credentials exist
+        if (!$config->hasCredentials()) {
+            $config->update([
+                'last_tested_at' => now(),
+                'last_test_success' => false,
+                'last_test_error' => 'Credenciales incompletas',
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Credenciales incompletas',
+                'data' => $config->toApiArray()
+            ]);
+        }
+
+        // Test connection based on provider
+        $result = match ($config->provider) {
+            'nubarium' => $this->testNubariumConnection($tenant),
+            default => ['success' => true, 'message' => 'Credenciales configuradas correctamente']
+        };
 
         $config->update([
             'last_tested_at' => now(),
-            'last_test_success' => $success,
-            'last_test_error' => $error,
+            'last_test_success' => $result['success'],
+            'last_test_error' => $result['success'] ? null : $result['message'],
         ]);
 
         return response()->json([
-            'success' => $success,
-            'message' => $success ? 'Conexión exitosa' : $error,
-            'data' => $config->toApiArray()
+            'success' => $result['success'],
+            'message' => $result['message'],
+            'data' => $config->fresh()->toApiArray()
         ]);
+    }
+
+    /**
+     * Test Nubarium connection.
+     */
+    private function testNubariumConnection(Tenant $tenant): array
+    {
+        $service = new \App\Services\ExternalApi\NubariumService($tenant);
+        return $service->testConnection();
     }
 
     /**

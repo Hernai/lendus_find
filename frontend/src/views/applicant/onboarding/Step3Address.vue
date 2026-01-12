@@ -1,11 +1,33 @@
 <script setup lang="ts">
 import { reactive, ref, watch, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore } from '@/stores'
-import { AppButton, AppInput, AppSelect } from '@/components/common'
+import { useOnboardingStore, useKycStore } from '@/stores'
+import { AppButton, AppInput, AppSelect, AppRadioGroup } from '@/components/common'
+import LockedField from '@/components/common/LockedField.vue'
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
+const kycStore = useKycStore()
+
+// Check if KYC is verified and has address data
+const isKycVerified = computed(() => kycStore.verified && !!kycStore.lockedData.curp)
+const hasIneAddress = computed(() =>
+  isKycVerified.value && !!kycStore.lockedData.direccion_ine.calle
+)
+
+// User indicates if current address is different from INE
+const addressIsDifferent = ref<'same' | 'different' | ''>('')
+const addressOptions = [
+  { value: 'same', label: 'Sí, vivo en esta dirección' },
+  { value: 'different', label: 'No, mi domicilio actual es diferente' }
+]
+
+// Show address form when: no KYC, address is different, or no INE address
+const showAddressForm = computed(() => {
+  if (!isKycVerified.value) return true
+  if (!hasIneAddress.value) return true
+  return addressIsDifferent.value === 'different'
+})
 
 const form = reactive({
   postal_code: '',
@@ -213,48 +235,64 @@ const stateOptions = [
 const validate = () => {
   let isValid = true
 
-  if (!form.postal_code || form.postal_code.length !== 5) {
-    errors.postal_code = 'Código postal inválido (5 dígitos)'
-    isValid = false
-  } else {
+  // If using INE address, only validate housing type and residence time
+  if (hasIneAddress.value && addressIsDifferent.value === 'same') {
+    // Clear address errors since we're using INE data
     errors.postal_code = ''
-  }
-
-  if (!form.state) {
-    errors.state = 'El estado es requerido'
-    isValid = false
-  } else {
     errors.state = ''
-  }
-
-  if (!form.municipality.trim()) {
-    errors.municipality = 'El municipio es requerido'
-    isValid = false
-  } else {
     errors.municipality = ''
-  }
-
-  if (!form.neighborhood.trim()) {
-    errors.neighborhood = 'La colonia es requerida'
-    isValid = false
-  } else {
     errors.neighborhood = ''
-  }
-
-  if (!form.street.trim()) {
-    errors.street = 'La calle es requerida'
-    isValid = false
-  } else {
     errors.street = ''
-  }
-
-  if (!form.ext_number.trim()) {
-    errors.ext_number = 'El número exterior es requerido'
-    isValid = false
-  } else {
     errors.ext_number = ''
+  } else if (hasIneAddress.value && addressIsDifferent.value === '') {
+    // User hasn't selected if address is same or different
+    return false
+  } else {
+    // Validate full address form
+    if (!form.postal_code || form.postal_code.length !== 5) {
+      errors.postal_code = 'Código postal inválido (5 dígitos)'
+      isValid = false
+    } else {
+      errors.postal_code = ''
+    }
+
+    if (!form.state) {
+      errors.state = 'El estado es requerido'
+      isValid = false
+    } else {
+      errors.state = ''
+    }
+
+    if (!form.municipality.trim()) {
+      errors.municipality = 'El municipio es requerido'
+      isValid = false
+    } else {
+      errors.municipality = ''
+    }
+
+    if (!form.neighborhood.trim()) {
+      errors.neighborhood = 'La colonia es requerida'
+      isValid = false
+    } else {
+      errors.neighborhood = ''
+    }
+
+    if (!form.street.trim()) {
+      errors.street = 'La calle es requerida'
+      isValid = false
+    } else {
+      errors.street = ''
+    }
+
+    if (!form.ext_number.trim()) {
+      errors.ext_number = 'El número exterior es requerido'
+      isValid = false
+    } else {
+      errors.ext_number = ''
+    }
   }
 
+  // Always validate housing type and residence time
   if (!form.housing_type) {
     errors.housing_type = 'Selecciona el tipo de vivienda'
     isValid = false
@@ -283,20 +321,41 @@ const handleSubmit = async () => {
   if (!validate()) return
 
   try {
-    // Normalize data to uppercase before saving
-    onboardingStore.updateStepData('step3', {
-      street: form.street.toUpperCase(),
-      ext_number: form.ext_number,
-      int_number: form.int_number || '',
-      neighborhood: form.neighborhood.toUpperCase(),
-      postal_code: form.postal_code,
-      city: form.city || form.municipality.toUpperCase(),
-      state: form.state,
-      municipality: form.municipality.toUpperCase(),
-      housing_type: form.housing_type,
-      years_at_address: form.years_at_address,
-      months_at_address: form.months_at_address
-    })
+    // Use INE address if same, otherwise use form data
+    if (hasIneAddress.value && addressIsDifferent.value === 'same') {
+      // Use INE address data
+      const ineAddr = kycStore.lockedData.direccion_ine
+      onboardingStore.updateStepData('step3', {
+        street: ineAddr.calle?.toUpperCase() || '',
+        ext_number: '', // INE doesn't have this, mark as not provided
+        int_number: '',
+        neighborhood: ineAddr.colonia?.toUpperCase() || '',
+        postal_code: ineAddr.cp || '',
+        city: ineAddr.municipio?.toUpperCase() || '',
+        state: ineAddr.estado?.toUpperCase() || '',
+        municipality: ineAddr.municipio?.toUpperCase() || '',
+        housing_type: form.housing_type,
+        years_at_address: form.years_at_address,
+        months_at_address: form.months_at_address,
+        is_ine_address: true // Mark as INE address
+      })
+    } else {
+      // Use form data (normalize to uppercase)
+      onboardingStore.updateStepData('step3', {
+        street: form.street.toUpperCase(),
+        ext_number: form.ext_number,
+        int_number: form.int_number || '',
+        neighborhood: form.neighborhood.toUpperCase(),
+        postal_code: form.postal_code,
+        city: form.city || form.municipality.toUpperCase(),
+        state: form.state,
+        municipality: form.municipality.toUpperCase(),
+        housing_type: form.housing_type,
+        years_at_address: form.years_at_address,
+        months_at_address: form.months_at_address,
+        is_ine_address: false
+      })
+    }
 
     // Save step 3 explicitly
     await onboardingStore.completeStep(3)
@@ -321,16 +380,130 @@ const prevStep = () => router.push('/solicitud/paso-2')
       </div>
 
       <form v-else class="space-y-4" @submit.prevent="handleSubmit">
-        <AppInput
-          v-model="form.postal_code"
-          type="tel"
-          label="Código Postal"
-          placeholder="00000"
-          :error="errors.postal_code"
-          :maxlength="5"
-          inputmode="numeric"
-          required
-        />
+        <!-- KYC Verified: Show INE address and ask if different -->
+        <template v-if="hasIneAddress">
+          <!-- Locked INE address -->
+          <div class="bg-gray-50 rounded-xl p-4 border border-gray-200">
+            <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide mb-4 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+              </svg>
+              Dirección en tu INE
+            </h3>
+            <div class="space-y-3">
+              <LockedField
+                label="Calle"
+                :value="kycStore.lockedData.direccion_ine.calle"
+                format="uppercase"
+              />
+              <div class="grid grid-cols-2 gap-3">
+                <LockedField
+                  label="Colonia"
+                  :value="kycStore.lockedData.direccion_ine.colonia"
+                  format="uppercase"
+                />
+                <LockedField
+                  label="C.P."
+                  :value="kycStore.lockedData.direccion_ine.cp"
+                />
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <LockedField
+                  label="Municipio"
+                  :value="kycStore.lockedData.direccion_ine.municipio"
+                  format="uppercase"
+                />
+                <LockedField
+                  label="Estado"
+                  :value="kycStore.lockedData.direccion_ine.estado"
+                  format="uppercase"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Ask if address is the same -->
+          <div class="border-t border-gray-200 pt-4">
+            <AppRadioGroup
+              v-model="addressIsDifferent"
+              :options="addressOptions"
+              label="¿Actualmente vives en esta dirección?"
+            />
+          </div>
+
+          <!-- If same address, show housing type and time -->
+          <template v-if="addressIsDifferent === 'same'">
+            <AppSelect
+              v-model="form.housing_type"
+              :options="housingTypeOptions"
+              label="Tipo de vivienda"
+              placeholder="Selecciona una opción"
+              :error="errors.housing_type"
+              required
+            />
+
+            <!-- Tiempo en el domicilio -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">
+                Tiempo en este domicilio <span class="text-red-500">*</span>
+              </label>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <div class="relative">
+                    <input
+                      v-model.number="form.years_at_address"
+                      type="number"
+                      min="0"
+                      max="99"
+                      placeholder="0"
+                      class="w-full px-4 py-3 pr-16 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                      inputmode="numeric"
+                    >
+                    <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">años</span>
+                  </div>
+                </div>
+                <div>
+                  <div class="relative">
+                    <input
+                      v-model.number="form.months_at_address"
+                      type="number"
+                      min="0"
+                      max="11"
+                      placeholder="0"
+                      class="w-full px-4 py-3 pr-20 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                      inputmode="numeric"
+                    >
+                    <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">meses</span>
+                  </div>
+                </div>
+              </div>
+              <p v-if="errors.residence_time" class="mt-1 text-sm text-red-600">
+                {{ errors.residence_time }}
+              </p>
+              <p v-else class="mt-1 text-xs text-gray-500">
+                Ej: 2 años y 6 meses
+              </p>
+            </div>
+          </template>
+
+          <!-- If different address, show divider -->
+          <div v-if="addressIsDifferent === 'different'" class="border-t border-gray-200 pt-4">
+            <p class="text-sm text-gray-500 mb-4">Ingresa tu domicilio actual:</p>
+          </div>
+        </template>
+
+        <!-- Address form (shown when no KYC or address is different) -->
+        <template v-if="showAddressForm">
+          <AppInput
+            v-model="form.postal_code"
+            type="tel"
+            label="Código Postal"
+            placeholder="00000"
+            :error="errors.postal_code"
+            :maxlength="5"
+            inputmode="numeric"
+            required
+          />
 
         <div v-if="isLoadingPostalCode" class="flex items-center gap-2 text-sm text-gray-500">
           <div class="animate-spin w-4 h-4 border-2 border-primary-600 border-t-transparent rounded-full" />
@@ -494,6 +667,7 @@ const prevStep = () => router.push('/solicitud/paso-2')
     ✓ Guardado automáticamente
   </span>
           </div>
+        </template>
         </template>
 
         <!-- Sticky Footer -->

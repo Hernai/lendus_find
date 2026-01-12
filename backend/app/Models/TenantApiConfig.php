@@ -136,8 +136,8 @@ class TenantApiConfig extends Model
         return match ($this->provider) {
             'twilio' => !empty($this->account_sid) && !empty($this->auth_token),
             'mailgun' => !empty($this->api_key) && !empty($this->domain),
-            'sendgrid', 'nubarium', 'mati' => !empty($this->api_key),
-            'circulo_credito' => !empty($this->api_key) && !empty($this->api_secret),
+            'sendgrid', 'mati' => !empty($this->api_key),
+            'nubarium', 'circulo_credito' => !empty($this->api_key) && !empty($this->api_secret),
             default => !empty($this->api_key),
         };
     }

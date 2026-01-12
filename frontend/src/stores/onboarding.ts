@@ -83,6 +83,28 @@ interface OnboardingData {
 
 const STORAGE_KEY = 'onboarding_draft'
 
+/**
+ * Convert date from DD/MM/YYYY format (OCR) to YYYY-MM-DD format (API)
+ * Handles multiple input formats: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD
+ */
+const formatDateForApi = (dateStr: string): string => {
+  if (!dateStr) return ''
+
+  // Already in YYYY-MM-DD format
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return dateStr
+  }
+
+  // DD/MM/YYYY or DD-MM-YYYY format (common from OCR)
+  if (/^\d{2}[/-]\d{2}[/-]\d{4}$/.test(dateStr)) {
+    const parts = dateStr.split(/[/-]/)
+    return `${parts[2]}-${parts[1]}-${parts[0]}`
+  }
+
+  // Return as-is if no pattern matches
+  return dateStr
+}
+
 const getDefaultData = (): OnboardingData => ({
   step1: {
     first_name: '',
@@ -325,7 +347,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
             first_name: s1.first_name,
             last_name_1: s1.last_name,
             last_name_2: s1.second_last_name || undefined,
-            birth_date: s1.birth_date,
+            birth_date: formatDateForApi(s1.birth_date),
             birth_state: s1.birth_state || undefined,
             gender: s1.gender as 'M' | 'F',
             nationality: s1.nationality || 'MX',

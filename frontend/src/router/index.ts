@@ -23,8 +23,9 @@ const AuthOtpView = () => import('@/views/applicant/auth/AuthOtpView.vue')
 const AuthPinSetupView = () => import('@/views/applicant/auth/AuthPinSetupView.vue')
 const AuthPinLoginView = () => import('@/views/applicant/auth/AuthPinLoginView.vue')
 
-// Applicant Onboarding (8-step wizard)
+// Applicant Onboarding (8-step wizard + KYC verification)
 const OnboardingLayout = () => import('@/views/applicant/onboarding/OnboardingLayout.vue')
+const StepKycVerification = () => import('@/views/applicant/onboarding/StepKycVerification.vue')
 const Step1PersonalData = () => import('@/views/applicant/onboarding/Step1PersonalData.vue')
 const Step2Identification = () => import('@/views/applicant/onboarding/Step2Identification.vue')
 const Step3Address = () => import('@/views/applicant/onboarding/Step3Address.vue')
@@ -133,7 +134,8 @@ const routes: RouteRecordRaw[] = [
     component: OnboardingLayout,
     meta: { requiresAuth: true },
     children: [
-      { path: '', redirect: (to) => `/${to.params.tenant}/solicitud/paso-1` },
+      { path: '', redirect: (to) => `/${to.params.tenant}/solicitud/verificacion` },
+      { path: 'verificacion', name: 'tenant-onboarding-kyc', component: StepKycVerification, meta: { step: 0, title: 'Verificación de identidad' } },
       { path: 'paso-1', name: 'tenant-onboarding-step-1', component: Step1PersonalData, meta: { step: 1, title: '¿Cómo te llamas?' } },
       { path: 'paso-2', name: 'tenant-onboarding-step-2', component: Step2Identification, meta: { step: 2, title: 'Tu identificación' } },
       { path: 'paso-3', name: 'tenant-onboarding-step-3', component: Step3Address, meta: { step: 3, title: '¿Dónde vives?' } },
@@ -247,7 +249,13 @@ const routes: RouteRecordRaw[] = [
     children: [
       {
         path: '',
-        redirect: '/solicitud/paso-1'
+        redirect: '/solicitud/verificacion'
+      },
+      {
+        path: 'verificacion',
+        name: 'onboarding-kyc',
+        component: StepKycVerification,
+        meta: { step: 0, title: 'Verificación de identidad' }
       },
       {
         path: 'paso-1',

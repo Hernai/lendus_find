@@ -1,11 +1,23 @@
 <script setup lang="ts">
-import { reactive, computed, watch, onMounted } from 'vue'
+import { reactive, computed, watch, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore } from '@/stores'
+import { useOnboardingStore, useKycStore } from '@/stores'
 import { AppButton, AppInput, AppRadioGroup } from '@/components/common'
+import LockedField from '@/components/common/LockedField.vue'
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
+const kycStore = useKycStore()
+
+// Check if KYC data is available (from INE OCR)
+const hasKycData = computed(() => kycStore.verified && !!kycStore.lockedData.curp)
+
+// RFC validation state
+const isValidatingRfc = ref(false)
+const rfcValidated = ref(false)
+const rfcIsValid = ref(false)
+const rfcRazonSocial = ref<string | null>(null)
+const rfcError = ref<string | null>(null)
 
 const form = reactive({
   id_type: 'INE' as 'INE' | 'PASSPORT',
@@ -49,10 +61,59 @@ const validateCurp = (curp: string): boolean => {
 }
 
 // RFC validation: 12 (moral) or 13 (physical) characters
-const validateRfc = (rfc: string): boolean => {
+const validateRfcFormat = (rfc: string): boolean => {
   const rfcRegex = /^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$/
   return rfcRegex.test(rfc.toUpperCase())
 }
+
+// Validate RFC with SAT via Nubarium (called automatically)
+const validateRfcWithSat = async () => {
+  if (!validateRfcFormat(form.rfc)) {
+    return
+  }
+
+  isValidatingRfc.value = true
+  rfcError.value = null
+
+  try {
+    const result = await kycStore.validateRfc(form.rfc)
+    rfcValidated.value = true
+    rfcIsValid.value = result.valid
+    rfcRazonSocial.value = result.razon_social || null
+
+    if (!result.valid) {
+      rfcError.value = result.error || 'RFC no registrado en SAT'
+    }
+  } catch (e) {
+    rfcError.value = 'Error al validar RFC'
+    rfcIsValid.value = false
+    rfcValidated.value = true
+  } finally {
+    isValidatingRfc.value = false
+  }
+}
+
+// Auto-validate RFC when it has valid format (debounced) - only if Nubarium is configured
+let rfcValidationTimeout: ReturnType<typeof setTimeout> | null = null
+watch(() => form.rfc, (newRfc) => {
+  // Reset validation state
+  rfcValidated.value = false
+  rfcIsValid.value = false
+  rfcRazonSocial.value = null
+  rfcError.value = null
+
+  // Clear previous timeout
+  if (rfcValidationTimeout) {
+    clearTimeout(rfcValidationTimeout)
+  }
+
+  // Auto-validate if format is valid and Nubarium is configured (with debounce)
+  if (kycStore.hasNubarium && newRfc.length >= 12 && validateRfcFormat(newRfc)) {
+    rfcValidationTimeout = setTimeout(() => {
+      validateRfcWithSat()
+    }, 500) // 500ms debounce
+  }
+})
 
 // Validar Clave de Elector: 18 caracteres alfanuméricos
 const validateClaveElector = (clave: string): boolean => {
@@ -81,12 +142,25 @@ onMounted(async () => {
   await onboardingStore.init()
 
   const step2 = onboardingStore.data.step2
-  form.id_type = step2.id_type || 'INE'
-  form.curp = step2.curp
-  form.rfc = step2.rfc
-  form.clave_elector = step2.clave_elector
-  form.numero_ocr = step2.numero_ocr
-  form.folio_ine = step2.folio_ine
+
+  // If KYC data is available, use it (takes priority over stored data)
+  if (hasKycData.value) {
+    form.id_type = 'INE' // KYC is always INE
+    form.curp = kycStore.lockedData.curp || step2.curp
+    form.rfc = step2.rfc // RFC is not in KYC, always editable
+    form.clave_elector = kycStore.lockedData.clave_elector || step2.clave_elector
+    form.numero_ocr = kycStore.lockedData.ocr || step2.numero_ocr
+    form.folio_ine = kycStore.lockedData.cic || kycStore.lockedData.identificador_ciudadano || step2.folio_ine
+  } else {
+    form.id_type = step2.id_type || 'INE'
+    form.curp = step2.curp
+    form.rfc = step2.rfc
+    form.clave_elector = step2.clave_elector
+    form.numero_ocr = step2.numero_ocr
+    form.folio_ine = step2.folio_ine
+  }
+
+  // Passport fields (only if not using KYC)
   form.passport_number = step2.passport_number
   form.passport_issue_date = step2.passport_issue_date
   form.passport_expiry_date = step2.passport_expiry_date
@@ -133,6 +207,20 @@ const validate = () => {
     errors[key as keyof typeof errors] = ''
   })
 
+  // If KYC verified, skip validation of locked fields (CURP, INE fields)
+  if (hasKycData.value) {
+    // Only validate RFC (not from KYC)
+    if (!form.rfc.trim()) {
+      errors.rfc = 'El RFC es requerido'
+      isValid = false
+    } else if (!validateRfcFormat(form.rfc)) {
+      errors.rfc = 'RFC inválido (12-13 caracteres)'
+      isValid = false
+    }
+    return isValid
+  }
+
+  // Normal validation when no KYC data
   if (!form.id_type) {
     errors.id_type = 'Selecciona un tipo de identificación'
     isValid = false
@@ -149,7 +237,7 @@ const validate = () => {
   if (!form.rfc.trim()) {
     errors.rfc = 'El RFC es requerido'
     isValid = false
-  } else if (!validateRfc(form.rfc)) {
+  } else if (!validateRfcFormat(form.rfc)) {
     errors.rfc = 'RFC inválido (12-13 caracteres)'
     isValid = false
   }
@@ -251,127 +339,263 @@ const prevStep = () => router.push('/solicitud/paso-1')
       </div>
 
       <form v-else class="space-y-5" @submit.prevent="handleSubmit">
-        <AppRadioGroup
-          v-model="form.id_type"
-          :options="idTypeOptions"
-          label="Tipo de identificación"
-          :error="errors.id_type"
-          required
-        />
+        <!-- KYC Verified: Show locked fields -->
+        <template v-if="hasKycData">
+          <!-- Verified badge -->
+          <div class="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3 mb-2">
+            <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-sm font-medium text-green-800">Datos verificados de tu INE</p>
+              <p class="text-xs text-green-600">Estos datos fueron extraídos automáticamente</p>
+            </div>
+          </div>
 
-        <AppInput
-          v-model="form.curp"
-          label="CURP"
-          placeholder="XXXX000000XXXXXX00"
-          :error="errors.curp"
-          :maxlength="18"
-          uppercase
-          required
-        />
-        <p class="text-xs text-gray-400 -mt-3">
-          <a href="https://www.gob.mx/curp/" target="_blank" class="text-primary-600 hover:underline">Consultar CURP</a>
-        </p>
+          <!-- ID Type locked to INE -->
+          <LockedField
+            label="Tipo de identificación"
+            value="INE/IFE"
+            :verified="true"
+          />
 
-        <AppInput
-          v-model="form.rfc"
-          label="RFC"
-          placeholder="XXXX000000XXX"
-          :error="errors.rfc"
-          :maxlength="13"
-          uppercase
-          required
-        />
-        <p class="text-xs text-gray-400 -mt-3">
-          12-13 caracteres con homoclave
-        </p>
+          <!-- CURP locked -->
+          <LockedField
+            label="CURP"
+            :value="form.curp"
+            format="curp"
+            :verified="true"
+            hint="Extraído de tu INE"
+          />
 
-        <!-- Campos adicionales de INE -->
-        <template v-if="showIneFields">
-          <div class="border-t pt-5 mt-6">
+          <!-- RFC editable (not from KYC) -->
+          <div class="border-t border-gray-200 my-4 pt-4">
+            <p class="text-sm text-gray-500 mb-4">Completa la siguiente información:</p>
+          </div>
+
+          <div class="space-y-2">
+            <div class="relative">
+              <AppInput
+                v-model="form.rfc"
+                label="RFC"
+                placeholder="XXXX000000XXX"
+                :error="errors.rfc"
+                :maxlength="13"
+                uppercase
+                required
+              />
+              <!-- Validation indicator inside input area (only if Nubarium configured) -->
+              <div v-if="kycStore.hasNubarium" class="absolute right-3 top-9 flex items-center">
+                <svg v-if="isValidatingRfc" class="animate-spin h-5 w-5 text-primary-500" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <svg v-else-if="rfcValidated && rfcIsValid" class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
+                <svg v-else-if="rfcValidated && !rfcIsValid" class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                </svg>
+              </div>
+            </div>
+            <p class="text-xs text-gray-400">
+              12-13 caracteres con homoclave
+            </p>
+            <!-- SAT Validation result (only if Nubarium configured) -->
+            <template v-if="kycStore.hasNubarium">
+              <div v-if="rfcValidated && rfcIsValid && rfcRazonSocial" class="bg-green-50 border border-green-200 rounded-lg p-3">
+                <p class="text-xs text-green-700 font-medium">RFC validado con SAT</p>
+                <p class="text-sm text-green-800">{{ rfcRazonSocial }}</p>
+              </div>
+              <div v-else-if="rfcValidated && !rfcIsValid" class="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p class="text-xs text-red-700">{{ rfcError || 'RFC no encontrado en SAT' }}</p>
+              </div>
+            </template>
+          </div>
+
+          <!-- INE fields locked -->
+          <div class="border-t pt-5 mt-4">
             <h3 class="font-medium text-gray-900 mb-4 flex items-center gap-2">
-              <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+              <svg class="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
               </svg>
               Datos de tu INE/IFE
             </h3>
 
-            <!-- Ayuda visual INE -->
-            <div class="bg-blue-50 rounded-xl p-3 mb-4 flex gap-3">
-              <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div class="text-xs text-blue-800">
-                <p class="font-medium mb-1">Estos datos los encuentras al reverso de tu INE</p>
-                <p>Asegurate de que tu INE esté vigente y los datos sean legibles.</p>
-              </div>
-            </div>
-
-            <div class="space-y-5">
-              <div>
-                <AppInput
-                  v-model="form.clave_elector"
-                  label="Clave de Elector"
-                  placeholder="ABCDEF12345678ABCD"
-                  :error="errors.clave_elector"
-                  :maxlength="18"
-                  uppercase
-                  required
-                />
-                <div class="mt-1 space-y-1">
-                  <p class="text-xs text-gray-500">
-                    18 caracteres alfanuméricos (letras y números)
-                  </p>
-                  <p class="text-xs text-gray-400">
-                    Ejemplo: GRPRLR80010509H100
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <AppInput
-                  v-model="form.numero_ocr"
-                  label="Número OCR"
-                  placeholder="0000000000000"
-                  :error="errors.numero_ocr"
-                  :maxlength="13"
-                  inputmode="numeric"
-                  required
-                />
-                <div class="mt-1 space-y-1">
-                  <p class="text-xs text-gray-500">
-                    13 dígitos debajo del código de barras
-                  </p>
-                  <p class="text-xs text-gray-400">
-                    Ejemplo: 0123456789012
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <AppInput
-                  v-model="form.folio_ine"
-                  label="Folio (CIC/ID Ciudadano)"
-                  placeholder="000000000000"
-                  :error="errors.folio_ine"
-                  :maxlength="20"
-                  inputmode="numeric"
-                  required
-                />
-                <div class="mt-1 space-y-1">
-                  <p class="text-xs text-gray-500">
-                    9 a 20 dígitos. En INE nuevas busca "IDMEX" seguido del número
-                  </p>
-                  <p class="text-xs text-gray-400">
-                    Ejemplo: 123456789012
-                  </p>
-                </div>
-              </div>
+            <div class="space-y-3">
+              <LockedField
+                label="Clave de Elector"
+                :value="form.clave_elector"
+                format="uppercase"
+                :verified="true"
+              />
+              <LockedField
+                label="Número OCR"
+                :value="form.numero_ocr"
+                :verified="true"
+              />
+              <LockedField
+                label="Folio (CIC/ID Ciudadano)"
+                :value="form.folio_ine"
+                :verified="true"
+              />
             </div>
           </div>
         </template>
 
-        <!-- Campos de Pasaporte -->
-        <template v-if="showPassportFields">
+        <!-- Normal flow: All fields editable -->
+        <template v-else>
+          <AppRadioGroup
+            v-model="form.id_type"
+            :options="idTypeOptions"
+            label="Tipo de identificación"
+            :error="errors.id_type"
+            required
+          />
+
+          <AppInput
+            v-model="form.curp"
+            label="CURP"
+            placeholder="XXXX000000XXXXXX00"
+            :error="errors.curp"
+            :maxlength="18"
+            uppercase
+            required
+          />
+          <p class="text-xs text-gray-400 -mt-3">
+            <a href="https://www.gob.mx/curp/" target="_blank" class="text-primary-600 hover:underline">Consultar CURP</a>
+          </p>
+
+          <div class="space-y-2">
+            <div class="relative">
+              <AppInput
+                v-model="form.rfc"
+                label="RFC"
+                placeholder="XXXX000000XXX"
+                :error="errors.rfc"
+                :maxlength="13"
+                uppercase
+                required
+              />
+              <!-- Validation indicator inside input area (only if Nubarium configured) -->
+              <div v-if="kycStore.hasNubarium" class="absolute right-3 top-9 flex items-center">
+                <svg v-if="isValidatingRfc" class="animate-spin h-5 w-5 text-primary-500" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <svg v-else-if="rfcValidated && rfcIsValid" class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
+                <svg v-else-if="rfcValidated && !rfcIsValid" class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                </svg>
+              </div>
+            </div>
+            <p class="text-xs text-gray-400">
+              12-13 caracteres con homoclave
+            </p>
+            <!-- SAT Validation result (only if Nubarium configured) -->
+            <template v-if="kycStore.hasNubarium">
+              <div v-if="rfcValidated && rfcIsValid && rfcRazonSocial" class="bg-green-50 border border-green-200 rounded-lg p-3">
+                <p class="text-xs text-green-700 font-medium">RFC validado con SAT</p>
+                <p class="text-sm text-green-800">{{ rfcRazonSocial }}</p>
+              </div>
+              <div v-else-if="rfcValidated && !rfcIsValid" class="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p class="text-xs text-red-700">{{ rfcError || 'RFC no encontrado en SAT' }}</p>
+              </div>
+            </template>
+          </div>
+
+          <!-- Campos adicionales de INE -->
+          <template v-if="showIneFields">
+            <div class="border-t pt-5 mt-6">
+              <h3 class="font-medium text-gray-900 mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                </svg>
+                Datos de tu INE/IFE
+              </h3>
+
+              <!-- Ayuda visual INE -->
+              <div class="bg-blue-50 rounded-xl p-3 mb-4 flex gap-3">
+                <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div class="text-xs text-blue-800">
+                  <p class="font-medium mb-1">Estos datos los encuentras al reverso de tu INE</p>
+                  <p>Asegurate de que tu INE esté vigente y los datos sean legibles.</p>
+                </div>
+              </div>
+
+              <div class="space-y-5">
+                <div>
+                  <AppInput
+                    v-model="form.clave_elector"
+                    label="Clave de Elector"
+                    placeholder="ABCDEF12345678ABCD"
+                    :error="errors.clave_elector"
+                    :maxlength="18"
+                    uppercase
+                    required
+                  />
+                  <div class="mt-1 space-y-1">
+                    <p class="text-xs text-gray-500">
+                      18 caracteres alfanuméricos (letras y números)
+                    </p>
+                    <p class="text-xs text-gray-400">
+                      Ejemplo: GRPRLR80010509H100
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <AppInput
+                    v-model="form.numero_ocr"
+                    label="Número OCR"
+                    placeholder="0000000000000"
+                    :error="errors.numero_ocr"
+                    :maxlength="13"
+                    inputmode="numeric"
+                    required
+                  />
+                  <div class="mt-1 space-y-1">
+                    <p class="text-xs text-gray-500">
+                      13 dígitos debajo del código de barras
+                    </p>
+                    <p class="text-xs text-gray-400">
+                      Ejemplo: 0123456789012
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <AppInput
+                    v-model="form.folio_ine"
+                    label="Folio (CIC/ID Ciudadano)"
+                    placeholder="000000000000"
+                    :error="errors.folio_ine"
+                    :maxlength="20"
+                    inputmode="numeric"
+                    required
+                  />
+                  <div class="mt-1 space-y-1">
+                    <p class="text-xs text-gray-500">
+                      9 a 20 dígitos. En INE nuevas busca "IDMEX" seguido del número
+                    </p>
+                    <p class="text-xs text-gray-400">
+                      Ejemplo: 123456789012
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </template>
+
+        <!-- Campos de Pasaporte (only when not KYC verified) -->
+        <template v-if="showPassportFields && !hasKycData">
           <div class="border-t pt-5 mt-6">
             <h3 class="font-medium text-gray-900 mb-4 flex items-center gap-2">
               <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

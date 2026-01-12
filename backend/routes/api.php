@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\ApplicationController;
 use App\Http\Controllers\Api\ApplicantController;
 use App\Http\Controllers\Api\CorrectionController;
 use App\Http\Controllers\Api\DocumentController;
+use App\Http\Controllers\Api\KycController;
 use App\Http\Controllers\Api\SimulatorController;
 use App\Http\Controllers\Api\Admin\DashboardController;
 use App\Http\Controllers\Api\Admin\ApplicationController as AdminApplicationController;
@@ -142,6 +143,42 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'metadata'])->group(
     // Document download (for local dev)
     Route::get('/documents/{document}/download', [DocumentController::class, 'download'])
         ->name('api.documents.download');
+
+    // =============================================
+    // KYC - Identity Validation Services
+    // =============================================
+    Route::prefix('kyc')->group(function () {
+        // Get available services
+        Route::get('/services', [KycController::class, 'services']);
+
+        // CURP validation and lookup
+        Route::post('/curp/validate', [KycController::class, 'validateCurp']);
+        Route::post('/curp/get', [KycController::class, 'getCurp']);
+
+        // RFC validation
+        Route::post('/rfc/validate', [KycController::class, 'validateRfc']);
+
+        // INE/IFE validation with OCR
+        Route::post('/ine/validate', [KycController::class, 'validateIne']);
+
+        // Biometric SDK token
+        Route::post('/biometric/token', [KycController::class, 'getBiometricToken']);
+
+        // SPEI CEP validation
+        Route::post('/cep/validate', [KycController::class, 'validateCep']);
+
+        // OFAC & UN sanctions block lists
+        Route::post('/ofac/check', [KycController::class, 'checkOfac']);
+
+        // PLD Mexican blacklists (PGR, PGJ, PEPs, SAT 69/69B, etc.)
+        Route::post('/pld/check', [KycController::class, 'checkPldBlacklists']);
+
+        // IMSS history
+        Route::post('/imss/history', [KycController::class, 'getImssHistory']);
+
+        // Cédula Profesional
+        Route::post('/cedula/validate', [KycController::class, 'validateCedula']);
+    });
 });
 
 // =============================================
