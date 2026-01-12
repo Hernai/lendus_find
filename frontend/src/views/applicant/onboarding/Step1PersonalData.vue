@@ -15,6 +15,9 @@ const kycStore = useKycStore()
 // Check if KYC is verified
 const isKycVerified = computed(() => kycStore.verified && !!kycStore.lockedData.curp)
 
+// Get verification info for fields (for showing method badges)
+const getVerification = (field: string) => kycStore.getFieldVerification(field)
+
 // Local form state (reactive copy from store)
 const form = reactive({
   first_name: '',
@@ -338,6 +341,12 @@ const handleSubmit = async () => {
 
         console.log('✅ Application created after step 1:', newApp?.id)
 
+        // Record KYC verifications if KYC was verified (now that applicant exists)
+        if (isKycVerified.value && newApp?.applicant_id) {
+          console.log('📝 Recording KYC verifications for applicant:', newApp.applicant_id)
+          await kycStore.recordVerifications(newApp.applicant_id)
+        }
+
         // Clear pending application if it existed
         if (pendingApp) {
           localStorage.removeItem('pending_application')
@@ -389,32 +398,40 @@ const handleSubmit = async () => {
               label="Nombre(s)"
               :value="form.first_name"
               format="uppercase"
+              :verification="getVerification('first_name')"
             />
             <div class="grid grid-cols-2 gap-3">
               <LockedField
                 label="Primer Apellido"
                 :value="form.last_name"
                 format="uppercase"
+                :verification="getVerification('last_name_1')"
+                :show-method="false"
               />
               <LockedField
                 label="Segundo Apellido"
                 :value="form.second_last_name"
                 format="uppercase"
+                :verification="getVerification('last_name_2')"
+                :show-method="false"
               />
             </div>
             <LockedField
               label="Fecha de nacimiento"
               :value="form.birth_date"
               format="date"
+              :verification="getVerification('birth_date')"
             />
             <LockedField
               label="Género"
               :value="form.gender === 'M' ? 'Masculino' : form.gender === 'F' ? 'Femenino' : '-'"
+              :verification="getVerification('gender')"
             />
             <LockedField
               label="CURP"
               :value="kycStore.lockedData.curp"
               format="curp"
+              :verification="getVerification('curp')"
             />
           </div>
 
@@ -425,6 +442,7 @@ const handleSubmit = async () => {
             :value="mexicanStates.find(s => s.value === form.birth_state)?.label || form.birth_state"
             format="uppercase"
             :verified="true"
+            :verification="getVerification('birth_state')"
             hint="Extraído de tu CURP"
           />
           <template v-else>

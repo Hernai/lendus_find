@@ -179,4 +179,117 @@ class DataVerification extends Model
     {
         return $query->where('status', VerificationStatus::VERIFIED);
     }
+
+    /**
+     * Create or update a verification record for a field.
+     *
+     * @param string $applicantId
+     * @param VerifiableField|string $field
+     * @param mixed $value
+     * @param VerificationMethod|string $method
+     * @param bool $isVerified
+     * @param array|null $metadata Additional data about the verification
+     * @param string|null $notes
+     * @return static
+     */
+    public static function recordVerification(
+        string $applicantId,
+        VerifiableField|string $field,
+        mixed $value,
+        VerificationMethod|string $method,
+        bool $isVerified = true,
+        ?array $metadata = null,
+        ?string $notes = null
+    ): static {
+        $fieldName = $field instanceof VerifiableField ? $field->value : $field;
+        $methodValue = $method instanceof VerificationMethod ? $method->value : $method;
+
+        return static::updateOrCreate(
+            [
+                'applicant_id' => $applicantId,
+                'field_name' => $fieldName,
+            ],
+            [
+                'field_value' => is_array($value) ? json_encode($value) : (string) $value,
+                'method' => $methodValue,
+                'is_verified' => $isVerified,
+                'status' => $isVerified ? VerificationStatus::VERIFIED : VerificationStatus::PENDING,
+                'metadata' => $metadata,
+                'notes' => $notes,
+            ]
+        );
+    }
+
+    /**
+     * Batch record multiple verifications.
+     *
+     * @param string $applicantId
+     * @param array $verifications Array of [field => [value, method, verified, metadata, notes]]
+     * @return array<string, static>
+     */
+    public static function recordBatchVerifications(
+        string $applicantId,
+        array $verifications
+    ): array {
+        $results = [];
+
+        foreach ($verifications as $field => $data) {
+            $value = $data['value'] ?? $data[0] ?? null;
+            $method = $data['method'] ?? $data[1] ?? VerificationMethod::API;
+            $verified = $data['verified'] ?? $data[2] ?? true;
+            $metadata = $data['metadata'] ?? $data[3] ?? null;
+            $notes = $data['notes'] ?? $data[4] ?? null;
+
+            $results[$field] = static::recordVerification(
+                $applicantId,
+                $field,
+                $value,
+                $method,
+                $verified,
+                $metadata,
+                $notes
+            );
+        }
+
+        return $results;
+    }
+
+    /**
+     * Get all verified fields for an applicant as a simple array.
+     *
+     * @param string $applicantId
+     * @return array<string, array{value: string, method: string, verified_at: string, metadata: array|null}>
+     */
+    public static function getVerifiedFieldsForApplicant(string $applicantId): array
+    {
+        $verifications = static::where('applicant_id', $applicantId)
+            ->where('is_verified', true)
+            ->get();
+
+        $result = [];
+        foreach ($verifications as $v) {
+            $result[$v->field_name] = [
+                'value' => $v->field_value,
+                'method' => $v->method?->value ?? $v->method,
+                'method_label' => $v->method?->label() ?? self::getMethodLabel($v->method),
+                'verified_at' => $v->updated_at->toIso8601String(),
+                'metadata' => $v->metadata,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Check if a specific field is verified for an applicant.
+     */
+    public static function isFieldVerified(string $applicantId, VerifiableField|string $field): bool
+    {
+        $fieldName = $field instanceof VerifiableField ? $field->value : $field;
+
+        return static::where('applicant_id', $applicantId)
+            ->where('field_name', $fieldName)
+            ->where('is_verified', true)
+            ->exists();
+    }
 }

@@ -12,6 +12,9 @@ const kycStore = useKycStore()
 // Check if KYC data is available (from INE OCR)
 const hasKycData = computed(() => kycStore.verified && !!kycStore.lockedData.curp)
 
+// Get verification info for fields (for showing method badges)
+const getVerification = (field: string) => kycStore.getFieldVerification(field)
+
 // RFC validation state
 const isValidatingRfc = ref(false)
 const rfcValidated = ref(false)
@@ -359,6 +362,7 @@ const prevStep = () => router.push('/solicitud/paso-1')
             label="Tipo de identificación"
             value="INE/IFE"
             :verified="true"
+            :verification="getVerification('ine_document')"
           />
 
           <!-- CURP locked -->
@@ -367,7 +371,8 @@ const prevStep = () => router.push('/solicitud/paso-1')
             :value="form.curp"
             format="curp"
             :verified="true"
-            hint="Extraído de tu INE"
+            :verification="getVerification('curp')"
+            hint="Validado con RENAPO"
           />
 
           <!-- RFC editable (not from KYC) -->
@@ -430,16 +435,19 @@ const prevStep = () => router.push('/solicitud/paso-1')
                 :value="form.clave_elector"
                 format="uppercase"
                 :verified="true"
+                :verification="getVerification('ine_clave')"
               />
               <LockedField
                 label="Número OCR"
                 :value="form.numero_ocr"
                 :verified="true"
+                :verification="getVerification('ine_ocr')"
               />
               <LockedField
                 label="Folio (CIC/ID Ciudadano)"
                 :value="form.folio_ine"
                 :verified="true"
+                :verification="getVerification('ine_folio')"
               />
             </div>
           </div>

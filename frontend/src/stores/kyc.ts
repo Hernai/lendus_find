@@ -124,6 +124,42 @@ export interface RfcValidationResponse {
   }
 }
 
+// Verified field information
+export interface VerifiedField {
+  value: string
+  method: string
+  method_label: string
+  verified_at: string
+  metadata?: Record<string, unknown> | null
+}
+
+// API response for verifications
+export interface VerificationsResponse {
+  data: {
+    verifications: Array<{
+      field: string
+      field_label: string
+      value: string
+      method: string
+      method_label: string
+      is_verified: boolean
+      status: string
+      verified_at: string
+      metadata?: Record<string, unknown> | null
+      notes?: string | null
+    }>
+    verified_fields: Record<string, VerifiedField>
+    summary: {
+      personal_data: Record<string, VerifiedField>
+      contact: Record<string, VerifiedField>
+      address: Record<string, VerifiedField>
+      kyc: Record<string, VerifiedField>
+    }
+    kyc_verified: boolean
+    kyc_verified_at: string | null
+  }
+}
+
 export const useKycStore = defineStore('kyc', () => {
   // State
   const verified = ref(false)
@@ -133,6 +169,20 @@ export const useKycStore = defineStore('kyc', () => {
   const isLoading = ref(false)
   const isValidating = ref(false)
   const error = ref<string | null>(null)
+
+  // Verified fields from backend
+  const verifiedFields = ref<Record<string, VerifiedField>>({})
+  const verificationsSummary = ref<{
+    personal_data: Record<string, VerifiedField>
+    contact: Record<string, VerifiedField>
+    address: Record<string, VerifiedField>
+    kyc: Record<string, VerifiedField>
+  }>({
+    personal_data: {},
+    contact: {},
+    address: {},
+    kyc: {}
+  })
 
   // Captured images (base64)
   const ineFrontImage = ref<string | null>(null)
@@ -579,6 +629,284 @@ export const useKycStore = defineStore('kyc', () => {
     verified.value = true
   }
 
+  /**
+   * Record KYC verifications to the backend.
+   * Should be called after KYC is completed with all verified data.
+   */
+  const recordVerifications = async (applicantId: string): Promise<boolean> => {
+    if (!applicantId) {
+      console.warn('[KYC Store] No applicant ID for recording verifications')
+      return false
+    }
+
+    const verifications: Array<{
+      field: string
+      value: unknown
+      method: string
+      verified: boolean
+      metadata?: Record<string, unknown>
+    }> = []
+
+    // Record personal data from INE OCR
+    if (lockedData.value.nombres) {
+      verifications.push({
+        field: 'first_name',
+        value: lockedData.value.nombres,
+        method: 'KYC_INE_OCR',
+        verified: true,
+        metadata: { source: 'ine_ocr' }
+      })
+    }
+
+    if (lockedData.value.apellido_paterno) {
+      verifications.push({
+        field: 'last_name_1',
+        value: lockedData.value.apellido_paterno,
+        method: 'KYC_INE_OCR',
+        verified: true,
+        metadata: { source: 'ine_ocr' }
+      })
+    }
+
+    if (lockedData.value.apellido_materno) {
+      verifications.push({
+        field: 'last_name_2',
+        value: lockedData.value.apellido_materno,
+        method: 'KYC_INE_OCR',
+        verified: true,
+        metadata: { source: 'ine_ocr' }
+      })
+    }
+
+    if (lockedData.value.fecha_nacimiento) {
+      verifications.push({
+        field: 'birth_date',
+        value: lockedData.value.fecha_nacimiento,
+        method: 'KYC_INE_OCR',
+        verified: true,
+        metadata: { source: 'ine_ocr' }
+      })
+    }
+
+    if (lockedData.value.sexo) {
+      verifications.push({
+        field: 'gender',
+        value: lockedData.value.sexo,
+        method: 'KYC_INE_OCR',
+        verified: true,
+        metadata: { source: 'ine_ocr' }
+      })
+    }
+
+    if (lockedData.value.entidad_nacimiento) {
+      verifications.push({
+        field: 'birth_state',
+        value: lockedData.value.entidad_nacimiento,
+        method: 'KYC_INE_OCR',
+        verified: true,
+        metadata: { source: 'curp_extraction' }
+      })
+    }
+
+    // CURP validation
+    if (lockedData.value.curp && validations.value.curp_renapo?.valid) {
+      verifications.push({
+        field: 'curp',
+        value: lockedData.value.curp,
+        method: 'KYC_CURP_RENAPO',
+        verified: true,
+        metadata: validations.value.curp_renapo.data as Record<string, unknown> || {}
+      })
+    }
+
+    // INE Clave de Elector
+    if (lockedData.value.clave_elector) {
+      verifications.push({
+        field: 'ine_clave',
+        value: lockedData.value.clave_elector,
+        method: validations.value.ine_lista_nominal?.valid ? 'KYC_INE_LIST' : 'KYC_INE_OCR',
+        verified: validations.value.ine_lista_nominal?.valid || false,
+        metadata: validations.value.ine_lista_nominal || {}
+      })
+    }
+
+    // INE OCR number
+    if (lockedData.value.ocr) {
+      verifications.push({
+        field: 'ine_ocr',
+        value: lockedData.value.ocr,
+        method: 'KYC_INE_OCR',
+        verified: true,
+        metadata: { source: 'ine_ocr' }
+      })
+    }
+
+    // Address from INE
+    const addr = lockedData.value.direccion_ine
+    if (addr.calle) {
+      verifications.push({
+        field: 'address_street',
+        value: addr.calle,
+        method: 'KYC_INE_OCR',
+        verified: true,
+        metadata: { source: 'ine_address' }
+      })
+    }
+    if (addr.colonia) {
+      verifications.push({
+        field: 'address_neighborhood',
+        value: addr.colonia,
+        method: 'KYC_INE_OCR',
+        verified: true,
+        metadata: { source: 'ine_address' }
+      })
+    }
+    if (addr.cp) {
+      verifications.push({
+        field: 'address_postal_code',
+        value: addr.cp,
+        method: 'KYC_INE_OCR',
+        verified: true,
+        metadata: { source: 'ine_address' }
+      })
+    }
+    if (addr.municipio || addr.ciudad) {
+      verifications.push({
+        field: 'address_city',
+        value: addr.municipio || addr.ciudad,
+        method: 'KYC_INE_OCR',
+        verified: true,
+        metadata: { source: 'ine_address' }
+      })
+    }
+    if (addr.estado) {
+      verifications.push({
+        field: 'address_state',
+        value: addr.estado,
+        method: 'KYC_INE_OCR',
+        verified: true,
+        metadata: { source: 'ine_address' }
+      })
+    }
+
+    // KYC validation results
+    if (validations.value.face_match) {
+      verifications.push({
+        field: 'face_match',
+        value: validations.value.face_match.match ? 'passed' : 'failed',
+        method: 'KYC_FACE_MATCH',
+        verified: validations.value.face_match.match,
+        metadata: { score: validations.value.face_match.score }
+      })
+    }
+
+    if (validations.value.liveness) {
+      verifications.push({
+        field: 'liveness',
+        value: validations.value.liveness.passed ? 'passed' : 'failed',
+        method: 'KYC_LIVENESS',
+        verified: validations.value.liveness.passed,
+        metadata: { score: validations.value.liveness.score }
+      })
+    }
+
+    if (validations.value.ofac) {
+      verifications.push({
+        field: 'ofac_clear',
+        value: validations.value.ofac.found ? 'found' : 'clear',
+        method: 'KYC_OFAC',
+        verified: !validations.value.ofac.found,
+        metadata: { matches: validations.value.ofac.matches, count: validations.value.ofac.score }
+      })
+    }
+
+    // Document verifications
+    if (ineFrontImage.value) {
+      verifications.push({
+        field: 'ine_document',
+        value: 'captured',
+        method: 'KYC_INE_OCR',
+        verified: true,
+        metadata: { has_front: true, has_back: !!ineBackImage.value }
+      })
+    }
+
+    if (selfieImage.value) {
+      verifications.push({
+        field: 'selfie',
+        value: 'captured',
+        method: 'KYC_LIVENESS',
+        verified: validations.value.liveness?.passed || validations.value.face_match?.match || false,
+        metadata: {}
+      })
+    }
+
+    // RFC if validated
+    if (rfcValidation.value?.valid) {
+      verifications.push({
+        field: 'rfc',
+        value: rfcValidation.value.rfc,
+        method: 'KYC_RFC_SAT',
+        verified: true,
+        metadata: { razon_social: rfcValidation.value.razon_social, tipo_persona: rfcValidation.value.tipo_persona }
+      })
+    }
+
+    if (verifications.length === 0) {
+      console.warn('[KYC Store] No verifications to record')
+      return false
+    }
+
+    try {
+      console.log('[KYC Store] Recording verifications:', verifications.length)
+      await api.post('/kyc/verifications', {
+        applicant_id: applicantId,
+        verifications
+      })
+      console.log('[KYC Store] Verifications recorded successfully')
+      return true
+    } catch (err) {
+      console.error('[KYC Store] Failed to record verifications:', err)
+      return false
+    }
+  }
+
+  /**
+   * Load verified fields from backend for an applicant.
+   */
+  const loadVerifications = async (applicantId: string): Promise<boolean> => {
+    if (!applicantId) {
+      console.warn('[KYC Store] No applicant ID for loading verifications')
+      return false
+    }
+
+    try {
+      const response = await api.get<VerificationsResponse>(`/kyc/verifications/${applicantId}`)
+      verifiedFields.value = response.data.data.verified_fields
+      verificationsSummary.value = response.data.data.summary
+      verified.value = response.data.data.kyc_verified
+      console.log('[KYC Store] Loaded verifications:', Object.keys(verifiedFields.value).length)
+      return true
+    } catch (err) {
+      console.error('[KYC Store] Failed to load verifications:', err)
+      return false
+    }
+  }
+
+  /**
+   * Check if a specific field is verified.
+   */
+  const isFieldVerified = (fieldName: string): boolean => {
+    return !!verifiedFields.value[fieldName]
+  }
+
+  /**
+   * Get verification info for a field.
+   */
+  const getFieldVerification = (fieldName: string): VerifiedField | null => {
+    return verifiedFields.value[fieldName] || null
+  }
+
   const reset = () => {
     verified.value = false
     isConfigured.value = false
@@ -621,6 +949,13 @@ export const useKycStore = defineStore('kyc', () => {
       ofac: null,
     }
     rfcValidation.value = null
+    verifiedFields.value = {}
+    verificationsSummary.value = {
+      personal_data: {},
+      contact: {},
+      address: {},
+      kyc: {}
+    }
   }
 
   return {
@@ -638,6 +973,8 @@ export const useKycStore = defineStore('kyc', () => {
     lockedData,
     validations,
     rfcValidation,
+    verifiedFields,
+    verificationsSummary,
     // Getters
     hasNubarium,
     fullNameFromIne,
@@ -663,6 +1000,10 @@ export const useKycStore = defineStore('kyc', () => {
     setFaceMatchResult,
     setLivenessResult,
     markVerified,
+    recordVerifications,
+    loadVerifications,
+    isFieldVerified,
+    getFieldVerification,
     reset
   }
 })

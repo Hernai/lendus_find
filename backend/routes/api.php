@@ -178,6 +178,11 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'metadata'])->group(
 
         // Cédula Profesional
         Route::post('/cedula/validate', [KycController::class, 'validateCedula']);
+
+        // Data Verifications - record and retrieve verified fields
+        Route::post('/verifications', [KycController::class, 'recordVerifications']);
+        Route::get('/verifications/{applicantId}', [KycController::class, 'getVerifications']);
+        Route::post('/verifications/check', [KycController::class, 'checkFieldsVerified']);
     });
 });
 

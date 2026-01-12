@@ -2,11 +2,16 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\VerifiableField;
+use App\Enums\VerificationMethod;
 use App\Http\Controllers\Controller;
+use App\Models\Applicant;
 use App\Models\AuditLog;
+use App\Models\DataVerification;
 use App\Services\ExternalApi\NubariumService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
@@ -596,5 +601,237 @@ class KycController extends Controller
         }
 
         return substr($rfc, 0, 4) . '****' . substr($rfc, -4);
+    }
+
+    // =========================================================================
+    // DATA VERIFICATION ENDPOINTS
+    // =========================================================================
+
+    /**
+     * Record KYC verification results for an applicant.
+     *
+     * This endpoint should be called after completing KYC verification
+     * to persist the verified data in the database.
+     */
+    public function recordVerifications(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'applicant_id' => 'required|uuid',
+            'verifications' => 'required|array',
+            'verifications.*.field' => 'required|string',
+            'verifications.*.value' => 'nullable',
+            'verifications.*.method' => 'required|string',
+            'verifications.*.verified' => 'boolean',
+            'verifications.*.metadata' => 'nullable|array',
+            'verifications.*.notes' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Datos inválidos',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        // Find applicant (with tenant scope)
+        $applicant = Applicant::find($request->applicant_id);
+
+        if (!$applicant) {
+            return response()->json([
+                'message' => 'Solicitante no encontrado',
+            ], 404);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $recorded = [];
+
+            foreach ($request->verifications as $verification) {
+                $field = $verification['field'];
+                $value = $verification['value'] ?? null;
+                $method = $verification['method'];
+                $verified = $verification['verified'] ?? true;
+                $metadata = $verification['metadata'] ?? null;
+                $notes = $verification['notes'] ?? null;
+
+                $record = DataVerification::recordVerification(
+                    $applicant->id,
+                    $field,
+                    $value,
+                    $method,
+                    $verified,
+                    $metadata,
+                    $notes
+                );
+
+                $recorded[] = [
+                    'field' => $field,
+                    'verified' => $record->is_verified,
+                    'method' => $record->method?->value ?? $record->method,
+                ];
+            }
+
+            // Update applicant's kyc_verified_at if all critical fields are verified
+            $this->updateApplicantKycStatus($applicant);
+
+            DB::commit();
+
+            // Audit log
+            $this->logKycAction($request, 'verifications_recorded', [
+                'applicant_id' => $applicant->id,
+                'fields_count' => count($recorded),
+            ]);
+
+            return response()->json([
+                'message' => 'Verificaciones registradas correctamente',
+                'data' => [
+                    'recorded' => $recorded,
+                    'total' => count($recorded),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'message' => 'Error al registrar verificaciones',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all verifications for an applicant.
+     */
+    public function getVerifications(Request $request, string $applicantId): JsonResponse
+    {
+        $applicant = Applicant::find($applicantId);
+
+        if (!$applicant) {
+            return response()->json([
+                'message' => 'Solicitante no encontrado',
+            ], 404);
+        }
+
+        $verifications = DataVerification::getVerifiedFieldsForApplicant($applicantId);
+
+        // Get all verifications (including pending/rejected)
+        $allVerifications = DataVerification::where('applicant_id', $applicantId)
+            ->orderBy('field_name')
+            ->get()
+            ->map(function ($v) {
+                return [
+                    'field' => $v->field_name,
+                    'field_label' => DataVerification::getFieldLabel($v->field_name),
+                    'value' => $v->field_value,
+                    'method' => $v->method?->value ?? $v->method,
+                    'method_label' => $v->method?->label() ?? DataVerification::getMethodLabel($v->method ?? ''),
+                    'is_verified' => $v->is_verified,
+                    'status' => $v->status?->value ?? $v->status,
+                    'verified_at' => $v->updated_at?->toIso8601String(),
+                    'metadata' => $v->metadata,
+                    'notes' => $v->notes,
+                ];
+            });
+
+        // Summary of verified fields by category
+        $summary = [
+            'personal_data' => [],
+            'contact' => [],
+            'address' => [],
+            'kyc' => [],
+        ];
+
+        foreach ($verifications as $field => $data) {
+            $fieldEnum = VerifiableField::tryFrom($field);
+            if ($fieldEnum) {
+                if ($fieldEnum->isPersonalData()) {
+                    $summary['personal_data'][$field] = $data;
+                } elseif ($fieldEnum->isContactInfo()) {
+                    $summary['contact'][$field] = $data;
+                } elseif ($fieldEnum->isAddressField()) {
+                    $summary['address'][$field] = $data;
+                } elseif ($fieldEnum->isKycField()) {
+                    $summary['kyc'][$field] = $data;
+                }
+            }
+        }
+
+        return response()->json([
+            'data' => [
+                'verifications' => $allVerifications,
+                'verified_fields' => $verifications,
+                'summary' => $summary,
+                'kyc_verified' => $applicant->isKycVerified(),
+                'kyc_verified_at' => $applicant->kyc_verified_at?->toIso8601String(),
+            ],
+        ]);
+    }
+
+    /**
+     * Check if specific fields are verified for an applicant.
+     */
+    public function checkFieldsVerified(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'applicant_id' => 'required|uuid',
+            'fields' => 'required|array',
+            'fields.*' => 'string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Datos inválidos',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $applicant = Applicant::find($request->applicant_id);
+
+        if (!$applicant) {
+            return response()->json([
+                'message' => 'Solicitante no encontrado',
+            ], 404);
+        }
+
+        $results = [];
+        foreach ($request->fields as $field) {
+            $results[$field] = DataVerification::isFieldVerified($request->applicant_id, $field);
+        }
+
+        return response()->json([
+            'data' => [
+                'fields' => $results,
+                'all_verified' => !in_array(false, $results, true),
+            ],
+        ]);
+    }
+
+    /**
+     * Update applicant's KYC status based on verified fields.
+     */
+    private function updateApplicantKycStatus(Applicant $applicant): void
+    {
+        // Check if critical KYC fields are verified
+        $criticalFields = [
+            VerifiableField::CURP->value,
+            VerifiableField::FIRST_NAME->value,
+            VerifiableField::LAST_NAME_1->value,
+            VerifiableField::BIRTH_DATE->value,
+        ];
+
+        $allCriticalVerified = true;
+        foreach ($criticalFields as $field) {
+            if (!DataVerification::isFieldVerified($applicant->id, $field)) {
+                $allCriticalVerified = false;
+                break;
+            }
+        }
+
+        if ($allCriticalVerified && !$applicant->kyc_verified_at) {
+            $applicant->kyc_verified_at = now();
+            $applicant->kyc_status = \App\Enums\KycStatus::VERIFIED;
+            $applicant->save();
+        }
     }
 }
