@@ -1424,88 +1424,81 @@ const addNote = async () => {
     </div>
 
     <template v-else-if="application">
-      <!-- Header with gradient and decorative pattern -->
-      <div class="relative bg-gradient-to-r from-primary-600 to-primary-800 rounded-2xl overflow-hidden mb-6">
-        <!-- Decorative wave pattern -->
-        <div class="absolute inset-0 overflow-hidden">
-          <svg class="absolute w-full h-full" viewBox="0 0 400 200" preserveAspectRatio="none">
-            <!-- Large blob top right -->
-            <ellipse cx="380" cy="30" rx="150" ry="100" fill="white" opacity="0.08"/>
-            <!-- Medium wave across -->
-            <path d="M0,140 Q100,100 200,120 T400,100 L400,200 L0,200 Z" fill="white" opacity="0.06"/>
-            <!-- Small blob bottom left -->
-            <ellipse cx="60" cy="170" rx="100" ry="60" fill="white" opacity="0.07"/>
-            <!-- Top accent curve -->
-            <ellipse cx="250" cy="50" rx="120" ry="70" fill="white" opacity="0.05"/>
-          </svg>
-        </div>
+      <!-- Header with subtle border -->
+      <div class="relative bg-white rounded-lg border-t-4 shadow-sm mb-6" :style="{ borderTopColor: tenantStore.branding?.primary_color || '#7c3aed' }">
+        <!-- Back button + Header content in single row -->
+        <div class="flex items-center justify-between gap-4 px-6 py-3">
+          <!-- Left: Back button + Info -->
+          <div class="flex items-center gap-4 flex-1 min-w-0">
+            <button
+              class="flex items-center gap-2 text-gray-600 hover:text-primary-600 transition-colors flex-shrink-0"
+              @click="goBack"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </button>
 
-        <!-- Back button -->
-        <div class="relative px-6 pt-4">
-          <button
-            class="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
-            @click="goBack"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Volver a solicitudes
-          </button>
-        </div>
-
-        <!-- Header content -->
-        <div class="relative flex items-start gap-6 px-6 py-5">
-          <!-- Header info -->
-          <div class="flex-1">
-            <div class="flex items-center gap-4">
-              <h1 class="text-2xl font-bold text-white">{{ application.folio }}</h1>
-              <span
-                :class="[
-                  'px-3 py-1 text-sm font-medium rounded-full',
-                  getStatusBadge(application.status).bg,
-                  getStatusBadge(application.status).text
-                ]"
-              >
-                {{ getStatusBadge(application.status).label }}
-              </span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-3 mb-0.5">
+                <h1 class="text-xl font-bold text-gray-900">{{ application.folio }}</h1>
+                <span
+                  :class="[
+                    'px-2.5 py-0.5 text-xs font-medium rounded-full',
+                    getStatusBadge(application.status).bg,
+                    getStatusBadge(application.status).text
+                  ]"
+                >
+                  {{ getStatusBadge(application.status).label }}
+                </span>
+              </div>
+              <p class="text-base text-gray-800 font-medium truncate">{{ application.applicant.full_name }}</p>
+              <p class="text-gray-500 text-xs">
+                {{ formatDateTime(application.created_at) }}
+                <span v-if="application.assigned_to" class="ml-2">
+                  · {{ application.assigned_to }}
+                </span>
+              </p>
             </div>
-            <p class="text-lg text-white font-medium mt-1">{{ application.applicant.full_name }}</p>
-            <p class="text-white/70 text-sm">
-              Creada {{ formatDateTime(application.created_at) }}
-              <span v-if="application.assigned_to" class="ml-2">
-                · Asignada a {{ application.assigned_to }}
-              </span>
-            </p>
           </div>
 
-          <!-- Application Action Buttons -->
-          <div class="flex flex-wrap gap-2 flex-shrink-0">
+          <!-- Center: Action Buttons -->
+          <div class="flex flex-col gap-2 flex-shrink-0">
             <!-- Contraoferta: Solo supervisores/admins que pueden aprobar/rechazar -->
             <button
               v-if="canApproveReject && ['IN_REVIEW', 'DOCS_PENDING'].includes(application.status)"
-              class="px-4 py-2 text-sm font-medium bg-white/20 hover:bg-white/30 text-white rounded-lg border border-white/30 transition-colors flex items-center"
+              class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors"
+              :style="{
+                backgroundColor: tenantStore.branding?.primary_color ? `${tenantStore.branding.primary_color}15` : '#7c3aed15',
+                color: tenantStore.branding?.primary_color || '#7c3aed',
+                borderColor: tenantStore.branding?.primary_color ? `${tenantStore.branding.primary_color}40` : '#7c3aed40'
+              }"
               @click="openCounterOfferModal"
             >
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-              </svg>
               Contraoferta
             </button>
             <!-- Asignar: Solo supervisores/admins -->
             <button
               v-if="canAssign"
-              class="px-4 py-2 text-sm font-medium bg-white/20 hover:bg-white/30 text-white rounded-lg border border-white/30 transition-colors flex items-center"
+              class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors"
+              :style="{
+                backgroundColor: tenantStore.branding?.primary_color ? `${tenantStore.branding.primary_color}15` : '#7c3aed15',
+                color: tenantStore.branding?.primary_color || '#7c3aed',
+                borderColor: tenantStore.branding?.primary_color ? `${tenantStore.branding.primary_color}40` : '#7c3aed40'
+              }"
               @click="openAssignModal"
             >
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
               Asignar
             </button>
             <!-- Cambiar Estado: Analistas y superiores -->
             <button
               v-if="canChangeStatus"
-              class="px-4 py-2 text-sm font-medium bg-white/20 hover:bg-white/30 text-white rounded-lg border border-white/30 transition-colors"
+              class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors"
+              :style="{
+                backgroundColor: tenantStore.branding?.primary_color ? `${tenantStore.branding.primary_color}15` : '#7c3aed15',
+                color: tenantStore.branding?.primary_color || '#7c3aed',
+                borderColor: tenantStore.branding?.primary_color ? `${tenantStore.branding.primary_color}40` : '#7c3aed40'
+              }"
               @click="openStatusModal"
             >
               Cambiar Estado
@@ -1513,23 +1506,26 @@ const addNote = async () => {
             <!-- Generar Contrato: Solo supervisores/admins con solicitud aprobada -->
             <button
               v-if="canApproveReject && application.status === 'APPROVED'"
-              class="px-4 py-2 text-sm font-medium bg-white text-primary-700 hover:bg-white/90 rounded-lg transition-colors"
+              class="px-3 py-1.5 text-xs font-medium text-white rounded-lg transition-colors"
+              :style="{
+                backgroundColor: tenantStore.branding?.primary_color || '#7c3aed'
+              }"
             >
               Generar Contrato
             </button>
           </div>
 
-          <!-- Selfie Photo - Always Visible (rightmost) -->
+          <!-- Right: Selfie Photo -->
           <div class="flex-shrink-0">
             <div class="relative w-28 h-28">
               <!-- Photo container -->
               <button
-                class="w-full h-full rounded-xl overflow-hidden bg-white/20 flex items-center justify-center border-2 transition-all hover:ring-4 hover:ring-white/30"
+                class="w-full h-full rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center border-2 transition-all hover:ring-2 hover:ring-primary-200"
                 :class="{
                   'border-green-400': selfieStatus === 'APPROVED',
                   'border-red-400': selfieStatus === 'REJECTED',
                   'border-yellow-400': selfieStatus === 'PENDING' && selfieUrl,
-                  'border-white/40': !selfieUrl
+                  'border-gray-300': !selfieUrl
                 }"
                 @click="selfieUrl ? showSelfieViewer = true : null"
                 :disabled="!selfieUrl"
@@ -1540,8 +1536,8 @@ const addNote = async () => {
                   alt="Foto del solicitante"
                   class="w-full h-full object-cover"
                 />
-                <div v-else-if="isLoadingSelfie" class="animate-spin w-6 h-6 border-2 border-white border-t-transparent rounded-full" />
-                <svg v-else class="w-10 h-10 text-white/50" fill="currentColor" viewBox="0 0 24 24">
+                <div v-else-if="isLoadingSelfie" class="animate-spin w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full" />
+                <svg v-else class="w-10 h-10 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
                 </svg>
               </button>
@@ -1673,16 +1669,16 @@ const addNote = async () => {
 
       <!-- Tabs -->
       <div class="bg-white rounded-xl shadow-sm mb-6">
-        <div class="border-b border-gray-200">
+        <div class="border-b border-gray-100">
           <nav class="flex -mb-px">
             <button
               v-for="tab in tabs"
               :key="tab.id"
               :class="[
-                'px-6 py-4 text-sm font-medium border-b-2 transition-colors',
+                'px-6 py-3 text-sm font-medium border-b transition-colors',
                 activeTab === tab.id
                   ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
               ]"
               @click="activeTab = tab.id"
             >
