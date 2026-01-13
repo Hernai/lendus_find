@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\KycController;
 use App\Http\Controllers\Api\SimulatorController;
 use App\Http\Controllers\Api\Admin\DashboardController;
 use App\Http\Controllers\Api\Admin\ApplicationController as AdminApplicationController;
+use App\Http\Controllers\Api\Admin\TenantIntegrationController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Broadcast;
 
@@ -270,6 +271,17 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff', 'metadata']
     // =============================================
     Route::middleware('permission:canManageUsers')->group(function () {
         Route::apiResource('users', \App\Http\Controllers\Api\Admin\UserController::class);
+    });
+
+    // =============================================
+    // INTEGRATIONS - Super Admin only
+    // =============================================
+    Route::middleware('permission:canConfigureTenant')->prefix('integrations')->group(function () {
+        Route::get('/', [TenantIntegrationController::class, 'index']);
+        Route::get('/options', [TenantIntegrationController::class, 'options']);
+        Route::post('/', [TenantIntegrationController::class, 'store']);
+        Route::post('/{id}/test', [TenantIntegrationController::class, 'test']);
+        Route::delete('/{id}', [TenantIntegrationController::class, 'destroy']);
     });
 
     // =============================================
