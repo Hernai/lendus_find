@@ -95,27 +95,36 @@
             </div>
 
             <!-- Actions -->
-            <div class="flex gap-2">
+            <div class="space-y-2">
+              <!-- Quick Test Button (Prominent) -->
               <button
-                @click="openEditModal(integration)"
-                class="flex-1 px-3 py-2 text-sm text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-primary-200"
-              >
-                Editar
-              </button>
-              <button
-                @click="openTestModal(integration)"
-                class="flex-1 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors border border-gray-300"
-              >
-                Probar
-              </button>
-              <button
-                @click="deleteIntegration(integration)"
-                class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-red-200"
+                v-if="['sms', 'whatsapp'].includes(integration.service_type)"
+                @click="openQuickTestModal(integration)"
+                class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-medium"
               >
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                 </svg>
+                Probar Ahora
               </button>
+
+              <!-- Secondary Actions -->
+              <div class="flex gap-2">
+                <button
+                  @click="openEditModal(integration)"
+                  class="flex-1 px-3 py-2 text-sm text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-primary-200"
+                >
+                  Editar
+                </button>
+                <button
+                  @click="deleteIntegration(integration)"
+                  class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-red-200"
+                >
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -254,11 +263,21 @@
       </div>
     </div>
 
-    <!-- Test Integration Modal -->
+    <!-- Quick Test Modal (Simplified) -->
     <div v-if="showTestModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
         <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 class="text-xl font-bold text-gray-900">Probar Integración</h2>
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+              <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </div>
+            <div>
+              <h2 class="text-xl font-bold text-gray-900">Prueba Rápida</h2>
+              <p class="text-sm text-gray-500">{{ testingIntegration?.provider_label }} - {{ testingIntegration?.service_type_label }}</p>
+            </div>
+          </div>
           <button @click="closeTestModal" class="text-gray-400 hover:text-gray-600">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -267,59 +286,91 @@
         </div>
 
         <form @submit.prevent="runTest" class="p-6 space-y-4">
-          <p class="text-sm text-gray-600">
-            Enviaremos un mensaje de prueba para verificar la configuración.
-          </p>
+          <!-- Info Alert -->
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div class="flex items-start gap-2">
+              <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+              </svg>
+              <p class="text-sm text-blue-800">
+                Se enviará un mensaje de prueba al número que ingreses para verificar que la configuración funciona correctamente.
+              </p>
+            </div>
+          </div>
 
+          <!-- Phone Input -->
           <div v-if="testingIntegration?.service_type === 'sms' || testingIntegration?.service_type === 'whatsapp'">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Número de Prueba *</label>
-            <input
-              v-model="testForm.test_phone"
-              type="text"
-              required
-              placeholder="9611838818"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            />
-            <p class="mt-1 text-xs text-gray-500">10 dígitos sin código de país</p>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Número de Celular *</label>
+            <div class="relative">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <span class="text-gray-500 text-sm">+52</span>
+              </div>
+              <input
+                v-model="testForm.test_phone"
+                type="text"
+                required
+                placeholder="9611838818"
+                maxlength="10"
+                pattern="[0-9]{10}"
+                class="w-full pl-12 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-lg font-mono"
+              />
+            </div>
+            <p class="mt-2 text-xs text-gray-500">
+              <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              10 dígitos sin código de país (ej: 9611838818)
+            </p>
           </div>
 
           <!-- Test Result -->
-          <div v-if="testResult" class="p-3 rounded-lg" :class="testResult.success ? 'bg-green-50' : 'bg-red-50'">
-            <div class="flex items-start gap-2">
-              <svg v-if="testResult.success" class="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-              </svg>
-              <svg v-else class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-              </svg>
+          <div v-if="testResult" class="p-4 rounded-lg animate-fade-in" :class="testResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'">
+            <div class="flex items-start gap-3">
+              <div v-if="testResult.success" class="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                </svg>
+              </div>
+              <div v-else class="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+              </div>
               <div class="flex-1">
-                <p :class="testResult.success ? 'text-green-800' : 'text-red-800'" class="text-sm font-medium">
+                <p :class="testResult.success ? 'text-green-900' : 'text-red-900'" class="font-semibold text-sm">
                   {{ testResult.message }}
                 </p>
                 <p v-if="testResult.error" class="text-xs text-red-700 mt-1">{{ testResult.error }}</p>
+                <p v-if="testResult.success" class="text-xs text-green-700 mt-1">
+                  El mensaje ha sido enviado exitosamente. Deberías recibirlo en unos segundos.
+                </p>
               </div>
             </div>
           </div>
 
           <!-- Actions -->
-          <div class="flex gap-3 pt-4 border-t border-gray-200">
+          <div class="flex gap-3 pt-4">
             <button
               type="button"
               @click="closeTestModal"
-              class="flex-1 px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              class="flex-1 px-4 py-3 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
             >
-              Cerrar
+              {{ testResult ? 'Cerrar' : 'Cancelar' }}
             </button>
             <button
+              v-if="!testResult"
               type="submit"
               :disabled="isTesting"
-              class="flex-1 px-4 py-2 text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              class="flex-1 px-4 py-3 text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium"
             >
-              <svg v-if="isTesting" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+              <svg v-if="isTesting" class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              {{ isTesting ? 'Probando...' : 'Enviar Prueba' }}
+              <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+              {{ isTesting ? 'Enviando...' : 'Enviar Mensaje' }}
             </button>
           </div>
         </form>
@@ -470,8 +521,8 @@ const saveIntegration = async () => {
   }
 }
 
-// Open test modal
-const openTestModal = (integration: Integration) => {
+// Open quick test modal
+const openQuickTestModal = (integration: Integration) => {
   testingIntegration.value = integration
   testForm.value = {
     test_phone: '',
@@ -480,6 +531,9 @@ const openTestModal = (integration: Integration) => {
   testResult.value = null
   showTestModal.value = true
 }
+
+// Open test modal (alias for compatibility)
+const openTestModal = openQuickTestModal
 
 // Close test modal
 const closeTestModal = () => {
