@@ -7,8 +7,10 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\OtpCode;
 use App\Models\User;
+use App\Services\TwilioService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
@@ -45,9 +47,45 @@ class AuthController extends Controller
                 tenantId: app('tenant.id')
             );
 
-            // TODO: Send OTP via provider (Twilio, MessageBird, etc.)
-            // For development, we'll just return success
-            // In production, integrate with SMS/Email provider
+            // Send OTP via Twilio
+            $sent = false;
+            $sendError = null;
+
+            if ($channel === 'SMS' || $channel === 'WHATSAPP') {
+                try {
+                    $twilioService = new TwilioService(app('tenant.id'));
+
+                    if ($channel === 'WHATSAPP') {
+                        $result = $twilioService->sendOtp($phone, $otp->code, 'whatsapp');
+                    } else {
+                        $result = $twilioService->sendOtp($phone, $otp->code, 'sms');
+                    }
+
+                    $sent = $result['success'] ?? false;
+                    if (!$sent) {
+                        $sendError = $result['error'] ?? 'Failed to send OTP';
+                        Log::warning('Failed to send OTP via Twilio', [
+                            'tenant_id' => app('tenant.id'),
+                            'phone' => $phone,
+                            'channel' => $channel,
+                            'error' => $sendError,
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    $sendError = $e->getMessage();
+                    Log::error('Exception sending OTP via Twilio', [
+                        'tenant_id' => app('tenant.id'),
+                        'phone' => $phone,
+                        'channel' => $channel,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            } elseif ($channel === 'EMAIL') {
+                // TODO: Implement email sending
+                Log::info('Email OTP not implemented yet', ['email' => $email]);
+                $sent = false;
+                $sendError = 'Email OTP not implemented';
+            }
 
             // Log OTP request
             $metadata = $request->attributes->get('metadata', []);
@@ -60,18 +98,37 @@ class AuthController extends Controller
                         'destination_masked' => $email
                             ? substr($email, 0, 3) . '***@' . substr($email, strpos($email, '@') + 1)
                             : substr($phone, 0, 3) . '****' . substr($phone, -2),
+                        'sent_successfully' => $sent,
+                        'send_error' => $sendError,
                     ],
                 ])
             );
 
-            return response()->json([
+            $response = [
                 'success' => true,
-                'message' => 'Código enviado correctamente',
+                'message' => $sent
+                    ? 'Código enviado correctamente'
+                    : 'Código generado (no se pudo enviar por ' . ($channel === 'WHATSAPP' ? 'WhatsApp' : 'SMS') . ')',
                 'channel' => $channel,
-                // Only in dev mode
-                'code' => app()->environment('local') ? $otp->code : null,
-            ]);
+            ];
+
+            // Only in dev/local mode, return the code
+            if (app()->environment('local', 'development')) {
+                $response['code'] = $otp->code;
+                $response['sent_via_provider'] = $sent;
+                if (!$sent && $sendError) {
+                    $response['send_error'] = $sendError;
+                }
+            }
+
+            return response()->json($response);
         } catch (\Exception $e) {
+            Log::error('OTP generation error', [
+                'tenant_id' => app('tenant.id'),
+                'destination' => $destination,
+                'error' => $e->getMessage(),
+            ]);
+
             return response()->json([
                 'error' => 'Failed to send OTP',
                 'message' => $e->getMessage(),
