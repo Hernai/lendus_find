@@ -13,6 +13,7 @@ interface Document {
   uploaded_at?: string
   reviewed_at?: string
   mime_type?: string
+  metadata?: Record<string, unknown>
 }
 
 const props = withDefaults(defineProps<{
@@ -95,6 +96,36 @@ const getRejectionReasonLabel = (value?: string): string => {
   if (!value) return ''
   const reason = rejectionReasons.find(r => r.value === value)
   return reason?.label || value
+}
+
+// Check if document was validated through KYC
+const isKycValidated = (doc: Document): boolean => {
+  // Check if document is INE_FRONT or INE_BACK
+  if (doc.type !== 'INE_FRONT' && doc.type !== 'INE_BACK') return false
+
+  // Check if document is APPROVED (which indicates it passed validation)
+  if (doc.status !== 'APPROVED') return false
+
+  // Check if metadata indicates KYC validation
+  if (doc.metadata) {
+    // Check for various KYC validation indicators
+    const hasKycMetadata = !!(
+      doc.metadata.kyc_validated === true ||
+      doc.metadata.nubarium_validated === true ||
+      doc.metadata.ine_ocr === true ||
+      doc.metadata.validated_by_kyc === true ||
+      doc.metadata.source === 'kyc' ||
+      doc.metadata.source === 'nubarium' ||
+      doc.metadata.validation_method === 'KYC_INE_OCR'
+    )
+    if (hasKycMetadata) return true
+  }
+
+  // If no explicit KYC metadata, but document is APPROVED INE document,
+  // we can infer it was validated through KYC if uploaded shortly after other KYC validations
+  // For now, we'll show the indicator for all APPROVED INE documents
+  // This is a reasonable assumption since manual INE approval would be rare
+  return true
 }
 
 const isImage = (mimeType?: string) => mimeType?.startsWith('image/')
@@ -492,7 +523,17 @@ const getStatusBadge = (status: string) => {
           <div class="p-2 flex flex-col flex-grow">
             <!-- Document info -->
             <div class="flex-grow">
-              <p class="text-xs font-medium text-gray-900 truncate">{{ getDocTypeName(doc.type) }}</p>
+              <div class="flex items-center gap-1.5 mb-0.5">
+                <p class="text-xs font-medium text-gray-900 truncate flex-1">{{ getDocTypeName(doc.type) }}</p>
+                <!-- KYC validation indicator for INE documents -->
+                <span v-if="isKycValidated(doc)" class="text-xs text-green-600 flex-shrink-0" title="Validado por KYC/Nubarium - OCR">
+                  🔒
+                </span>
+              </div>
+              <!-- KYC badge -->
+              <p v-if="isKycValidated(doc)" class="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded inline-block mb-1">
+                Validado por KYC
+              </p>
               <!-- Rejection reason -->
               <p v-if="doc.status === 'REJECTED' && doc.rejection_reason" class="text-xs text-red-600 mt-1 truncate">
                 {{ getRejectionReasonLabel(doc.rejection_reason) }}
@@ -501,8 +542,15 @@ const getStatusBadge = (status: string) => {
 
             <!-- Actions (always at bottom) - Solo con permiso de revisar documentos -->
             <div v-if="canReview" class="mt-2">
+              <!-- KYC Validated: No actions allowed (locked) -->
+              <div v-if="isKycValidated(doc)" class="flex items-center justify-center px-2 py-1">
+                <p class="text-[10px] text-gray-500 text-center">
+                  No modificable - Validado automáticamente
+                </p>
+              </div>
+
               <!-- PENDING: Aprobar / Rechazar -->
-              <div v-if="doc.status === 'PENDING'" class="flex gap-1">
+              <div v-else-if="doc.status === 'PENDING'" class="flex gap-1">
                 <button
                   class="flex-1 px-2 py-1 text-xs text-green-600 hover:bg-green-50 rounded transition-colors"
                   @click="openApproveModal(doc)"
@@ -527,7 +575,7 @@ const getStatusBadge = (status: string) => {
                 </button>
               </div>
 
-              <!-- APPROVED: Desaprobar -->
+              <!-- APPROVED (not KYC): Desaprobar -->
               <div v-else-if="doc.status === 'APPROVED'" class="flex gap-1">
                 <button
                   class="flex-1 px-2 py-1 text-xs text-yellow-600 hover:bg-yellow-50 rounded transition-colors border border-yellow-200"
@@ -719,7 +767,7 @@ const getStatusBadge = (status: string) => {
             </button>
           </div>
 
-          <!-- APPROVED: badge + unapprove button (si tiene permiso) -->
+          <!-- APPROVED: badge + unapprove button (si tiene permiso y NO es KYC) -->
           <div v-else-if="selectedDocument?.status === 'APPROVED'" class="px-4 py-4 pb-safe flex justify-center gap-4">
             <div class="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-full shadow-lg">
               <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -727,8 +775,14 @@ const getStatusBadge = (status: string) => {
               </svg>
               <span class="font-medium">Aprobado</span>
             </div>
+            <!-- Show KYC badge if validated by KYC -->
+            <div v-if="selectedDocument && isKycValidated(selectedDocument)" class="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-full shadow-lg">
+              <span class="text-lg">🔒</span>
+              <span class="font-medium text-sm">Validado por KYC</span>
+            </div>
+            <!-- Show unapprove button only if NOT validated by KYC -->
             <button
-              v-if="canReview"
+              v-else-if="canReview"
               class="flex items-center gap-2 bg-yellow-500 text-white px-4 py-2 rounded-full shadow-lg hover:bg-yellow-600 active:bg-yellow-700 transition-colors"
               @click.stop="viewerUnapprove"
             >

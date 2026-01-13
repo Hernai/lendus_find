@@ -22,6 +22,7 @@ class DataVerification extends Model
         'field_value',
         'method',
         'is_verified',
+        'is_locked',
         'notes',
         'rejection_reason',
         'status',
@@ -36,6 +37,7 @@ class DataVerification extends Model
         'status' => VerificationStatus::class,
         'method' => VerificationMethod::class,
         'is_verified' => 'boolean',
+        'is_locked' => 'boolean',
         'metadata' => 'array',
         'correction_history' => 'array',
         'rejected_at' => 'datetime',
@@ -102,6 +104,22 @@ class DataVerification extends Model
     }
 
     /**
+     * Check if this field is locked (cannot be modified).
+     */
+    public function isLocked(): bool
+    {
+        return $this->is_locked === true;
+    }
+
+    /**
+     * Check if this field can be modified.
+     */
+    public function canBeModified(): bool
+    {
+        return !$this->isLocked();
+    }
+
+    /**
      * Reject this field with a reason.
      */
     public function reject(string $reason, ?string $userId = null): void
@@ -147,6 +165,11 @@ class DataVerification extends Model
      */
     public function verify(?string $method = null, ?string $userId = null, ?string $notes = null): void
     {
+        // Check if locked before allowing modification
+        if ($this->exists && $this->isLocked()) {
+            throw new \Exception("Cannot modify locked field: {$this->field_name}. This field was verified by KYC.");
+        }
+
         $this->status = VerificationStatus::VERIFIED;
         $this->is_verified = true;
         $this->method = $method ?? VerificationMethod::MANUAL->value;
@@ -204,6 +227,21 @@ class DataVerification extends Model
         $fieldName = $field instanceof VerifiableField ? $field->value : $field;
         $methodValue = $method instanceof VerificationMethod ? $method->value : $method;
 
+        // Check if field is already locked
+        $existing = static::where('applicant_id', $applicantId)
+            ->where('field_name', $fieldName)
+            ->first();
+
+        if ($existing && $existing->is_locked) {
+            // Field is locked, cannot update
+            throw new \Exception("Cannot update locked field: {$fieldName}. This field was verified by automated KYC.");
+        }
+
+        // Determine if this method should lock the field
+        // Lock if method is automated KYC
+        $methodEnum = $method instanceof VerificationMethod ? $method : VerificationMethod::tryFrom($methodValue);
+        $shouldLock = $methodEnum && $methodEnum->isAutomated() && $isVerified;
+
         return static::updateOrCreate(
             [
                 'applicant_id' => $applicantId,
@@ -213,6 +251,7 @@ class DataVerification extends Model
                 'field_value' => is_array($value) ? json_encode($value) : (string) $value,
                 'method' => $methodValue,
                 'is_verified' => $isVerified,
+                'is_locked' => $shouldLock,
                 'status' => $isVerified ? VerificationStatus::VERIFIED : VerificationStatus::PENDING,
                 'metadata' => $metadata,
                 'notes' => $notes,
@@ -258,7 +297,7 @@ class DataVerification extends Model
      * Get all verified fields for an applicant as a simple array.
      *
      * @param string $applicantId
-     * @return array<string, array{value: string, method: string, verified_at: string, metadata: array|null}>
+     * @return array<string, array{value: string, method: string, verified_at: string, metadata: array|null, is_locked: bool}>
      */
     public static function getVerifiedFieldsForApplicant(string $applicantId): array
     {
@@ -274,6 +313,7 @@ class DataVerification extends Model
                 'method_label' => $v->method?->label() ?? self::getMethodLabel($v->method),
                 'verified_at' => $v->updated_at->toIso8601String(),
                 'metadata' => $v->metadata,
+                'is_locked' => $v->is_locked ?? false,
             ];
         }
 

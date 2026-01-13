@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore, useApplicationStore, useAuthStore } from '@/stores'
+import { useOnboardingStore, useApplicationStore, useAuthStore, useKycStore } from '@/stores'
 import { AppButton, AppSignaturePad } from '@/components/common'
 import { api } from '@/services/api'
 
@@ -9,6 +9,7 @@ const router = useRouter()
 const onboardingStore = useOnboardingStore()
 const applicationStore = useApplicationStore()
 const authStore = useAuthStore()
+const kycStore = useKycStore()
 
 // Sync from store on mount
 onMounted(async () => {
@@ -75,7 +76,18 @@ const handleSubmit = async () => {
     })
     console.log('✅ Signature saved to applicant')
 
-    // 2. Update application with consent data
+    // 2. Record KYC verifications if KYC was completed
+    if (kycStore.verified && kycStore.lockedData.curp && authStore.user?.applicant_id) {
+      console.log('📝 Recording KYC verifications...')
+      const recorded = await kycStore.recordVerifications(authStore.user.applicant_id)
+      if (recorded) {
+        console.log('✅ KYC verifications recorded successfully')
+      } else {
+        console.warn('⚠️ Failed to record KYC verifications, but continuing...')
+      }
+    }
+
+    // 3. Update application with consent data
     await applicationStore.updateApplication({
       dynamic_data: {
         ...applicationStore.currentApplication.dynamic_data,
@@ -88,7 +100,7 @@ const handleSubmit = async () => {
       }
     })
 
-    // 3. Submit the application
+    // 4. Submit the application
     const result = await applicationStore.submitApplication()
 
     if (result) {

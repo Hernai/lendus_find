@@ -73,6 +73,7 @@ class DocumentController extends Controller
         $validator = Validator::make($request->all(), [
             'type' => 'required|string|max:50',
             'file' => 'required|file|mimes:jpg,jpeg,png,webp,pdf|max:10240', // 10MB max
+            'metadata' => 'nullable|array', // Accept metadata from client (e.g., KYC validation info)
         ]);
 
         if ($validator->fails()) {
@@ -127,6 +128,9 @@ class DocumentController extends Controller
         $disk = config('app.env') === 'production' ? 's3' : 'local';
         Storage::disk($disk)->put($path, file_get_contents($file), 'private');
 
+        // Prepare document metadata (merge client metadata with system metadata)
+        $docMetadata = $request->input('metadata', []);
+
         // Create document record
         $document = Document::create([
             'tenant_id' => $tenant->id,
@@ -139,6 +143,7 @@ class DocumentController extends Controller
             'mime_type' => $file->getMimeType(),
             'size' => $file->getSize(),
             'status' => DocumentStatus::PENDING,
+            'metadata' => $docMetadata,
         ]);
 
         // Get metadata for timeline

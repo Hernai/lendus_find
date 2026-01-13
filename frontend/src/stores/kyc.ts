@@ -131,6 +131,7 @@ export interface VerifiedField {
   method_label: string
   verified_at: string
   metadata?: Record<string, unknown> | null
+  is_locked?: boolean
 }
 
 // API response for verifications
@@ -143,6 +144,7 @@ export interface VerificationsResponse {
       method: string
       method_label: string
       is_verified: boolean
+      is_locked: boolean
       status: string
       verified_at: string
       metadata?: Record<string, unknown> | null
@@ -312,6 +314,62 @@ export const useKycStore = defineStore('kyc', () => {
       console.error('Failed to check KYC services:', err)
       isConfigured.value = false
       return false
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
+   * Test connection to the KYC service (Nubarium).
+   * Forces a token refresh and validates credentials.
+   */
+  const testConnection = async (): Promise<{ success: boolean; message: string }> => {
+    isLoading.value = true
+    error.value = null
+
+    try {
+      const response = await api.post<{ success: boolean; message: string; configured: boolean }>('/kyc/test-connection')
+      return {
+        success: response.data.success,
+        message: response.data.message
+      }
+    } catch (err: unknown) {
+      console.error('Failed to test KYC connection:', err)
+      const errorResponse = err as { response?: { data?: { message?: string } } }
+      const message = errorResponse.response?.data?.message || 'Error al probar conexión'
+      error.value = message
+      return {
+        success: false,
+        message
+      }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
+   * Force refresh the Nubarium JWT token.
+   * Useful when the token has expired or API calls are failing with 401.
+   */
+  const refreshToken = async (): Promise<{ success: boolean; message: string }> => {
+    isLoading.value = true
+    error.value = null
+
+    try {
+      const response = await api.post<{ success: boolean; message: string }>('/kyc/refresh-token')
+      return {
+        success: response.data.success,
+        message: response.data.message
+      }
+    } catch (err: unknown) {
+      console.error('Failed to refresh KYC token:', err)
+      const errorResponse = err as { response?: { data?: { message?: string } } }
+      const message = errorResponse.response?.data?.message || 'Error al renovar token'
+      error.value = message
+      return {
+        success: false,
+        message
+      }
     } finally {
       isLoading.value = false
     }
@@ -901,10 +959,75 @@ export const useKycStore = defineStore('kyc', () => {
   }
 
   /**
+   * Check if a specific field is locked (cannot be modified).
+   */
+  const isFieldLocked = (fieldName: string): boolean => {
+    return verifiedFields.value[fieldName]?.is_locked === true
+  }
+
+  /**
    * Get verification info for a field.
    */
   const getFieldVerification = (fieldName: string): VerifiedField | null => {
     return verifiedFields.value[fieldName] || null
+  }
+
+  /**
+   * Upload INE documents with KYC validation metadata.
+   * Should be called after INE validation is successful.
+   */
+  const uploadIneDocuments = async (applicationId: string): Promise<{ front: boolean; back: boolean }> => {
+    if (!applicationId) {
+      console.warn('[KYC Store] No application ID for uploading INE documents')
+      return { front: false, back: false }
+    }
+
+    const result = { front: false, back: false }
+
+    // Prepare KYC metadata
+    const kycMetadata = {
+      kyc_validated: true,
+      source: 'kyc',
+      nubarium_validated: true,
+      validation_method: 'KYC_INE_OCR',
+      ine_ocr: true,
+      validated_at: new Date().toISOString(),
+      ine_valid: validations.value.ine_lista_nominal?.valid || false,
+      ocr_data: lockedData.value
+    }
+
+    try {
+      // Upload INE_FRONT if available
+      if (ineFrontImage.value) {
+        console.log('[KYC Store] Uploading INE_FRONT with KYC metadata')
+        // Convert base64 to File
+        const frontBlob = await fetch(ineFrontImage.value).then(r => r.blob())
+        const frontFile = new File([frontBlob], 'ine_front.jpg', { type: 'image/jpeg' })
+
+        const applicationService = (await import('@/services/application.service')).default
+        await applicationService.uploadDocument(applicationId, 'INE_FRONT', frontFile, kycMetadata)
+        result.front = true
+        console.log('[KYC Store] INE_FRONT uploaded with KYC metadata')
+      }
+
+      // Upload INE_BACK if available
+      if (ineBackImage.value) {
+        console.log('[KYC Store] Uploading INE_BACK with KYC metadata')
+        // Convert base64 to File
+        const backBlob = await fetch(ineBackImage.value).then(r => r.blob())
+        const backFile = new File([backBlob], 'ine_back.jpg', { type: 'image/jpeg' })
+
+        const applicationService = (await import('@/services/application.service')).default
+        await applicationService.uploadDocument(applicationId, 'INE_BACK', backFile, kycMetadata)
+        result.back = true
+        console.log('[KYC Store] INE_BACK uploaded with KYC metadata')
+      }
+
+      return result
+    } catch (err) {
+      console.error('[KYC Store] Failed to upload INE documents:', err)
+      return result
+    }
   }
 
   const reset = () => {
@@ -988,6 +1111,8 @@ export const useKycStore = defineStore('kyc', () => {
     validationProgress,
     // Actions
     checkServices,
+    testConnection,
+    refreshToken,
     setIneFrontImage,
     setIneBackImage,
     setSelfieImage,
@@ -1003,7 +1128,9 @@ export const useKycStore = defineStore('kyc', () => {
     recordVerifications,
     loadVerifications,
     isFieldVerified,
+    isFieldLocked,
     getFieldVerification,
+    uploadIneDocuments,
     reset
   }
 })

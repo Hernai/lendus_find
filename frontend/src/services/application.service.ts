@@ -158,10 +158,15 @@ const applicationService = {
   /**
    * Upload a document
    */
-  uploadDocument: async (applicationId: string, type: string, file: File) => {
+  uploadDocument: async (applicationId: string, type: string, file: File, metadata?: Record<string, unknown>) => {
     const formData = new FormData()
     formData.append('type', type)
     formData.append('file', file)
+
+    // Add metadata if provided (e.g., KYC validation info)
+    if (metadata) {
+      formData.append('metadata', JSON.stringify(metadata))
+    }
 
     const response = await api.post<{ message: string; data: ApplicationDocument }>(
       `/applications/${applicationId}/documents`,

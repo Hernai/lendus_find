@@ -639,6 +639,13 @@ class ApplicationController extends Controller
             ], 400);
         }
 
+        // Cannot unapprove documents validated by KYC
+        if ($document->metadata && isset($document->metadata['kyc_validated']) && $document->metadata['kyc_validated'] === true) {
+            return response()->json([
+                'message' => 'No se puede desaprobar un documento validado por KYC automático'
+            ], 403);
+        }
+
         $previousStatus = $document->status;
 
         $document->status = DocumentStatus::PENDING;
@@ -1103,11 +1110,13 @@ class ApplicationController extends Controller
                     $v->field_name => [
                         'verified' => $v->is_verified,
                         'method' => $v->method,
+                        'method_label' => $v->method?->label() ?? null,
                         'verified_at' => $v->created_at?->toIso8601String(),
                         'verified_by' => $v->verifier?->name,
                         'notes' => $v->notes,
                         'rejection_reason' => $v->rejection_reason,
                         'status' => $v->status,
+                        'is_locked' => $v->is_locked ?? false,
                     ]
                 ]) ?? [],
 
@@ -1137,6 +1146,7 @@ class ApplicationController extends Controller
                 'uploaded_at' => $doc->created_at->toIso8601String(),
                 'reviewed_at' => $doc->reviewed_at?->toIso8601String(),
                 'mime_type' => $doc->mime_type,
+                'metadata' => $doc->metadata,
             ]),
 
             // References

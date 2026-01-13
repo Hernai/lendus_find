@@ -137,6 +137,11 @@ class NubariumService extends BaseExternalApiService
     }
 
     /**
+     * Track if we've already tried to refresh the token in this request.
+     */
+    protected bool $tokenRefreshAttempted = false;
+
+    /**
      * Get or generate JWT token using Basic Auth.
      * Tokens are cached to avoid unnecessary API calls.
      */
@@ -151,6 +156,35 @@ class NubariumService extends BaseExternalApiService
         return Cache::remember($cacheKey, $this->tokenCacheDuration, function () {
             return $this->generateJwtToken();
         });
+    }
+
+    /**
+     * Force refresh JWT token (useful when token has expired).
+     */
+    public function refreshToken(): ?string
+    {
+        $this->clearTokenCache();
+        $this->tokenRefreshAttempted = true;
+        return $this->getJwtToken();
+    }
+
+    /**
+     * Handle 401 Unauthorized by refreshing token and retrying once.
+     */
+    protected function handleUnauthorized(): ?string
+    {
+        if ($this->tokenRefreshAttempted) {
+            Log::warning('Nubarium: Token refresh already attempted, not retrying', [
+                'tenant_id' => $this->tenant->id,
+            ]);
+            return null;
+        }
+
+        Log::info('Nubarium: Attempting token refresh due to 401', [
+            'tenant_id' => $this->tenant->id,
+        ]);
+
+        return $this->refreshToken();
     }
 
     /**
@@ -276,6 +310,59 @@ class NubariumService extends BaseExternalApiService
     }
 
     /**
+     * Make an API call with automatic token refresh on 401.
+     *
+     * @param string $service Service name (curp, ine, ocr, sat, global)
+     * @param string $method HTTP method (GET, POST)
+     * @param string $endpoint API endpoint
+     * @param array $payload Request payload
+     * @param int|null $timeout Custom timeout (optional)
+     * @return \Illuminate\Http\Client\Response
+     */
+    protected function apiCall(string $service, string $method, string $endpoint, array $payload = [], ?int $timeout = null): \Illuminate\Http\Client\Response
+    {
+        $http = $this->serviceHttp($service);
+
+        if ($timeout) {
+            $http = $http->timeout($timeout);
+        }
+
+        $method = strtoupper($method);
+        $response = $method === 'GET'
+            ? $http->get($endpoint, $payload)
+            : $http->post($endpoint, $payload);
+
+        // If we get 401 Unauthorized, try to refresh token and retry once
+        if ($response->status() === 401 && !$this->tokenRefreshAttempted) {
+            Log::info('Nubarium: Got 401, attempting token refresh', [
+                'endpoint' => $endpoint,
+                'tenant_id' => $this->tenant->id,
+            ]);
+
+            $newToken = $this->handleUnauthorized();
+
+            if ($newToken) {
+                // Retry with new token
+                $http = $this->serviceHttp($service);
+                if ($timeout) {
+                    $http = $http->timeout($timeout);
+                }
+
+                $response = $method === 'GET'
+                    ? $http->get($endpoint, $payload)
+                    : $http->post($endpoint, $payload);
+
+                Log::info('Nubarium: Retry after token refresh', [
+                    'endpoint' => $endpoint,
+                    'new_status' => $response->status(),
+                ]);
+            }
+        }
+
+        return $response;
+    }
+
+    /**
      * Test API connection by attempting to generate a JWT token.
      */
     public function testConnection(): array
@@ -342,7 +429,7 @@ class NubariumService extends BaseExternalApiService
         $this->logRequest('POST', 'renapo/v3/valida_curp', ['curp' => $curp]);
 
         try {
-            $response = $this->serviceHttp('curp')->post('/renapo/v3/valida_curp', [
+            $response = $this->apiCall('curp', 'POST', '/renapo/v3/valida_curp', [
                 'curp' => strtoupper($curp),
             ]);
 
@@ -439,7 +526,7 @@ class NubariumService extends BaseExternalApiService
         $this->logRequest('POST', 'renapo/obtener_curp', $payload);
 
         try {
-            $response = $this->serviceHttp('curp')->post('/renapo/obtener_curp', $payload);
+            $response = $this->apiCall('curp', 'POST', '/renapo/obtener_curp', $payload);
 
             $this->logResponse($response, 'renapo/obtener_curp');
 
@@ -500,7 +587,7 @@ class NubariumService extends BaseExternalApiService
         $this->logRequest('POST', 'sat/valida_rfc', ['rfc' => $rfc]);
 
         try {
-            $response = $this->serviceHttp('sat')->post('/sat/valida_rfc', [
+            $response = $this->apiCall('sat', 'POST', '/sat/valida_rfc', [
                 'rfc' => strtoupper($rfc),
             ]);
 
@@ -570,9 +657,7 @@ class NubariumService extends BaseExternalApiService
         $this->logRequest('POST', 'ocr/v1/obtener_datos_id', ['has_front' => true, 'has_back' => !empty($backImage)]);
 
         try {
-            $response = $this->serviceHttp('ocr')
-                ->timeout(60) // OCR may take longer
-                ->post('/ocr/v1/obtener_datos_id', $payload);
+            $response = $this->apiCall('ocr', 'POST', '/ocr/v1/obtener_datos_id', $payload, 60);
 
             $this->logResponse($response, 'ocr/v1/obtener_datos_id');
 
@@ -735,7 +820,7 @@ class NubariumService extends BaseExternalApiService
         $this->logRequest('POST', 'ine/v2/valida_ine', $payload);
 
         try {
-            $response = $this->serviceHttp('ine')->post('/ine/v2/valida_ine', $payload);
+            $response = $this->apiCall('ine', 'POST', '/ine/v2/valida_ine', $payload);
 
             $this->logResponse($response, 'ine/v2/valida_ine');
 
@@ -892,7 +977,7 @@ class NubariumService extends BaseExternalApiService
         $this->logRequest('POST', 'spei/cep', $data);
 
         try {
-            $response = $this->serviceHttp('global')->post('/spei/cep', [
+            $response = $this->apiCall('global', 'POST', '/spei/cep', [
                 'clave_rastreo' => $data['clave_rastreo'],
                 'fecha_operacion' => $this->formatDate($data['fecha_operacion']),
                 'monto' => (float) $data['monto'],
@@ -945,7 +1030,7 @@ class NubariumService extends BaseExternalApiService
                 'similarity' => $similarity,
             ];
 
-            $response = $this->serviceHttp('global')->post('/blocklist/v1/query', $payload);
+            $response = $this->apiCall('global', 'POST', '/blocklist/v1/query', $payload);
 
             $this->logResponse($response, 'blocklist/v1/query');
 
@@ -1026,7 +1111,7 @@ class NubariumService extends BaseExternalApiService
                 $payload['curp'] = strtoupper($curp);
             }
 
-            $response = $this->serviceHttp('global')->post('/blacklists/v1/consulta', $payload);
+            $response = $this->apiCall('global', 'POST', '/blacklists/v1/consulta', $payload);
 
             $this->logResponse($response, 'blacklists/v1/consulta');
 
@@ -1096,9 +1181,7 @@ class NubariumService extends BaseExternalApiService
                 $payload['nss'] = $nss;
             }
 
-            $response = $this->serviceHttp('global')
-                ->timeout(60) // IMSS queries can be slow
-                ->post('/imss/history', $payload);
+            $response = $this->apiCall('global', 'POST', '/imss/history', $payload, 60);
 
             $this->logResponse($response, 'imss/history');
 
@@ -1147,7 +1230,7 @@ class NubariumService extends BaseExternalApiService
         $this->logRequest('POST', 'sep/cedula', ['cedula' => $cedula]);
 
         try {
-            $response = $this->serviceHttp('global')->post('/sep/cedula', [
+            $response = $this->apiCall('global', 'POST', '/sep/cedula', [
                 'cedula' => $cedula,
             ]);
 

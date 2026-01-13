@@ -47,6 +47,76 @@ class KycController extends Controller
     }
 
     /**
+     * Test KYC service connection and refresh token if needed.
+     * This endpoint forces a token refresh and tests the connection.
+     */
+    public function testConnection(Request $request): JsonResponse
+    {
+        $tenant = app('tenant');
+        $service = new NubariumService($tenant);
+
+        if (!$service->isConfigured()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Servicio de validación no configurado',
+                'configured' => false,
+            ], 503);
+        }
+
+        // Clear token cache and test connection
+        $result = $service->testConnection();
+
+        // Audit log
+        $this->logKycAction($request, 'connection_test', [
+            'success' => $result['success'],
+            'message' => $result['message'],
+        ]);
+
+        return response()->json([
+            'success' => $result['success'],
+            'message' => $result['message'],
+            'configured' => true,
+        ], $result['success'] ? 200 : 400);
+    }
+
+    /**
+     * Force refresh the Nubarium JWT token.
+     * Useful when the token has expired or is about to expire.
+     */
+    public function refreshToken(Request $request): JsonResponse
+    {
+        $tenant = app('tenant');
+        $service = new NubariumService($tenant);
+
+        if (!$service->isConfigured()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Servicio de validación no configurado',
+            ], 503);
+        }
+
+        // Force refresh the token
+        $newToken = $service->refreshToken();
+
+        // Audit log
+        $this->logKycAction($request, 'token_refresh', [
+            'success' => $newToken !== null,
+        ]);
+
+        if ($newToken) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Token renovado exitosamente',
+            ]);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Error al renovar el token. Verifique las credenciales configuradas.',
+        ], 400);
+    }
+
+    /**
      * Validate CURP with RENAPO.
      */
     public function validateCurp(Request $request): JsonResponse
@@ -727,6 +797,7 @@ class KycController extends Controller
                     'method' => $v->method?->value ?? $v->method,
                     'method_label' => $v->method?->label() ?? DataVerification::getMethodLabel($v->method ?? ''),
                     'is_verified' => $v->is_verified,
+                    'is_locked' => $v->is_locked ?? false,
                     'status' => $v->status?->value ?? $v->status,
                     'verified_at' => $v->updated_at?->toIso8601String(),
                     'metadata' => $v->metadata,

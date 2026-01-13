@@ -151,6 +151,10 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'metadata'])->group(
         // Get available services
         Route::get('/services', [KycController::class, 'services']);
 
+        // Connection test and token management
+        Route::post('/test-connection', [KycController::class, 'testConnection']);
+        Route::post('/refresh-token', [KycController::class, 'refreshToken']);
+
         // CURP validation and lookup
         Route::post('/curp/validate', [KycController::class, 'validateCurp']);
         Route::post('/curp/get', [KycController::class, 'getCurp']);

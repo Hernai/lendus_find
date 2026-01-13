@@ -165,11 +165,13 @@ interface Application {
   field_verifications?: Record<string, {
     verified: boolean
     method: string
+    method_label?: string
     verified_at?: string
     verified_by?: string
     notes?: string
     rejection_reason?: string
     status?: string
+    is_locked?: boolean
   }>
 }
 
@@ -1215,6 +1217,12 @@ const getFieldVerification = (field: string) => {
   return application.value?.field_verifications?.[field]
 }
 
+// Helper to check if a field is locked (verified by KYC and cannot be modified)
+const isFieldLocked = (field: string): boolean => {
+  const verification = application.value?.field_verifications?.[field]
+  return verification?.is_locked === true
+}
+
 // Helper to get field label in Spanish
 const getFieldLabel = (field: string): string => {
   const labels: Record<string, string> = {
@@ -1744,7 +1752,11 @@ const addNote = async () => {
                         :class="isFieldRejected('first_name') ? 'bg-red-500' : isFieldVerified('first_name') ? 'bg-green-500' : isFieldPending('first_name') ? 'bg-yellow-500' : application.applicant.full_name ? 'bg-blue-500' : 'bg-gray-300'"
                       ></span>
                       <span class="text-xs text-gray-500">Nombre</span>
-                      <div v-if="application.applicant.full_name" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
+                      <!-- Lock icon for KYC-verified fields -->
+                      <span v-if="isFieldLocked('first_name')" class="text-xs text-green-600" title="Verificado por KYC - No modificable">
+                        🔒
+                      </span>
+                      <div v-if="application.applicant.full_name && !isFieldLocked('first_name')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
                         <!-- Verificar: solo si NO está verificado -->
                         <button
                           v-if="!isFieldVerified('first_name') && !isFieldRejected('first_name')"
@@ -1794,10 +1806,19 @@ const addNote = async () => {
                           </svg>
                         </button>
                       </div>
+                      <!-- Message for locked fields -->
+                      <div v-if="isFieldLocked('first_name')" class="ml-auto">
+                        <span class="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+                          {{ getFieldVerification('first_name')?.method_label || 'KYC' }}
+                        </span>
+                      </div>
                     </div>
                     <p class="font-medium text-gray-900 truncate">{{ application.applicant.full_name || '—' }}</p>
                     <p v-if="isFieldRejected('first_name')" class="text-xs text-red-600 mt-0.5">
                       ⚠ {{ getFieldVerification('first_name')?.rejection_reason }}
+                    </p>
+                    <p v-if="isFieldLocked('first_name')" class="text-[10px] text-green-600 mt-0.5">
+                      Verificado automáticamente - No modificable
                     </p>
                   </div>
                   <!-- Email -->
@@ -1928,7 +1949,10 @@ const addNote = async () => {
                         :class="isFieldRejected('curp') ? 'bg-red-500' : isFieldVerified('curp') ? 'bg-green-500' : isFieldPending('curp') ? 'bg-yellow-500' : application.applicant.curp ? 'bg-blue-500' : 'bg-gray-300'"
                       ></span>
                       <span class="text-xs text-gray-500">CURP</span>
-                      <div v-if="application.applicant.curp" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
+                      <span v-if="isFieldLocked('curp')" class="text-xs text-green-600" title="Verificado por KYC - No modificable">
+                        🔒
+                      </span>
+                      <div v-if="application.applicant.curp && !isFieldLocked('curp')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
                         <button
                           v-if="!isFieldVerified('curp') && !isFieldRejected('curp')"
                           class="p-0.5 rounded hover:bg-green-100 text-gray-400 hover:text-green-600"
@@ -1974,10 +1998,18 @@ const addNote = async () => {
                           </svg>
                         </button>
                       </div>
+                      <div v-if="isFieldLocked('curp')" class="ml-auto">
+                        <span class="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+                          {{ getFieldVerification('curp')?.method_label || 'KYC' }}
+                        </span>
+                      </div>
                     </div>
                     <p class="font-mono text-sm text-gray-900">{{ application.applicant.curp || '—' }}</p>
                     <p v-if="isFieldRejected('curp')" class="text-xs text-red-600 mt-0.5">
                       ⚠ {{ getFieldVerification('curp')?.rejection_reason }}
+                    </p>
+                    <p v-if="isFieldLocked('curp')" class="text-[10px] text-green-600 mt-0.5">
+                      Verificado automáticamente - No modificable
                     </p>
                   </div>
                   <!-- RFC -->
@@ -1988,7 +2020,10 @@ const addNote = async () => {
                         :class="isFieldRejected('rfc') ? 'bg-red-500' : isFieldVerified('rfc') ? 'bg-green-500' : isFieldPending('rfc') ? 'bg-yellow-500' : application.applicant.rfc ? 'bg-blue-500' : 'bg-gray-300'"
                       ></span>
                       <span class="text-xs text-gray-500">RFC</span>
-                      <div v-if="application.applicant.rfc" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
+                      <span v-if="isFieldLocked('rfc')" class="text-xs text-green-600" title="Verificado por KYC - No modificable">
+                        🔒
+                      </span>
+                      <div v-if="application.applicant.rfc && !isFieldLocked('rfc')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
                         <button
                           v-if="!isFieldVerified('rfc') && !isFieldRejected('rfc')"
                           class="p-0.5 rounded hover:bg-green-100 text-gray-400 hover:text-green-600"
@@ -2034,10 +2069,18 @@ const addNote = async () => {
                           </svg>
                         </button>
                       </div>
+                      <div v-if="isFieldLocked('rfc')" class="ml-auto">
+                        <span class="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+                          {{ getFieldVerification('rfc')?.method_label || 'KYC' }}
+                        </span>
+                      </div>
                     </div>
                     <p class="font-mono text-sm text-gray-900">{{ application.applicant.rfc || '—' }}</p>
                     <p v-if="isFieldRejected('rfc')" class="text-xs text-red-600 mt-0.5">
                       ⚠ {{ getFieldVerification('rfc')?.rejection_reason }}
+                    </p>
+                    <p v-if="isFieldLocked('rfc')" class="text-[10px] text-green-600 mt-0.5">
+                      Verificado automáticamente - No modificable
                     </p>
                   </div>
                   <!-- Fecha Nacimiento -->
@@ -2048,7 +2091,10 @@ const addNote = async () => {
                         :class="isFieldRejected('birth_date') ? 'bg-red-500' : isFieldVerified('birth_date') ? 'bg-green-500' : isFieldPending('birth_date') ? 'bg-yellow-500' : application.applicant.birth_date ? 'bg-blue-500' : 'bg-gray-300'"
                       ></span>
                       <span class="text-xs text-gray-500">Fecha Nacimiento</span>
-                      <div v-if="application.applicant.birth_date" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
+                      <span v-if="isFieldLocked('birth_date')" class="text-xs text-green-600" title="Verificado por KYC - No modificable">
+                        🔒
+                      </span>
+                      <div v-if="application.applicant.birth_date && !isFieldLocked('birth_date')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
                         <button
                           v-if="!isFieldVerified('birth_date') && !isFieldRejected('birth_date')"
                           class="p-0.5 rounded hover:bg-green-100 text-gray-400 hover:text-green-600"
@@ -2094,10 +2140,18 @@ const addNote = async () => {
                           </svg>
                         </button>
                       </div>
+                      <div v-if="isFieldLocked('birth_date')" class="ml-auto">
+                        <span class="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+                          {{ getFieldVerification('birth_date')?.method_label || 'KYC' }}
+                        </span>
+                      </div>
                     </div>
                     <p class="font-medium text-gray-900">{{ application.applicant.birth_date ? formatDate(application.applicant.birth_date) : '—' }}</p>
                     <p v-if="isFieldRejected('birth_date')" class="text-xs text-red-600 mt-0.5">
                       ⚠ {{ getFieldVerification('birth_date')?.rejection_reason }}
+                    </p>
+                    <p v-if="isFieldLocked('birth_date')" class="text-[10px] text-green-600 mt-0.5">
+                      Verificado automáticamente - No modificable
                     </p>
                   </div>
                 </div>
