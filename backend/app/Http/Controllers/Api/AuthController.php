@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\OtpCode;
 use App\Models\User;
-use App\Services\TwilioService;
+use App\Services\ExternalApi\TwilioService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -214,6 +214,129 @@ class AuthController extends Controller
         // Mark phone as verified if not already
         if ($request->phone && !$user->hasVerifiedPhone()) {
             $user->markPhoneAsVerified();
+
+            // Also mark phone as verified in Applicant if exists
+            if ($user->applicant) {
+                // Update applicant phone_verified_at if not set
+                if (!$user->applicant->phone_verified_at) {
+                    $user->applicant->update(['phone_verified_at' => now()]);
+                }
+
+                // Check if phone verification is already recorded
+                $existingVerification = \App\Models\DataVerification::where('applicant_id', $user->applicant->id)
+                    ->where('field_name', 'phone')
+                    ->where('is_verified', true)
+                    ->exists();
+
+                // Only create if not already verified
+                if (!$existingVerification) {
+                    \App\Models\DataVerification::create([
+                        'tenant_id' => app('tenant.id'),
+                        'applicant_id' => $user->applicant->id,
+                        'field_name' => 'phone',
+                        'field_value' => $request->phone,
+                        'method' => \App\Enums\VerificationMethod::OTP,
+                        'is_verified' => true,
+                        'is_locked' => true, // Lock phone verified by OTP
+                        'status' => \App\Enums\VerificationStatus::VERIFIED,
+                        'notes' => 'Verificado vía OTP/SMS',
+                        'metadata' => ['otp_verified_at' => now()->toIso8601String()],
+                    ]);
+                }
+            }
+        }
+
+        // Sync verification for users with verified phone but applicant not synced
+        if ($request->phone && $user->hasVerifiedPhone() && $user->applicant) {
+            // Update applicant phone_verified_at if user has verified phone but applicant doesn't
+            if (!$user->applicant->phone_verified_at) {
+                $user->applicant->update(['phone_verified_at' => $user->phone_verified_at]);
+            }
+
+            // Create DataVerification if doesn't exist
+            $existingVerification = \App\Models\DataVerification::where('applicant_id', $user->applicant->id)
+                ->where('field_name', 'phone')
+                ->where('is_verified', true)
+                ->exists();
+
+            if (!$existingVerification) {
+                \App\Models\DataVerification::create([
+                    'tenant_id' => app('tenant.id'),
+                    'applicant_id' => $user->applicant->id,
+                    'field_name' => 'phone',
+                    'field_value' => $request->phone,
+                    'method' => \App\Enums\VerificationMethod::OTP,
+                    'is_verified' => true,
+                    'is_locked' => true, // Lock phone verified by OTP
+                    'status' => \App\Enums\VerificationStatus::VERIFIED,
+                    'notes' => 'Verificado vía OTP/SMS (sincronizado)',
+                    'metadata' => ['otp_verified_at' => $user->phone_verified_at->toIso8601String()],
+                ]);
+            }
+        }
+
+        // Mark email as verified if OTP was sent to email
+        if ($request->email && !$user->hasVerifiedEmail()) {
+            $user->markEmailAsVerified();
+
+            // Also mark email as verified in Applicant if exists
+            if ($user->applicant) {
+                // Update applicant email_verified_at if not set
+                if (!$user->applicant->email_verified_at) {
+                    $user->applicant->update(['email_verified_at' => now()]);
+                }
+
+                // Check if email verification is already recorded
+                $existingEmailVerification = \App\Models\DataVerification::where('applicant_id', $user->applicant->id)
+                    ->where('field_name', 'email')
+                    ->where('is_verified', true)
+                    ->exists();
+
+                // Only create if not already verified
+                if (!$existingEmailVerification) {
+                    \App\Models\DataVerification::create([
+                        'tenant_id' => app('tenant.id'),
+                        'applicant_id' => $user->applicant->id,
+                        'field_name' => 'email',
+                        'field_value' => $request->email,
+                        'method' => \App\Enums\VerificationMethod::OTP,
+                        'is_verified' => true,
+                        'is_locked' => true, // Lock email verified by OTP
+                        'status' => \App\Enums\VerificationStatus::VERIFIED,
+                        'notes' => 'Verificado vía OTP/Email',
+                        'metadata' => ['otp_verified_at' => now()->toIso8601String()],
+                    ]);
+                }
+            }
+        }
+
+        // Sync verification for users with verified email but applicant not synced
+        if ($request->email && $user->hasVerifiedEmail() && $user->applicant) {
+            // Update applicant email_verified_at if user has verified email but applicant doesn't
+            if (!$user->applicant->email_verified_at) {
+                $user->applicant->update(['email_verified_at' => $user->email_verified_at]);
+            }
+
+            // Create DataVerification if doesn't exist
+            $existingEmailVerification = \App\Models\DataVerification::where('applicant_id', $user->applicant->id)
+                ->where('field_name', 'email')
+                ->where('is_verified', true)
+                ->exists();
+
+            if (!$existingEmailVerification) {
+                \App\Models\DataVerification::create([
+                    'tenant_id' => app('tenant.id'),
+                    'applicant_id' => $user->applicant->id,
+                    'field_name' => 'email',
+                    'field_value' => $request->email,
+                    'method' => \App\Enums\VerificationMethod::OTP,
+                    'is_verified' => true,
+                    'is_locked' => true, // Lock email verified by OTP
+                    'status' => \App\Enums\VerificationStatus::VERIFIED,
+                    'notes' => 'Verificado vía OTP/Email (sincronizado)',
+                    'metadata' => ['otp_verified_at' => $user->email_verified_at->toIso8601String()],
+                ]);
+            }
         }
 
         // Record login

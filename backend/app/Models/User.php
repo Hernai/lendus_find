@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\UserType;
+use App\Traits\HasAuditFields;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,7 +15,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, HasUuids, Notifiable;
+    use HasApiTokens, HasFactory, HasUuids, Notifiable, HasAuditFields;
 
     /**
      * The attributes that are mass assignable.
@@ -29,9 +30,11 @@ class User extends Authenticatable
         'role',
         'first_name',
         'last_name',
+        'last_name_2',
         'avatar_url',
         'is_active',
         'phone_verified_at',
+        'email_verified_at',
         'last_login_at',
         'last_login_ip',
     ];
@@ -73,6 +76,36 @@ class User extends Authenticatable
     }
 
     /**
+     * Boot the model.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Auto-generate 'name' field from first_name, last_name, last_name_2
+        static::creating(function ($user) {
+            if (!$user->name && ($user->first_name || $user->last_name)) {
+                $user->name = trim(implode(' ', array_filter([
+                    $user->first_name,
+                    $user->last_name,
+                    $user->last_name_2,
+                ])));
+            }
+        });
+
+        // Update 'name' when updating first_name, last_name, or last_name_2
+        static::updating(function ($user) {
+            if ($user->isDirty(['first_name', 'last_name', 'last_name_2'])) {
+                $user->name = trim(implode(' ', array_filter([
+                    $user->first_name,
+                    $user->last_name,
+                    $user->last_name_2,
+                ])));
+            }
+        });
+    }
+
+    /**
      * Get the tenant.
      */
     public function tenant(): BelongsTo
@@ -101,8 +134,12 @@ class User extends Authenticatable
      */
     public function getFullNameAttribute(): string
     {
-        if ($this->first_name || $this->last_name) {
-            return trim($this->first_name . ' ' . $this->last_name);
+        if ($this->first_name || $this->last_name || $this->last_name_2) {
+            return trim(implode(' ', array_filter([
+                $this->first_name,
+                $this->last_name,
+                $this->last_name_2,
+            ])));
         }
 
         return $this->name ?? '';
@@ -285,6 +322,24 @@ class User extends Authenticatable
     {
         return $this->forceFill([
             'phone_verified_at' => $this->freshTimestamp(),
+        ])->save();
+    }
+
+    /**
+     * Check if email is verified.
+     */
+    public function hasVerifiedEmail(): bool
+    {
+        return $this->email_verified_at !== null;
+    }
+
+    /**
+     * Mark email as verified.
+     */
+    public function markEmailAsVerified(): bool
+    {
+        return $this->forceFill([
+            'email_verified_at' => $this->freshTimestamp(),
         ])->save();
     }
 
