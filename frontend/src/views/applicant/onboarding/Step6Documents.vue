@@ -193,16 +193,30 @@ const uploadKycDocuments = async () => {
       // Create File from Blob
       const file = new File([blob], `${type.toLowerCase()}.jpg`, { type: 'image/jpeg' })
 
-      // Upload to backend
+      // Prepare KYC metadata for auto-approval
+      const kycMetadata = {
+        kyc_validated: true,
+        source: 'kyc',
+        nubarium_validated: true,
+        validation_method: 'KYC_INE_OCR',
+        ine_ocr: true,
+        validated_at: new Date().toISOString(),
+        ine_valid: true, // Document was validated during KYC
+        ocr_curp: kycStore.lockedData.curp || null,
+        ocr_data: kycStore.lockedData
+      }
+
+      // Upload to backend with KYC metadata
       const formData = new FormData()
       formData.append('type', type)
       formData.append('file', file)
+      formData.append('metadata', JSON.stringify(kycMetadata))
 
       await api.post(`/applications/${applicationId}/documents`, formData)
 
       doc.status = 'uploaded'
       doc.fromKyc = true
-      console.log(`✅ KYC document ${type} uploaded successfully`)
+      console.log(`✅ KYC document ${type} uploaded with metadata - will be auto-approved`)
     } catch (e: unknown) {
       console.error(`Error uploading KYC document ${type}:`, e)
       // Don't mark as error - user can still upload manually

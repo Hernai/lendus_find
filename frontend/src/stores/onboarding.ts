@@ -459,9 +459,22 @@ export const useOnboardingStore = defineStore('onboarding', () => {
 
           if (applicationStore.currentApplication && hasFinalValidId) {
             console.log('📤 Updating application with purpose:', data.value.step5.purpose)
-            await applicationStore.updateApplication({
-              purpose: data.value.step5.purpose
-            })
+            try {
+              await applicationStore.updateApplication({
+                purpose: data.value.step5.purpose
+              })
+            } catch (err: unknown) {
+              const error = err as { message?: string }
+              // If application was already submitted, the error handler in applicationStore
+              // will have cleared it. Check if we need to create a new one.
+              if (error.message?.includes('ya fue enviada') || error.message?.includes('no fue encontrada')) {
+                console.log('🔄 Previous application was submitted. Creating new one...')
+                // The applicationStore should have cleared currentApplication
+                // Throw error to let user know they need to restart
+                throw new Error('Tu solicitud anterior ya fue enviada. Para crear una nueva solicitud, regresa al inicio.')
+              }
+              throw err
+            }
           } else {
             // Last resort: throw an error so the user sees feedback
             throw new Error('No se encontró la solicitud. Por favor, regresa al inicio y vuelve a empezar.')

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\HasAuditFields;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,7 +10,7 @@ use Illuminate\Support\Facades\Crypt;
 
 class TenantApiConfig extends Model
 {
-    use HasUuid;
+    use HasUuid, HasAuditFields;
 
     protected $fillable = [
         'tenant_id',

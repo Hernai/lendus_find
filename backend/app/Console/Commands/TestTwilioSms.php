@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Services\TwilioService;
+use App\Services\ExternalApi\TwilioService;
 use Illuminate\Console\Command;
 
 class TestTwilioSms extends Command

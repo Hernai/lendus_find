@@ -140,6 +140,16 @@ const suggestedFonts = [
   'Nunito, sans-serif'
 ]
 
+// Test modal state
+const showTestModal = ref(false)
+const testingIntegration = ref<ApiConfig | null>(null)
+const testForm = ref({
+  test_phone: '',
+  test_email: ''
+})
+const testResult = ref<{ success: boolean; message: string; error?: string } | null>(null)
+const isTesting = ref(false)
+
 // Suggested icons/logos (SVG paths for common business icons)
 const suggestedIcons = [
   // Row 1
@@ -623,19 +633,53 @@ const deleteApiInConfig = async (config: ApiConfig) => {
   }
 }
 
-const testApiInConfig = async (config: ApiConfig) => {
-  if (!configTenant.value) return
+const testApiInConfig = (config: ApiConfig) => {
+  testingIntegration.value = config
+  testForm.value = {
+    test_phone: '',
+    test_email: ''
+  }
+  testResult.value = null
+  showTestModal.value = true
+}
+
+const closeTestModal = () => {
+  showTestModal.value = false
+  testingIntegration.value = null
+  testResult.value = null
+}
+
+const runTest = async () => {
+  if (!testingIntegration.value || !configTenant.value) return
 
   try {
-    const response = await api.post<{ success: boolean; message: string }>(
-      `/admin/tenants/${configTenant.value.id}/api-configs/${config.id}/test`
+    isTesting.value = true
+    testResult.value = null
+
+    // Only send the fields that are needed based on service type
+    const payload: { test_phone?: string; test_email?: string } = {}
+    if (testingIntegration.value.service_type === 'sms' || testingIntegration.value.service_type === 'whatsapp') {
+      payload.test_phone = testForm.value.test_phone
+    } else if (testingIntegration.value.service_type === 'email') {
+      payload.test_email = testForm.value.test_email
+    }
+
+    const response = await api.post<{ success: boolean; message: string; error?: string }>(
+      `/admin/tenants/${configTenant.value.id}/api-configs/${testingIntegration.value.id}/test`,
+      payload
     )
+    testResult.value = response.data
     // Reload config
     const reloadResponse = await api.get<{ data: TenantConfig }>(`/admin/tenants/${configTenant.value.id}/config`)
     configData.value = reloadResponse.data.data
-    alert(response.data.message)
-  } catch (e) {
-    alert('Error al probar la conexión')
+  } catch (err: any) {
+    testResult.value = {
+      success: false,
+      message: 'Error en la prueba',
+      error: err.response?.data?.error || 'Error desconocido'
+    }
+  } finally {
+    isTesting.value = false
   }
 }
 
@@ -1672,6 +1716,151 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                 Guardar Cambios
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Test Integration Modal (z-[70] to appear above config modal) -->
+    <Teleport to="body">
+      <div
+        v-if="showTestModal"
+        class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4"
+        @click.self="closeTestModal"
+      >
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+          <!-- Header -->
+          <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-lg font-semibold text-gray-900">Prueba Rápida</h3>
+                <p class="text-sm text-gray-600">
+                  {{ testingIntegration?.provider }} - {{ testingIntegration?.service_type }}
+                </p>
+              </div>
+            </div>
+            <button
+              @click="closeTestModal"
+              class="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div class="px-6 py-4 space-y-4">
+            <!-- Info Alert -->
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 flex gap-2">
+              <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p class="text-sm text-blue-800">
+                Se enviará un mensaje de prueba desde LendusFind para verificar la configuración.
+              </p>
+            </div>
+
+            <!-- Phone Input -->
+            <div v-if="testingIntegration?.service_type === 'sms' || testingIntegration?.service_type === 'whatsapp'">
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                Número de Teléfono
+              </label>
+              <div class="flex gap-2">
+                <div class="w-16 px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 text-sm flex items-center justify-center">
+                  +52
+                </div>
+                <input
+                  v-model="testForm.test_phone"
+                  type="tel"
+                  placeholder="9611234567"
+                  class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                  :disabled="isTesting"
+                />
+              </div>
+              <p class="text-xs text-gray-500 mt-1">Ingresa 10 dígitos (sin +52)</p>
+            </div>
+
+            <!-- Email Input -->
+            <div v-if="testingIntegration?.service_type === 'email'">
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                Correo Electrónico
+              </label>
+              <input
+                v-model="testForm.test_email"
+                type="email"
+                placeholder="ejemplo@correo.com"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                :disabled="isTesting"
+              />
+            </div>
+
+            <!-- Test Result -->
+            <div v-if="testResult" :class="[
+              'p-4 rounded-lg border',
+              testResult.success
+                ? 'bg-green-50 border-green-200'
+                : 'bg-red-50 border-red-200'
+            ]">
+              <div class="flex items-start gap-2">
+                <svg
+                  v-if="testResult.success"
+                  class="w-5 h-5 text-green-600 flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <svg
+                  v-else
+                  class="w-5 h-5 text-red-600 flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <p :class="['font-medium text-sm', testResult.success ? 'text-green-800' : 'text-red-800']">
+                    {{ testResult.message }}
+                  </p>
+                  <p v-if="testResult.error" class="text-xs text-red-700 mt-1">
+                    {{ testResult.error }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+            <button
+              @click="closeTestModal"
+              class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
+              :disabled="isTesting"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="runTest"
+              :disabled="isTesting || (!testForm.test_phone && !testForm.test_email)"
+              class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg v-if="isTesting" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              {{ isTesting ? 'Enviando...' : 'Enviar Mensaje' }}
+            </button>
           </div>
         </div>
       </div>

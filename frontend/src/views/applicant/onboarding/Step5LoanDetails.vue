@@ -102,9 +102,17 @@ const handleSubmit = async () => {
     // Save step 5 explicitly
     await onboardingStore.completeStep(5)
     router.push('/solicitud/paso-6')
-  } catch (e) {
+  } catch (e: unknown) {
     console.error('Failed to save step 5:', e)
-    errors.purpose = 'Error al guardar. Por favor intenta de nuevo.'
+    const error = e as { message?: string }
+    // Check if this is the "already submitted" error
+    if (error.message?.includes('ya fue enviada')) {
+      errors.purpose = 'Tu solicitud anterior ya fue enviada. Regresa al inicio para crear una nueva.'
+    } else if (error.message?.includes('no fue encontrada')) {
+      errors.purpose = 'Sesión expirada. Por favor, regresa al inicio y vuelve a empezar.'
+    } else {
+      errors.purpose = 'Error al guardar. Por favor intenta de nuevo.'
+    }
   }
 }
 

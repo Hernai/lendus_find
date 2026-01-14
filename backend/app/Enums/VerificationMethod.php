@@ -45,6 +45,7 @@ enum VerificationMethod: string
     public function isAutomated(): bool
     {
         return in_array($this, [
+            self::OTP, // Phone verified by OTP should be locked
             self::KYC_INE_OCR,
             self::KYC_INE_LIST,
             self::KYC_CURP_RENAPO,

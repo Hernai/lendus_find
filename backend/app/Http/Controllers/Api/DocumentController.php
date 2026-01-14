@@ -6,6 +6,7 @@ use App\Enums\ApplicationStatus;
 use App\Enums\AuditAction;
 use App\Enums\DocumentStatus;
 use App\Enums\DocumentType;
+use App\Enums\VerificationMethod;
 use App\Enums\VerificationStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
@@ -73,7 +74,7 @@ class DocumentController extends Controller
         $validator = Validator::make($request->all(), [
             'type' => 'required|string|max:50',
             'file' => 'required|file|mimes:jpg,jpeg,png,webp,pdf|max:10240', // 10MB max
-            'metadata' => 'nullable|array', // Accept metadata from client (e.g., KYC validation info)
+            'metadata' => 'nullable', // Accept metadata from client as JSON string or array
         ]);
 
         if ($validator->fails()) {
@@ -129,7 +130,30 @@ class DocumentController extends Controller
         Storage::disk($disk)->put($path, file_get_contents($file), 'private');
 
         // Prepare document metadata (merge client metadata with system metadata)
-        $docMetadata = $request->input('metadata', []);
+        // Note: metadata comes as JSON string from FormData, need to decode it
+        $metadataInput = $request->input('metadata', '{}');
+        $docMetadata = is_string($metadataInput) ? json_decode($metadataInput, true) ?? [] : ($metadataInput ?? []);
+
+        // Determine initial document status
+        // Auto-approve INE documents when they come from validated KYC process
+        $initialStatus = DocumentStatus::PENDING;
+        $reviewedBy = null;
+        $reviewedAt = null;
+
+        $isIneDocument = in_array($type, ['INE_FRONT', 'INE_BACK']);
+        $hasKycValidation = !empty($docMetadata['ine_valid']) && $docMetadata['ine_valid'] === true;
+
+        if ($isIneDocument && $hasKycValidation) {
+            $initialStatus = DocumentStatus::APPROVED;
+            $reviewedBy = $request->user()->id; // System auto-approval recorded under user
+            $reviewedAt = now();
+
+            \Log::info("[DocumentController] Auto-approving {$type} - KYC validated", [
+                'applicant_id' => $applicant->id,
+                'application_id' => $application->id,
+                'ocr_curp' => $docMetadata['ocr_curp'] ?? null,
+            ]);
+        }
 
         // Create document record
         $document = Document::create([
@@ -142,9 +166,31 @@ class DocumentController extends Controller
             'storage_path' => $path,
             'mime_type' => $file->getMimeType(),
             'size' => $file->getSize(),
-            'status' => DocumentStatus::PENDING,
+            'status' => $initialStatus,
             'metadata' => $docMetadata,
+            'reviewed_by' => $reviewedBy,
+            'reviewed_at' => $reviewedAt,
         ]);
+
+        // Record document verification if auto-approved
+        if ($initialStatus === DocumentStatus::APPROVED && $isIneDocument) {
+            $verificationField = $type === 'INE_FRONT' ? 'ine_document_front' : 'ine_document_back';
+            DataVerification::recordVerification(
+                $applicant->id,
+                $verificationField,
+                $document->id,
+                VerificationMethod::KYC_INE_OCR,
+                true,
+                [
+                    'document_id' => $document->id,
+                    'document_type' => $type,
+                    'auto_approved' => true,
+                    'ine_valid' => $docMetadata['ine_valid'] ?? false,
+                    'ocr_curp' => $docMetadata['ocr_curp'] ?? null,
+                ],
+                'Auto-aprobado por validación KYC con Nubarium'
+            );
+        }
 
         // Get metadata for timeline
         $metadata = $request->attributes->get('metadata', []);
@@ -178,6 +224,12 @@ class DocumentController extends Controller
             'user_agent' => $userAgent,
             'location' => $approximateLocation,
         ];
+
+        // Add auto-approval info if applicable
+        if ($initialStatus === DocumentStatus::APPROVED) {
+            $timelineEntry['auto_approved'] = true;
+            $timelineEntry['approval_reason'] = 'Validado por KYC (Nubarium)';
+        }
 
         // Add old file info if this was a replacement
         if ($isReplacement && $oldDocInfo) {

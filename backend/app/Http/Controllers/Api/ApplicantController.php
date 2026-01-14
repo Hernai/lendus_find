@@ -20,16 +20,7 @@ class ApplicantController extends Controller
      */
     public function show(Request $request): JsonResponse
     {
-        $user = $request->user();
-        $applicant = $user->applicant;
-
-        if (!$applicant) {
-            return response()->json([
-                'message' => 'Applicant profile not found',
-                'data' => null
-            ], 404);
-        }
-
+        $applicant = $this->getOrCreateApplicant($request);
         $applicant->load(['addresses', 'currentEmployment', 'primaryBankAccount']);
 
         return response()->json([

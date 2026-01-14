@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\VerifiableField;
 use App\Enums\VerificationMethod;
 use App\Enums\VerificationStatus;
+use App\Traits\HasAuditFields;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class DataVerification extends Model
 {
-    use HasFactory, HasUuid, HasTenant;
+    use HasFactory, HasUuid, HasTenant, HasAuditFields;
 
     protected $fillable = [
         'tenant_id',

@@ -460,7 +460,7 @@ class TenantController extends Controller
     /**
      * Test an API configuration for a specific tenant.
      */
-    public function testApiConfig(Tenant $tenant, TenantApiConfig $config): JsonResponse
+    public function testApiConfig(Request $request, Tenant $tenant, TenantApiConfig $config): JsonResponse
     {
         if ($config->tenant_id !== $tenant->id) {
             return response()->json(['message' => 'No autorizado'], 403);
@@ -481,23 +481,68 @@ class TenantController extends Controller
             ]);
         }
 
-        // Test connection based on provider
-        $result = match ($config->provider) {
-            'nubarium' => $this->testNubariumConnection($tenant),
-            default => ['success' => true, 'message' => 'Credenciales configuradas correctamente']
-        };
-
-        $config->update([
-            'last_tested_at' => now(),
-            'last_test_success' => $result['success'],
-            'last_test_error' => $result['success'] ? null : $result['message'],
+        // Validate request for SMS/WhatsApp/Email tests
+        $validator = Validator::make($request->all(), [
+            'test_phone' => 'nullable|string',
+            'test_email' => 'nullable|email',
         ]);
 
-        return response()->json([
-            'success' => $result['success'],
-            'message' => $result['message'],
-            'data' => $config->fresh()->toApiArray()
-        ]);
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        // Validate required fields based on service type
+        if (in_array($config->service_type, ['sms', 'whatsapp']) && empty($request->test_phone)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'El número de teléfono es requerido para probar SMS/WhatsApp',
+            ], 422);
+        }
+
+        if ($config->service_type === 'email' && empty($request->test_email)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'El correo electrónico es requerido para probar Email',
+            ], 422);
+        }
+
+        try {
+            // Test connection based on provider
+            $result = match ($config->provider) {
+                'nubarium' => $this->testNubariumConnection($tenant),
+                'twilio' => $this->testTwilioConnection($tenant, $config, $request),
+                default => ['success' => true, 'message' => 'Credenciales configuradas correctamente']
+            };
+
+            $config->update([
+                'last_tested_at' => now(),
+                'last_test_success' => $result['success'],
+                'last_test_error' => $result['success'] ? null : ($result['error'] ?? $result['message']),
+            ]);
+
+            return response()->json([
+                'success' => $result['success'],
+                'message' => $result['message'],
+                'error' => $result['error'] ?? null,
+                'data' => $config->fresh()->toApiArray()
+            ]);
+        } catch (\Exception $e) {
+            $config->update([
+                'last_tested_at' => now(),
+                'last_test_success' => false,
+                'last_test_error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error en la prueba',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
@@ -507,6 +552,87 @@ class TenantController extends Controller
     {
         $service = new \App\Services\ExternalApi\NubariumService($tenant);
         return $service->testConnection();
+    }
+
+    /**
+     * Test Twilio connection.
+     */
+    private function testTwilioConnection(Tenant $tenant, TenantApiConfig $config, Request $request): array
+    {
+        // Initialize Twilio client directly with config credentials
+        $client = new \Twilio\Rest\Client(
+            $config->account_sid,
+            $config->auth_token
+        );
+
+        $testMessage = 'Prueba de integración desde LendusFind - ' . now()->format('H:i:s');
+        $fromNumber = $config->from_number;
+
+        try {
+            // Send test message
+            if ($config->service_type === 'whatsapp') {
+                // WhatsApp format: whatsapp:+52XXXXXXXXXX
+                $to = 'whatsapp:+52' . ltrim($request->test_phone, '+52');
+                $from = 'whatsapp:' . $fromNumber;
+            } else {
+                // SMS format: +52XXXXXXXXXX
+                $to = '+52' . ltrim($request->test_phone, '+52');
+                $from = $fromNumber;
+            }
+
+            $message = $client->messages->create($to, [
+                'from' => $from,
+                'body' => $testMessage,
+            ]);
+
+            // Log the SMS
+            \App\Models\SmsLog::create([
+                'tenant_id' => $tenant->id,
+                'to' => $to,
+                'from' => $from,
+                'body' => $testMessage,
+                'type' => $config->service_type,
+                'sid' => $message->sid,
+                'status' => $message->status,
+                'direction' => 'outbound-api',
+                'price' => $message->price,
+                'price_unit' => $message->priceUnit,
+            ]);
+
+            return [
+                'success' => true,
+                'message' => 'Prueba exitosa - Mensaje enviado',
+                'details' => [
+                    'sid' => $message->sid,
+                    'status' => $message->status,
+                ],
+            ];
+        } catch (\Twilio\Exceptions\TwilioException $e) {
+            \Log::error('Twilio test error', [
+                'tenant_id' => $tenant->id,
+                'config_id' => $config->id,
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'Prueba fallida',
+                'error' => $e->getMessage(),
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Test error', [
+                'tenant_id' => $tenant->id,
+                'config_id' => $config->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'Error en la prueba',
+                'error' => $e->getMessage(),
+            ];
+        }
     }
 
     /**

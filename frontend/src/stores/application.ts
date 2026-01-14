@@ -243,8 +243,9 @@ export const useApplicationStore = defineStore('application', () => {
     } catch (error: unknown) {
       console.error('❌ Error updating application:', error)
 
+      const axiosError = error as { response?: { status?: number; data?: { message?: string } } }
+
       // Handle 404 - application no longer exists (possibly changed tenant or deleted)
-      const axiosError = error as { response?: { status?: number } }
       if (axiosError.response?.status === 404) {
         console.warn('⚠️ Application not found (404). Clearing stale state...')
         // Clear the stale application reference
@@ -252,6 +253,19 @@ export const useApplicationStore = defineStore('application', () => {
         localStorage.removeItem('current_application_id')
         // Throw a user-friendly error
         throw new Error('La solicitud no fue encontrada. Es posible que haya expirado o ya no exista. Por favor, inicia una nueva solicitud.')
+      }
+
+      // Handle 400 - application cannot be modified (already submitted, approved, etc.)
+      if (axiosError.response?.status === 400) {
+        const message = axiosError.response?.data?.message || ''
+        if (message.includes('cannot be modified') || message.includes('current status')) {
+          console.warn('⚠️ Application cannot be modified (400). Clearing stale state...')
+          // Clear the stale application reference
+          currentApplication.value = null
+          localStorage.removeItem('current_application_id')
+          // Throw a user-friendly error
+          throw new Error('La solicitud anterior ya fue enviada. Se creará una nueva solicitud.')
+        }
       }
 
       throw error
@@ -271,12 +285,35 @@ export const useApplicationStore = defineStore('application', () => {
       })
     }
 
-    await updateApplication({
-      dynamic_data: {
-        ...currentApplication.value?.dynamic_data,
-        ...stepData
+    try {
+      await updateApplication({
+        dynamic_data: {
+          ...currentApplication.value?.dynamic_data,
+          ...stepData
+        }
+      })
+    } catch (error: unknown) {
+      const err = error as { message?: string }
+      // If the application was submitted/closed, create a new one
+      if (err.message?.includes('ya fue enviada') || err.message?.includes('no fue encontrada')) {
+        console.log('🔄 Creating new application after previous one was closed...')
+        await createApplication({
+          product_id: selectedProduct.value?.id || 'default-product',
+          requested_amount: simulation.value?.requested_amount || 10000,
+          term_months: simulation.value?.term_months || 12,
+          payment_frequency: simulation.value?.payment_frequency || 'MONTHLY'
+        })
+        // Retry saving the step data with the new application
+        await updateApplication({
+          dynamic_data: {
+            ...currentApplication.value?.dynamic_data,
+            ...stepData
+          }
+        })
+      } else {
+        throw error
       }
-    })
+    }
   }
 
   const submitApplication = async (): Promise<Application | null> => {

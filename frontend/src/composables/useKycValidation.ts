@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { useKycStore } from '@/stores/kyc'
+import { useApplicantStore } from '@/stores/applicant'
 import { storeToRefs } from 'pinia'
 
 export type KycStep = 'ine-front' | 'ine-back' | 'selfie' | 'validating' | 'result'
@@ -42,6 +43,7 @@ export interface UseKycValidationReturn {
  */
 export function useKycValidation(): UseKycValidationReturn {
   const kycStore = useKycStore()
+  const applicantStore = useApplicantStore()
   const {
     validations,
     lockedData,
@@ -181,11 +183,15 @@ export function useKycValidation(): UseKycValidationReturn {
     validationMessages.value = {}
 
     try {
+      // Get applicant_id for auto-recording verifications
+      const applicantId = applicantStore.applicant?.id
+      console.log('[KYC] Applicant ID for auto-recording:', applicantId)
+
       // Step 1: Validate INE (OCR + Lista Nominal)
       console.log('[KYC] Step 1: Validating INE...')
       validationProgress.value.ine_ocr = 'in_progress'
 
-      const ineValid = await kycStore.validateIne()
+      const ineValid = await kycStore.validateIne(applicantId)
       console.log('[KYC] INE validation result:', ineValid, validations.value.ine_ocr)
 
       if (validations.value.ine_ocr?.success) {
@@ -217,7 +223,7 @@ export function useKycValidation(): UseKycValidationReturn {
       if (lockedData.value.curp) {
         validationProgress.value.curp_renapo = 'in_progress'
 
-        const curpValid = await kycStore.validateCurp()
+        const curpValid = await kycStore.validateCurp(undefined, applicantId)
         console.log('[KYC] CURP validation result:', curpValid)
 
         if (curpValid) {
@@ -299,6 +305,9 @@ export function useKycValidation(): UseKycValidationReturn {
       return true
     }
 
+    // Get applicant_id for auto-recording verifications
+    const applicantId = applicantStore.applicant?.id
+
     for (const step of failedSteps) {
       validationProgress.value[step] = 'in_progress'
       validationMessages.value[step] = ''
@@ -307,7 +316,7 @@ export function useKycValidation(): UseKycValidationReturn {
         switch (step) {
           case 'ine_ocr':
           case 'ine_lista_nominal':
-            await kycStore.validateIne()
+            await kycStore.validateIne(applicantId)
             validationProgress.value.ine_ocr = validations.value.ine_ocr?.success
               ? 'success'
               : 'error'
@@ -317,7 +326,7 @@ export function useKycValidation(): UseKycValidationReturn {
             break
 
           case 'curp_renapo':
-            const curpValid = await kycStore.validateCurp()
+            const curpValid = await kycStore.validateCurp(undefined, applicantId)
             validationProgress.value.curp_renapo = curpValid ? 'success' : 'error'
             break
 

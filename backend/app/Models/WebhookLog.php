@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\WebhookStatus;
+use App\Traits\HasAuditFields;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class WebhookLog extends Model
 {
-    use HasUuid, HasTenant;
+    use HasUuid, HasTenant, HasAuditFields;
 
     /**
      * Table name (using existing webhooks table).

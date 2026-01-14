@@ -107,6 +107,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | OTP Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Control OTP code generation behavior. Set OTP_USE_FIXED=false to use
+    | random codes for production/demo environments while in local mode.
+    |
+    */
+
+    'otp_use_fixed' => env('OTP_USE_FIXED', null), // null = auto-detect based on environment
+
+    /*
+    |--------------------------------------------------------------------------
     | Maintenance Mode Driver
     |--------------------------------------------------------------------------
     |

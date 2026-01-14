@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { reactive, computed, watch, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore, useKycStore } from '@/stores'
+import { useOnboardingStore, useKycStore, useAuthStore, useApplicantStore } from '@/stores'
 import { AppButton, AppInput, AppRadioGroup } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
+import { generarRFCDesdeKyc } from '@/services/rfc.service'
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
 const kycStore = useKycStore()
+const authStore = useAuthStore()
+const applicantStore = useApplicantStore()
 
 // Check if KYC data is available (from INE OCR)
 const hasKycData = computed(() => kycStore.verified && !!kycStore.lockedData.curp)
@@ -21,6 +24,9 @@ const rfcValidated = ref(false)
 const rfcIsValid = ref(false)
 const rfcRazonSocial = ref<string | null>(null)
 const rfcError = ref<string | null>(null)
+
+// RFC suggestion state
+const rfcSugerido = ref<string | null>(null)
 
 const form = reactive({
   id_type: 'INE' as 'INE' | 'PASSPORT',
@@ -79,7 +85,9 @@ const validateRfcWithSat = async () => {
   rfcError.value = null
 
   try {
-    const result = await kycStore.validateRfc(form.rfc)
+    // Pass applicant_id if available for auto-recording
+    const applicantId = applicantStore.applicant?.id
+    const result = await kycStore.validateRfc(form.rfc, applicantId)
     rfcValidated.value = true
     rfcIsValid.value = result.valid
     rfcRazonSocial.value = result.razon_social || null
@@ -150,10 +158,38 @@ onMounted(async () => {
   if (hasKycData.value) {
     form.id_type = 'INE' // KYC is always INE
     form.curp = kycStore.lockedData.curp || step2.curp
-    form.rfc = step2.rfc // RFC is not in KYC, always editable
     form.clave_elector = kycStore.lockedData.clave_elector || step2.clave_elector
     form.numero_ocr = kycStore.lockedData.ocr || step2.numero_ocr
     form.folio_ine = kycStore.lockedData.cic || kycStore.lockedData.identificador_ciudadano || step2.folio_ine
+
+    // Generar RFC automáticamente desde datos del INE y auto-rellenar SIEMPRE
+    if (
+      kycStore.lockedData.nombres &&
+      kycStore.lockedData.apellido_paterno &&
+      kycStore.lockedData.fecha_nacimiento
+    ) {
+      try {
+        console.log('[RFC] Generando RFC desde KYC...')
+        const resultado = generarRFCDesdeKyc(
+          kycStore.lockedData.nombres,
+          kycStore.lockedData.apellido_paterno,
+          kycStore.lockedData.apellido_materno || null,
+          kycStore.lockedData.fecha_nacimiento
+        )
+        // Usar RFC completo con homoclave (13 caracteres)
+        rfcSugerido.value = resultado.rfcSugerido
+        // SIEMPRE auto-rellenar el RFC calculado
+        form.rfc = resultado.rfcSugerido
+        console.log('[RFC] RFC auto-rellenado:', form.rfc)
+      } catch (error) {
+        console.error('[RFC] Error al generar RFC:', error)
+        // Si falla, usar el valor guardado
+        form.rfc = step2.rfc
+      }
+    } else {
+      // Si no hay datos KYC suficientes, usar el guardado
+      form.rfc = step2.rfc
+    }
   } else {
     form.id_type = step2.id_type || 'INE'
     form.curp = step2.curp
@@ -168,6 +204,14 @@ onMounted(async () => {
   form.passport_issue_date = step2.passport_issue_date
   form.passport_expiry_date = step2.passport_expiry_date
 })
+
+// Función para usar la sugerencia de RFC
+const usarRfcSugerido = () => {
+  if (rfcSugerido.value) {
+    form.rfc = rfcSugerido.value
+    console.log('[RFC] Usando RFC sugerido:', rfcSugerido.value)
+  }
+}
 
 // Auto-save to store when form changes
 watch(form, () => {
@@ -381,6 +425,26 @@ const prevStep = () => router.push('/solicitud/paso-1')
           </div>
 
           <div class="space-y-2">
+            <!-- RFC Suggestion (if available from KYC) - only show if form.rfc differs from suggestion -->
+            <div v-if="rfcSugerido && form.rfc !== rfcSugerido" class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-2">
+              <div class="flex items-start justify-between">
+                <div class="flex-1">
+                  <p class="text-xs font-medium text-blue-800 mb-1">RFC sugerido basado en tu INE:</p>
+                  <p class="text-lg font-mono font-bold text-blue-900">{{ rfcSugerido }}</p>
+                  <p class="text-xs text-blue-600 mt-1">
+                    Calculado con el algoritmo oficial del SAT
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  @click="usarRfcSugerido"
+                  class="ml-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  Usar
+                </button>
+              </div>
+            </div>
+
             <div class="relative">
               <AppInput
                 v-model="form.rfc"
@@ -406,7 +470,7 @@ const prevStep = () => router.push('/solicitud/paso-1')
               </div>
             </div>
             <p class="text-xs text-gray-400">
-              12-13 caracteres con homoclave
+              12-13 caracteres con homoclave. Completa con XXX si no conoces tu homoclave.
             </p>
             <!-- SAT Validation result (only if Nubarium configured) -->
             <template v-if="kycStore.hasNubarium">

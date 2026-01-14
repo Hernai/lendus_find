@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore, useApplicationStore, useTenantStore, useKycStore } from '@/stores'
+import { useOnboardingStore, useApplicationStore, useApplicantStore, useTenantStore, useKycStore } from '@/stores'
 import { AppButton, AppInput, AppRadioGroup, AppSelect, AppDatePicker } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
 import type { PaymentFrequency } from '@/types'
@@ -9,6 +9,7 @@ import type { PaymentFrequency } from '@/types'
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
 const applicationStore = useApplicationStore()
+const applicantStore = useApplicantStore()
 const tenantStore = useTenantStore()
 const kycStore = useKycStore()
 
@@ -342,9 +343,17 @@ const handleSubmit = async () => {
         console.log('✅ Application created after step 1:', newApp?.id)
 
         // Record KYC verifications if KYC was verified (now that applicant exists)
-        if (isKycVerified.value && newApp?.applicant_id) {
-          console.log('📝 Recording KYC verifications for applicant:', newApp.applicant_id)
-          await kycStore.recordVerifications(newApp.applicant_id)
+        const applicantId = applicantStore.applicant?.id || newApp?.applicant_id
+        if (isKycVerified.value && applicantId) {
+          console.log('📝 Recording KYC verifications for applicant:', applicantId)
+          try {
+            await kycStore.recordVerifications(applicantId)
+            console.log('✅ KYC verifications recorded successfully')
+          } catch (err) {
+            console.error('❌ Failed to record KYC verifications:', err)
+          }
+        } else {
+          console.log('⚠️ Skipping KYC recording - isKycVerified:', isKycVerified.value, 'applicantId:', applicantId)
         }
 
         // Clear pending application if it existed

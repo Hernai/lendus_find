@@ -387,7 +387,7 @@ export const useKycStore = defineStore('kyc', () => {
     selfieImage.value = image
   }
 
-  const validateIne = async () => {
+  const validateIne = async (applicantId?: string) => {
     if (!ineFrontImage.value) {
       error.value = 'Se requiere la imagen frontal del INE'
       return false
@@ -450,11 +450,76 @@ export const useKycStore = defineStore('kyc', () => {
           success: true,
           data: response.data.ocr_data as unknown as Record<string, unknown>
         }
+
+        // Auto-record INE verifications if applicant_id is provided
+        if (applicantId && response.data.is_valid) {
+          console.log('[KYC Store] Auto-recording INE verifications...')
+
+          // Record all fields from INE OCR
+          if (ocr.nombres) {
+            await recordSingleVerification(applicantId, 'first_name', ocr.nombres, 'KYC_INE_OCR', true, { source: 'ine_ocr' })
+          }
+          if (ocr.apellido_paterno) {
+            await recordSingleVerification(applicantId, 'last_name_1', ocr.apellido_paterno, 'KYC_INE_OCR', true, { source: 'ine_ocr' })
+          }
+          if (ocr.apellido_materno) {
+            await recordSingleVerification(applicantId, 'last_name_2', ocr.apellido_materno, 'KYC_INE_OCR', true, { source: 'ine_ocr' })
+          }
+          if (ocr.fecha_nacimiento) {
+            await recordSingleVerification(applicantId, 'birth_date', ocr.fecha_nacimiento, 'KYC_INE_OCR', true, { source: 'ine_ocr' })
+          }
+          if (ocr.sexo) {
+            await recordSingleVerification(applicantId, 'gender', ocr.sexo, 'KYC_INE_OCR', true, { source: 'ine_ocr' })
+          }
+          if (entidadNacimiento) {
+            await recordSingleVerification(applicantId, 'birth_state', entidadNacimiento, 'KYC_INE_OCR', true, { source: 'curp_extraction' })
+          }
+          if (cleanCurp) {
+            await recordSingleVerification(applicantId, 'curp', cleanCurp, 'KYC_INE_OCR', true, { source: 'ine_ocr', needs_renapo_validation: true })
+          }
+          if (ocr.clave_elector) {
+            await recordSingleVerification(applicantId, 'ine_clave', ocr.clave_elector, 'KYC_INE_OCR', true, { source: 'ine_ocr' })
+          }
+          if (ocr.ocr) {
+            await recordSingleVerification(applicantId, 'ine_ocr', ocr.ocr, 'KYC_INE_OCR', true, { source: 'ine_ocr' })
+          }
+
+          // Record address fields
+          if (ocr.calle) {
+            await recordSingleVerification(applicantId, 'address_street', ocr.calle, 'KYC_INE_OCR', true, { source: 'ine_address' })
+          }
+          if (ocr.colonia) {
+            await recordSingleVerification(applicantId, 'address_neighborhood', ocr.colonia, 'KYC_INE_OCR', true, { source: 'ine_address' })
+          }
+          if (ocr.cp) {
+            await recordSingleVerification(applicantId, 'address_postal_code', ocr.cp, 'KYC_INE_OCR', true, { source: 'ine_address' })
+          }
+          if (ocr.municipio || ocr.ciudad) {
+            await recordSingleVerification(applicantId, 'address_city', ocr.municipio || ocr.ciudad, 'KYC_INE_OCR', true, { source: 'ine_address' })
+          }
+          if (ocr.estado) {
+            await recordSingleVerification(applicantId, 'address_state', ocr.estado, 'KYC_INE_OCR', true, { source: 'ine_address' })
+          }
+
+          console.log('[KYC Store] INE verifications auto-recorded')
+        }
       }
 
       // Store list validation
       if (response.data.list_validation) {
         validations.value.ine_lista_nominal = response.data.list_validation
+
+        // Auto-record lista nominal validation if successful
+        if (applicantId && response.data.list_validation.valid && lockedData.value.clave_elector) {
+          await recordSingleVerification(
+            applicantId,
+            'ine_clave',
+            lockedData.value.clave_elector,
+            'KYC_INE_LIST',
+            true,
+            response.data.list_validation
+          )
+        }
       }
 
       return response.data.is_valid === true
@@ -472,7 +537,7 @@ export const useKycStore = defineStore('kyc', () => {
     }
   }
 
-  const validateCurp = async (curp?: string) => {
+  const validateCurp = async (curp?: string, applicantId?: string) => {
     const curpToValidate = curp || lockedData.value.curp
     if (!curpToValidate) {
       error.value = 'Se requiere CURP para validar'
@@ -492,6 +557,20 @@ export const useKycStore = defineStore('kyc', () => {
         data: response.data.data
       }
 
+      // Auto-record CURP validation if successful and applicant_id provided
+      if (applicantId && response.data.valid) {
+        console.log('[KYC Store] Auto-recording CURP RENAPO validation...')
+        await recordSingleVerification(
+          applicantId,
+          'curp',
+          curpToValidate,
+          'KYC_CURP_RENAPO',
+          true,
+          response.data.data || { source: 'renapo' }
+        )
+        console.log('[KYC Store] CURP RENAPO validation auto-recorded')
+      }
+
       return response.data.valid
     } catch (err: unknown) {
       console.error('Failed to validate CURP:', err)
@@ -506,7 +585,7 @@ export const useKycStore = defineStore('kyc', () => {
     }
   }
 
-  const validateRfc = async (rfc: string): Promise<{ valid: boolean; razon_social?: string; error?: string }> => {
+  const validateRfc = async (rfc: string, applicantId?: string): Promise<{ valid: boolean; razon_social?: string; error?: string }> => {
     if (!rfc || rfc.length < 12) {
       return { valid: false, error: 'RFC debe tener al menos 12 caracteres' }
     }
@@ -531,6 +610,24 @@ export const useKycStore = defineStore('kyc', () => {
       }
 
       rfcValidation.value = result
+
+      // Auto-record RFC validation if successful and applicant_id provided
+      if (applicantId && isValid) {
+        console.log('[KYC Store] Auto-recording RFC SAT validation...')
+        await recordSingleVerification(
+          applicantId,
+          'rfc',
+          response.data.data.rfc,
+          'KYC_RFC_SAT',
+          true,
+          {
+            razon_social: razonSocial,
+            tipo_persona: response.data.data.tipo_persona,
+            tipo_persona_label: response.data.data.tipo_persona_label
+          }
+        )
+        console.log('[KYC Store] RFC SAT validation auto-recorded')
+      }
 
       return {
         valid: result.valid,
@@ -930,6 +1027,43 @@ export const useKycStore = defineStore('kyc', () => {
   }
 
   /**
+   * Record a single verification immediately (auto-record after validation).
+   * Used to automatically save verifications as they happen (INE, CURP, RFC, etc.)
+   */
+  const recordSingleVerification = async (
+    applicantId: string,
+    field: string,
+    value: unknown,
+    method: string,
+    verified: boolean,
+    metadata?: Record<string, unknown>
+  ): Promise<boolean> => {
+    if (!applicantId) {
+      console.warn('[KYC Store] No applicant ID for recording verification')
+      return false
+    }
+
+    try {
+      console.log(`[KYC Store] Auto-recording ${field} verification (${method})`)
+      await api.post('/kyc/verifications', {
+        applicant_id: applicantId,
+        verifications: [{
+          field,
+          value,
+          method,
+          verified,
+          metadata
+        }]
+      })
+      console.log(`[KYC Store] ${field} verification recorded successfully`)
+      return true
+    } catch (err) {
+      console.error(`[KYC Store] Failed to auto-record ${field} verification:`, err)
+      return false
+    }
+  }
+
+  /**
    * Load verified fields from backend for an applicant.
    */
   const loadVerifications = async (applicantId: string): Promise<boolean> => {
@@ -1126,6 +1260,7 @@ export const useKycStore = defineStore('kyc', () => {
     setLivenessResult,
     markVerified,
     recordVerifications,
+    recordSingleVerification,
     loadVerifications,
     isFieldVerified,
     isFieldLocked,

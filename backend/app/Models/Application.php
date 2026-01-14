@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ApplicationStatus;
+use App\Traits\HasAuditFields;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,7 +15,7 @@ use Illuminate\Support\Str;
 
 class Application extends Model
 {
-    use HasFactory, HasUuid, HasTenant, SoftDeletes;
+    use HasFactory, HasUuid, HasTenant, SoftDeletes, HasAuditFields;
 
     protected $fillable = [
         'tenant_id',

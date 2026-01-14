@@ -169,7 +169,8 @@ class NubariumService extends BaseExternalApiService
     }
 
     /**
-     * Handle 401 Unauthorized by refreshing token and retrying once.
+     * Handle 401 Unauthorized or 403 Forbidden by refreshing token and retrying once.
+     * Nubarium returns 403 when the JWT token has expired.
      */
     protected function handleUnauthorized(): ?string
     {
@@ -180,7 +181,7 @@ class NubariumService extends BaseExternalApiService
             return null;
         }
 
-        Log::info('Nubarium: Attempting token refresh due to 401', [
+        Log::info('Nubarium: Attempting token refresh due to expired token (401/403)', [
             'tenant_id' => $this->tenant->id,
         ]);
 
@@ -332,9 +333,9 @@ class NubariumService extends BaseExternalApiService
             ? $http->get($endpoint, $payload)
             : $http->post($endpoint, $payload);
 
-        // If we get 401 Unauthorized, try to refresh token and retry once
-        if ($response->status() === 401 && !$this->tokenRefreshAttempted) {
-            Log::info('Nubarium: Got 401, attempting token refresh', [
+        // If we get 401 Unauthorized or 403 Forbidden (expired token), try to refresh token and retry once
+        if (($response->status() === 401 || $response->status() === 403) && !$this->tokenRefreshAttempted) {
+            Log::info('Nubarium: Got ' . $response->status() . ', attempting token refresh', [
                 'endpoint' => $endpoint,
                 'tenant_id' => $this->tenant->id,
             ]);
@@ -355,6 +356,7 @@ class NubariumService extends BaseExternalApiService
                 Log::info('Nubarium: Retry after token refresh', [
                     'endpoint' => $endpoint,
                     'new_status' => $response->status(),
+                    'successful' => $response->successful(),
                 ]);
             }
         }

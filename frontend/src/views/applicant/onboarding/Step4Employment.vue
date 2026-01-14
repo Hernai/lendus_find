@@ -14,7 +14,8 @@ const form = reactive({
   company_phone: '',
   company_address: '',
   monthly_income: 0,
-  seniority_years: 0
+  seniority_years: 0,
+  seniority_months: 0
 })
 
 const errors = reactive({
@@ -36,13 +37,31 @@ const employmentTypeOptions = [
   { value: 'OTRO', label: 'Otro' }
 ]
 
-const seniorityOptions = [
-  { value: 0, label: 'Menos de 1 año' },
+// Opciones de antigüedad en años
+const seniorityYearsOptions = [
+  { value: 0, label: '0 años' },
   { value: 1, label: '1 año' },
   { value: 2, label: '2 años' },
   { value: 3, label: '3 años' },
+  { value: 4, label: '4 años' },
   { value: 5, label: '5 años' },
   { value: 10, label: '10+ años' }
+]
+
+// Opciones de antigüedad en meses (máximo 11)
+const seniorityMonthsOptions = [
+  { value: 0, label: '0 meses' },
+  { value: 1, label: '1 mes' },
+  { value: 2, label: '2 meses' },
+  { value: 3, label: '3 meses' },
+  { value: 4, label: '4 meses' },
+  { value: 5, label: '5 meses' },
+  { value: 6, label: '6 meses' },
+  { value: 7, label: '7 meses' },
+  { value: 8, label: '8 meses' },
+  { value: 9, label: '9 meses' },
+  { value: 10, label: '10 meses' },
+  { value: 11, label: '11 meses' }
 ]
 
 // Sync form from store on mount
@@ -57,6 +76,7 @@ onMounted(async () => {
   form.company_address = step4.company_address || ''
   form.monthly_income = step4.monthly_income || 0
   form.seniority_years = step4.seniority_years || 0
+  form.seniority_months = step4.seniority_months || 0
 })
 
 // Auto-save to store when form changes
@@ -68,7 +88,8 @@ watch(form, () => {
     company_phone: form.company_phone,
     company_address: form.company_address,
     monthly_income: form.monthly_income,
-    seniority_years: form.seniority_years
+    seniority_years: form.seniority_years,
+    seniority_months: form.seniority_months
   })
 }, { deep: true })
 
@@ -134,7 +155,8 @@ const handleSubmit = async () => {
       company_phone: form.company_phone,
       company_address: form.company_address,
       monthly_income: form.monthly_income,
-      seniority_years: form.seniority_years
+      seniority_years: form.seniority_years,
+      seniority_months: form.seniority_months
     })
 
     // Save step 4 explicitly
@@ -196,13 +218,21 @@ const prevStep = () => router.push('/solicitud/paso-3')
             :maxlength="12"
           />
 
-          <AppSelect
-            v-model.number="form.seniority_years"
-            :options="seniorityOptions"
-            label="Antigüedad en empleo actual"
-            placeholder="Selecciona"
-            :error="errors.seniority_years"
-          />
+          <div class="grid grid-cols-2 gap-3">
+            <AppSelect
+              v-model.number="form.seniority_years"
+              :options="seniorityYearsOptions"
+              label="Años en empleo"
+              placeholder="Años"
+              :error="errors.seniority_years"
+            />
+            <AppSelect
+              v-model.number="form.seniority_months"
+              :options="seniorityMonthsOptions"
+              label="Meses adicionales"
+              placeholder="Meses"
+            />
+          </div>
         </template>
 
         <template v-else-if="form.employment_type === 'INDEPENDIENTE' || form.employment_type === 'EMPRESARIO'">

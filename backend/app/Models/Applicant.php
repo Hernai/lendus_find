@@ -7,6 +7,7 @@ use App\Enums\EducationLevel;
 use App\Enums\Gender;
 use App\Enums\KycStatus;
 use App\Enums\MaritalStatus;
+use App\Traits\HasAuditFields;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,7 +19,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Applicant extends Model
 {
-    use HasFactory, HasUuid, HasTenant, SoftDeletes;
+    use HasFactory, HasUuid, HasTenant, SoftDeletes, HasAuditFields;
 
     protected $fillable = [
         'tenant_id',

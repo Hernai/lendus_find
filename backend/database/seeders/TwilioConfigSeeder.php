@@ -10,10 +10,15 @@ class TwilioConfigSeeder extends Seeder
 {
     /**
      * Run the database seeds.
+     *
+     * Required environment variables:
+     * - TWILIO_ACCOUNT_SID
+     * - TWILIO_AUTH_TOKEN
+     * - TWILIO_FROM_NUMBER
+     * - TWILIO_WHATSAPP_FROM (optional)
      */
     public function run(): void
     {
-        // Get first tenant (or create one for testing)
         $tenant = Tenant::first();
 
         if (!$tenant) {
@@ -23,19 +28,18 @@ class TwilioConfigSeeder extends Seeder
 
         $this->command->info("Configuring Twilio for tenant: {$tenant->name} ({$tenant->slug})");
 
-        // Twilio credentials from environment
-        $accountSid = env('TWILIO_ACCOUNT_SID', '');
+        // Twilio credentials from environment only - no default values
+        $accountSid = env('TWILIO_ACCOUNT_SID');
         $authToken = env('TWILIO_AUTH_TOKEN');
-        $fromNumber = env('TWILIO_FROM_NUMBER', '');
-        $whatsappFrom = env('TWILIO_WHATSAPP_FROM', '');
+        $fromNumber = env('TWILIO_FROM_NUMBER');
+        $whatsappFrom = env('TWILIO_WHATSAPP_FROM', $fromNumber);
 
-        if (!$authToken) {
-            $this->command->error('TWILIO_AUTH_TOKEN not set in .env file');
+        if (!$accountSid || !$authToken || !$fromNumber) {
+            $this->command->error('Missing Twilio configuration. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER in .env');
             return;
         }
 
-        // Create or update SMS config
-        $smsConfig = TenantApiConfig::updateOrCreate(
+        TenantApiConfig::updateOrCreate(
             [
                 'tenant_id' => $tenant->id,
                 'provider' => 'twilio',
@@ -47,18 +51,13 @@ class TwilioConfigSeeder extends Seeder
                 'from_number' => $fromNumber,
                 'is_active' => true,
                 'is_sandbox' => env('APP_ENV') !== 'production',
-                'extra_config' => [
-                    'whatsapp_from' => $whatsappFrom,
-                ],
+                'extra_config' => ['whatsapp_from' => $whatsappFrom],
             ]
         );
 
-        $this->command->info('✅ SMS configuration created/updated');
-        $this->command->info("   Account SID: {$accountSid}");
-        $this->command->info("   From Number: {$fromNumber}");
+        $this->command->info('SMS configuration created/updated');
 
-        // Create or update WhatsApp config (optional)
-        $whatsappConfig = TenantApiConfig::updateOrCreate(
+        TenantApiConfig::updateOrCreate(
             [
                 'tenant_id' => $tenant->id,
                 'provider' => 'twilio',
@@ -73,11 +72,7 @@ class TwilioConfigSeeder extends Seeder
             ]
         );
 
-        $this->command->info('✅ WhatsApp configuration created/updated');
-        $this->command->info("   From Number: {$whatsappFrom}");
-
-        $this->command->newLine();
-        $this->command->info('🎉 Twilio configuration completed!');
-        $this->command->info('Test with: php artisan twilio:test-sms 9611838818 --tenant=' . $tenant->id);
+        $this->command->info('WhatsApp configuration created/updated');
+        $this->command->info('Test with: php artisan twilio:test-sms <phone> --tenant=' . $tenant->id);
     }
 }
