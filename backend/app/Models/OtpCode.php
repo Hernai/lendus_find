@@ -7,7 +7,6 @@ use App\Enums\OtpPurpose;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
 
 class OtpCode extends Model
 {
@@ -28,6 +27,7 @@ class OtpCode extends Model
         'user_agent',
         'provider_message_id',
         'provider_status',
+        'sent_at',
     ];
 
     protected $casts = [
@@ -36,6 +36,7 @@ class OtpCode extends Model
         'is_used' => 'boolean',
         'used_at' => 'datetime',
         'expires_at' => 'datetime',
+        'sent_at' => 'datetime',
     ];
 
     /**
@@ -77,8 +78,8 @@ class OtpCode extends Model
      */
     public static function generateCode(int $length = 6): string
     {
-        // In local/development, always use 123456 for testing
-        if (app()->environment('local', 'testing')) {
+        // Use fixed code 123456 if OTP_USE_FIXED is true (for testing)
+        if (config('app.otp_use_fixed', false)) {
             return '123456';
         }
 
@@ -148,5 +149,27 @@ class OtpCode extends Model
         return $query->where('is_used', false)
             ->where('expires_at', '>', now())
             ->where('attempts', '<', 5);
+    }
+
+    /**
+     * Check if OTP was sent successfully.
+     */
+    public function wasSent(): bool
+    {
+        return $this->sent_at !== null;
+    }
+
+    /**
+     * Mark OTP as sent.
+     */
+    public function markAsSent(?string $messageId = null, ?string $status = null): self
+    {
+        $this->update([
+            'sent_at' => now(),
+            'provider_message_id' => $messageId,
+            'provider_status' => $status ?? 'sent',
+        ]);
+
+        return $this;
     }
 }

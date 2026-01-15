@@ -98,7 +98,7 @@
             <div class="space-y-2">
               <!-- Quick Test Button (Prominent) -->
               <button
-                v-if="['sms', 'whatsapp'].includes(integration.service_type)"
+                v-if="['sms', 'whatsapp', 'kyc'].includes(integration.service_type)"
                 @click="openQuickTestModal(integration)"
                 class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-medium"
                 title="Probar conexión"
@@ -287,41 +287,16 @@
         </div>
 
         <form @submit.prevent="runTest" class="p-6 space-y-4">
-          <!-- Info Alert -->
+          <!-- Info Alert - Same for all integrations -->
           <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
             <div class="flex items-start gap-2">
               <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
               </svg>
               <p class="text-sm text-blue-800">
-                Se enviará un mensaje de prueba al número que ingreses para verificar que la configuración funciona correctamente.
+                Se verificará la conexión con el servicio para confirmar que las credenciales son correctas.
               </p>
             </div>
-          </div>
-
-          <!-- Phone Input -->
-          <div v-if="testingIntegration?.service_type === 'sms' || testingIntegration?.service_type === 'whatsapp'">
-            <label class="block text-sm font-medium text-gray-700 mb-2">Número de Celular *</label>
-            <div class="relative">
-              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <span class="text-gray-500 text-sm">+52</span>
-              </div>
-              <input
-                v-model="testForm.test_phone"
-                type="text"
-                required
-                placeholder="9611838818"
-                maxlength="10"
-                pattern="[0-9]{10}"
-                class="w-full pl-12 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-lg font-mono"
-              />
-            </div>
-            <p class="mt-2 text-xs text-gray-500">
-              <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              10 dígitos sin código de país (ej: 9611838818)
-            </p>
           </div>
 
           <!-- Test Result -->
@@ -343,8 +318,17 @@
                 </p>
                 <p v-if="testResult.error" class="text-xs text-red-700 mt-1">{{ testResult.error }}</p>
                 <p v-if="testResult.success" class="text-xs text-green-700 mt-1">
-                  El mensaje ha sido enviado exitosamente. Deberías recibirlo en unos segundos.
+                  Credenciales verificadas. La integración está funcionando correctamente.
                 </p>
+                <!-- Help for credential errors -->
+                <div v-if="!testResult.success && isCredentialError(testResult.error)" class="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                  <p class="font-medium">Posibles soluciones:</p>
+                  <ul class="mt-1 list-disc list-inside space-y-0.5">
+                    <li>Verifique que el Account SID y Auth Token sean correctos</li>
+                    <li>Obtenga las credenciales desde la consola de Twilio</li>
+                    <li>Asegúrese de no copiar espacios adicionales</li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
@@ -371,7 +355,7 @@
               <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
-              {{ isTesting ? 'Enviando...' : 'Enviar Mensaje' }}
+              {{ isTesting ? 'Probando...' : 'Probar Conexión' }}
             </button>
           </div>
         </form>
@@ -533,9 +517,6 @@ const openQuickTestModal = (integration: Integration) => {
   showTestModal.value = true
 }
 
-// Open test modal (alias for compatibility)
-const openTestModal = openQuickTestModal
-
 // Close test modal
 const closeTestModal = () => {
   showTestModal.value = false
@@ -566,6 +547,13 @@ const runTest = async () => {
   } finally {
     isTesting.value = false
   }
+}
+
+// Check if error is a credential error
+const isCredentialError = (error?: string): boolean => {
+  if (!error) return false
+  const credentialErrors = ['401', 'Authenticate', 'credential', 'inválidas', 'Account SID', 'Auth Token']
+  return credentialErrors.some(keyword => error.toLowerCase().includes(keyword.toLowerCase()))
 }
 
 // Delete integration

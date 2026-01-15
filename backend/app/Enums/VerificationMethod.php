@@ -13,6 +13,8 @@ enum VerificationMethod: string
     case KYC_INE_LIST = 'KYC_INE_LIST';
     case KYC_CURP_RENAPO = 'KYC_CURP_RENAPO';
     case KYC_RFC_SAT = 'KYC_RFC_SAT';
+    case RENAPO = 'RENAPO'; // Alias for CURP validation via RENAPO
+    case SAT = 'SAT'; // Alias for RFC validation via SAT
     case KYC_FACE_MATCH = 'KYC_FACE_MATCH';
     case KYC_LIVENESS = 'KYC_LIVENESS';
     case KYC_OFAC = 'KYC_OFAC';
@@ -36,6 +38,8 @@ enum VerificationMethod: string
             self::KYC_OFAC => 'Lista OFAC',
             self::KYC_PLD => 'Listas PLD',
             self::NUBARIUM => 'Nubarium',
+            self::RENAPO => 'RENAPO',
+            self::SAT => 'SAT',
         };
     }
 
@@ -57,6 +61,8 @@ enum VerificationMethod: string
             self::NUBARIUM,
             self::API,
             self::BUREAU,
+            self::RENAPO,
+            self::SAT,
         ]);
     }
 

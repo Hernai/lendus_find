@@ -1007,6 +1007,7 @@ class ApplicationController extends Controller
                 'housing_type' => $primaryAddress->housing_type,
                 'housing_type_label' => $primaryAddress->housing_type_label,
                 'years_at_address' => $primaryAddress->years_at_address,
+                'months_at_address' => $primaryAddress->months_at_address,
                 'monthly_rent' => $primaryAddress->monthly_rent ? (float) $primaryAddress->monthly_rent : null,
                 'is_verified' => $primaryAddress->is_verified,
                 'full_address' => $primaryAddress->full_address,

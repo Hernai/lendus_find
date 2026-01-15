@@ -13,6 +13,7 @@ use App\Models\Application;
 use App\Models\AuditLog;
 use App\Models\DataVerification;
 use App\Models\Document;
+use App\Services\VerificationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,6 +23,13 @@ use Illuminate\Support\Str;
 
 class DocumentController extends Controller
 {
+    protected VerificationService $verificationService;
+
+    public function __construct(VerificationService $verificationService)
+    {
+        $this->verificationService = $verificationService;
+    }
+
     /**
      * List documents for an application.
      */
@@ -174,22 +182,18 @@ class DocumentController extends Controller
 
         // Record document verification if auto-approved
         if ($initialStatus === DocumentStatus::APPROVED && $isIneDocument) {
-            $verificationField = $type === 'INE_FRONT' ? 'ine_document_front' : 'ine_document_back';
-            DataVerification::recordVerification(
-                $applicant->id,
-                $verificationField,
-                $document->id,
-                VerificationMethod::KYC_INE_OCR,
-                true,
-                [
-                    'document_id' => $document->id,
-                    'document_type' => $type,
-                    'auto_approved' => true,
-                    'ine_valid' => $docMetadata['ine_valid'] ?? false,
-                    'ocr_curp' => $docMetadata['ocr_curp'] ?? null,
-                ],
-                'Auto-aprobado por validación KYC con Nubarium'
-            );
+            $side = $type === 'INE_FRONT' ? 'front' : 'back';
+
+            // Extract OCR data from various possible metadata formats
+            $ocrDataFromMeta = $docMetadata['ocr_data'] ?? [];
+            $ocrData = [
+                'curp' => $docMetadata['ocr_curp'] ?? $ocrDataFromMeta['curp'] ?? null,
+                'first_name' => $docMetadata['ocr_first_name'] ?? $ocrDataFromMeta['nombres'] ?? null,
+                'last_name_1' => $docMetadata['ocr_last_name_1'] ?? $ocrDataFromMeta['apellido_paterno'] ?? null,
+                'last_name_2' => $docMetadata['ocr_last_name_2'] ?? $ocrDataFromMeta['apellido_materno'] ?? null,
+                'birth_date' => $docMetadata['ocr_birth_date'] ?? $ocrDataFromMeta['fecha_nacimiento'] ?? null,
+            ];
+            $this->verificationService->verifyIneDocument($applicant, $side, $document->id, $ocrData);
         }
 
         // Get metadata for timeline

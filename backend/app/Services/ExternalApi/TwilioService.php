@@ -46,10 +46,17 @@ class TwilioService
         }
 
         // Initialize Twilio client with tenant credentials
-        $this->client = new Client(
-            $this->config->account_sid,
-            $this->config->auth_token
-        );
+        $accountSid = $this->config->account_sid;
+        $authToken = $this->config->auth_token;
+
+        Log::debug('Twilio credentials loaded', [
+            'tenant_id' => $tenantId,
+            'account_sid_length' => strlen($accountSid ?? ''),
+            'account_sid_preview' => $accountSid ? substr($accountSid, 0, 4) . '...' . substr($accountSid, -4) : 'null',
+            'auth_token_length' => strlen($authToken ?? ''),
+        ]);
+
+        $this->client = new Client($accountSid, $authToken);
 
         $this->fromNumber = $this->config->from_number;
 
@@ -159,9 +166,19 @@ class TwilioService
                 'sent_at' => now(),
             ]);
 
+            // Provide better error messages for common issues
+            $errorMessage = $e->getMessage();
+            if (str_contains($errorMessage, '401') || str_contains($errorMessage, 'Authenticate')) {
+                $errorMessage = 'Credenciales de Twilio inválidas. Verifique Account SID y Auth Token en Integraciones.';
+            } elseif (str_contains($errorMessage, '21608') || str_contains($errorMessage, 'unverified')) {
+                $errorMessage = 'El número de origen no está verificado en Twilio. Verifique la configuración.';
+            } elseif (str_contains($errorMessage, '21211')) {
+                $errorMessage = 'Número de teléfono destino inválido.';
+            }
+
             return [
                 'success' => false,
-                'error' => $e->getMessage(),
+                'error' => $errorMessage,
                 'code' => $e->getCode(),
             ];
         } catch (\Exception $e) {
@@ -378,5 +395,100 @@ class TwilioService
         ]);
 
         return true;
+    }
+
+    /**
+     * Test connection to Twilio by fetching account info
+     */
+    public function testConnection(): array
+    {
+        try {
+            $accountSid = $this->config?->account_sid ?? config('services.twilio.account_sid');
+
+            Log::info('Testing Twilio connection', [
+                'tenant_id' => $this->tenantId,
+                'account_sid_preview' => $accountSid ? substr($accountSid, 0, 6) . '...' . substr($accountSid, -4) : 'null',
+            ]);
+
+            // Fetch account info to verify credentials
+            $account = $this->client->api->v2010->accounts($accountSid)->fetch();
+
+            // Update test result in config
+            if ($this->config) {
+                $this->config->update([
+                    'last_tested_at' => now(),
+                    'last_test_success' => true,
+                    'last_test_error' => null,
+                ]);
+            }
+
+            return [
+                'success' => true,
+                'message' => 'Conexión exitosa',
+                'account_name' => $account->friendlyName,
+                'account_status' => $account->status,
+            ];
+        } catch (TwilioException $e) {
+            Log::error('Twilio connection test failed', [
+                'tenant_id' => $this->tenantId,
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+            ]);
+
+            // Provide better error messages
+            $errorMessage = $e->getMessage();
+            $userMessage = 'Error de autenticación';
+
+            if (str_contains($errorMessage, '401') || str_contains($errorMessage, 'Authenticate')) {
+                $userMessage = 'Credenciales inválidas';
+                $errorMessage = 'El Account SID o Auth Token no son válidos. Verifique en console.twilio.com que las credenciales sean correctas y que la cuenta esté activa.';
+            }
+
+            // Update test result in config
+            if ($this->config) {
+                $this->config->update([
+                    'last_tested_at' => now(),
+                    'last_test_success' => false,
+                    'last_test_error' => $errorMessage,
+                ]);
+            }
+
+            return [
+                'success' => false,
+                'message' => $userMessage,
+                'error' => $errorMessage,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Twilio connection test failed', [
+                'tenant_id' => $this->tenantId,
+                'error' => $e->getMessage(),
+            ]);
+
+            if ($this->config) {
+                $this->config->update([
+                    'last_tested_at' => now(),
+                    'last_test_success' => false,
+                    'last_test_error' => $e->getMessage(),
+                ]);
+            }
+
+            return [
+                'success' => false,
+                'message' => 'Error de conexión',
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Create service instance for testing without throwing on missing config
+     */
+    public static function createForTest(string $tenantId): ?self
+    {
+        try {
+            return new self($tenantId);
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 }

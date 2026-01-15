@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\TenantApiConfig;
+use App\Services\ExternalApi\NubariumService;
 use App\Services\ExternalApi\TwilioService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -134,22 +135,57 @@ class TenantIntegrationController extends Controller
             ->where('id', $id)
             ->firstOrFail();
 
-        $validator = Validator::make($request->all(), [
-            'test_phone' => 'required_if:service_type,sms,whatsapp|string',
-            'test_email' => 'required_if:service_type,email|email',
-        ]);
+        // Validation depends on provider/service type
+        $rules = [];
+        if ($config->provider === 'twilio' && in_array($config->service_type, ['sms', 'whatsapp'])) {
+            $rules['test_phone'] = 'required|string';
+        } elseif ($config->service_type === 'email') {
+            $rules['test_email'] = 'required|email';
+        }
+        // Nubarium KYC doesn't need additional data - just test token generation
 
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
+        if (!empty($rules)) {
+            $validator = Validator::make($request->all(), $rules);
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Datos requeridos',
+                    'error' => 'Se requiere número de teléfono para la prueba',
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
         }
 
         try {
-            $result = null;
+            // Test Nubarium KYC - just obtain token (no phone needed)
+            if ($config->provider === 'nubarium' && $config->service_type === 'kyc') {
+                $nubariumService = new NubariumService(app('tenant'));
+                $result = $nubariumService->testConnection();
 
-            // Test based on provider and service type
+                $config->update([
+                    'last_tested_at' => now(),
+                    'last_test_success' => $result['success'],
+                    'last_test_error' => $result['success'] ? null : ($result['error'] ?? 'Unknown error'),
+                ]);
+
+                if ($result['success']) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Conexión exitosa - Token obtenido',
+                        'details' => [
+                            'token_preview' => $result['token_preview'] ?? null,
+                        ],
+                    ]);
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $result['message'] ?? 'Error de autenticación',
+                        'error' => $result['error'] ?? 'No se pudo obtener token',
+                    ], 400);
+                }
+            }
+
+            // Test Twilio SMS/WhatsApp - send real test message
             if ($config->provider === 'twilio' && in_array($config->service_type, ['sms', 'whatsapp'])) {
                 $twilioService = new TwilioService(app('tenant.id'));
                 $testMessage = 'Prueba de integración desde LendusFind - ' . now()->format('H:i:s');
@@ -160,39 +196,33 @@ class TenantIntegrationController extends Controller
                     $result = $twilioService->sendSms($request->test_phone, $testMessage);
                 }
 
-                if ($result['success']) {
-                    $config->update([
-                        'last_tested_at' => now(),
-                        'last_test_success' => true,
-                        'last_test_error' => null,
-                    ]);
+                $config->update([
+                    'last_tested_at' => now(),
+                    'last_test_success' => $result['success'],
+                    'last_test_error' => $result['success'] ? null : ($result['error'] ?? 'Unknown error'),
+                ]);
 
+                if ($result['success']) {
                     return response()->json([
                         'success' => true,
-                        'message' => 'Prueba exitosa - Mensaje enviado',
+                        'message' => 'Mensaje enviado exitosamente',
                         'details' => [
                             'sid' => $result['sid'] ?? null,
                             'status' => $result['status'] ?? null,
                         ],
                     ]);
                 } else {
-                    $config->update([
-                        'last_tested_at' => now(),
-                        'last_test_success' => false,
-                        'last_test_error' => $result['error'] ?? 'Unknown error',
-                    ]);
-
                     return response()->json([
                         'success' => false,
-                        'message' => 'Prueba fallida',
-                        'error' => $result['error'] ?? 'Unknown error',
-                    ], 500);
+                        'message' => 'Error al enviar mensaje',
+                        'error' => $result['error'] ?? 'No se pudo enviar',
+                    ], 400);
                 }
             }
 
-            // Add more provider/service type tests here
-
             return response()->json([
+                'success' => false,
+                'message' => 'No implementado',
                 'error' => 'Test not implemented for this provider/service type',
             ], 501);
         } catch (\Exception $e) {

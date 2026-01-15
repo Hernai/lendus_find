@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\VerificationMethod;
 use App\Http\Controllers\Controller;
 use App\Models\Address;
 use App\Models\Applicant;
 use App\Models\BankAccount;
 use App\Models\EmploymentRecord;
+use App\Services\VerificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +17,12 @@ use Illuminate\Support\Str;
 
 class ApplicantController extends Controller
 {
+    protected VerificationService $verificationService;
+
+    public function __construct(VerificationService $verificationService)
+    {
+        $this->verificationService = $verificationService;
+    }
     /**
      * Get the current user's applicant profile.
      */
@@ -68,6 +76,9 @@ class ApplicantController extends Controller
             'kyc_status' => 'PENDING',
         ]);
 
+        // Sync phone/email verifications from User to Applicant
+        $this->syncUserVerificationsToApplicant($user, $applicant);
+
         return response()->json([
             'message' => 'Applicant profile created',
             'data' => $this->formatApplicant($applicant)
@@ -120,6 +131,9 @@ class ApplicantController extends Controller
         ]));
 
         $applicant->save();
+
+        // Sync verification from User if phone/email matches verified User data
+        $this->syncUserVerificationsToApplicant($request->user(), $applicant);
 
         return response()->json([
             'message' => 'Applicant profile updated',
@@ -256,6 +270,9 @@ class ApplicantController extends Controller
         if (!empty($userUpdates)) {
             $user->update($userUpdates);
         }
+
+        // Sync verification from User if phone/email matches verified User data
+        $this->syncUserVerificationsToApplicant($user, $applicant);
 
         return response()->json([
             'message' => 'Personal data updated',
@@ -505,7 +522,7 @@ class ApplicantController extends Controller
         $user = $request->user();
 
         if (!$user->applicant) {
-            return Applicant::create([
+            $applicant = Applicant::create([
                 'id' => Str::uuid(),
                 'tenant_id' => app('tenant.id'),
                 'user_id' => $user->id,
@@ -514,9 +531,42 @@ class ApplicantController extends Controller
                 'email' => $user->email,
                 'kyc_status' => 'PENDING',
             ]);
+
+            // Sync phone/email verifications from User to Applicant
+            $this->syncUserVerificationsToApplicant($user, $applicant);
+
+            return $applicant;
         }
 
         return $user->applicant;
+    }
+
+    /**
+     * Sync verified phone/email from User to Applicant's DataVerification records.
+     */
+    private function syncUserVerificationsToApplicant($user, Applicant $applicant): void
+    {
+        // If phone was verified via OTP on User
+        if ($user->phone && $user->phone_verified_at) {
+            $this->verificationService->verify(
+                $applicant,
+                'phone',
+                $user->phone,
+                VerificationMethod::OTP,
+                ['synced_from_user' => true, 'user_verified_at' => $user->phone_verified_at->toIso8601String()]
+            );
+        }
+
+        // If email was verified via OTP on User
+        if ($user->email && $user->email_verified_at) {
+            $this->verificationService->verify(
+                $applicant,
+                'email',
+                $user->email,
+                VerificationMethod::OTP,
+                ['synced_from_user' => true, 'user_verified_at' => $user->email_verified_at->toIso8601String()]
+            );
+        }
     }
 
     /**

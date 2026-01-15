@@ -372,7 +372,8 @@ class NubariumService extends BaseExternalApiService
         if (!$this->isConfigured()) {
             return [
                 'success' => false,
-                'message' => 'Nubarium no está configurado para este tenant',
+                'message' => 'Error de configuración',
+                'error' => 'Nubarium no está configurado para este tenant',
             ];
         }
 
@@ -387,21 +388,24 @@ class NubariumService extends BaseExternalApiService
                 $this->updateTestResult(true, null);
                 return [
                     'success' => true,
-                    'message' => 'Conexión exitosa - Token JWT generado correctamente',
+                    'message' => 'Conexión exitosa - Token obtenido',
+                    'token_preview' => substr($token, 0, 20) . '...',
                 ];
             }
 
             $this->updateTestResult(false, 'No se pudo generar el token JWT');
             return [
                 'success' => false,
-                'message' => 'Error: No se pudo generar el token JWT. Verifique las credenciales (usuario y contraseña).',
+                'message' => 'Error de autenticación',
+                'error' => 'Verifique las credenciales (usuario y contraseña)',
             ];
         } catch (\Exception $e) {
             $this->updateTestResult(false, $e->getMessage());
 
             return [
                 'success' => false,
-                'message' => 'Error de conexión: ' . $e->getMessage(),
+                'message' => 'Error de conexión',
+                'error' => $e->getMessage(),
             ];
         }
     }

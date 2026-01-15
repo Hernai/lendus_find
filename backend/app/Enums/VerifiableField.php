@@ -10,6 +10,7 @@ enum VerifiableField: string
     case FULL_NAME = 'full_name';
     case CURP = 'curp';
     case RFC = 'rfc';
+    case INE = 'ine'; // Alias for INE clave de elector
     case INE_CLAVE = 'ine_clave';
     case INE_OCR = 'ine_ocr';
     case INE_FOLIO = 'ine_folio';
@@ -44,6 +45,7 @@ enum VerifiableField: string
             self::FULL_NAME => 'Nombre Completo',
             self::CURP => 'CURP',
             self::RFC => 'RFC',
+            self::INE => 'INE',
             self::INE_CLAVE => 'Clave de Elector',
             self::INE_OCR => 'OCR de INE',
             self::INE_FOLIO => 'Folio de INE',
@@ -88,6 +90,7 @@ enum VerifiableField: string
             self::FULL_NAME,
             self::CURP,
             self::RFC,
+            self::INE,
             self::INE_CLAVE,
             self::INE_OCR,
             self::INE_FOLIO,

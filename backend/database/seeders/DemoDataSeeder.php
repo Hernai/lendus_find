@@ -31,7 +31,7 @@ class DemoDataSeeder extends Seeder
             'branding' => [
                 'primary_color' => '#2563eb',
                 'secondary_color' => '#1e40af',
-                'logo_url' => '/images/logo.svg',
+                'logo_url' => null, // Uses default LendusFind logo when null
             ],
             'settings' => [
                 'otp_provider' => 'twilio',

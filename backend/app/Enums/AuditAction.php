@@ -41,6 +41,7 @@ enum AuditAction: string
     case KYC_PLD_BLACKLISTS_CHECK = 'kyc.pld_blacklists_check';
     case KYC_IMSS_HISTORY = 'kyc.imss_history';
     case KYC_CEDULA_VALIDATION = 'kyc.cedula_validation';
+    case KYC_VERIFICATIONS_RECORDED = 'kyc.verifications_recorded';
 
     public function label(): string
     {
@@ -80,6 +81,7 @@ enum AuditAction: string
             self::KYC_PLD_BLACKLISTS_CHECK => 'Consulta Listas Negras PLD',
             self::KYC_IMSS_HISTORY => 'Historial IMSS',
             self::KYC_CEDULA_VALIDATION => 'Validación de Cédula Profesional',
+            self::KYC_VERIFICATIONS_RECORDED => 'Verificaciones registradas',
         };
     }
 

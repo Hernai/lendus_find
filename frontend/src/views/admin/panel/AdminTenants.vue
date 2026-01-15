@@ -1762,11 +1762,16 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <p class="text-sm text-blue-800">
-                Se enviará un mensaje de prueba desde LendusFind para verificar la configuración.
+                <template v-if="testingIntegration?.service_type === 'sms' || testingIntegration?.service_type === 'whatsapp'">
+                  Se enviará un mensaje de prueba al número que ingreses.
+                </template>
+                <template v-else>
+                  Se verificará la conexión con el servicio.
+                </template>
               </p>
             </div>
 
-            <!-- Phone Input -->
+            <!-- Phone Input (only for SMS/WhatsApp) -->
             <div v-if="testingIntegration?.service_type === 'sms' || testingIntegration?.service_type === 'whatsapp'">
               <label class="block text-sm font-medium text-gray-700 mb-1">
                 Número de Teléfono
@@ -1784,20 +1789,6 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                 />
               </div>
               <p class="text-xs text-gray-500 mt-1">Ingresa 10 dígitos (sin +52)</p>
-            </div>
-
-            <!-- Email Input -->
-            <div v-if="testingIntegration?.service_type === 'email'">
-              <label class="block text-sm font-medium text-gray-700 mb-1">
-                Correo Electrónico
-              </label>
-              <input
-                v-model="testForm.test_email"
-                type="email"
-                placeholder="ejemplo@correo.com"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-                :disabled="isTesting"
-              />
             </div>
 
             <!-- Test Result -->
@@ -1849,7 +1840,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
             </button>
             <button
               @click="runTest"
-              :disabled="isTesting || (!testForm.test_phone && !testForm.test_email)"
+              :disabled="isTesting || ((testingIntegration?.service_type === 'sms' || testingIntegration?.service_type === 'whatsapp') && !testForm.test_phone)"
               class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg v-if="isTesting" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -1859,7 +1850,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
               <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
-              {{ isTesting ? 'Enviando...' : 'Enviar Mensaje' }}
+              {{ isTesting ? 'Probando...' : (testingIntegration?.service_type === 'sms' || testingIntegration?.service_type === 'whatsapp' ? 'Enviar Mensaje' : 'Probar Conexión') }}
             </button>
           </div>
         </div>

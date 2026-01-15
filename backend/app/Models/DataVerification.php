@@ -234,8 +234,8 @@ class DataVerification extends Model
             ->first();
 
         if ($existing && $existing->is_locked) {
-            // Field is locked, cannot update
-            throw new \Exception("Cannot update locked field: {$fieldName}. This field was verified by automated KYC.");
+            // Field is locked, return existing record without error
+            return $existing;
         }
 
         // Determine if this method should lock the field

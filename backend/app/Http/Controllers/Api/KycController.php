@@ -9,6 +9,7 @@ use App\Models\Applicant;
 use App\Models\AuditLog;
 use App\Models\DataVerification;
 use App\Services\ExternalApi\NubariumService;
+use App\Services\VerificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +24,13 @@ use Illuminate\Support\Str;
  */
 class KycController extends Controller
 {
+    protected VerificationService $verificationService;
+
+    public function __construct(VerificationService $verificationService)
+    {
+        $this->verificationService = $verificationService;
+    }
+
     /**
      * Get available KYC services for the current tenant.
      */
@@ -157,6 +165,38 @@ class KycController extends Controller
             ], $result['status_code'] ?? 400);
         }
 
+        // Auto-register verifications if user has an applicant and CURP is valid
+        if ($result['valid'] && $request->user()?->applicant) {
+            $applicant = $request->user()->applicant;
+            $data = $result['data'] ?? [];
+
+            // Register CURP verification
+            $this->verificationService->verify(
+                $applicant,
+                'curp',
+                $request->curp,
+                VerificationMethod::RENAPO,
+                ['renapo_response' => $data]
+            );
+
+            // Register personal data from RENAPO response
+            if (!empty($data['nombres'])) {
+                $this->verificationService->verify($applicant, 'first_name', $data['nombres'], VerificationMethod::RENAPO);
+            }
+            if (!empty($data['apellido_paterno'])) {
+                $this->verificationService->verify($applicant, 'last_name_1', $data['apellido_paterno'], VerificationMethod::RENAPO);
+            }
+            if (!empty($data['apellido_materno'])) {
+                $this->verificationService->verify($applicant, 'last_name_2', $data['apellido_materno'], VerificationMethod::RENAPO);
+            }
+            if (!empty($data['fecha_nacimiento'])) {
+                $this->verificationService->verify($applicant, 'birth_date', $data['fecha_nacimiento'], VerificationMethod::RENAPO);
+            }
+
+            // Update KYC status if all critical fields verified
+            $this->verificationService->updateKycStatus($applicant);
+        }
+
         return response()->json([
             'message' => 'CURP validado',
             'data' => $result['data'],
@@ -215,6 +255,38 @@ class KycController extends Controller
             ], 400);
         }
 
+        // Auto-register verifications if user has an applicant
+        if (!empty($result['curp']) && $request->user()?->applicant) {
+            $applicant = $request->user()->applicant;
+            $data = $result['data'] ?? [];
+
+            // Register CURP verification
+            $this->verificationService->verify(
+                $applicant,
+                'curp',
+                $result['curp'],
+                VerificationMethod::RENAPO,
+                ['renapo_response' => $data]
+            );
+
+            // Register personal data from RENAPO response
+            if (!empty($data['nombres'])) {
+                $this->verificationService->verify($applicant, 'first_name', $data['nombres'], VerificationMethod::RENAPO);
+            }
+            if (!empty($data['apellido_paterno'])) {
+                $this->verificationService->verify($applicant, 'last_name_1', $data['apellido_paterno'], VerificationMethod::RENAPO);
+            }
+            if (!empty($data['apellido_materno'])) {
+                $this->verificationService->verify($applicant, 'last_name_2', $data['apellido_materno'], VerificationMethod::RENAPO);
+            }
+            if (!empty($data['fecha_nacimiento'])) {
+                $this->verificationService->verify($applicant, 'birth_date', $data['fecha_nacimiento'], VerificationMethod::RENAPO);
+            }
+
+            // Update KYC status if all critical fields verified
+            $this->verificationService->updateKycStatus($applicant);
+        }
+
         return response()->json([
             'message' => 'CURP encontrado',
             'data' => $result['data'],
@@ -261,6 +333,19 @@ class KycController extends Controller
                 'message' => $result['error'] ?? 'Error al validar RFC',
                 'provider_error' => $result['provider_error'] ?? null,
             ], $result['status_code'] ?? 400);
+        }
+
+        // Auto-register RFC verification if user has an applicant and RFC is valid
+        if ($result['valid'] && $request->user()?->applicant) {
+            $applicant = $request->user()->applicant;
+
+            $this->verificationService->verify(
+                $applicant,
+                'rfc',
+                $request->rfc,
+                VerificationMethod::SAT,
+                ['sat_response' => $result['data'] ?? []]
+            );
         }
 
         return response()->json([
@@ -314,6 +399,29 @@ class KycController extends Controller
                 'message' => $result['error'] ?? 'Error al validar INE',
                 'provider_error' => $result['provider_error'] ?? null,
             ], $result['status_code'] ?? 400);
+        }
+
+        // Auto-register INE verification if user has an applicant and INE is valid
+        if ($result['is_valid'] && $request->user()?->applicant) {
+            $applicant = $request->user()->applicant;
+            $ocrData = $result['ocr_data'] ?? [];
+
+            // Verify INE document
+            $this->verificationService->verifyIneDocument(
+                $applicant,
+                'front',
+                'ine_ocr_' . now()->timestamp,
+                [
+                    'curp' => $ocrData['curp'] ?? null,
+                    'first_name' => $ocrData['nombres'] ?? null,
+                    'last_name_1' => $ocrData['apellido_paterno'] ?? null,
+                    'last_name_2' => $ocrData['apellido_materno'] ?? null,
+                    'birth_date' => $ocrData['fecha_nacimiento'] ?? null,
+                ]
+            );
+
+            // Update KYC status if all critical fields verified
+            $this->verificationService->updateKycStatus($applicant);
         }
 
         return response()->json([
@@ -721,29 +829,31 @@ class KycController extends Controller
                 $field = $verification['field'];
                 $value = $verification['value'] ?? null;
                 $method = $verification['method'];
-                $verified = $verification['verified'] ?? true;
                 $metadata = $verification['metadata'] ?? null;
                 $notes = $verification['notes'] ?? null;
 
-                $record = DataVerification::recordVerification(
-                    $applicant->id,
+                // Use VerificationService which handles locked fields gracefully
+                $record = $this->verificationService->verify(
+                    $applicant,
                     $field,
                     $value,
                     $method,
-                    $verified,
                     $metadata,
                     $notes
                 );
 
-                $recorded[] = [
-                    'field' => $field,
-                    'verified' => $record->is_verified,
-                    'method' => $record->method?->value ?? $record->method,
-                ];
+                if ($record) {
+                    $recorded[] = [
+                        'field' => $field,
+                        'verified' => $record->is_verified,
+                        'locked' => $record->is_locked,
+                        'method' => $record->method?->value ?? $record->method,
+                    ];
+                }
             }
 
             // Update applicant's kyc_verified_at if all critical fields are verified
-            $this->updateApplicantKycStatus($applicant);
+            $this->verificationService->updateKycStatus($applicant);
 
             DB::commit();
 
@@ -878,31 +988,4 @@ class KycController extends Controller
         ]);
     }
 
-    /**
-     * Update applicant's KYC status based on verified fields.
-     */
-    private function updateApplicantKycStatus(Applicant $applicant): void
-    {
-        // Check if critical KYC fields are verified
-        $criticalFields = [
-            VerifiableField::CURP->value,
-            VerifiableField::FIRST_NAME->value,
-            VerifiableField::LAST_NAME_1->value,
-            VerifiableField::BIRTH_DATE->value,
-        ];
-
-        $allCriticalVerified = true;
-        foreach ($criticalFields as $field) {
-            if (!DataVerification::isFieldVerified($applicant->id, $field)) {
-                $allCriticalVerified = false;
-                break;
-            }
-        }
-
-        if ($allCriticalVerified && !$applicant->kyc_verified_at) {
-            $applicant->kyc_verified_at = now();
-            $applicant->kyc_status = \App\Enums\KycStatus::VERIFIED;
-            $applicant->save();
-        }
-    }
 }

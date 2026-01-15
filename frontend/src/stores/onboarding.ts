@@ -49,6 +49,7 @@ interface Step4Data {
   job_title: string
   monthly_income: number
   seniority_years: number
+  seniority_months: number
   company_phone: string
   company_address: string
 }
@@ -147,6 +148,7 @@ const getDefaultData = (): OnboardingData => ({
     job_title: '',
     monthly_income: 0,
     seniority_years: 0,
+    seniority_months: 0,
     company_phone: '',
     company_address: ''
   },
@@ -307,12 +309,14 @@ export const useOnboardingStore = defineStore('onboarding', () => {
         // Populate step 4 from current employment
         if (a.current_employment) {
           const emp = a.current_employment
+          const totalMonths = emp.seniority_months || 0
           data.value.step4 = {
             employment_type: emp.employment_type || '',
             company_name: emp.company_name || '',
             job_title: emp.position || '', // Backend sends 'position'
             monthly_income: emp.monthly_income || 0,
-            seniority_years: Math.floor((emp.seniority_months || 0) / 12), // Convert months to years
+            seniority_years: Math.floor(totalMonths / 12), // Convert months to years
+            seniority_months: totalMonths % 12, // Remaining months
             company_phone: emp.work_phone || '', // Backend sends 'work_phone'
             company_address: ''
           }
@@ -414,7 +418,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
             company_name: s4.company_name || undefined,
             position: s4.job_title || undefined, // Backend expects 'position', not 'job_title'
             monthly_income: s4.monthly_income,
-            seniority_months: (Number(s4.seniority_years) || 0) * 12, // Convert years to months for backend
+            seniority_months: (Number(s4.seniority_years) || 0) * 12 + (Number(s4.seniority_months) || 0), // Convert years + months to total months
             work_phone: s4.company_phone || undefined // Backend expects 'work_phone', not 'company_phone'
           })
           break

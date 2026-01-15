@@ -242,6 +242,21 @@ const prevStep = () => router.push('/solicitud/paso-3')
             :placeholder="form.employment_type === 'EMPRESARIO' ? 'MI NEGOCIO S.A.' : 'SERVICIOS PROFESIONALES'"
             uppercase
           />
+
+          <div class="grid grid-cols-2 gap-3">
+            <AppSelect
+              v-model.number="form.seniority_years"
+              :options="seniorityYearsOptions"
+              :label="form.employment_type === 'EMPRESARIO' ? 'Años con negocio' : 'Años de experiencia'"
+              placeholder="Años"
+            />
+            <AppSelect
+              v-model.number="form.seniority_months"
+              :options="seniorityMonthsOptions"
+              label="Meses adicionales"
+              placeholder="Meses"
+            />
+          </div>
         </template>
 
         <div class="relative">
