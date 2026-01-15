@@ -191,14 +191,16 @@ const TABLA_HOMOCLAVE: Record<string, string> = {
 }
 
 /**
- * Tabla para convertir residuo a carácter de homoclave
+ * Tabla para convertir residuo a carácter de homoclave (base 34)
+ * Mapeo: 0-8 → '1'-'9', 9-33 → 'A'-'Z' (excluyendo 'O')
+ * Total: 34 caracteres = "123456789ABCDEFGHIJKLMNPQRSTUVWXYZ"
  */
 const TABLA_DIGITO: Record<number, string> = {
   0: '1', 1: '2', 2: '3', 3: '4', 4: '5', 5: '6', 6: '7', 7: '8',
   8: '9', 9: 'A', 10: 'B', 11: 'C', 12: 'D', 13: 'E', 14: 'F',
   15: 'G', 16: 'H', 17: 'I', 18: 'J', 19: 'K', 20: 'L', 21: 'M',
   22: 'N', 23: 'P', 24: 'Q', 25: 'R', 26: 'S', 27: 'T', 28: 'U',
-  29: 'V', 30: 'W', 31: 'X', 32: 'Y'
+  29: 'V', 30: 'W', 31: 'X', 32: 'Y', 33: 'Z'
 }
 
 /**
@@ -211,9 +213,19 @@ const TABLA_VERIFICADOR: Record<number, string> = {
 
 /**
  * Calcula la homoclave del RFC usando el algoritmo oficial del SAT
+ *
+ * El algoritmo oficial (basado en documentación del IFAI):
+ * 1. Construir nombre completo: "APELLIDO_PATERNO APELLIDO_MATERNO NOMBRE"
+ * 2. Agregar un '0' al inicio del nombre
+ * 3. Convertir cada carácter a su valor de 2 dígitos (usando TABLA_HOMOCLAVE)
+ * 4. Para cada posición i, multiplicar el número de 2 dígitos (i, i+1) por el dígito en i+1
+ * 5. Sumar todos los productos
+ * 6. Tomar los últimos 3 dígitos (módulo 1000)
+ * 7. Dividir entre 34: cociente → primer carácter, residuo → segundo carácter
  */
 function calcularHomoclave(data: PersonaFisicaData): string {
   // Construir el nombre completo normalizado
+  // El algoritmo del SAT usa el nombre completo tal como aparece (sin filtrar partículas)
   const apellidoPaterno = normalizarTexto(data.primerApellido)
   const apellidoMaterno = data.segundoApellido ? normalizarTexto(data.segundoApellido) : ''
   const nombre = normalizarTexto(data.nombre)
@@ -225,10 +237,11 @@ function calcularHomoclave(data: PersonaFisicaData): string {
   }
   nombreCompleto += ' ' + nombre
 
-  // Agregar un espacio al inicio (requerido por el algoritmo)
-  nombreCompleto = ' ' + nombreCompleto
+  // Agregar un '0' al inicio (requerido por el algoritmo oficial)
+  // El '0' tiene valor '00' en la tabla
+  nombreCompleto = '0' + nombreCompleto
 
-  console.log('[RFC] Nombre completo para homoclave:', nombreCompleto)
+  console.log('[RFC] Nombre completo para homoclave:', `"${nombreCompleto}"`)
 
   // Paso 1: Convertir cada carácter a su valor de 2 dígitos
   let valores = ''
@@ -237,22 +250,30 @@ function calcularHomoclave(data: PersonaFisicaData): string {
     valores += valor
   }
 
-  console.log('[RFC] Valores numéricos:', valores)
+  console.log('[RFC] Valores numéricos:', valores, 'longitud:', valores.length)
 
-  // Paso 2: Sumar productos de pares consecutivos
+  // Paso 2: Calcular la suma de productos
+  // Para cada posición i, multiplicar el número de 2 dígitos (posiciones i, i+1)
+  // por el dígito en la posición i+1
   let suma = 0
   for (let i = 0; i < valores.length - 1; i++) {
-    const par = parseInt(valores.substring(i, i + 2))
-    const siguiente = parseInt(valores[i + 1])
-    suma += par * siguiente
+    // Tomar el número de 2 dígitos empezando en i
+    const dosDigitos = parseInt(valores.substring(i, i + 2), 10)
+    // Multiplicar por el dígito en posición i+1
+    const digitoSiguiente = parseInt(valores.charAt(i + 1), 10)
+    const producto = dosDigitos * digitoSiguiente
+    suma += producto
   }
 
   console.log('[RFC] Suma de productos:', suma)
 
   // Paso 3: Obtener los últimos 3 dígitos de la suma
   const ultimos3 = suma % 1000
+  console.log('[RFC] Últimos 3 dígitos:', ultimos3)
 
-  // Paso 4: Calcular los 2 primeros caracteres de la homoclave
+  // Paso 4: Calcular los 2 caracteres de la homoclave
+  // Primer carácter: cociente de dividir entre 34
+  // Segundo carácter: residuo de dividir entre 34
   const cociente = Math.floor(ultimos3 / 34)
   const residuo = ultimos3 % 34
 

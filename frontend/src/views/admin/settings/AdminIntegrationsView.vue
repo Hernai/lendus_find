@@ -33,95 +33,174 @@
         </div>
 
         <!-- Integrations Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           <div
             v-for="integration in integrations"
             :key="integration.id"
-            class="bg-white rounded-lg shadow border border-gray-200 p-6"
+            class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
           >
-            <!-- Header with Status -->
-            <div class="flex items-start justify-between mb-4">
-              <div class="flex-1">
-                <h3 class="text-lg font-semibold text-gray-900">{{ integration.provider_label }}</h3>
-                <p class="text-sm text-gray-500">{{ integration.service_type_label }}</p>
-              </div>
-              <span
-                :class="[
-                  'px-2 py-1 text-xs font-medium rounded-full',
-                  integration.is_active
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-gray-100 text-gray-800'
-                ]"
-              >
-                {{ integration.is_active ? 'Activo' : 'Inactivo' }}
-              </span>
-            </div>
-
-            <!-- Configuration Details -->
-            <div class="space-y-2 mb-4">
-              <div v-if="integration.from_number" class="text-sm">
-                <span class="text-gray-500">Número:</span>
-                <span class="ml-2 font-mono text-gray-900">{{ integration.from_number }}</span>
-              </div>
-              <div v-if="integration.from_email" class="text-sm">
-                <span class="text-gray-500">Email:</span>
-                <span class="ml-2 font-mono text-gray-900">{{ integration.from_email }}</span>
-              </div>
-              <div v-if="integration.masked_credentials.account_sid" class="text-sm">
-                <span class="text-gray-500">Account SID:</span>
-                <span class="ml-2 font-mono text-gray-600">{{ integration.masked_credentials.account_sid }}</span>
-              </div>
-              <div v-if="integration.is_sandbox" class="text-sm">
-                <span class="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded">Modo Sandbox</span>
-              </div>
-            </div>
-
-            <!-- Last Test Result -->
-            <div v-if="integration.last_tested_at" class="mb-4 p-3 rounded-lg" :class="integration.last_test_success ? 'bg-green-50' : 'bg-red-50'">
-              <div class="flex items-center gap-2 text-sm">
-                <svg v-if="integration.last_test_success" class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                </svg>
-                <svg v-else class="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                </svg>
-                <span :class="integration.last_test_success ? 'text-green-800' : 'text-red-800'">
-                  {{ integration.last_test_success ? 'Última prueba exitosa' : 'Última prueba falló' }}
+            <!-- Card Header -->
+            <div class="px-5 py-4 border-b border-gray-100 bg-gray-50/50">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <!-- Provider Icon -->
+                  <div class="w-10 h-10 rounded-lg bg-white border border-gray-200 flex items-center justify-center">
+                    <span class="text-lg font-bold text-gray-600">{{ integration.provider_label.charAt(0) }}</span>
+                  </div>
+                  <div>
+                    <h3 class="font-semibold text-gray-900">{{ integration.provider_label }}</h3>
+                    <p class="text-xs text-gray-500">{{ integration.service_type_label }}</p>
+                  </div>
+                </div>
+                <span
+                  :class="[
+                    'px-2.5 py-1 text-xs font-medium rounded-full',
+                    integration.is_active
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-gray-100 text-gray-500'
+                  ]"
+                >
+                  {{ integration.is_active ? 'Activo' : 'Inactivo' }}
                 </span>
               </div>
-              <p v-if="!integration.last_test_success && integration.last_test_error" class="text-xs text-red-700 mt-1 truncate">
-                {{ integration.last_test_error }}
-              </p>
             </div>
 
-            <!-- Actions -->
-            <div class="space-y-2">
-              <!-- Quick Test Button (Prominent) -->
-              <button
-                v-if="['sms', 'whatsapp', 'kyc'].includes(integration.service_type)"
-                @click="openQuickTestModal(integration)"
-                class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-medium"
-                title="Probar conexión"
-              >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                </svg>
-                Probar Conexión
-              </button>
+            <!-- Card Body -->
+            <div class="px-5 py-4">
+              <!-- Configuration Details -->
+              <div class="space-y-2 text-sm">
+                <!-- Twilio specific -->
+                <template v-if="integration.provider === 'twilio'">
+                  <div v-if="integration.from_number" class="flex justify-between">
+                    <span class="text-gray-500">Número</span>
+                    <span class="font-mono text-gray-900">{{ integration.from_number }}</span>
+                  </div>
+                  <div v-if="integration.masked_credentials.account_sid" class="flex justify-between">
+                    <span class="text-gray-500">Account SID</span>
+                    <span class="font-mono text-gray-600 text-xs">{{ integration.masked_credentials.account_sid }}</span>
+                  </div>
+                </template>
 
-              <!-- Secondary Actions -->
+                <!-- Nubarium specific -->
+                <template v-else-if="integration.provider === 'nubarium'">
+                  <div v-if="integration.masked_credentials.api_key" class="flex justify-between">
+                    <span class="text-gray-500">API Key</span>
+                    <span class="font-mono text-gray-600 text-xs">{{ integration.masked_credentials.api_key }}</span>
+                  </div>
+                  <div v-if="integration.masked_credentials.api_secret" class="flex justify-between">
+                    <span class="text-gray-500">API Secret</span>
+                    <span class="font-mono text-gray-600 text-xs">{{ integration.masked_credentials.api_secret }}</span>
+                  </div>
+                </template>
+
+                <!-- Email providers -->
+                <template v-else-if="integration.service_type === 'email'">
+                  <div v-if="integration.from_email" class="flex justify-between">
+                    <span class="text-gray-500">Email</span>
+                    <span class="font-mono text-gray-900 text-xs">{{ integration.from_email }}</span>
+                  </div>
+                  <div v-if="integration.domain" class="flex justify-between">
+                    <span class="text-gray-500">Dominio</span>
+                    <span class="font-mono text-gray-900 text-xs">{{ integration.domain }}</span>
+                  </div>
+                </template>
+
+                <!-- Generic fallback -->
+                <template v-else>
+                  <div v-if="integration.masked_credentials.api_key" class="flex justify-between">
+                    <span class="text-gray-500">API Key</span>
+                    <span class="font-mono text-gray-600 text-xs">{{ integration.masked_credentials.api_key }}</span>
+                  </div>
+                </template>
+
+                <!-- Sandbox badge -->
+                <div v-if="integration.is_sandbox" class="pt-1">
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-50 text-yellow-700 text-xs rounded border border-yellow-200">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                    Sandbox
+                  </span>
+                </div>
+              </div>
+
+              <!-- Last Test Result -->
+              <div v-if="integration.last_tested_at" class="mt-4 p-3 rounded-lg" :class="integration.last_test_success ? 'bg-green-50 border border-green-100' : 'bg-red-50 border border-red-100'">
+                <div class="flex items-center gap-2 text-sm">
+                  <svg v-if="integration.last_test_success" class="w-4 h-4 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                  </svg>
+                  <svg v-else class="w-4 h-4 text-red-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                  </svg>
+                  <span :class="integration.last_test_success ? 'text-green-700' : 'text-red-700'" class="font-medium">
+                    {{ integration.last_test_success ? 'Conexión verificada' : 'Error de conexión' }}
+                  </span>
+                </div>
+                <p v-if="!integration.last_test_success && integration.last_test_error" class="text-xs text-red-600 mt-1 truncate">
+                  {{ integration.last_test_error }}
+                </p>
+              </div>
+            </div>
+
+            <!-- Card Footer / Actions -->
+            <div class="px-5 py-4 bg-gray-50/50 border-t border-gray-100 space-y-2">
+              <!-- Primary Actions Row -->
+              <div class="flex gap-2">
+                <button
+                  v-if="['sms', 'whatsapp', 'kyc'].includes(integration.service_type)"
+                  @click="openQuickTestModal(integration)"
+                  class="flex-1 px-3 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors flex items-center justify-center gap-1.5 font-medium"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Probar
+                </button>
+                <button
+                  @click="toggleIntegrationStatus(integration)"
+                  :disabled="isTogglingStatus === integration.id"
+                  :class="[
+                    'flex-1 px-3 py-2 text-sm rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5',
+                    integration.is_active
+                      ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                      : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                  ]"
+                >
+                  <svg v-if="isTogglingStatus === integration.id" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <template v-else>
+                    <svg v-if="integration.is_active" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </template>
+                  {{ integration.is_active ? 'Pausar' : 'Activar' }}
+                </button>
+              </div>
+
+              <!-- Secondary Actions Row -->
               <div class="flex gap-2">
                 <button
                   @click="openEditModal(integration)"
-                  class="flex-1 px-3 py-2 text-sm text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-primary-200"
+                  class="flex-1 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex items-center justify-center gap-1.5"
                 >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
                   Editar
                 </button>
                 <button
                   @click="deleteIntegration(integration)"
-                  class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-red-200"
+                  class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Eliminar"
                 >
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </button>
@@ -163,7 +242,7 @@
               <select
                 v-model="form.provider"
                 required
-                :disabled="editingIntegration"
+                :disabled="!!editingIntegration"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100"
               >
                 <option value="">Seleccionar...</option>
@@ -176,7 +255,7 @@
               <select
                 v-model="form.service_type"
                 required
-                :disabled="editingIntegration"
+                :disabled="!!editingIntegration"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100"
               >
                 <option value="">Seleccionar...</option>
@@ -192,10 +271,11 @@
               <input
                 v-model="form.account_sid"
                 type="text"
-                required
+                :required="!editingIntegration"
                 placeholder="ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
+              <p v-if="editingIntegration" class="mt-1 text-xs text-gray-500">Dejar vacío para mantener el valor actual</p>
             </div>
 
             <div>
@@ -203,10 +283,11 @@
               <input
                 v-model="form.auth_token"
                 type="password"
-                required
+                :required="!editingIntegration"
                 placeholder="••••••••••••••••••••••••••••••••"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
+              <p v-if="editingIntegration" class="mt-1 text-xs text-gray-500">Dejar vacío para mantener el valor actual</p>
             </div>
 
             <div>
@@ -219,6 +300,79 @@
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
               <p class="mt-1 text-xs text-gray-500">Formato E.164 (ej: +521234567890)</p>
+            </div>
+          </div>
+
+          <!-- Nubarium Specific Fields -->
+          <div v-else-if="form.provider === 'nubarium'" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">API Key *</label>
+              <input
+                v-model="form.api_key"
+                type="text"
+                :required="!editingIntegration"
+                placeholder="Tu API Key de Nubarium"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+              <p v-if="editingIntegration" class="mt-1 text-xs text-gray-500">Dejar vacío para mantener el valor actual</p>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">API Secret *</label>
+              <input
+                v-model="form.api_secret"
+                type="password"
+                :required="!editingIntegration"
+                placeholder="••••••••••••••••••••••••••••••••"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+              <p v-if="editingIntegration" class="mt-1 text-xs text-gray-500">Dejar vacío para mantener el valor actual</p>
+            </div>
+
+            <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div class="flex items-start gap-2">
+                <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                </svg>
+                <p class="text-sm text-blue-800">
+                  Obtén tus credenciales desde el panel de Nubarium en <a href="https://nubarium.com" target="_blank" class="underline font-medium">nubarium.com</a>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Generic API Key Fields (for other providers) -->
+          <div v-else-if="form.provider && !['twilio', 'nubarium'].includes(form.provider)" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">API Key *</label>
+              <input
+                v-model="form.api_key"
+                type="text"
+                :required="!editingIntegration"
+                placeholder="Tu API Key"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+              <p v-if="editingIntegration" class="mt-1 text-xs text-gray-500">Dejar vacío para mantener el valor actual</p>
+            </div>
+
+            <div v-if="['mailgun', 'sendgrid', 'ses'].includes(form.provider)">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Dominio</label>
+              <input
+                v-model="form.domain"
+                type="text"
+                placeholder="mg.tudominio.com"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
+
+            <div v-if="form.service_type === 'email'">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Email de Origen</label>
+              <input
+                v-model="form.from_email"
+                type="email"
+                placeholder="noreply@tudominio.com"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
             </div>
           </div>
 
@@ -376,6 +530,7 @@ interface Integration {
   service_type_label: string
   from_number?: string
   from_email?: string
+  domain?: string
   is_active: boolean
   is_sandbox: boolean
   has_credentials: boolean
@@ -409,6 +564,7 @@ const form = ref({
   api_secret: '',
   from_number: '',
   from_email: '',
+  domain: '',
   is_active: true,
   is_sandbox: false,
 })
@@ -422,6 +578,9 @@ const testForm = ref({
   test_email: '',
 })
 const testResult = ref<{ success: boolean; message: string; error?: string } | null>(null)
+
+// Toggle status
+const isTogglingStatus = ref<string | null>(null)
 
 // Load integrations
 const loadIntegrations = async () => {
@@ -461,6 +620,7 @@ const openNewIntegrationModal = () => {
     api_secret: '',
     from_number: '',
     from_email: '',
+    domain: '',
     is_active: true,
     is_sandbox: false,
   }
@@ -479,6 +639,7 @@ const openEditModal = (integration: Integration) => {
     api_secret: '',
     from_number: integration.from_number || '',
     from_email: integration.from_email || '',
+    domain: integration.domain || '',
     is_active: integration.is_active,
     is_sandbox: integration.is_sandbox,
   }
@@ -554,6 +715,20 @@ const isCredentialError = (error?: string): boolean => {
   if (!error) return false
   const credentialErrors = ['401', 'Authenticate', 'credential', 'inválidas', 'Account SID', 'Auth Token']
   return credentialErrors.some(keyword => error.toLowerCase().includes(keyword.toLowerCase()))
+}
+
+// Toggle integration status (enable/disable)
+const toggleIntegrationStatus = async (integration: Integration) => {
+  try {
+    isTogglingStatus.value = integration.id
+    await api.patch(`/admin/integrations/${integration.id}/toggle`)
+    await loadIntegrations()
+  } catch (err: any) {
+    alert(err.response?.data?.message || 'Error al cambiar el estado de la integración')
+    console.error('Error toggling integration status:', err)
+  } finally {
+    isTogglingStatus.value = null
+  }
 }
 
 // Delete integration

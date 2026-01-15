@@ -1,4 +1,4 @@
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, onUnmounted } from 'vue'
 
 export interface CaptureOptions {
   /** Camera facing mode: 'user' for selfie, 'environment' for documents */
@@ -58,19 +58,19 @@ export function useDeviceCapture(options: CaptureOptions = {}): UseCaptureReturn
   const error = ref<string | null>(null)
   const isLoading = ref(false)
 
-  // Device detection
-  const isMobile = computed(() => {
+  // Device detection - evaluated once at composable creation
+  const isMobile = (() => {
     if (typeof window === 'undefined') return false
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
       navigator.userAgent
     )
-  }).value
+  })()
 
-  // Check for webcam support
-  const hasWebcam = computed(() => {
+  // Check for webcam support - evaluated once at composable creation
+  const hasWebcam = (() => {
     if (typeof navigator === 'undefined') return false
     return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
-  }).value
+  })()
 
   /**
    * Start webcam stream and attach to video element

@@ -42,8 +42,14 @@ class ApplicationResource extends JsonResource
             'approved_amount' => $this->approved_amount ? (float) $this->approved_amount : null,
             'term_months' => $this->term_months,
             'payment_frequency' => $this->payment_frequency,
-            'interest_rate' => (float) $this->interest_rate,
-            'opening_commission' => (float) $this->opening_commission,
+            // Fallback to product rate if application rate is 0 (legacy data)
+            // Use explicit numeric comparison because decimal:2 cast returns "0.00" string which is truthy
+            'interest_rate' => (float) $this->interest_rate > 0
+                ? (float) $this->interest_rate
+                : (float) ($this->product?->annual_rate ?? 0),
+            'opening_commission' => (float) $this->opening_commission > 0
+                ? (float) $this->opening_commission
+                : (float) ($this->product?->opening_commission_rate ?? 0),
             'monthly_payment' => (float) $this->monthly_payment,
             'total_to_pay' => (float) $this->total_to_pay,
             'cat' => $this->cat ? (float) $this->cat : null,

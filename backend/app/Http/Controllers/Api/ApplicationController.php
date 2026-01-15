@@ -112,7 +112,8 @@ class ApplicationController extends Controller
         };
         $totalPeriods = (int) round($totalPeriods);
 
-        $interestRate = $product->rules['interest_rate'] ?? $product->rules['annual_rate'] ?? 0;
+        // Use the accessor which checks DB column first, then rules, with fallback to 45%
+        $interestRate = $product->annual_rate;
         $periodRate = ($interestRate / 100) / $periodsPerYear;
 
         // Calculate payment using French amortization
@@ -126,8 +127,8 @@ class ApplicationController extends Controller
 
         $totalToPay = $payment * $totalPeriods;
 
-        // Calculate opening commission
-        $openingCommissionRate = $product->rules['opening_commission'] ?? 0;
+        // Calculate opening commission using the accessor
+        $openingCommissionRate = $product->opening_commission_rate;
         $openingCommission = $request->requested_amount * ($openingCommissionRate / 100);
 
         // Create application

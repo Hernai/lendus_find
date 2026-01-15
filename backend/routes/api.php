@@ -281,6 +281,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff', 'metadata']
         Route::get('/options', [TenantIntegrationController::class, 'options']);
         Route::post('/', [TenantIntegrationController::class, 'store']);
         Route::post('/{id}/test', [TenantIntegrationController::class, 'test']);
+        Route::patch('/{id}/toggle', [TenantIntegrationController::class, 'toggle']);
         Route::delete('/{id}', [TenantIntegrationController::class, 'destroy']);
     });
 

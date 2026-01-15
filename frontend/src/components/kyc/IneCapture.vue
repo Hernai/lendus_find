@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useDocumentCapture } from '@/composables/useDeviceCapture'
 import AppButton from '@/components/common/AppButton.vue'
 
@@ -68,15 +68,21 @@ const handleFileInput = async (event: Event) => {
  * Start webcam for desktop capture
  */
 const startCamera = async () => {
-  if (!videoRef.value) return
-
+  // First show the webcam view so the video element is rendered
   showWebcam.value = true
 
-  // Wait for DOM to update
-  await new Promise(resolve => setTimeout(resolve, 100))
+  // Wait for DOM to update and video element to be available
+  await new Promise(resolve => setTimeout(resolve, 150))
 
   if (videoRef.value) {
-    await capture.startWebcam(videoRef.value)
+    const success = await capture.startWebcam(videoRef.value)
+    if (!success) {
+      // If webcam failed to start, go back to initial state
+      showWebcam.value = false
+    }
+  } else {
+    console.error('Video element not found after DOM update')
+    showWebcam.value = false
   }
 }
 

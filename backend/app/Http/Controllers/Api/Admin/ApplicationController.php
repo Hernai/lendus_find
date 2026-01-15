@@ -1079,8 +1079,14 @@ class ApplicationController extends Controller
                 'approved_amount' => $application->approved_amount ? (float) $application->approved_amount : null,
                 'term_months' => $application->term_months,
                 'payment_frequency' => $application->payment_frequency,
-                'interest_rate' => (float) $application->interest_rate,
-                'opening_commission' => (float) $application->opening_commission,
+                // Fallback to product rate if application rate is 0 (legacy data)
+                // Use explicit numeric comparison because decimal:2 cast returns "0.00" string which is truthy
+                'interest_rate' => (float) $application->interest_rate > 0
+                    ? (float) $application->interest_rate
+                    : (float) ($application->product?->annual_rate ?? 0),
+                'opening_commission' => (float) $application->opening_commission > 0
+                    ? (float) $application->opening_commission
+                    : (float) ($application->product?->opening_commission_rate ?? 0),
                 'monthly_payment' => (float) $application->monthly_payment,
                 'total_to_pay' => (float) $application->total_to_pay,
                 'cat' => $application->cat ? (float) $application->cat : null,

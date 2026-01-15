@@ -38,31 +38,6 @@ const employmentTypeOptions = [
 ]
 
 // Opciones de antigüedad en años
-const seniorityYearsOptions = [
-  { value: 0, label: '0 años' },
-  { value: 1, label: '1 año' },
-  { value: 2, label: '2 años' },
-  { value: 3, label: '3 años' },
-  { value: 4, label: '4 años' },
-  { value: 5, label: '5 años' },
-  { value: 10, label: '10+ años' }
-]
-
-// Opciones de antigüedad en meses (máximo 11)
-const seniorityMonthsOptions = [
-  { value: 0, label: '0 meses' },
-  { value: 1, label: '1 mes' },
-  { value: 2, label: '2 meses' },
-  { value: 3, label: '3 meses' },
-  { value: 4, label: '4 meses' },
-  { value: 5, label: '5 meses' },
-  { value: 6, label: '6 meses' },
-  { value: 7, label: '7 meses' },
-  { value: 8, label: '8 meses' },
-  { value: 9, label: '9 meses' },
-  { value: 10, label: '10 meses' },
-  { value: 11, label: '11 meses' }
-]
 
 // Sync form from store on mount
 onMounted(async () => {
@@ -219,19 +194,37 @@ const prevStep = () => router.push('/solicitud/paso-3')
           />
 
           <div class="grid grid-cols-2 gap-3">
-            <AppSelect
-              v-model.number="form.seniority_years"
-              :options="seniorityYearsOptions"
-              label="Años en empleo"
-              placeholder="Años"
-              :error="errors.seniority_years"
-            />
-            <AppSelect
-              v-model.number="form.seniority_months"
-              :options="seniorityMonthsOptions"
-              label="Meses adicionales"
-              placeholder="Meses"
-            />
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Años en empleo</label>
+              <div class="relative">
+                <input
+                  v-model.number="form.seniority_years"
+                  type="number"
+                  min="0"
+                  max="99"
+                  placeholder="0"
+                  class="w-full px-4 py-3 pr-16 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                  inputmode="numeric"
+                />
+                <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">años</span>
+              </div>
+              <p v-if="errors.seniority_years" class="mt-1 text-sm text-red-600">{{ errors.seniority_years }}</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Meses adicionales</label>
+              <div class="relative">
+                <input
+                  v-model.number="form.seniority_months"
+                  type="number"
+                  min="0"
+                  max="11"
+                  placeholder="0"
+                  class="w-full px-4 py-3 pr-20 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                  inputmode="numeric"
+                />
+                <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">meses</span>
+              </div>
+            </div>
           </div>
         </template>
 
@@ -244,18 +237,38 @@ const prevStep = () => router.push('/solicitud/paso-3')
           />
 
           <div class="grid grid-cols-2 gap-3">
-            <AppSelect
-              v-model.number="form.seniority_years"
-              :options="seniorityYearsOptions"
-              :label="form.employment_type === 'EMPRESARIO' ? 'Años con negocio' : 'Años de experiencia'"
-              placeholder="Años"
-            />
-            <AppSelect
-              v-model.number="form.seniority_months"
-              :options="seniorityMonthsOptions"
-              label="Meses adicionales"
-              placeholder="Meses"
-            />
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                {{ form.employment_type === 'EMPRESARIO' ? 'Años con negocio' : 'Años de experiencia' }}
+              </label>
+              <div class="relative">
+                <input
+                  v-model.number="form.seniority_years"
+                  type="number"
+                  min="0"
+                  max="99"
+                  placeholder="0"
+                  class="w-full px-4 py-3 pr-16 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                  inputmode="numeric"
+                />
+                <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">años</span>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Meses adicionales</label>
+              <div class="relative">
+                <input
+                  v-model.number="form.seniority_months"
+                  type="number"
+                  min="0"
+                  max="11"
+                  placeholder="0"
+                  class="w-full px-4 py-3 pr-20 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                  inputmode="numeric"
+                />
+                <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">meses</span>
+              </div>
+            </div>
           </div>
         </template>
 

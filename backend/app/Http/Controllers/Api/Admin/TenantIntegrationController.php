@@ -241,6 +241,26 @@ class TenantIntegrationController extends Controller
     }
 
     /**
+     * Toggle integration active status (enable/disable)
+     */
+    public function toggle(string $id): JsonResponse
+    {
+        $config = TenantApiConfig::where('tenant_id', app('tenant.id'))
+            ->where('id', $id)
+            ->firstOrFail();
+
+        $config->update([
+            'is_active' => !$config->is_active,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => $config->is_active ? 'Integración habilitada' : 'Integración deshabilitada',
+            'data' => $config->toApiArray(),
+        ]);
+    }
+
+    /**
      * Delete an integration
      */
     public function destroy(string $id): JsonResponse
