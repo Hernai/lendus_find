@@ -505,14 +505,23 @@ class ApplicationController extends Controller
         $application->save();
 
         // Log document approval
-        $metadata = $request->attributes->get('metadata', []);
+        $requestMetadata = $request->attributes->get('metadata', []);
         AuditLog::log(
             AuditAction::DOCUMENT_APPROVED->value,
             null,
-            array_merge($metadata, [
+            array_merge($requestMetadata, [
                 'user_id' => $request->user()->id,
                 'applicant_id' => $application->applicant_id,
                 'application_id' => $application->id,
+                'entity_type' => 'Document',
+                'entity_id' => $document->id,
+                'new_values' => [
+                    'document_type' => $docType,
+                    'document_label' => $docTypeLabel,
+                    'status' => 'APPROVED',
+                    'reviewed_by' => $request->user()->id,
+                    'reviewer_name' => $request->user()->name,
+                ],
             ])
         );
 
@@ -599,14 +608,25 @@ class ApplicationController extends Controller
         }
 
         // Log document rejection
-        $metadata = $request->attributes->get('metadata', []);
+        $requestMetadata = $request->attributes->get('metadata', []);
         AuditLog::log(
             AuditAction::DOCUMENT_REJECTED->value,
             null,
-            array_merge($metadata, [
+            array_merge($requestMetadata, [
                 'user_id' => $request->user()->id,
                 'applicant_id' => $application->applicant_id,
                 'application_id' => $application->id,
+                'entity_type' => 'Document',
+                'entity_id' => $document->id,
+                'new_values' => [
+                    'document_type' => $docType,
+                    'document_label' => $docTypeLabel,
+                    'status' => 'REJECTED',
+                    'rejection_reason' => $request->reason,
+                    'rejection_comment' => $request->comment,
+                    'reviewed_by' => $request->user()->id,
+                    'reviewer_name' => $request->user()->name,
+                ],
             ])
         );
 
@@ -694,16 +714,26 @@ class ApplicationController extends Controller
         $application->save();
 
         // Log document unapproval
-        $metadata = $request->attributes->get('metadata', []);
+        $requestMetadata = $request->attributes->get('metadata', []);
         AuditLog::log(
-            AuditAction::DOCUMENT_REJECTED->value, // Using REJECTED as closest audit action
+            AuditAction::DOCUMENT_UNAPPROVED->value,
             null,
-            array_merge($metadata, [
+            array_merge($requestMetadata, [
                 'user_id' => $request->user()->id,
                 'applicant_id' => $application->applicant_id,
                 'application_id' => $application->id,
-                'action_type' => 'unapprove',
-                'previous_status' => $previousStatus->value,
+                'entity_type' => 'Document',
+                'entity_id' => $document->id,
+                'old_values' => [
+                    'status' => $previousStatus->value,
+                ],
+                'new_values' => [
+                    'document_type' => $docType,
+                    'document_label' => $docTypeLabel,
+                    'status' => 'PENDING',
+                    'reviewed_by' => $request->user()->id,
+                    'reviewer_name' => $request->user()->name,
+                ],
             ])
         );
 
@@ -1686,6 +1716,56 @@ class ApplicationController extends Controller
                 'verified_at' => $verifiedAt,
                 'rejected_at' => $rejectedAt,
                 'rejection_reason' => $request->rejection_reason,
+            ]
+        ]);
+    }
+
+    /**
+     * Get the review history for a document.
+     */
+    public function getDocumentHistory(Request $request, Application $application, Document $document): JsonResponse
+    {
+        $tenant = $request->attributes->get('tenant');
+
+        if ($application->tenant_id !== $tenant->id || $document->application_id !== $application->id) {
+            return response()->json(['message' => 'Document not found'], 404);
+        }
+
+        // Get audit logs for this document
+        $auditLogs = AuditLog::where('entity_type', 'Document')
+            ->where('entity_id', $document->id)
+            ->whereIn('action', [
+                AuditAction::DOCUMENT_APPROVED->value,
+                AuditAction::DOCUMENT_REJECTED->value,
+                AuditAction::DOCUMENT_UNAPPROVED->value,
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $history = $auditLogs->map(function ($log) {
+            $newValues = $log->new_values ?? [];
+            $oldValues = $log->old_values ?? [];
+
+            return [
+                'id' => $log->id,
+                'action' => $log->action->value ?? $log->action,
+                'action_label' => $log->action->label() ?? $log->action,
+                'status' => $newValues['status'] ?? null,
+                'previous_status' => $oldValues['status'] ?? null,
+                'rejection_reason' => $newValues['rejection_reason'] ?? null,
+                'rejection_comment' => $newValues['rejection_comment'] ?? null,
+                'reviewer_name' => $newValues['reviewer_name'] ?? null,
+                'reviewer_id' => $newValues['reviewed_by'] ?? $log->user_id,
+                'created_at' => $log->created_at?->toIso8601String(),
+            ];
+        });
+
+        return response()->json([
+            'data' => [
+                'document_id' => $document->id,
+                'document_type' => $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type,
+                'current_status' => $document->status instanceof \App\Enums\DocumentStatus ? $document->status->value : $document->status,
+                'history' => $history,
             ]
         ]);
     }

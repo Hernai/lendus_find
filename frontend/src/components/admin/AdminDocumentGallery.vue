@@ -17,6 +17,19 @@ interface Document {
   is_kyc_locked?: boolean  // Added by backend - true if verified via KYC and locked
 }
 
+interface ReviewHistoryEntry {
+  id: string
+  action: string
+  action_label: string
+  status: string | null
+  previous_status: string | null
+  rejection_reason: string | null
+  rejection_comment: string | null
+  reviewer_name: string | null
+  reviewer_id: string | null
+  created_at: string | null
+}
+
 const props = withDefaults(defineProps<{
   applicationId: string
   documents: Document[]
@@ -55,6 +68,12 @@ const selectedDocument = ref<Document | null>(null)
 const selectedDocumentUrl = ref<string | null>(null)
 const showViewer = ref(false)
 const isLoadingViewer = ref(false)
+
+// History state
+const showHistoryModal = ref(false)
+const docHistoryLoading = ref(false)
+const docHistory = ref<ReviewHistoryEntry[]>([])
+const docHistoryFor = ref<Document | null>(null)
 
 // Modals
 const showApproveModal = ref(false)
@@ -457,6 +476,38 @@ const getStatusBadge = (status: string) => {
       return { label: 'Pendiente', class: 'bg-yellow-100 text-yellow-800' }
   }
 }
+
+// Load document review history
+const loadDocumentHistory = async (doc: Document) => {
+  docHistoryFor.value = doc
+  docHistoryLoading.value = true
+  docHistory.value = []
+  showHistoryModal.value = true
+
+  try {
+    const response = await api.get<{ data: { history: ReviewHistoryEntry[] } }>(
+      `/admin/applications/${props.applicationId}/documents/${doc.id}/history`
+    )
+    docHistory.value = response.data.data.history
+  } catch (e) {
+    console.error('Failed to load document history:', e)
+  } finally {
+    docHistoryLoading.value = false
+  }
+}
+
+// Format date for history display
+const formatHistoryDate = (dateString: string | null): string => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return date.toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
 </script>
 
 <template>
@@ -564,6 +615,17 @@ const getStatusBadge = (status: string) => {
             <div class="flex-grow">
               <div class="flex items-center gap-1.5 mb-0.5">
                 <p class="text-xs font-medium text-gray-900 truncate flex-1">{{ getDocTypeName(doc.type) }}</p>
+                <!-- History button -->
+                <button
+                  v-if="doc.status !== 'PENDING'"
+                  class="w-4 h-4 text-gray-400 hover:text-gray-600 flex-shrink-0"
+                  title="Ver historial de revisiones"
+                  @click.stop="loadDocumentHistory(doc)"
+                >
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
                 <!-- KYC validation indicator for INE documents -->
                 <svg v-if="isKycValidated(doc)" class="w-3.5 h-3.5 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" title="Validado por KYC/Nubarium - OCR">
                   <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
@@ -921,5 +983,117 @@ const getStatusBadge = (status: string) => {
       :loading="isUnrejecting"
       @confirm="confirmUnreject"
     />
+
+    <!-- History Modal -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition-opacity duration-200"
+        leave-active-class="transition-opacity duration-200"
+        enter-from-class="opacity-0"
+        leave-to-class="opacity-0"
+      >
+        <div
+          v-if="showHistoryModal"
+          class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          @click="showHistoryModal = false"
+        >
+          <div
+            class="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden"
+            @click.stop
+          >
+            <!-- Header -->
+            <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h3 class="font-semibold text-gray-900">Historial de Revisiones</h3>
+                <p v-if="docHistoryFor" class="text-sm text-gray-500">{{ getDocTypeName(docHistoryFor.type) }}</p>
+              </div>
+              <button
+                class="p-1 text-gray-400 hover:text-gray-600 rounded"
+                @click="showHistoryModal = false"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <!-- Content -->
+            <div class="p-4 overflow-y-auto max-h-[60vh]">
+              <!-- Loading -->
+              <div v-if="docHistoryLoading" class="flex items-center justify-center py-8">
+                <div class="animate-spin w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full" />
+              </div>
+
+              <!-- Empty state -->
+              <div v-else-if="docHistory.length === 0" class="text-center py-8 text-gray-500">
+                <svg class="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p class="text-sm">No hay historial de revisiones</p>
+              </div>
+
+              <!-- History list -->
+              <div v-else class="space-y-3">
+                <div
+                  v-for="entry in docHistory"
+                  :key="entry.id"
+                  class="border rounded-lg p-3"
+                  :class="{
+                    'border-green-200 bg-green-50': entry.status === 'APPROVED',
+                    'border-red-200 bg-red-50': entry.status === 'REJECTED',
+                    'border-yellow-200 bg-yellow-50': entry.status === 'PENDING'
+                  }"
+                >
+                  <!-- Action and date -->
+                  <div class="flex items-center justify-between mb-1">
+                    <span
+                      class="text-xs font-medium px-2 py-0.5 rounded-full"
+                      :class="{
+                        'bg-green-100 text-green-700': entry.status === 'APPROVED',
+                        'bg-red-100 text-red-700': entry.status === 'REJECTED',
+                        'bg-yellow-100 text-yellow-700': entry.status === 'PENDING'
+                      }"
+                    >
+                      {{ entry.action_label }}
+                    </span>
+                    <span class="text-xs text-gray-500">{{ formatHistoryDate(entry.created_at) }}</span>
+                  </div>
+
+                  <!-- Reviewer -->
+                  <p v-if="entry.reviewer_name" class="text-xs text-gray-600">
+                    Por: <span class="font-medium">{{ entry.reviewer_name }}</span>
+                  </p>
+
+                  <!-- Rejection details -->
+                  <div v-if="entry.status === 'REJECTED' && entry.rejection_reason" class="mt-2 text-xs">
+                    <p class="text-red-700">
+                      <span class="font-medium">Motivo:</span> {{ getRejectionReasonLabel(entry.rejection_reason) }}
+                    </p>
+                    <p v-if="entry.rejection_comment" class="text-red-600 mt-1">
+                      {{ entry.rejection_comment }}
+                    </p>
+                  </div>
+
+                  <!-- Previous status for unapprove -->
+                  <p v-if="entry.previous_status && entry.status === 'PENDING'" class="text-xs text-gray-500 mt-1">
+                    Estado anterior: {{ entry.previous_status }}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="px-4 py-3 border-t border-gray-200">
+              <button
+                class="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                @click="showHistoryModal = false"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>

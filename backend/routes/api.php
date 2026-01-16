@@ -249,6 +249,7 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff', 'metadata']
         Route::get('/{application}/documents/{document}/url', [AdminApplicationController::class, 'getDocumentUrl']);
         Route::get('/{application}/documents/{document}/download', [AdminApplicationController::class, 'downloadDocument'])
             ->name('api.admin.documents.download');
+        Route::get('/{application}/documents/{document}/history', [AdminApplicationController::class, 'getDocumentHistory']);
 
         // Reference verification - requires canVerifyReferences (analyst+)
         Route::put('/{application}/references/{reference}/verify', [AdminApplicationController::class, 'verifyReference'])
