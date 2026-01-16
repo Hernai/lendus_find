@@ -8,6 +8,10 @@ import type {
   CreateApplicationParams,
   Product
 } from '@/types'
+import { logger } from '@/utils/logger'
+import { storage, STORAGE_KEYS } from '@/utils/storage'
+
+const appLogger = logger.child('Application')
 
 interface SimulatorResponse {
   simulation: {
@@ -104,7 +108,7 @@ export const useApplicationStore = defineStore('application', () => {
 
       return simulation.value
     } catch (error) {
-      console.error('Error running simulation:', error)
+      appLogger.error('Error running simulation', error)
       throw error
     } finally {
       isLoading.value = false
@@ -117,7 +121,7 @@ export const useApplicationStore = defineStore('application', () => {
       const response = await api.get<ApplicationListResponse>('/applications')
       return response.data.data
     } catch (error) {
-      console.error('Error loading applications:', error)
+      appLogger.error('Error loading applications', error)
       return []
     } finally {
       isLoading.value = false
@@ -127,7 +131,7 @@ export const useApplicationStore = defineStore('application', () => {
   const loadApplication = async (id: string): Promise<Application | null> => {
     // Validate ID before making API call
     if (!id || id === 'null' || id === 'undefined') {
-      console.error('❌ loadApplication: Invalid ID:', id)
+      appLogger.error('loadApplication: Invalid ID', { id })
       return null
     }
 
@@ -138,19 +142,19 @@ export const useApplicationStore = defineStore('application', () => {
 
       // Validate the response has a valid ID
       if (!app?.id || app.id === 'null') {
-        console.error('❌ loadApplication: API returned invalid application ID')
+        appLogger.error('loadApplication: API returned invalid application ID')
         return null
       }
 
       currentApplication.value = app
       return currentApplication.value
     } catch (error: unknown) {
-      console.error('Error loading application:', error)
+      appLogger.error('Error loading application', error)
 
       // Handle 404 - clear stale references
       const axiosError = error as { response?: { status?: number } }
       if (axiosError.response?.status === 404) {
-        console.warn('⚠️ Application not found (404). Clearing localStorage reference.')
+        appLogger.warn('Application not found (404). Clearing localStorage reference.')
         localStorage.removeItem('current_application_id')
       }
 
@@ -164,7 +168,7 @@ export const useApplicationStore = defineStore('application', () => {
     isLoading.value = true
 
     try {
-      console.log('📤 POST /applications with:', params)
+      appLogger.debug('POST /applications', { productId: params.product_id })
       const response = await api.post<ApplicationResponse>('/applications', {
         product_id: params.product_id,
         requested_amount: params.requested_amount,
@@ -173,19 +177,14 @@ export const useApplicationStore = defineStore('application', () => {
         simulation_data: simulation.value
       })
 
-      console.log('📥 Response status:', response.status)
-      console.log('📥 Response data:', response.data)
-      console.log('📥 Response data.data:', response.data.data)
-      console.log('📥 Response data.data.id:', response.data.data?.id)
+      appLogger.debug('Response received', { status: response.status, appId: response.data.data?.id })
 
       currentApplication.value = response.data.data
 
-      console.log('✅ currentApplication set to:', currentApplication.value?.id)
-
-      // Save to localStorage for persistence
+      // Save to storage for persistence
       if (currentApplication.value?.id) {
-        localStorage.setItem('current_application_id', currentApplication.value.id)
-        console.log('💾 Saved application ID to localStorage:', currentApplication.value.id)
+        storage.set(STORAGE_KEYS.CURRENT_APPLICATION_ID, currentApplication.value.id)
+        appLogger.debug('Saved application ID to storage', { appId: currentApplication.value.id })
       }
 
       // Reset step to 1
@@ -193,7 +192,7 @@ export const useApplicationStore = defineStore('application', () => {
 
       return currentApplication.value
     } catch (error) {
-      console.error('❌ Error creating application:', error)
+      appLogger.error('Error creating application', error)
       throw error
     } finally {
       isLoading.value = false
@@ -201,25 +200,25 @@ export const useApplicationStore = defineStore('application', () => {
   }
 
   const updateApplication = async (data: Partial<Application>) => {
-    console.log('📝 updateApplication called, currentApplication:', currentApplication.value?.id || 'NULL')
+    appLogger.debug('updateApplication called', { appId: currentApplication.value?.id || 'NULL' })
 
     if (!currentApplication.value) {
-      console.warn('⚠️ updateApplication: No currentApplication')
+      appLogger.warn('updateApplication: No currentApplication')
       return
     }
 
     // Validate ID is not null, undefined, or the string "null"
     const appId = currentApplication.value.id
     if (!appId || appId === 'null' || appId === 'undefined') {
-      console.error('❌ updateApplication: currentApplication has invalid ID:', appId)
-      console.error('❌ currentApplication:', JSON.stringify(currentApplication.value))
+      appLogger.error('updateApplication: currentApplication has invalid ID', { appId })
 
-      // Try to recover from localStorage
-      const savedId = localStorage.getItem('current_application_id')
+      // Try to recover from storage
+      const savedId = storage.get<string>(STORAGE_KEYS.CURRENT_APPLICATION_ID) || localStorage.getItem('current_application_id')
       if (savedId && savedId !== 'null' && savedId !== 'undefined') {
-        console.log('🔄 Attempting to reload application from saved ID:', savedId)
+        appLogger.debug('Attempting to reload application from saved ID', { savedId })
         const loaded = await loadApplication(savedId)
         if (!loaded?.id) {
+          storage.remove(STORAGE_KEYS.CURRENT_APPLICATION_ID)
           localStorage.removeItem('current_application_id')
           throw new Error('Application ID is missing and recovery failed')
         }
@@ -232,24 +231,25 @@ export const useApplicationStore = defineStore('application', () => {
     isSaving.value = true
 
     try {
-      console.log('📤 PUT /applications/' + currentApplication.value!.id, data)
+      appLogger.debug('PUT /applications/' + currentApplication.value!.id)
       const response = await api.put<ApplicationResponse>(
         `/applications/${currentApplication.value!.id}`,
         data
       )
 
       currentApplication.value = response.data.data
-      console.log('✅ Application updated:', currentApplication.value?.id)
+      appLogger.debug('Application updated', { appId: currentApplication.value?.id })
     } catch (error: unknown) {
-      console.error('❌ Error updating application:', error)
+      appLogger.error('Error updating application', error)
 
       const axiosError = error as { response?: { status?: number; data?: { message?: string } } }
 
       // Handle 404 - application no longer exists (possibly changed tenant or deleted)
       if (axiosError.response?.status === 404) {
-        console.warn('⚠️ Application not found (404). Clearing stale state...')
+        appLogger.warn('Application not found (404). Clearing stale state...')
         // Clear the stale application reference
         currentApplication.value = null
+        storage.remove(STORAGE_KEYS.CURRENT_APPLICATION_ID)
         localStorage.removeItem('current_application_id')
         // Throw a user-friendly error
         throw new Error('La solicitud no fue encontrada. Es posible que haya expirado o ya no exista. Por favor, inicia una nueva solicitud.')
@@ -259,9 +259,10 @@ export const useApplicationStore = defineStore('application', () => {
       if (axiosError.response?.status === 400) {
         const message = axiosError.response?.data?.message || ''
         if (message.includes('cannot be modified') || message.includes('current status')) {
-          console.warn('⚠️ Application cannot be modified (400). Clearing stale state...')
+          appLogger.warn('Application cannot be modified (400). Clearing stale state...')
           // Clear the stale application reference
           currentApplication.value = null
+          storage.remove(STORAGE_KEYS.CURRENT_APPLICATION_ID)
           localStorage.removeItem('current_application_id')
           // Throw a user-friendly error
           throw new Error('La solicitud anterior ya fue enviada. Se creará una nueva solicitud.')
@@ -296,7 +297,7 @@ export const useApplicationStore = defineStore('application', () => {
       const err = error as { message?: string }
       // If the application was submitted/closed, create a new one
       if (err.message?.includes('ya fue enviada') || err.message?.includes('no fue encontrada')) {
-        console.log('🔄 Creating new application after previous one was closed...')
+        appLogger.info('Creating new application after previous one was closed...')
         await createApplication({
           product_id: selectedProduct.value?.id || 'default-product',
           requested_amount: simulation.value?.requested_amount || 10000,
@@ -330,7 +331,7 @@ export const useApplicationStore = defineStore('application', () => {
 
       return currentApplication.value
     } catch (error) {
-      console.error('Error submitting application:', error)
+      appLogger.error('Error submitting application', error)
       throw error
     } finally {
       isLoading.value = false
@@ -351,7 +352,7 @@ export const useApplicationStore = defineStore('application', () => {
 
       return currentApplication.value
     } catch (error) {
-      console.error('Error canceling application:', error)
+      appLogger.error('Error canceling application', error)
       throw error
     } finally {
       isLoading.value = false
