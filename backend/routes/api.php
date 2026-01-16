@@ -251,6 +251,9 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff', 'metadata']
             ->name('api.admin.documents.download');
         Route::get('/{application}/documents/{document}/history', [AdminApplicationController::class, 'getDocumentHistory']);
 
+        // API Logs for applicant - all staff can view
+        Route::get('/{application}/api-logs', [AdminApplicationController::class, 'getApiLogs']);
+
         // Reference verification - requires canVerifyReferences (analyst+)
         Route::put('/{application}/references/{reference}/verify', [AdminApplicationController::class, 'verifyReference'])
             ->middleware('permission:canVerifyReferences');

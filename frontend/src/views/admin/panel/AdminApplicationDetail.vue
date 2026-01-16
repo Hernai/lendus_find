@@ -215,6 +215,26 @@ const isRejectingDoc = ref(false)
 const showMetadataModal = ref(false)
 const selectedTimelineEvent = ref<Application['timeline'][0] | null>(null)
 
+// API Logs state
+interface ApiLogEntry {
+  id: string
+  provider: string
+  service: string
+  endpoint: string
+  method: string
+  response_status: number
+  success: boolean
+  error_message?: string
+  duration_ms: number
+  created_at: string
+  request_payload?: Record<string, unknown>
+  response_body?: Record<string, unknown>
+}
+const apiLogs = ref<ApiLogEntry[]>([])
+const loadingApiLogs = ref(false)
+const showApiLogDetailModal = ref(false)
+const selectedApiLog = ref<ApiLogEntry | null>(null)
+
 const docRejectReasons = [
   { value: 'ILLEGIBLE', label: 'Documento ilegible' },
   { value: 'EXPIRED', label: 'Documento vencido' },
@@ -330,7 +350,8 @@ const tabs = [
   { id: 'documents', label: 'Documentos' },
   { id: 'references', label: 'Referencias' },
   { id: 'bank_accounts', label: 'Cuentas Bancarias' },
-  { id: 'timeline', label: 'Historial' }
+  { id: 'timeline', label: 'Historial' },
+  { id: 'api_logs', label: 'Logs API' }
 ]
 
 const allStatusOptions = [
@@ -545,6 +566,48 @@ const fetchApplication = async () => {
     error.value = 'Error al cargar la solicitud'
   } finally {
     loading.value = false
+  }
+}
+
+// Load API logs for this application's applicant
+const loadApiLogs = async () => {
+  if (!application.value) return
+
+  loadingApiLogs.value = true
+  try {
+    const appId = route.params.id as string
+    const response = await api.get<{ data: ApiLogEntry[] }>(`/admin/applications/${appId}/api-logs`)
+    apiLogs.value = response.data.data || []
+  } catch (e) {
+    console.error('Failed to load API logs:', e)
+    apiLogs.value = []
+  } finally {
+    loadingApiLogs.value = false
+  }
+}
+
+const viewApiLogDetail = (log: ApiLogEntry) => {
+  selectedApiLog.value = log
+  showApiLogDetailModal.value = true
+}
+
+const getProviderColor = (provider: string): string => {
+  const colors: Record<string, string> = {
+    'NUBARIUM': 'bg-purple-100 text-purple-800',
+    'TWILIO': 'bg-red-100 text-red-800',
+    'RENAPO': 'bg-blue-100 text-blue-800',
+    'SAT': 'bg-green-100 text-green-800',
+    'INE': 'bg-yellow-100 text-yellow-800',
+    'SEPOMEX': 'bg-indigo-100 text-indigo-800'
+  }
+  return colors[provider] || 'bg-gray-100 text-gray-800'
+}
+
+// Switch tab and load data if needed
+const switchTab = (tabId: string) => {
+  activeTab.value = tabId
+  if (tabId === 'api_logs' && apiLogs.value.length === 0 && !loadingApiLogs.value) {
+    loadApiLogs()
   }
 }
 
@@ -1857,7 +1920,7 @@ const addNote = async () => {
                   ? 'border-primary-500 text-primary-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               ]"
-              @click="activeTab = tab.id"
+              @click="switchTab(tab.id)"
             >
               {{ tab.label }}
             </button>
@@ -2867,9 +2930,172 @@ const addNote = async () => {
               </ul>
             </div>
           </div>
+
+          <!-- API Logs Tab -->
+          <div v-if="activeTab === 'api_logs'">
+            <div v-if="loadingApiLogs" class="flex justify-center py-8">
+              <div class="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full" />
+            </div>
+
+            <div v-else-if="apiLogs.length === 0" class="text-center py-8">
+              <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p class="text-gray-500">No hay logs de API para este solicitante</p>
+            </div>
+
+            <div v-else class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Proveedor</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Servicio</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">HTTP</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duración</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <tr v-for="log in apiLogs" :key="log.id" class="hover:bg-gray-50">
+                    <td class="px-4 py-3 whitespace-nowrap">
+                      <span :class="['px-2 py-1 text-xs font-medium rounded-full', getProviderColor(log.provider)]">
+                        {{ log.provider }}
+                      </span>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                      {{ log.service }}
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                      <span
+                        :class="[
+                          'px-2 py-1 text-xs font-medium rounded-full',
+                          log.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        ]"
+                      >
+                        {{ log.success ? 'OK' : 'Error' }}
+                      </span>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                      {{ log.response_status }}
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                      {{ log.duration_ms }}ms
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                      {{ formatDateTime(log.created_at) }}
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                      <button
+                        class="text-primary-600 hover:text-primary-800 text-sm font-medium"
+                        @click="viewApiLogDetail(log)"
+                      >
+                        Ver detalle
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </template>
+
+    <!-- API Log Detail Modal -->
+    <div
+      v-if="showApiLogDetailModal && selectedApiLog"
+      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      @click.self="showApiLogDetailModal = false"
+    >
+      <div class="bg-white rounded-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+        <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+          <div>
+            <h3 class="text-lg font-semibold text-gray-900">Detalle de Llamada API</h3>
+            <p class="text-sm text-gray-500">{{ selectedApiLog.provider }} - {{ selectedApiLog.service }}</p>
+          </div>
+          <button
+            class="text-gray-400 hover:text-gray-600"
+            @click="showApiLogDetailModal = false"
+          >
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 space-y-4">
+          <!-- Summary -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-gray-50 rounded-lg p-3">
+              <p class="text-xs text-gray-500">Método</p>
+              <p class="font-medium">{{ selectedApiLog.method }}</p>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-3">
+              <p class="text-xs text-gray-500">HTTP Status</p>
+              <p class="font-medium">{{ selectedApiLog.response_status }}</p>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-3">
+              <p class="text-xs text-gray-500">Duración</p>
+              <p class="font-medium">{{ selectedApiLog.duration_ms }}ms</p>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-3">
+              <p class="text-xs text-gray-500">Estado</p>
+              <span
+                :class="[
+                  'px-2 py-1 text-xs font-medium rounded-full',
+                  selectedApiLog.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                ]"
+              >
+                {{ selectedApiLog.success ? 'Exitoso' : 'Error' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Endpoint -->
+          <div>
+            <p class="text-sm font-medium text-gray-700 mb-1">Endpoint</p>
+            <code class="block bg-gray-100 p-2 rounded text-sm text-gray-800 break-all">
+              {{ selectedApiLog.endpoint }}
+            </code>
+          </div>
+
+          <!-- Error Message (if any) -->
+          <div v-if="selectedApiLog.error_message" class="bg-red-50 border border-red-200 rounded-lg p-3">
+            <p class="text-sm font-medium text-red-800 mb-1">Mensaje de Error</p>
+            <p class="text-sm text-red-700">{{ selectedApiLog.error_message }}</p>
+          </div>
+
+          <!-- Request Payload -->
+          <div v-if="selectedApiLog.request_payload">
+            <p class="text-sm font-medium text-gray-700 mb-1">Request Payload</p>
+            <pre class="bg-gray-900 text-green-400 p-3 rounded-lg text-xs overflow-x-auto max-h-60">{{ JSON.stringify(selectedApiLog.request_payload, null, 2) }}</pre>
+          </div>
+
+          <!-- Response Body -->
+          <div v-if="selectedApiLog.response_body">
+            <p class="text-sm font-medium text-gray-700 mb-1">Response Body</p>
+            <pre class="bg-gray-900 text-green-400 p-3 rounded-lg text-xs overflow-x-auto max-h-60">{{ JSON.stringify(selectedApiLog.response_body, null, 2) }}</pre>
+          </div>
+
+          <!-- Timestamp -->
+          <div class="text-sm text-gray-500">
+            Fecha: {{ formatDateTime(selectedApiLog.created_at) }}
+          </div>
+        </div>
+
+        <div class="p-4 border-t border-gray-200">
+          <AppButton
+            variant="outline"
+            class="w-full"
+            @click="showApiLogDetailModal = false"
+          >
+            Cerrar
+          </AppButton>
+        </div>
+      </div>
+    </div>
 
     <!-- Status Change Modal -->
     <div

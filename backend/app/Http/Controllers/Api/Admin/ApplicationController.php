@@ -1769,4 +1769,49 @@ class ApplicationController extends Controller
             ]
         ]);
     }
+
+    /**
+     * Get API call logs for an application's applicant.
+     */
+    public function getApiLogs(Request $request, Application $application): JsonResponse
+    {
+        $tenant = $request->attributes->get('tenant');
+
+        if ($application->tenant_id !== $tenant->id) {
+            return response()->json(['message' => 'Application not found'], 404);
+        }
+
+        $applicant = $application->applicant;
+        if (!$applicant) {
+            return response()->json(['data' => []], 200);
+        }
+
+        // Get API logs for this applicant
+        $logs = \App\Models\ApiLog::where('applicant_id', $applicant->id)
+            ->orderBy('created_at', 'desc')
+            ->limit(50) // Limit to last 50 calls
+            ->get();
+
+        $formattedLogs = $logs->map(function ($log) {
+            return [
+                'id' => $log->id,
+                'provider' => $log->provider,
+                'service' => $log->service,
+                'endpoint' => $log->endpoint,
+                'method' => $log->method,
+                'response_status' => $log->response_status,
+                'success' => $log->success,
+                'error_code' => $log->error_code,
+                'error_message' => $log->error_message,
+                'duration_ms' => $log->duration_ms,
+                'request_payload' => $log->request_payload,
+                'response_body' => $log->response_body,
+                'created_at' => $log->created_at?->toIso8601String(),
+            ];
+        });
+
+        return response()->json([
+            'data' => $formattedLogs
+        ]);
+    }
 }
