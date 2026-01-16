@@ -4,9 +4,11 @@ namespace App\Providers;
 
 use App\Contracts\ApiLoggerInterface;
 use App\Contracts\DocumentStorageInterface;
+use App\Contracts\KycServiceInterface;
 use App\Contracts\SmsServiceInterface;
 use App\Services\ApiLoggerService;
 use App\Services\DocumentService;
+use App\Services\ExternalApi\NubariumService;
 use App\Services\ExternalApi\TwilioService;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -29,6 +31,13 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(SmsServiceInterface::class, function ($app) {
             $tenantId = $app->bound('tenant.id') ? $app->make('tenant.id') : null;
             return new TwilioService($tenantId);
+        });
+
+        // KycServiceInterface binding requires tenant context
+        // NubariumService needs tenant for API credentials lookup
+        $this->app->bind(KycServiceInterface::class, function ($app) {
+            $tenant = $app->bound('tenant') ? $app->make('tenant') : null;
+            return new NubariumService($tenant);
         });
     }
 

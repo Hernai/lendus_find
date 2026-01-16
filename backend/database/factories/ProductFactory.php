@@ -24,6 +24,7 @@ class ProductFactory extends Factory
         return [
             'id' => Str::uuid(),
             'tenant_id' => Tenant::factory(),
+            'code' => strtoupper(fake()->unique()->lexify('PROD-????')),
             'name' => match ($type) {
                 'PERSONAL' => 'Crédito Personal',
                 'PAYROLL' => 'Crédito de Nómina',
@@ -42,6 +43,7 @@ class ProductFactory extends Factory
             ],
             'required_docs' => ['INE', 'COMPROBANTE_DOMICILIO'],
             'extra_fields' => [],
+            'eligibility_rules' => [],
         ];
     }
 

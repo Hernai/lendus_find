@@ -9,17 +9,26 @@ return new class extends Migration
 {
     /**
      * Run the migrations.
+     *
+     * Renames AGENT role to SUPERVISOR in users table.
+     * CHECK constraints only apply to PostgreSQL.
      */
     public function up(): void
     {
-        // First, drop the existing CHECK constraint
-        DB::statement("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_type_check");
+        $driver = DB::getDriverName();
 
-        // Update existing AGENT users to SUPERVISOR
+        // Only drop/add constraints on PostgreSQL
+        if ($driver === 'pgsql') {
+            DB::statement("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_type_check");
+        }
+
+        // Update existing AGENT users to SUPERVISOR (works on all databases)
         DB::table('users')->where('type', 'AGENT')->update(['type' => 'SUPERVISOR']);
 
-        // Add new CHECK constraint with SUPERVISOR instead of AGENT
-        DB::statement("ALTER TABLE users ADD CONSTRAINT users_type_check CHECK (type::text = ANY (ARRAY['APPLICANT'::character varying, 'SUPERVISOR'::character varying, 'ANALYST'::character varying, 'ADMIN'::character varying, 'SUPER_ADMIN'::character varying]::text[]))");
+        // Add new CHECK constraint with SUPERVISOR instead of AGENT (PostgreSQL only)
+        if ($driver === 'pgsql') {
+            DB::statement("ALTER TABLE users ADD CONSTRAINT users_type_check CHECK (type::text = ANY (ARRAY['APPLICANT'::character varying, 'SUPERVISOR'::character varying, 'ANALYST'::character varying, 'ADMIN'::character varying, 'SUPER_ADMIN'::character varying]::text[]))");
+        }
     }
 
     /**
@@ -27,13 +36,17 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // Drop the new constraint
-        DB::statement("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_type_check");
+        $driver = DB::getDriverName();
+
+        if ($driver === 'pgsql') {
+            DB::statement("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_type_check");
+        }
 
         // Revert SUPERVISOR back to AGENT
         DB::table('users')->where('type', 'SUPERVISOR')->update(['type' => 'AGENT']);
 
-        // Re-add original CHECK constraint with AGENT
-        DB::statement("ALTER TABLE users ADD CONSTRAINT users_type_check CHECK (type::text = ANY (ARRAY['APPLICANT'::character varying, 'AGENT'::character varying, 'ANALYST'::character varying, 'ADMIN'::character varying, 'SUPER_ADMIN'::character varying]::text[]))");
+        if ($driver === 'pgsql') {
+            DB::statement("ALTER TABLE users ADD CONSTRAINT users_type_check CHECK (type::text = ANY (ARRAY['APPLICANT'::character varying, 'AGENT'::character varying, 'ANALYST'::character varying, 'ADMIN'::character varying, 'SUPER_ADMIN'::character varying]::text[]))");
+        }
     }
 };

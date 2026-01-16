@@ -81,7 +81,7 @@ return new class extends Migration
             if (Schema::hasTable($tableName)) {
                 Schema::table($tableName, function (Blueprint $table) use ($tableName) {
                     // Drop foreign keys first (use constraint naming convention)
-                    $table->dropForeign([' created_by']);
+                    $table->dropForeign(['created_by']);
                     $table->dropForeign(['updated_by']);
                     if (Schema::hasColumn($tableName, 'deleted_by')) {
                         $table->dropForeign(['deleted_by']);
