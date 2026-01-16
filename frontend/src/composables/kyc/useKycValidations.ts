@@ -71,7 +71,11 @@ export function useKycValidations() {
     try {
       kycLogger.debug('Starting INE validation')
 
-      const response = await api.post('/kyc/ine/validate', {
+      const response = await api.post<{
+        ocr_data?: Record<string, unknown>
+        error?: string
+        list_validation?: { valid: boolean; code?: string; message?: string }
+      }>('/kyc/ine/validate', {
         ine_front: ineFrontBase64,
         ine_back: ineBackBase64,
       })
@@ -116,7 +120,7 @@ export function useKycValidations() {
     try {
       kycLogger.debug('Starting CURP validation')
 
-      const response = await api.post('/kyc/curp/validate', { curp })
+      const response = await api.post<{ valid?: boolean; data?: Record<string, unknown>; error?: string }>('/kyc/curp/validate', { curp })
 
       const result = {
         valid: response.data.valid === true,
@@ -154,7 +158,7 @@ export function useKycValidations() {
     try {
       kycLogger.debug('Starting RFC validation')
 
-      const response = await api.post('/kyc/rfc/validate', { rfc })
+      const response = await api.post<{ valid?: boolean; razon_social?: string; error?: string }>('/kyc/rfc/validate', { rfc })
 
       const result = {
         valid: response.data.valid === true,
@@ -190,7 +194,7 @@ export function useKycValidations() {
     try {
       kycLogger.debug('Starting OFAC check')
 
-      const response = await api.post('/kyc/ofac/check', { name: fullName })
+      const response = await api.post<{ found?: boolean; matches?: unknown[]; score?: number }>('/kyc/ofac/check', { name: fullName })
 
       const result = {
         found: response.data.found === true,

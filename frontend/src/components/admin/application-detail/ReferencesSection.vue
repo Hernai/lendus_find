@@ -30,16 +30,18 @@ const formatPhone = (phone: string | null | undefined): string => {
   return phone
 }
 
-const getVerificationBadge = (ref: Reference) => {
+const defaultBadge = { bg: 'bg-green-100', text: 'text-green-700', label: 'Verificada' }
+
+const getVerificationBadge = (ref: Reference): { bg: string; text: string; label: string } => {
   if (!ref.verified) {
     return { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pendiente' }
   }
   const badges: Record<string, { bg: string; text: string; label: string }> = {
-    VERIFIED: { bg: 'bg-green-100', text: 'text-green-700', label: 'Verificada' },
+    VERIFIED: defaultBadge,
     NOT_VERIFIED: { bg: 'bg-red-100', text: 'text-red-700', label: 'No Verificada' },
     NO_ANSWER: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Sin Respuesta' },
   }
-  return badges[ref.verification_result || 'VERIFIED'] || badges.VERIFIED
+  return badges[ref.verification_result || 'VERIFIED'] ?? defaultBadge
 }
 
 const formatDateTime = (dateStr: string) => {

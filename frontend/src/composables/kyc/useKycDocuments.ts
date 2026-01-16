@@ -73,7 +73,7 @@ export function useKycDocuments() {
       if (documents.value.front) {
         try {
           kycLogger.debug('Uploading INE front')
-          const response = await api.post(`/applications/${applicationId}/documents`, {
+          const response = await api.post<{ data?: { id?: string } }>(`/applications/${applicationId}/documents`, {
             type: 'INE_FRONT',
             file: documents.value.front,
             source: 'kyc_capture',
@@ -95,7 +95,7 @@ export function useKycDocuments() {
       if (documents.value.back) {
         try {
           kycLogger.debug('Uploading INE back')
-          const response = await api.post(`/applications/${applicationId}/documents`, {
+          const response = await api.post<{ data?: { id?: string } }>(`/applications/${applicationId}/documents`, {
             type: 'INE_BACK',
             file: documents.value.back,
             source: 'kyc_capture',
@@ -132,7 +132,7 @@ export function useKycDocuments() {
 
     try {
       kycLogger.debug('Uploading selfie')
-      const response = await api.post(`/applications/${applicationId}/documents`, {
+      const response = await api.post<{ data?: { id?: string } }>(`/applications/${applicationId}/documents`, {
         type: 'SELFIE',
         file: documents.value.selfie,
         source: 'kyc_capture',
@@ -161,7 +161,7 @@ export function useKycDocuments() {
       reader.onload = () => {
         const result = reader.result as string
         // Remove data URL prefix if present
-        const base64 = result.includes(',') ? result.split(',')[1] : result
+        const base64 = result.includes(',') ? result.split(',')[1] ?? result : result
         resolve(base64)
       }
       reader.onerror = () => reject(new Error('Failed to read file'))
@@ -199,7 +199,7 @@ export function useKycDocuments() {
 
         ctx.drawImage(img, 0, 0, width, height)
         const compressed = canvas.toDataURL('image/jpeg', quality)
-        resolve(compressed.split(',')[1])
+        resolve(compressed.split(',')[1] ?? compressed)
       }
       img.onerror = () => reject(new Error('Failed to load image'))
       img.src = `data:image/jpeg;base64,${base64}`

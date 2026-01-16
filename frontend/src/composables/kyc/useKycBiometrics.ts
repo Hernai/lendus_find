@@ -42,7 +42,7 @@ export function useKycBiometrics() {
     try {
       kycLogger.debug('Getting biometric token')
 
-      const response = await api.post('/kyc/biometric/token', {
+      const response = await api.post<{ token: string }>('/kyc/biometric/token', {
         application_id: applicationId,
       })
 
@@ -72,7 +72,7 @@ export function useKycBiometrics() {
     try {
       kycLogger.debug('Starting face match validation')
 
-      const response = await api.post('/kyc/face-match/validate', {
+      const response = await api.post<{ score?: number; match?: boolean }>('/kyc/face-match/validate', {
         selfie: selfieBase64,
         ine_photo: inePhotoBase64,
       })
@@ -107,7 +107,7 @@ export function useKycBiometrics() {
     try {
       kycLogger.debug('Starting liveness validation')
 
-      const response = await api.post('/kyc/liveness/validate', {
+      const response = await api.post<{ passed?: boolean; score?: number }>('/kyc/liveness/validate', {
         data: livenessData,
       })
 

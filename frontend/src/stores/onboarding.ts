@@ -3,6 +3,9 @@ import { ref, computed, watch } from 'vue'
 import { useApplicantStore } from './applicant'
 import { useApplicationStore } from './application'
 import type { Address, EmploymentRecord, BankAccount, Reference } from '@/types'
+import { logger } from '@/utils/logger'
+
+const onboardingLogger = logger.child('Onboarding')
 
 // Step data interfaces
 interface Step1Data {
@@ -200,7 +203,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
         currentStep.value = parsed.currentStep || 1
       }
     } catch (e) {
-      console.error('Failed to load onboarding data from storage:', e)
+      onboardingLogger.error('Failed to load onboarding data from storage', e)
     }
   }
 
@@ -214,7 +217,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
         savedAt: new Date().toISOString()
       }))
     } catch (e) {
-      console.error('Failed to save onboarding data to storage:', e)
+      onboardingLogger.error('Failed to save onboarding data to storage', e)
     }
   }
 
@@ -231,19 +234,19 @@ export const useOnboardingStore = defineStore('onboarding', () => {
       if (!currentAppId || currentAppId === 'null' || currentAppId === 'undefined') {
         // No application in store, try to restore from localStorage
         if (savedAppId && savedAppId !== 'null' && savedAppId !== 'undefined') {
-          console.log('🔄 Restoring application from localStorage:', savedAppId)
+          onboardingLogger.debug('Restoring application from localStorage', { savedAppId })
           try {
             await applicationStore.loadApplication(savedAppId)
-            console.log('✅ Application restored:', applicationStore.currentApplication?.id)
+            onboardingLogger.debug('Application restored', { appId: applicationStore.currentApplication?.id })
           } catch (e) {
-            console.warn('⚠️ Could not restore application:', e)
+            onboardingLogger.warn('Could not restore application', e)
             localStorage.removeItem('current_application_id')
           }
         } else {
-          console.log('⚠️ No application ID in localStorage to restore')
+          onboardingLogger.debug('No application ID in localStorage to restore')
         }
       } else {
-        console.log('✅ Application already loaded:', currentAppId)
+        onboardingLogger.debug('Application already loaded', { currentAppId })
       }
 
       if (applicantStore.applicant) {
@@ -331,7 +334,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
         saveToStorage()
       }
     } catch (e) {
-      console.error('Failed to load from backend:', e)
+      onboardingLogger.error('Failed to load from backend', e)
     } finally {
       isLoading.value = false
     }
@@ -386,7 +389,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           const isIneAddress = s3.is_ine_address === true
 
           // Log for debugging
-          console.log('[Onboarding] Step 3 data:', {
+          onboardingLogger.debug('Step 3 data', {
             street: s3.street,
             ext_number: s3.ext_number,
             neighborhood: s3.neighborhood,
@@ -447,31 +450,31 @@ export const useOnboardingStore = defineStore('onboarding', () => {
         case 5: {
           // Loan details - save purpose directly to application (not to dynamic_data)
           const currentId = applicationStore.currentApplication?.id
-          console.log('🔍 Step 5 save - currentApplication:', currentId || 'NULL')
+          onboardingLogger.debug('Step 5 save - currentApplication', { currentId: currentId || 'NULL' })
 
           // Check if current application has valid ID
           const hasValidId = currentId && currentId !== 'null' && currentId !== 'undefined'
 
           // If no current application or invalid ID, try to load or create one
           if (!applicationStore.currentApplication || !hasValidId) {
-            console.warn('⚠️ No valid currentApplication - attempting recovery...')
+            onboardingLogger.warn('No valid currentApplication - attempting recovery')
 
             // Try to load from localStorage
             let savedAppId = localStorage.getItem('current_application_id')
 
             // Clean up invalid saved IDs
             if (savedAppId === 'null' || savedAppId === 'undefined' || savedAppId === '') {
-              console.log('🧹 Cleaning up invalid savedAppId:', savedAppId)
+              onboardingLogger.debug('Cleaning up invalid savedAppId', { savedAppId })
               localStorage.removeItem('current_application_id')
               savedAppId = null
             }
 
             if (savedAppId) {
-              console.log('🔄 Trying to load application from saved ID:', savedAppId)
+              onboardingLogger.debug('Trying to load application from saved ID', { savedAppId })
               try {
                 await applicationStore.loadApplication(savedAppId)
               } catch (e) {
-                console.warn('❌ Could not load application:', e)
+                onboardingLogger.warn('Could not load application', e)
                 localStorage.removeItem('current_application_id')
               }
             }
@@ -482,7 +485,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           const hasFinalValidId = finalId && finalId !== 'null' && finalId !== 'undefined'
 
           if (applicationStore.currentApplication && hasFinalValidId) {
-            console.log('📤 Updating application with purpose:', data.value.step5.purpose)
+            onboardingLogger.debug('Updating application with purpose', { purpose: data.value.step5.purpose })
             try {
               await applicationStore.updateApplication({
                 purpose: data.value.step5.purpose
@@ -492,7 +495,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
               // If application was already submitted, the error handler in applicationStore
               // will have cleared it. Check if we need to create a new one.
               if (error.message?.includes('ya fue enviada') || error.message?.includes('no fue encontrada')) {
-                console.log('🔄 Previous application was submitted. Creating new one...')
+                onboardingLogger.debug('Previous application was submitted. Creating new one')
                 // The applicationStore should have cleared currentApplication
                 // Throw error to let user know they need to restart
                 throw new Error('Tu solicitud anterior ya fue enviada. Para crear una nueva solicitud, regresa al inicio.')
@@ -512,7 +515,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
       lastSavedAt.value = new Date()
       saveToStorage()
     } catch (e) {
-      console.error(`Failed to save step ${step} to backend:`, e)
+      onboardingLogger.error(`Failed to save step ${step} to backend`, e)
       throw e
     } finally {
       isSaving.value = false
@@ -582,16 +585,16 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     autoSaveTimer = setTimeout(async () => {
       // Check if minimum required fields are filled before attempting save
       if (!canAutoSaveStep(step)) {
-        console.log(`⏭️ Skipping auto-save for step ${step} - required fields not filled`)
+        onboardingLogger.debug(`Skipping auto-save for step ${step} - required fields not filled`)
         return
       }
 
       try {
-        console.log(`💾 Auto-saving step ${step}...`)
+        onboardingLogger.debug(`Auto-saving step ${step}`)
         await saveStepToBackend(step)
-        console.log(`✅ Auto-save complete for step ${step}`)
+        onboardingLogger.debug(`Auto-save complete for step ${step}`)
       } catch (error) {
-        console.error(`❌ Auto-save failed for step ${step}:`, error)
+        onboardingLogger.error(`Auto-save failed for step ${step}`, error)
         // Don't throw - auto-save failures shouldn't block the user
       }
     }, 2000) // 2 seconds debounce
@@ -646,7 +649,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
 
   // Handle application not found (404) - reset to appropriate state
   const handleApplicationNotFound = () => {
-    console.warn('⚠️ Application not found. Resetting onboarding to step 1.')
+    onboardingLogger.warn('Application not found. Resetting onboarding to step 1')
     // Clear application reference
     localStorage.removeItem('current_application_id')
     // Reset to step 1 but keep data for steps 1-4 (applicant data)
@@ -665,7 +668,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     if (currentStep.value >= 5) {
       const appId = applicationStore.currentApplication?.id
       if (!appId || appId === 'null' || appId === 'undefined') {
-        console.warn('⚠️ Onboarding init: No valid application for step >= 5, resetting to step 1')
+        onboardingLogger.warn('Onboarding init: No valid application for step >= 5, resetting to step 1')
         currentStep.value = 1
         // Keep completedSteps for steps 1-4 if they were completed
         completedSteps.value = completedSteps.value.filter(s => s <= 4)
