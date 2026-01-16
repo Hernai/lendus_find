@@ -4,13 +4,14 @@ namespace App\Models;
 
 use App\Enums\OtpChannel;
 use App\Enums\OtpPurpose;
+use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class OtpCode extends Model
 {
-    use HasFactory, HasUuid;
+    use HasFactory, HasUuid, HasTenant;
 
     protected $fillable = [
         'tenant_id',

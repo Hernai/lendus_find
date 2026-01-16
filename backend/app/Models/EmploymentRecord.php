@@ -171,8 +171,8 @@ class EmploymentRecord extends Model
     public function getAllowsIncomeVerificationAttribute(): bool
     {
         return in_array($this->employment_type, [
-            self::TYPE_EMPLOYED,
-            self::TYPE_RETIRED,
+            EmploymentType::EMPLOYED->value,
+            EmploymentType::RETIRED->value,
         ]);
     }
 

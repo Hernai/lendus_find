@@ -2,10 +2,14 @@
 
 namespace App\Traits;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 /**
  * Trait for models using UUID as primary key.
+ *
+ * Automatically generates a UUID when creating a new record
+ * and configures the model to use string keys.
  */
 trait HasUuid
 {
@@ -14,9 +18,10 @@ trait HasUuid
      */
     protected static function bootHasUuid(): void
     {
-        static::creating(function ($model) {
-            if (empty($model->{$model->getKeyName()})) {
-                $model->{$model->getKeyName()} = (string) Str::uuid();
+        static::creating(function (Model $model): void {
+            $keyName = $model->getKeyName();
+            if ($model->{$keyName} === null) {
+                $model->{$keyName} = Str::uuid()->toString();
             }
         });
     }

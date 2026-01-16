@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\ReferenceType;
 use App\Traits\HasAuditFields;
+use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,9 +13,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Reference extends Model
 {
-    use HasFactory, HasUuid, SoftDeletes, HasAuditFields;
+    use HasFactory, HasUuid, HasTenant, SoftDeletes, HasAuditFields;
 
     protected $fillable = [
+        'tenant_id',
         'applicant_id',
         'application_id',
         'first_name',

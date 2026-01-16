@@ -265,11 +265,11 @@ class Application extends Model
     public function scopePending($query)
     {
         return $query->whereIn('status', [
-            self::STATUS_SUBMITTED,
-            self::STATUS_IN_REVIEW,
-            self::STATUS_DOCS_PENDING,
-            self::STATUS_CORRECTIONS_PENDING,
-            self::STATUS_COUNTER_OFFERED,
+            ApplicationStatus::SUBMITTED->value,
+            ApplicationStatus::IN_REVIEW->value,
+            ApplicationStatus::DOCS_PENDING->value,
+            ApplicationStatus::CORRECTIONS_PENDING->value,
+            ApplicationStatus::COUNTER_OFFERED->value,
         ]);
     }
 

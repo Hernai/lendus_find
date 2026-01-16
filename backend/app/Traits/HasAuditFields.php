@@ -2,7 +2,9 @@
 
 namespace App\Traits;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Auth;
 
 /**
@@ -27,25 +29,25 @@ trait HasAuditFields
     protected static function bootHasAuditFields(): void
     {
         // Automatically set created_by when creating a new record
-        static::creating(function (Model $model) {
-            if (Auth::check() && !$model->created_by) {
+        static::creating(function (Model $model): void {
+            if (Auth::check() && $model->created_by === null) {
                 $model->created_by = Auth::id();
             }
         });
 
         // Automatically set updated_by when updating a record
-        static::updating(function (Model $model) {
-            if (Auth::check() && !$model->updated_by) {
+        static::updating(function (Model $model): void {
+            if (Auth::check()) {
                 $model->updated_by = Auth::id();
             }
         });
 
         // Automatically set deleted_by when soft deleting a record
-        if (method_exists(static::class, 'bootSoftDeletes')) {
-            static::deleting(function (Model $model) {
-                if (Auth::check() && !$model->deleted_by && !$model->isForceDeleting()) {
+        if (in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive(static::class))) {
+            static::deleting(function (Model $model): void {
+                if (Auth::check() && $model->deleted_by === null && !$model->isForceDeleting()) {
                     $model->deleted_by = Auth::id();
-                    $model->saveQuietly(); // Save without triggering events again
+                    $model->saveQuietly();
                 }
             });
         }
@@ -54,25 +56,25 @@ trait HasAuditFields
     /**
      * Get the user who created this record.
      */
-    public function creator()
+    public function creator(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'created_by');
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     /**
      * Get the user who last updated this record.
      */
-    public function updater()
+    public function updater(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'updated_by');
+        return $this->belongsTo(User::class, 'updated_by');
     }
 
     /**
      * Get the user who deleted this record.
      */
-    public function deleter()
+    public function deleter(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\User::class, 'deleted_by');
+        return $this->belongsTo(User::class, 'deleted_by');
     }
 
     /**

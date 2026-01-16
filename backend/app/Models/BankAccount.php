@@ -269,7 +269,10 @@ class BankAccount extends Model
      */
     public function scopeForDisbursement($query)
     {
-        return $query->whereIn('type', [self::TYPE_DISBURSEMENT, self::TYPE_BOTH]);
+        return $query->whereIn('type', [
+            BankAccountUsageType::DISBURSEMENT->value,
+            BankAccountUsageType::BOTH->value,
+        ]);
     }
 
     /**
@@ -277,7 +280,10 @@ class BankAccount extends Model
      */
     public function scopeForPayment($query)
     {
-        return $query->whereIn('type', [self::TYPE_PAYMENT, self::TYPE_BOTH]);
+        return $query->whereIn('type', [
+            BankAccountUsageType::PAYMENT->value,
+            BankAccountUsageType::BOTH->value,
+        ]);
     }
 
     // =========================================================================
