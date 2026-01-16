@@ -339,4 +339,15 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff', 'metadata']
         Route::delete('/{tenant}/api-configs/{config}', [\App\Http\Controllers\Api\Admin\TenantController::class, 'deleteApiConfig']);
         Route::post('/{tenant}/api-configs/{config}/test', [\App\Http\Controllers\Api\Admin\TenantController::class, 'testApiConfig']);
     });
+
+    // =============================================
+    // API LOGS - Admin+ can view API call history
+    // =============================================
+    Route::middleware('permission:canManageProducts')->prefix('api-logs')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\Admin\ApiLogController::class, 'index']);
+        Route::get('/stats', [\App\Http\Controllers\Api\Admin\ApiLogController::class, 'stats']);
+        Route::get('/providers', [\App\Http\Controllers\Api\Admin\ApiLogController::class, 'providers']);
+        Route::get('/services', [\App\Http\Controllers\Api\Admin\ApiLogController::class, 'services']);
+        Route::get('/{apiLog}', [\App\Http\Controllers\Api\Admin\ApiLogController::class, 'show']);
+    });
 });

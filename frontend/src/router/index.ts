@@ -59,6 +59,7 @@ const AdminProducts = () => import('@/views/admin/panel/AdminProducts.vue')
 const AdminTenants = () => import('@/views/admin/panel/AdminTenants.vue')
 const AdminSettings = () => import('@/views/admin/panel/AdminSettings.vue')
 const AdminIntegrations = () => import('@/views/admin/settings/AdminIntegrationsView.vue')
+const AdminApiLogs = () => import('@/views/admin/panel/AdminApiLogs.vue')
 const AdminUnderConstruction = () => import('@/views/admin/panel/AdminUnderConstruction.vue')
 
 // Reserved paths that are NOT tenant slugs (must match tenant.ts)
@@ -394,6 +395,11 @@ const routes: RouteRecordRaw[] = [
         path: 'integraciones',
         name: 'admin-integrations',
         component: AdminIntegrations
+      },
+      {
+        path: 'api-logs',
+        name: 'admin-api-logs',
+        component: AdminApiLogs
       },
       {
         path: 'tenants',
