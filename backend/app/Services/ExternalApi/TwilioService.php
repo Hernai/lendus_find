@@ -2,6 +2,7 @@
 
 namespace App\Services\ExternalApi;
 
+use App\Contracts\SmsServiceInterface;
 use App\Models\ApiLog;
 use App\Models\SmsLog;
 use App\Models\TenantApiConfig;
@@ -9,7 +10,12 @@ use Illuminate\Support\Facades\Log;
 use Twilio\Rest\Client;
 use Twilio\Exceptions\TwilioException;
 
-class TwilioService
+/**
+ * Twilio SMS/WhatsApp service.
+ *
+ * Implements SmsServiceInterface for consistent messaging API.
+ */
+class TwilioService implements SmsServiceInterface
 {
     protected ?Client $client = null;
     protected ?string $fromNumber = null;
@@ -655,5 +661,35 @@ class TwilioService
         } catch (\Exception $e) {
             return null;
         }
+    }
+
+    /**
+     * Check if the service is properly configured.
+     *
+     * @implements SmsServiceInterface
+     */
+    public function isConfigured(): bool
+    {
+        return $this->client !== null && $this->fromNumber !== null;
+    }
+
+    /**
+     * Check if SMS capability is available.
+     *
+     * @implements SmsServiceInterface
+     */
+    public function hasSmsCapability(): bool
+    {
+        return $this->isConfigured() && !empty($this->fromNumber);
+    }
+
+    /**
+     * Check if WhatsApp capability is available.
+     *
+     * @implements SmsServiceInterface
+     */
+    public function hasWhatsAppCapability(): bool
+    {
+        return $this->isConfigured() && !empty($this->whatsappFrom);
     }
 }

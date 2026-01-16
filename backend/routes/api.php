@@ -29,19 +29,20 @@ Route::middleware(['tenant'])->group(function () {
     // Tenant Configuration (public)
     Route::get('/config', [ConfigController::class, 'index']);
 
-    // Authentication (with metadata capture for audit logging)
+    // Authentication (with metadata capture for audit logging and rate limiting)
     Route::middleware(['metadata'])->prefix('auth')->group(function () {
-        Route::post('/otp/request', [AuthController::class, 'requestOtp']);
-        Route::post('/otp/verify', [AuthController::class, 'verifyOtp']);
+        // OTP endpoints with strict rate limiting (3/min for send, 5/min for verify)
+        Route::middleware('throttle:otp')->post('/otp/request', [AuthController::class, 'requestOtp']);
+        Route::middleware('throttle:otp-verify')->post('/otp/verify', [AuthController::class, 'verifyOtp']);
         Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 
-        // PIN Authentication (no SMS cost)
+        // PIN Authentication with rate limiting (5/min)
         Route::post('/check-user', [AuthController::class, 'checkUser']);
-        Route::post('/pin/login', [AuthController::class, 'loginWithPin']);
-        Route::post('/pin/reset', [AuthController::class, 'resetPinWithOtp']);
+        Route::middleware('throttle:pin-login')->post('/pin/login', [AuthController::class, 'loginWithPin']);
+        Route::middleware('throttle:otp-verify')->post('/pin/reset', [AuthController::class, 'resetPinWithOtp']);
 
-        // Email/Password Authentication (for admin/staff users)
-        Route::post('/password/login', [AuthController::class, 'loginWithPassword']);
+        // Email/Password Authentication with rate limiting (5/min)
+        Route::middleware('throttle:password-login')->post('/password/login', [AuthController::class, 'loginWithPassword']);
     });
 
     // PIN Setup & Change (requires authentication)

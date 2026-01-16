@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Contracts\DocumentStorageInterface;
 use App\Enums\DocumentStatus;
 use App\Models\Document;
 use App\Models\Application;
@@ -12,7 +13,12 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Intervention\Image\Facades\Image;
 
-class DocumentService
+/**
+ * Document storage and management service.
+ *
+ * Implements DocumentStorageInterface for consistent storage operations.
+ */
+class DocumentService implements DocumentStorageInterface
 {
     /**
      * The storage disk to use.

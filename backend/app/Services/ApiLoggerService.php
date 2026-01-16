@@ -2,10 +2,16 @@
 
 namespace App\Services;
 
+use App\Contracts\ApiLoggerInterface;
 use App\Models\ApiLog;
 use Illuminate\Support\Facades\Log;
 
-class ApiLoggerService
+/**
+ * API call logging service.
+ *
+ * Implements ApiLoggerInterface for consistent API call logging.
+ */
+class ApiLoggerService implements ApiLoggerInterface
 {
     protected ?string $tenantId = null;
     protected ?string $applicantId = null;
@@ -16,7 +22,7 @@ class ApiLoggerService
     /**
      * Set the tenant context for logging.
      */
-    public function forTenant(?string $tenantId): self
+    public function forTenant(?string $tenantId): static
     {
         $this->tenantId = $tenantId;
         return $this;
@@ -25,7 +31,7 @@ class ApiLoggerService
     /**
      * Set the applicant context for logging.
      */
-    public function forApplicant(?string $applicantId): self
+    public function forApplicant(?string $applicantId): static
     {
         $this->applicantId = $applicantId;
         return $this;
@@ -34,7 +40,7 @@ class ApiLoggerService
     /**
      * Set the application context for logging.
      */
-    public function forApplication(?string $applicationId): self
+    public function forApplication(?string $applicationId): static
     {
         $this->applicationId = $applicationId;
         return $this;
@@ -43,7 +49,7 @@ class ApiLoggerService
     /**
      * Set the user context for logging.
      */
-    public function forUser(?string $userId): self
+    public function forUser(?string $userId): static
     {
         $this->userId = $userId;
         return $this;
@@ -235,7 +241,7 @@ class ApiLoggerService
     /**
      * Reset the context (useful after logging).
      */
-    public function reset(): self
+    public function reset(): static
     {
         $this->tenantId = null;
         $this->applicantId = null;

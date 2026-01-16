@@ -13,59 +13,63 @@ use App\Models\ApiLog;
 interface ApiLoggerInterface
 {
     /**
-     * Set the context for subsequent log entries.
-     *
-     * @param int|null $tenantId
-     * @param int|null $applicantId
-     * @param int|null $applicationId
-     * @param int|null $userId
-     * @return static
+     * Set the tenant context for logging.
      */
-    public function setContext(
-        ?int $tenantId = null,
-        ?int $applicantId = null,
-        ?int $applicationId = null,
-        ?int $userId = null
-    ): static;
+    public function forTenant(?string $tenantId): static;
+
+    /**
+     * Set the applicant context for logging.
+     */
+    public function forApplicant(?string $applicantId): static;
+
+    /**
+     * Set the application context for logging.
+     */
+    public function forApplication(?string $applicationId): static;
+
+    /**
+     * Set the user context for logging.
+     */
+    public function forUser(?string $userId): static;
 
     /**
      * Log an API call.
      *
      * @param string $provider Provider name (e.g., 'NUBARIUM', 'TWILIO')
      * @param string $service Service/endpoint name
-     * @param string $method HTTP method
      * @param string $endpoint Full endpoint URL
-     * @param array $requestHeaders Request headers (sensitive data will be masked)
-     * @param array $requestPayload Request body (sensitive data will be masked)
-     * @param int $responseStatus HTTP response status code
+     * @param string $method HTTP method (default: POST)
+     * @param array $requestHeaders Request headers
+     * @param array $requestPayload Request body
+     * @param int|null $responseStatus HTTP response status code
      * @param array $responseHeaders Response headers
-     * @param mixed $responseBody Response body
+     * @param array|string|null $responseBody Response body
      * @param bool $success Whether the call was successful
-     * @param int $durationMs Duration in milliseconds
      * @param string|null $errorCode Error code if failed
      * @param string|null $errorMessage Error message if failed
+     * @param int|null $durationMs Duration in milliseconds
+     * @param float|null $cost Cost of the API call
      * @return ApiLog The created log entry
      */
     public function log(
         string $provider,
         string $service,
-        string $method,
         string $endpoint,
-        array $requestHeaders,
-        array $requestPayload,
-        int $responseStatus,
-        array $responseHeaders,
-        mixed $responseBody,
-        bool $success,
-        int $durationMs,
+        string $method = 'POST',
+        array $requestHeaders = [],
+        array $requestPayload = [],
+        ?int $responseStatus = null,
+        array $responseHeaders = [],
+        array|string|null $responseBody = null,
+        bool $success = false,
         ?string $errorCode = null,
-        ?string $errorMessage = null
+        ?string $errorMessage = null,
+        ?int $durationMs = null,
+        ?float $cost = null
     ): ApiLog;
 
     /**
      * Reset the context after completing a series of calls.
-     *
-     * @return static
      */
     public function reset(): static;
 }

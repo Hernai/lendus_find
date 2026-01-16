@@ -2,6 +2,7 @@
 
 namespace App\Contracts;
 
+use App\Models\Document;
 use Illuminate\Http\UploadedFile;
 
 /**
@@ -13,55 +14,28 @@ use Illuminate\Http\UploadedFile;
 interface DocumentStorageInterface
 {
     /**
-     * Store an uploaded file.
+     * Get a temporary signed URL for a document.
      *
-     * @param UploadedFile $file The file to store
-     * @param string $path Storage path/prefix
-     * @param array $options Additional storage options
-     * @return array{success: bool, path?: string, error?: string}
-     */
-    public function store(UploadedFile $file, string $path, array $options = []): array;
-
-    /**
-     * Store a file from base64 content.
-     *
-     * @param string $base64Content Base64 encoded file content
-     * @param string $path Storage path including filename
-     * @param string|null $mimeType MIME type of the file
-     * @return array{success: bool, path?: string, error?: string}
-     */
-    public function storeBase64(string $base64Content, string $path, ?string $mimeType = null): array;
-
-    /**
-     * Get a temporary signed URL for a stored file.
-     *
-     * @param string $path Path to the stored file
+     * @param Document $document The document to get URL for
      * @param int $expirationMinutes URL expiration time in minutes
-     * @return string|null The signed URL or null if not available
+     * @return string The signed URL
      */
-    public function getSignedUrl(string $path, int $expirationMinutes = 60): ?string;
+    public function getSignedUrl(Document $document, int $expirationMinutes = 15): string;
 
     /**
-     * Delete a stored file.
+     * Delete a document and its file.
      *
-     * @param string $path Path to the file
+     * @param Document $document The document to delete
      * @return bool True if deleted successfully
      */
-    public function delete(string $path): bool;
+    public function delete(Document $document): bool;
 
     /**
-     * Check if a file exists.
+     * Replace a document with a new file.
      *
-     * @param string $path Path to check
-     * @return bool True if file exists
+     * @param Document $document The document to replace
+     * @param UploadedFile $file The new file
+     * @return Document The updated document
      */
-    public function exists(string $path): bool;
-
-    /**
-     * Get file contents.
-     *
-     * @param string $path Path to the file
-     * @return string|null File contents or null if not found
-     */
-    public function get(string $path): ?string;
+    public function replace(Document $document, UploadedFile $file): Document;
 }
