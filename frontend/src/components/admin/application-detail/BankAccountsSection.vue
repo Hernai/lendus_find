@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AppButton } from '@/components/common'
+import { computed } from 'vue'
 
 interface BankAccount {
   id: string
@@ -17,7 +17,7 @@ interface BankAccount {
   created_at?: string
 }
 
-defineProps<{
+const props = defineProps<{
   accounts: BankAccount[]
   canVerify: boolean
 }>()
@@ -27,101 +27,99 @@ const emit = defineEmits<{
   (e: 'unverify', account: BankAccount): void
 }>()
 
-const formatClabe = (clabe: string): string => {
-  if (!clabe) return '-'
-  // Format: XXXX XXXX XXXX XXXX XX
-  return clabe.replace(/(\d{4})(?=\d)/g, '$1 ')
-}
-
-const formatDateTime = (dateStr: string) => {
-  return new Date(dateStr).toLocaleString('es-MX', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
+const stats = computed(() => ({
+  total: props.accounts.length,
+  verified: props.accounts.filter(ba => ba.is_verified).length,
+}))
 </script>
 
 <template>
-  <div class="border border-gray-200 rounded-lg">
-    <div class="bg-gray-50 px-3 py-2 border-b border-gray-200">
-      <h3 class="text-sm font-semibold text-gray-900">Cuentas Bancarias</h3>
+  <div>
+    <!-- Bank Account Stats -->
+    <div class="flex items-center gap-4 mb-4 text-sm text-gray-500">
+      <span>Total: <b class="text-gray-900">{{ stats.total }}</b></span>
+      <span>Verificadas: <b class="text-gray-900">{{ stats.verified }}</b></span>
     </div>
-    <div class="divide-y divide-gray-100">
-      <div v-if="accounts.length === 0" class="p-4 text-center text-gray-500 text-sm">
-        No hay cuentas bancarias registradas
-      </div>
+
+    <div v-if="accounts.length === 0" class="text-center py-6 text-gray-500 text-sm">
+      No hay cuentas bancarias registradas
+    </div>
+
+    <div v-else class="space-y-3">
       <div
         v-for="account in accounts"
         :key="account.id"
-        class="p-3"
+        class="border border-gray-200 rounded-lg p-4"
       >
-        <div class="flex items-start justify-between">
-          <div class="flex-1">
-            <div class="flex items-center gap-2 mb-1">
-              <span class="font-medium text-gray-900">{{ account.bank_name }}</span>
-              <span
-                v-if="account.is_primary"
-                class="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700"
-              >
-                Principal
-              </span>
-              <span
-                :class="[
-                  'px-2 py-0.5 rounded-full text-xs font-medium',
-                  account.is_verified
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-gray-100 text-gray-600',
-                ]"
-              >
-                {{ account.is_verified ? 'Verificada' : 'Pendiente' }}
-              </span>
+        <div class="flex items-start justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+              </svg>
             </div>
-            <div class="text-sm text-gray-600 space-y-1">
-              <div class="flex items-center gap-4">
-                <span class="text-gray-500">CLABE:</span>
-                <span class="font-mono">{{ formatClabe(account.clabe) }}</span>
-              </div>
-              <div class="flex items-center gap-4">
-                <span class="text-gray-500">Titular:</span>
-                <span>{{ account.holder_name }}</span>
-                <span v-if="!account.is_own_account" class="text-xs text-orange-600">
-                  (Cuenta de tercero)
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-semibold text-gray-900">{{ account.bank_name }}</span>
+                <span
+                  v-if="account.is_primary"
+                  class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
+                >
+                  Principal
+                </span>
+                <span
+                  v-if="account.is_verified"
+                  class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                >
+                  Verificada
+                </span>
+                <span
+                  v-else
+                  class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
+                >
+                  Sin verificar
                 </span>
               </div>
-              <div v-if="account.holder_rfc" class="flex items-center gap-4">
-                <span class="text-gray-500">RFC:</span>
-                <span class="font-mono">{{ account.holder_rfc }}</span>
-              </div>
-              <div class="flex items-center gap-4">
-                <span class="text-gray-500">Tipo:</span>
-                <span>{{ account.account_type_label || account.account_type }}</span>
-              </div>
-            </div>
-            <div v-if="account.created_at" class="text-xs text-gray-400 mt-2">
-              Registrada el {{ formatDateTime(account.created_at) }}
+              <p class="text-xs text-gray-500">{{ account.account_type_label || account.account_type }}</p>
             </div>
           </div>
-          <div class="flex items-center gap-2">
-            <AppButton
-              v-if="canVerify && !account.is_verified"
-              variant="outline"
-              size="sm"
-              @click="emit('verify', account)"
-            >
-              Verificar
-            </AppButton>
-            <AppButton
-              v-if="canVerify && account.is_verified"
-              variant="ghost"
-              size="sm"
-              @click="emit('unverify', account)"
-            >
-              Quitar Verificación
-            </AppButton>
+        </div>
+
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between">
+            <span class="text-gray-500">CLABE</span>
+            <span class="text-gray-900 font-mono">{{ account.clabe }}</span>
           </div>
+          <div class="flex justify-between">
+            <span class="text-gray-500">Titular</span>
+            <span class="text-gray-900 text-right">{{ account.holder_name }}</span>
+          </div>
+          <div v-if="account.holder_rfc" class="flex justify-between">
+            <span class="text-gray-500">RFC</span>
+            <span class="text-gray-900 font-mono">{{ account.holder_rfc }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-500">Cuenta propia</span>
+            <span class="text-gray-900">{{ account.is_own_account ? 'Sí' : 'No' }}</span>
+          </div>
+        </div>
+
+        <!-- Verification actions -->
+        <div v-if="canVerify" class="mt-4 pt-3 border-t border-gray-100 flex gap-2">
+          <button
+            v-if="!account.is_verified"
+            class="flex-1 px-3 py-1.5 text-sm text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors font-medium"
+            @click="emit('verify', account)"
+          >
+            Verificar
+          </button>
+          <button
+            v-else
+            class="flex-1 px-3 py-1.5 text-sm text-yellow-700 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors font-medium"
+            @click="emit('unverify', account)"
+          >
+            Quitar verificación
+          </button>
         </div>
       </div>
     </div>

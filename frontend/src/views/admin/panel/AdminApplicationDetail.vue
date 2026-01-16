@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { AppButton } from '@/components/common'
 import AdminDocumentGallery from '@/components/admin/AdminDocumentGallery.vue'
 import ConfirmModal from '@/components/admin/ConfirmModal.vue'
+import { ReferencesSection, BankAccountsSection } from '@/components/admin/application-detail'
 import { api } from '@/services/api'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useTenantStore } from '@/stores/tenant'
@@ -2736,151 +2737,21 @@ const addNote = async () => {
 
           <!-- References Tab -->
           <div v-if="activeTab === 'references'">
-            <!-- Reference Stats -->
-            <div class="flex items-center gap-4 mb-4 text-sm text-gray-500">
-              <span>Total: <b class="text-gray-900">{{ application.references.length }}</b></span>
-              <span>Verificadas: <b class="text-gray-900">{{ application.references.filter(r => r.verified).length }}</b></span>
-              <span>Pendientes: <b class="text-gray-900">{{ application.references.filter(r => !r.verified).length }}</b></span>
-            </div>
-
-            <div v-if="application.references.length === 0" class="text-center py-6 text-gray-500 text-sm">
-              No hay referencias
-            </div>
-
-            <div v-else class="space-y-2">
-              <div
-                v-for="ref in application.references"
-                :key="ref.id"
-                class="flex items-center justify-between border border-gray-200 rounded px-3 py-2"
-              >
-                <div class="flex items-center gap-2">
-                  <div class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-medium text-gray-600">
-                    {{ ref.full_name.charAt(0).toUpperCase() }}
-                  </div>
-                  <div>
-                    <span class="text-sm font-medium text-gray-900">{{ ref.full_name }}</span>
-                    <span class="text-xs text-gray-500 ml-2">{{ ref.relationship }} · {{ formatPhone(ref.phone) }}</span>
-                  </div>
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <span class="text-xs text-gray-500">{{ ref.verified ? 'Verificada' : 'Pendiente' }}</span>
-                  <div class="flex items-center">
-                    <a
-                      :href="'tel:' + ref.phone"
-                      class="p-1.5 text-gray-400 hover:text-gray-600"
-                      title="Llamar"
-                    >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                      </svg>
-                    </a>
-                    <button
-                      v-if="!ref.verified && canVerifyRefs"
-                      class="p-1.5 text-gray-400 hover:text-gray-600"
-                      title="Verificar"
-                      @click="openVerifyRefModal(ref)"
-                    >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <ReferencesSection
+              :references="application.references"
+              :can-verify="canVerifyRefs"
+              @verify="openVerifyRefModal"
+            />
           </div>
 
           <!-- Bank Accounts Tab -->
           <div v-if="activeTab === 'bank_accounts'">
-            <!-- Bank Account Stats -->
-            <div class="flex items-center gap-4 mb-4 text-sm text-gray-500">
-              <span>Total: <b class="text-gray-900">{{ application.bank_accounts.length }}</b></span>
-              <span>Verificadas: <b class="text-gray-900">{{ application.bank_accounts.filter(ba => ba.is_verified).length }}</b></span>
-            </div>
-
-            <div v-if="application.bank_accounts.length === 0" class="text-center py-6 text-gray-500 text-sm">
-              No hay cuentas bancarias registradas
-            </div>
-
-            <div v-else class="space-y-3">
-              <div
-                v-for="account in application.bank_accounts"
-                :key="account.id"
-                class="border border-gray-200 rounded-lg p-4"
-              >
-                <div class="flex items-start justify-between mb-3">
-                  <div class="flex items-center gap-2">
-                    <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <div class="flex items-center gap-2">
-                        <span class="font-semibold text-gray-900">{{ account.bank_name }}</span>
-                        <span
-                          v-if="account.is_primary"
-                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
-                        >
-                          Principal
-                        </span>
-                        <span
-                          v-if="account.is_verified"
-                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
-                        >
-                          Verificada
-                        </span>
-                        <span
-                          v-else
-                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
-                        >
-                          Sin verificar
-                        </span>
-                      </div>
-                      <p class="text-xs text-gray-500">{{ account.account_type_label || account.account_type }}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="space-y-2 text-sm">
-                  <div class="flex justify-between">
-                    <span class="text-gray-500">CLABE</span>
-                    <span class="text-gray-900 font-mono">{{ account.clabe }}</span>
-                  </div>
-                  <div class="flex justify-between">
-                    <span class="text-gray-500">Titular</span>
-                    <span class="text-gray-900 text-right">{{ account.holder_name }}</span>
-                  </div>
-                  <div v-if="account.holder_rfc" class="flex justify-between">
-                    <span class="text-gray-500">RFC</span>
-                    <span class="text-gray-900 font-mono">{{ account.holder_rfc }}</span>
-                  </div>
-                  <div class="flex justify-between">
-                    <span class="text-gray-500">Cuenta propia</span>
-                    <span class="text-gray-900">{{ account.is_own_account ? 'Sí' : 'No' }}</span>
-                  </div>
-                </div>
-
-                <!-- Verification actions - Solo con permiso de verificar -->
-                <div v-if="canVerifyRefs" class="mt-4 pt-3 border-t border-gray-100 flex gap-2">
-                  <button
-                    v-if="!account.is_verified"
-                    class="flex-1 px-3 py-1.5 text-sm text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors font-medium"
-                    @click="openBankAccountVerifyModal(account)"
-                  >
-                    Verificar
-                  </button>
-                  <button
-                    v-else
-                    class="flex-1 px-3 py-1.5 text-sm text-yellow-700 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors font-medium"
-                    @click="openBankAccountUnverifyModal(account)"
-                  >
-                    Quitar verificación
-                  </button>
-                </div>
-              </div>
-            </div>
+            <BankAccountsSection
+              :accounts="application.bank_accounts"
+              :can-verify="canVerifyRefs"
+              @verify="openBankAccountVerifyModal"
+              @unverify="openBankAccountUnverifyModal"
+            />
           </div>
 
           <!-- Timeline Tab -->
