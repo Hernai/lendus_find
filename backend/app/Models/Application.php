@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class Application extends Model
@@ -82,48 +83,51 @@ class Application extends Model
 
     /**
      * Generate a unique folio for the application.
+     *
+     * Uses database-level locking to prevent race conditions
+     * when multiple applications are created simultaneously.
      */
     public static function generateFolio(?string $tenantId): string
     {
         $prefix = 'LEN'; // Can be customized per tenant
         $year = date('Y');
 
-        // Get the highest sequence number for this year by parsing the folio
-        $lastFolio = static::withoutGlobalScopes()
-            ->where('tenant_id', $tenantId)
-            ->where('folio', 'LIKE', "{$prefix}-{$year}-%")
-            ->orderByDesc('created_at')
-            ->value('folio');
+        return DB::transaction(function () use ($prefix, $year, $tenantId) {
+            // Use FOR UPDATE lock to prevent race conditions
+            $lastFolio = static::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('folio', 'LIKE', "{$prefix}-{$year}-%")
+                ->orderByRaw("CAST(SUBSTRING(folio FROM '\\d+$') AS INTEGER) DESC")
+                ->lockForUpdate()
+                ->value('folio');
 
-        if ($lastFolio) {
-            preg_match('/(\d+)$/', $lastFolio, $matches);
-            $sequence = isset($matches[1]) ? intval($matches[1]) + 1 : 1;
-        } else {
-            $sequence = 1;
-        }
-
-        // Add randomness to prevent collisions
-        $attempts = 0;
-        $maxAttempts = 10;
-
-        do {
-            $folio = sprintf('%s-%s-%05d', $prefix, $year, $sequence);
-
-            // Check if folio already exists
-            $exists = static::withoutGlobalScopes()
-                ->where('folio', $folio)
-                ->exists();
-
-            if (!$exists) {
-                return $folio;
+            if ($lastFolio) {
+                preg_match('/(\d+)$/', $lastFolio, $matches);
+                $sequence = isset($matches[1]) ? intval($matches[1]) + 1 : 1;
+            } else {
+                $sequence = 1;
             }
 
-            $sequence++;
-            $attempts++;
-        } while ($attempts < $maxAttempts);
+            // Generate folio with proper sequence
+            $folio = sprintf('%s-%s-%05d', $prefix, $year, $sequence);
 
-        // Fallback: add timestamp to guarantee uniqueness
-        return sprintf('%s-%s-%05d-%s', $prefix, $year, $sequence, substr(uniqid(), -4));
+            // Double-check uniqueness (belt and suspenders)
+            $attempts = 0;
+            $maxAttempts = 5;
+
+            while (static::withoutGlobalScopes()->where('folio', $folio)->exists() && $attempts < $maxAttempts) {
+                $sequence++;
+                $folio = sprintf('%s-%s-%05d', $prefix, $year, $sequence);
+                $attempts++;
+            }
+
+            // Fallback: add timestamp to guarantee uniqueness
+            if ($attempts >= $maxAttempts) {
+                $folio = sprintf('%s-%s-%05d-%s', $prefix, $year, $sequence, substr(uniqid(), -4));
+            }
+
+            return $folio;
+        }, 3); // 3 retry attempts on deadlock
     }
 
     /**

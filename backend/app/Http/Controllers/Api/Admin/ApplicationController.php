@@ -49,16 +49,21 @@ class ApplicationController extends Controller
         }
 
         if ($search = $request->input('search')) {
-            $query->where(function ($q) use ($search) {
+            $tenantId = $tenant->id;
+            $query->where(function ($q) use ($search, $tenantId) {
                 $q->where('folio', 'LIKE', "%{$search}%")
-                    ->orWhereHas('applicant', function ($q) use ($search) {
-                        $q->where('curp', 'LIKE', "%{$search}%")
-                            ->orWhere('first_name', 'LIKE', "%{$search}%")
-                            ->orWhere('last_name_1', 'LIKE', "%{$search}%")
-                            ->orWhere('last_name_2', 'LIKE', "%{$search}%")
-                            ->orWhere('full_name', 'LIKE', "%{$search}%")
-                            ->orWhere('phone', 'LIKE', "%{$search}%")
-                            ->orWhere('email', 'LIKE', "%{$search}%");
+                    ->orWhereHas('applicant', function ($q) use ($search, $tenantId) {
+                        // Ensure tenant scoping to prevent cross-tenant data leakage
+                        $q->where('tenant_id', $tenantId)
+                            ->where(function ($subQ) use ($search) {
+                                $subQ->where('curp', 'LIKE', "%{$search}%")
+                                    ->orWhere('first_name', 'LIKE', "%{$search}%")
+                                    ->orWhere('last_name_1', 'LIKE', "%{$search}%")
+                                    ->orWhere('last_name_2', 'LIKE', "%{$search}%")
+                                    ->orWhere('full_name', 'LIKE', "%{$search}%")
+                                    ->orWhere('phone', 'LIKE', "%{$search}%")
+                                    ->orWhere('email', 'LIKE', "%{$search}%");
+                            });
                     });
             });
         }
@@ -101,9 +106,12 @@ class ApplicationController extends Controller
                   ->where('updated_at', '<', now()->subHours(8));
         }
 
-        // Sorting
+        // Sorting (whitelist to prevent SQL injection)
+        $allowedSortColumns = ['created_at', 'updated_at', 'status', 'folio', 'requested_amount'];
         $sortBy = $request->input('sort_by', 'created_at');
+        $sortBy = in_array($sortBy, $allowedSortColumns, true) ? $sortBy : 'created_at';
         $sortOrder = $request->input('sort_order', 'desc');
+        $sortOrder = in_array(strtolower($sortOrder), ['asc', 'desc'], true) ? $sortOrder : 'desc';
         $query->orderBy($sortBy, $sortOrder);
 
         // Pagination
@@ -366,7 +374,8 @@ class ApplicationController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:users,id',
+            // Validate user belongs to same tenant to prevent cross-tenant assignment
+            'user_id' => ['required', 'exists:users,id,tenant_id,' . $tenant->id],
         ]);
 
         if ($validator->fails()) {
