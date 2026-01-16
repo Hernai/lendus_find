@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApplicationStore, useTenantStore, useAuthStore, useOnboardingStore } from '@/stores'
 import { AppProgressBar } from '@/components/common'
-import type { PaymentFrequency } from '@/types'
+import type { PaymentFrequency, Application } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -101,8 +101,30 @@ onMounted(async () => {
         console.log('📂 Loading from saved ID:', savedAppId)
         try {
           await applicationStore.loadApplication(savedAppId)
-          applicationStore.restoreProgress()
-          console.log('✅ Loaded from saved ID')
+
+          // Check if the loaded application is in a terminal/non-editable status
+          const loadedApp = applicationStore.currentApplication as Application | null
+          const terminalStatuses = ['CANCELLED', 'REJECTED', 'APPROVED', 'SYNCED', 'SUBMITTED']
+
+          if (loadedApp && terminalStatuses.includes(loadedApp.status)) {
+            console.log('⚠️ Loaded application is in terminal status:', loadedApp.status)
+            console.log('🧹 Clearing reference to allow creating a new application')
+            // Clear the reference - this application cannot be modified
+            applicationStore.reset()
+            localStorage.removeItem('current_application_id')
+          } else {
+            applicationStore.restoreProgress()
+            console.log('✅ Loaded from saved ID')
+
+            // Set the selected product from the loaded application
+            if (loadedApp?.product_id) {
+              const product = tenantStore.products.find(p => p.id === loadedApp.product_id)
+              if (product) {
+                console.log('🏷️ Setting product from loaded application:', product.name)
+                applicationStore.setSelectedProduct(product)
+              }
+            }
+          }
         } catch (e) {
           // Application might have been submitted or deleted
           console.warn('❌ Could not load saved application:', e)
@@ -129,6 +151,16 @@ onMounted(async () => {
           localStorage.setItem('current_application_id', draftApp.id)
           // Restore progress (step)
           applicationStore.restoreProgress()
+
+          // Set the selected product from the loaded draft
+          const loadedDraft = applicationStore.currentApplication as Application | null
+          if (loadedDraft?.product_id) {
+            const product = tenantStore.products.find(p => p.id === loadedDraft.product_id)
+            if (product) {
+              console.log('🏷️ Setting product from draft application:', product.name)
+              applicationStore.setSelectedProduct(product)
+            }
+          }
           console.log('✅ Loaded draft application')
         } else {
           console.log('⚠️ No draft applications found')
@@ -144,7 +176,9 @@ onMounted(async () => {
 
     console.log('🏁 Final state:', {
       currentApplication: applicationStore.currentApplication?.id || null,
-      status: applicationStore.currentApplication?.status || null
+      status: applicationStore.currentApplication?.status || null,
+      selectedProduct: applicationStore.selectedProduct?.name || null,
+      required_documents: applicationStore.selectedProduct?.required_documents || []
     })
   } catch (error) {
     console.error('❌ Failed to initialize application:', error)

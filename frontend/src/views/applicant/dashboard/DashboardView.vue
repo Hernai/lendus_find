@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore, useTenantStore, useApplicantStore } from '@/stores'
+import { useAuthStore, useTenantStore, useApplicantStore, useApplicationStore, useOnboardingStore } from '@/stores'
 import { AppButton } from '@/components/common'
 import applicationService, { type Application as ApiApplication } from '@/services/application.service'
 import { useWebSocket } from '@/composables/useWebSocket'
@@ -11,6 +11,8 @@ const router = useRouter()
 const authStore = useAuthStore()
 const tenantStore = useTenantStore()
 const applicantStore = useApplicantStore()
+const applicationStore = useApplicationStore()
+const onboardingStore = useOnboardingStore()
 
 interface PendingDocument {
   type: string
@@ -267,6 +269,20 @@ const viewApplication = (app: Application) => {
 }
 
 const startNewApplication = () => {
+  // Clear any previous application state before starting a new one
+  console.log('🆕 Starting new application - clearing previous state')
+
+  // Reset application store state
+  applicationStore.reset()
+
+  // Clear localStorage references to previous application
+  localStorage.removeItem('current_application_id')
+  localStorage.removeItem('pending_application')
+
+  // Reset onboarding store data
+  onboardingStore.reset()
+
+  // Navigate to start new application flow
   router.push('/solicitud')
 }
 

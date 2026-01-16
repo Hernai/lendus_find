@@ -169,6 +169,12 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'metadata'])->group(
         // Biometric SDK token
         Route::post('/biometric/token', [KycController::class, 'getBiometricToken']);
 
+        // Face Match - compare selfie with INE photo
+        Route::post('/biometric/face-match', [KycController::class, 'validateFaceMatch']);
+
+        // Liveness detection - verify real person (anti-spoofing)
+        Route::post('/biometric/liveness', [KycController::class, 'validateLiveness']);
+
         // SPEI CEP validation
         Route::post('/cep/validate', [KycController::class, 'validateCep']);
 

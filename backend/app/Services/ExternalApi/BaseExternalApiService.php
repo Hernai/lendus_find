@@ -2,6 +2,7 @@
 
 namespace App\Services\ExternalApi;
 
+use App\Models\ApiLog;
 use App\Models\Tenant;
 use App\Models\TenantApiConfig;
 use Illuminate\Http\Client\PendingRequest;
@@ -15,6 +16,13 @@ abstract class BaseExternalApiService
     protected ?TenantApiConfig $config = null;
     protected string $provider;
     protected string $serviceType;
+
+    /**
+     * Context for API logging.
+     */
+    protected ?string $applicantId = null;
+    protected ?string $applicationId = null;
+    protected ?string $userId = null;
 
     /**
      * Base URL for production environment.
@@ -40,6 +48,33 @@ abstract class BaseExternalApiService
     {
         $this->tenant = $tenant;
         $this->loadConfig();
+    }
+
+    /**
+     * Set the applicant context for API logging.
+     */
+    public function forApplicant(?string $applicantId): static
+    {
+        $this->applicantId = $applicantId;
+        return $this;
+    }
+
+    /**
+     * Set the application context for API logging.
+     */
+    public function forApplication(?string $applicationId): static
+    {
+        $this->applicationId = $applicationId;
+        return $this;
+    }
+
+    /**
+     * Set the user context for API logging.
+     */
+    public function forUser(?string $userId): static
+    {
+        $this->userId = $userId;
+        return $this;
     }
 
     /**
@@ -97,10 +132,23 @@ abstract class BaseExternalApiService
     }
 
     /**
+     * Current request context for logging (populated by logRequest, used by logResponse).
+     */
+    protected array $currentRequestContext = [];
+
+    /**
      * Log API request for debugging and auditing.
      */
     protected function logRequest(string $method, string $endpoint, array $data = []): void
     {
+        // Store context for when response is logged
+        $this->currentRequestContext = [
+            'method' => $method,
+            'endpoint' => $endpoint,
+            'payload' => $data,
+            'start_time' => microtime(true),
+        ];
+
         Log::channel('external_api')->info("External API Request", [
             'provider' => $this->provider,
             'tenant_id' => $this->tenant->id,
@@ -111,9 +159,9 @@ abstract class BaseExternalApiService
     }
 
     /**
-     * Log API response.
+     * Log API response and persist to api_logs table.
      */
-    protected function logResponse(Response $response, string $endpoint): void
+    protected function logResponse(Response $response, string $endpoint, ?string $service = null): void
     {
         $level = $response->successful() ? 'info' : 'error';
 
@@ -124,6 +172,92 @@ abstract class BaseExternalApiService
             'status' => $response->status(),
             'success' => $response->successful(),
         ]);
+
+        // Persist to api_logs table
+        $this->persistApiLog($response, $endpoint, $service);
+    }
+
+    /**
+     * Persist API call to the api_logs table.
+     */
+    protected function persistApiLog(Response $response, string $endpoint, ?string $service = null): void
+    {
+        try {
+            $context = $this->currentRequestContext;
+            $durationMs = isset($context['start_time'])
+                ? (int) ((microtime(true) - $context['start_time']) * 1000)
+                : null;
+
+            // Determine service name from endpoint if not provided
+            $serviceName = $service ?? $this->extractServiceFromEndpoint($endpoint);
+
+            // Get full URL
+            $fullUrl = $this->getBaseUrl() . '/' . ltrim($endpoint, '/');
+
+            // Parse response body
+            $responseBody = $response->json() ?? ['raw' => substr($response->body(), 0, 5000)];
+
+            // Determine error info
+            $success = $response->successful();
+            $errorCode = null;
+            $errorMessage = null;
+
+            if (!$success) {
+                $errorCode = (string) $response->status();
+                $errorMessage = $responseBody['mensaje'] ?? $responseBody['message'] ?? $responseBody['error'] ?? 'HTTP ' . $response->status();
+            }
+
+            // Create the log entry
+            ApiLog::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenant->id,
+                'applicant_id' => $this->applicantId,
+                'application_id' => $this->applicationId,
+                'user_id' => $this->userId,
+                'provider' => strtoupper($this->provider),
+                'service' => $serviceName,
+                'endpoint' => $fullUrl,
+                'method' => strtoupper($context['method'] ?? 'POST'),
+                'request_headers' => ApiLog::maskSensitiveData($this->getDefaultHeaders()),
+                'request_payload' => ApiLog::maskSensitiveData($context['payload'] ?? []),
+                'response_status' => $response->status(),
+                'response_headers' => $response->headers(),
+                'response_body' => ApiLog::maskSensitiveData($responseBody),
+                'success' => $success,
+                'error_code' => $errorCode,
+                'error_message' => $errorMessage,
+                'duration_ms' => $durationMs,
+                'metadata' => [
+                    'sandbox' => $this->config?->is_sandbox ?? false,
+                ],
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            // Clear context
+            $this->currentRequestContext = [];
+        } catch (\Exception $e) {
+            // Don't let logging failures break the application
+            Log::error('Failed to persist API log', [
+                'provider' => $this->provider,
+                'endpoint' => $endpoint,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Extract service name from endpoint.
+     */
+    protected function extractServiceFromEndpoint(string $endpoint): string
+    {
+        // Remove leading slashes and version prefixes
+        $clean = preg_replace('/^\/?([a-z]+\/)?v\d+\//', '', $endpoint);
+
+        // Take first two path segments
+        $parts = explode('/', $clean);
+        $service = implode('_', array_slice($parts, 0, 2));
+
+        return $service ?: $endpoint;
     }
 
     /**

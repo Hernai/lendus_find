@@ -384,12 +384,32 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           // ext_number is optional when using INE address (is_ine_address flag)
           const s3 = data.value.step3
           const isIneAddress = s3.is_ine_address === true
-          if (!s3.street || !s3.neighborhood || !s3.postal_code || !s3.state || !s3.housing_type) {
-            throw new Error('Faltan campos requeridos en dirección')
+
+          // Log for debugging
+          console.log('[Onboarding] Step 3 data:', {
+            street: s3.street,
+            ext_number: s3.ext_number,
+            neighborhood: s3.neighborhood,
+            postal_code: s3.postal_code,
+            state: s3.state,
+            housing_type: s3.housing_type,
+            is_ine_address: isIneAddress
+          })
+
+          // Check each required field individually for better error messages
+          const missingFields: string[] = []
+          if (!s3.street) missingFields.push('calle')
+          if (!s3.neighborhood) missingFields.push('colonia')
+          if (!s3.postal_code) missingFields.push('código postal')
+          if (!s3.state) missingFields.push('estado')
+          if (!s3.housing_type) missingFields.push('tipo de vivienda')
+
+          if (missingFields.length > 0) {
+            throw new Error(`Faltan campos requeridos en dirección: ${missingFields.join(', ')}`)
           }
           // ext_number is required only for non-INE addresses
           if (!isIneAddress && !s3.ext_number) {
-            throw new Error('Faltan campos requeridos en dirección')
+            throw new Error('Falta el número exterior')
           }
           await applicantStore.updateAddress({
             street: s3.street,

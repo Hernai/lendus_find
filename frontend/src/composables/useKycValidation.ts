@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { useKycStore } from '@/stores/kyc'
 import { useApplicantStore } from '@/stores/applicant'
+import { useApplicationStore } from '@/stores/application'
 import { storeToRefs } from 'pinia'
 
 export type KycStep = 'ine-front' | 'ine-back' | 'selfie' | 'validating' | 'result'
@@ -23,6 +24,8 @@ export interface UseKycValidationReturn {
   allPassed: import('vue').ComputedRef<boolean>
   /** Overall error message */
   error: import('vue').ComputedRef<string | null>
+  /** Whether selfie/face match is required for current product */
+  requiresSelfie: import('vue').ComputedRef<boolean>
   /** Move to next step */
   nextStep: () => void
   /** Move to previous step */
@@ -44,18 +47,38 @@ export interface UseKycValidationReturn {
 export function useKycValidation(): UseKycValidationReturn {
   const kycStore = useKycStore()
   const applicantStore = useApplicantStore()
+  const applicationStore = useApplicationStore()
   const {
     validations,
     lockedData,
-    isValidating,
     error: storeError,
     ineFrontImage,
-    ineBackImage,
-    verified
+    selfieImage
   } = storeToRefs(kycStore)
 
   // Current step in the process
   const currentStep = ref<KycStep>('ine-front')
+
+  // Check if selfie/face match is required for the current product
+  // Products can specify 'SELFIE' in their required_documents array
+  const requiresSelfie = computed(() => {
+    const product = applicationStore.selectedProduct
+    if (!product) return false
+
+    // Check if product requires selfie in required_documents or required_docs
+    // Backend may send either field name depending on the endpoint
+    const requiredDocs = product.required_documents || product.required_docs || []
+    console.log('[KYC] Checking requiresSelfie - requiredDocs:', requiredDocs)
+
+    return requiredDocs.some((doc) => {
+      // Handle both string and object formats
+      const docType = typeof doc === 'string' ? doc : doc.type
+      const upperType = docType?.toUpperCase() || ''
+      return upperType === 'SELFIE' ||
+             upperType === 'FACE_MATCH' ||
+             upperType === 'BIOMETRIC'
+    })
+  })
 
   // Track individual validation statuses
   const validationProgress = ref<Record<string, 'pending' | 'in_progress' | 'success' | 'error' | 'warning'>>({
@@ -63,7 +86,8 @@ export function useKycValidation(): UseKycValidationReturn {
     ine_lista_nominal: 'pending',
     curp_renapo: 'pending',
     pld: 'pending',
-    ofac: 'pending'
+    ofac: 'pending',
+    face_match: 'pending'
   })
 
   const validationMessages = ref<Record<string, string>>({})
@@ -72,38 +96,56 @@ export function useKycValidation(): UseKycValidationReturn {
   const stepOrder: KycStep[] = ['ine-front', 'ine-back', 'selfie', 'validating', 'result']
 
   // Computed validation steps for UI display
-  const validationSteps = computed<ValidationStep[]>(() => [
-    {
-      key: 'ine_ocr',
-      label: 'Extrayendo datos del INE (OCR)',
-      status: validationProgress.value.ine_ocr || 'pending',
-      message: validationMessages.value.ine_ocr || undefined
-    },
-    {
-      key: 'ine_lista_nominal',
-      label: 'Verificando en lista nominal del INE',
-      status: validationProgress.value.ine_lista_nominal || 'pending',
-      message: validationMessages.value.ine_lista_nominal || undefined
-    },
-    {
-      key: 'curp_renapo',
-      label: 'Validando CURP con RENAPO',
-      status: validationProgress.value.curp_renapo || 'pending',
-      message: validationMessages.value.curp_renapo || undefined
-    },
-    {
-      key: 'pld',
-      label: 'Verificando listas PLD (México)',
-      status: validationProgress.value.pld || 'pending',
-      message: validationMessages.value.pld || undefined
-    },
-    {
-      key: 'ofac',
-      label: 'Verificando listas OFAC (Internacional)',
-      status: validationProgress.value.ofac || 'pending',
-      message: validationMessages.value.ofac || undefined
+  const validationSteps = computed<ValidationStep[]>(() => {
+    const steps: ValidationStep[] = [
+      {
+        key: 'ine_ocr',
+        label: 'Extrayendo datos del INE (OCR)',
+        status: validationProgress.value.ine_ocr || 'pending',
+        message: validationMessages.value.ine_ocr || undefined
+      },
+      {
+        key: 'ine_lista_nominal',
+        label: 'Verificando en lista nominal del INE',
+        status: validationProgress.value.ine_lista_nominal || 'pending',
+        message: validationMessages.value.ine_lista_nominal || undefined
+      },
+      {
+        key: 'curp_renapo',
+        label: 'Validando CURP con RENAPO',
+        status: validationProgress.value.curp_renapo || 'pending',
+        message: validationMessages.value.curp_renapo || undefined
+      }
+    ]
+
+    // Add face match step only if selfie is required
+    if (requiresSelfie.value) {
+      steps.push({
+        key: 'face_match',
+        label: 'Comparando rostro con INE',
+        status: validationProgress.value.face_match || 'pending',
+        message: validationMessages.value.face_match || undefined
+      })
     }
-  ])
+
+    // Always add PLD and OFAC steps
+    steps.push(
+      {
+        key: 'pld',
+        label: 'Verificando listas PLD (México)',
+        status: validationProgress.value.pld || 'pending',
+        message: validationMessages.value.pld || undefined
+      },
+      {
+        key: 'ofac',
+        label: 'Verificando listas OFAC (Internacional)',
+        status: validationProgress.value.ofac || 'pending',
+        message: validationMessages.value.ofac || undefined
+      }
+    )
+
+    return steps
+  })
 
   // Check if all validations are complete
   const isComplete = computed(() => {
@@ -177,6 +219,7 @@ export function useKycValidation(): UseKycValidationReturn {
       ine_ocr: 'pending',
       ine_lista_nominal: 'pending',
       curp_renapo: 'pending',
+      face_match: 'pending',
       pld: 'pending',
       ofac: 'pending'
     }
@@ -238,9 +281,34 @@ export function useKycValidation(): UseKycValidationReturn {
         validationMessages.value.curp_renapo = 'No se pudo extraer el CURP del INE'
       }
 
-      // Step 3: Check PLD (Mexican blacklists - PGR, PGJ, PEPs, SAT, etc.)
+      // Step 3: Face Match (if selfie is required)
+      // Compares selfie with INE photo to verify identity
+      if (requiresSelfie.value && selfieImage.value) {
+        console.log('[KYC] Step 3: Validating face match...')
+        validationProgress.value.face_match = 'in_progress'
+
+        const faceMatchValid = await kycStore.validateFaceMatch(applicantId)
+        console.log('[KYC] Face match result:', faceMatchValid)
+
+        if (faceMatchValid) {
+          validationProgress.value.face_match = 'success'
+          validationMessages.value.face_match = 'Rostro verificado correctamente'
+        } else {
+          validationProgress.value.face_match = 'error'
+          validationMessages.value.face_match = 'El rostro no coincide con la foto del INE'
+        }
+      } else if (requiresSelfie.value) {
+        // Selfie required but not captured
+        validationProgress.value.face_match = 'error'
+        validationMessages.value.face_match = 'Falta la imagen de selfie'
+      } else {
+        // Selfie not required - mark as success (skipped)
+        validationProgress.value.face_match = 'success'
+      }
+
+      // Step 4: Check PLD (Mexican blacklists - PGR, PGJ, PEPs, SAT, etc.)
       // PLD is NON-BLOCKING - shows warning for review but doesn't fail validation
-      console.log('[KYC] Step 3: Checking PLD blacklists...')
+      console.log('[KYC] Step 4: Checking PLD blacklists...')
       validationProgress.value.pld = 'in_progress'
 
       const pldClear = await kycStore.checkPldBlacklists()
@@ -255,9 +323,9 @@ export function useKycValidation(): UseKycValidationReturn {
         validationMessages.value.pld = 'Requiere revisión - posibles coincidencias en listas PLD'
       }
 
-      // Step 4: Check OFAC (International sanctions - US OFAC, UN)
+      // Step 5: Check OFAC (International sanctions - US OFAC, UN)
       // OFAC is NON-BLOCKING - shows warning for review but doesn't fail validation
-      console.log('[KYC] Step 4: Checking OFAC...')
+      console.log('[KYC] Step 5: Checking OFAC...')
       validationProgress.value.ofac = 'in_progress'
 
       const ofacClear = await kycStore.checkOfac()
@@ -274,11 +342,14 @@ export function useKycValidation(): UseKycValidationReturn {
 
       // Mark as verified if critical validations passed
       // PLD and OFAC warnings don't block - they just flag for review
+      // Face match is only critical if selfie is required
+      const faceMatchPassed = !requiresSelfie.value || validationProgress.value.face_match === 'success'
       const criticalPassed =
         validationProgress.value.ine_ocr === 'success' &&
-        validationProgress.value.curp_renapo === 'success'
+        validationProgress.value.curp_renapo === 'success' &&
+        faceMatchPassed
 
-      console.log('[KYC] Critical passed:', criticalPassed, 'ine_ocr:', validationProgress.value.ine_ocr, 'curp:', validationProgress.value.curp_renapo)
+      console.log('[KYC] Critical passed:', criticalPassed, 'ine_ocr:', validationProgress.value.ine_ocr, 'curp:', validationProgress.value.curp_renapo, 'face_match:', validationProgress.value.face_match)
 
       if (criticalPassed) {
         kycStore.markVerified()
@@ -339,6 +410,13 @@ export function useKycValidation(): UseKycValidationReturn {
             const ofacClear = await kycStore.checkOfac()
             validationProgress.value.ofac = ofacClear ? 'success' : 'warning'
             break
+
+          case 'face_match':
+            if (requiresSelfie.value && selfieImage.value) {
+              const faceMatchValid = await kycStore.validateFaceMatch(applicantId)
+              validationProgress.value.face_match = faceMatchValid ? 'success' : 'error'
+            }
+            break
         }
       } catch {
         validationProgress.value[step] = 'error'
@@ -357,6 +435,7 @@ export function useKycValidation(): UseKycValidationReturn {
       ine_ocr: 'pending',
       ine_lista_nominal: 'pending',
       curp_renapo: 'pending',
+      face_match: 'pending',
       pld: 'pending',
       ofac: 'pending'
     }
@@ -370,6 +449,7 @@ export function useKycValidation(): UseKycValidationReturn {
     isComplete,
     allPassed,
     error,
+    requiresSelfie,
     nextStep,
     previousStep,
     goToStep,

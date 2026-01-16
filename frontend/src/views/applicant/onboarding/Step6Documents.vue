@@ -194,17 +194,32 @@ const uploadKycDocuments = async () => {
       const file = new File([blob], `${type.toLowerCase()}.jpg`, { type: 'image/jpeg' })
 
       // Prepare KYC metadata for auto-approval
-      const kycMetadata = {
-        kyc_validated: true,
-        source: 'kyc',
-        nubarium_validated: true,
-        validation_method: 'KYC_INE_OCR',
-        ine_ocr: true,
-        validated_at: new Date().toISOString(),
-        ine_valid: true, // Document was validated during KYC
-        ocr_curp: kycStore.lockedData.curp || null,
-        ocr_data: kycStore.lockedData
-      }
+      // Use different metadata for selfie (face match) vs INE (OCR)
+      const isSelfie = type === 'SELFIE'
+      const kycMetadata = isSelfie
+        ? {
+            kyc_validated: true,
+            source: 'kyc',
+            nubarium_validated: true,
+            validation_method: 'KYC_FACE_MATCH',
+            face_match: true,
+            validated_at: new Date().toISOString(),
+            face_match_score: kycStore.validations.face_match?.score || null,
+            face_match_passed: kycStore.validations.face_match?.match || false,
+            liveness_passed: kycStore.validations.liveness?.passed || null,
+            liveness_score: kycStore.validations.liveness?.score || null
+          }
+        : {
+            kyc_validated: true,
+            source: 'kyc',
+            nubarium_validated: true,
+            validation_method: 'KYC_INE_OCR',
+            ine_ocr: true,
+            validated_at: new Date().toISOString(),
+            ine_valid: true, // Document was validated during KYC
+            ocr_curp: kycStore.lockedData.curp || null,
+            ocr_data: kycStore.lockedData
+          }
 
       // Upload to backend with KYC metadata
       const formData = new FormData()

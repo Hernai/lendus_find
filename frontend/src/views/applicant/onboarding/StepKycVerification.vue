@@ -1,20 +1,19 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, watchEffect } from 'vue'
+import { ref, computed, onMounted, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
-import { useKycStore, useOnboardingStore } from '@/stores'
+import { useKycStore, useOnboardingStore, useApplicationStore, useTenantStore, useApplicantStore } from '@/stores'
 import { useKycValidation } from '@/composables/useKycValidation'
 import { AppButton } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
 import IneCapture from '@/components/kyc/IneCapture.vue'
-
-// Debug: watch allPassed changes
-if (import.meta.env.DEV) {
-  console.log('[StepKYC] Component loaded')
-}
+import SelfieCapture from '@/components/kyc/SelfieCapture.vue'
 
 const router = useRouter()
 const kycStore = useKycStore()
 const onboardingStore = useOnboardingStore()
+const applicationStore = useApplicationStore()
+const tenantStore = useTenantStore()
+const applicantStore = useApplicantStore()
 
 // Use the validation composable
 const {
@@ -26,14 +25,18 @@ const {
   nextStep,
   goToStep,
   runValidations,
-  resetKyc
+  resetKyc,
+  requiresSelfie
 } = useKycValidation()
 
-// Debug: watch allPassed in dev mode
+// Debug: watch allPassed and requiresSelfie in dev mode
 if (import.meta.env.DEV) {
   watchEffect(() => {
     console.log('[StepKYC Watch] allPassed:', allPassed.value)
     console.log('[StepKYC Watch] isComplete:', isComplete.value)
+    console.log('[StepKYC Watch] requiresSelfie:', requiresSelfie.value)
+    console.log('[StepKYC Watch] selectedProduct:', applicationStore.selectedProduct?.name)
+    console.log('[StepKYC Watch] required_documents:', applicationStore.selectedProduct?.required_documents)
     console.log('[StepKYC Watch] validationSteps:', validationSteps.value.map(s => `${s.key}:${s.status}`).join(', '))
   })
 }
@@ -47,9 +50,30 @@ onMounted(async () => {
   isChecking.value = true
 
   try {
-    // NOTE: Don't call onboardingStore.init() here - it tries to load applicant
-    // which doesn't exist yet for new users. The applicant is created in Step 1
-    // after KYC verification.
+    // Load applicant if exists (for returning users starting a new application)
+    // This is needed so that KYC verifications can be properly associated with the applicant
+    await applicantStore.loadApplicant()
+    console.log('[StepKYC] Applicant loaded:', applicantStore.applicant?.id || 'none')
+
+    // Load tenant config to get products
+    await tenantStore.loadConfig()
+
+    // Load product from pending_application if available
+    // This is needed because KYC runs before the application is created
+    const pendingApp = localStorage.getItem('pending_application')
+    if (pendingApp && !applicationStore.selectedProduct) {
+      try {
+        const params = JSON.parse(pendingApp) as { product_id: string }
+        const product = tenantStore.products.find(p => p.id === params.product_id)
+        if (product) {
+          console.log('[StepKYC] Setting product from pending_application:', product.name)
+          console.log('[StepKYC] Product required_documents:', product.required_documents)
+          applicationStore.setSelectedProduct(product)
+        }
+      } catch (e) {
+        console.error('[StepKYC] Failed to parse pending_application:', e)
+      }
+    }
 
     // Check if Nubarium is configured
     const hasNubarium = await kycStore.checkServices()
@@ -96,7 +120,26 @@ const handleIneBackRetake = () => {
   kycStore.setIneBackImage('')
 }
 
-// Start validation after both images captured
+// Handle selfie capture
+const handleSelfieCapture = (image: string) => {
+  kycStore.setSelfieImage(image)
+}
+
+// Handle selfie retake
+const handleSelfieRetake = () => {
+  kycStore.setSelfieImage('')
+}
+
+// Proceed from INE back to selfie or validation
+const proceedAfterIneBack = () => {
+  if (requiresSelfie.value) {
+    goToStep('selfie')
+  } else {
+    startValidation()
+  }
+}
+
+// Start validation after all images captured
 const startValidation = async () => {
   goToStep('validating')
 
@@ -148,23 +191,25 @@ const handleRetry = () => {
 // Computed properties
 const canProceedFromFront = computed(() => !!kycStore.ineFrontImage)
 const canProceedFromBack = computed(() => !!kycStore.ineBackImage)
-const canStartValidation = computed(() => canProceedFromFront.value && canProceedFromBack.value)
+const canProceedFromSelfie = computed(() => !!kycStore.selfieImage)
 
-// Step display info
+// Step display info (dynamic based on whether selfie is required)
 const stepInfo = computed(() => {
+  const totalSteps = requiresSelfie.value ? 4 : 3
+
   switch (currentStep.value) {
     case 'ine-front':
-      return { number: 1, total: 3, title: 'Captura tu INE' }
+      return { number: 1, total: totalSteps, title: 'Captura tu INE' }
     case 'ine-back':
-      return { number: 2, total: 3, title: 'Captura tu INE' }
+      return { number: 2, total: totalSteps, title: 'Captura tu INE' }
     case 'selfie':
-      return { number: 3, total: 3, title: 'Verificación facial' }
+      return { number: 3, total: totalSteps, title: 'Verificación facial' }
     case 'validating':
-      return { number: 3, total: 3, title: 'Verificando identidad' }
+      return { number: requiresSelfie.value ? 4 : 3, total: totalSteps, title: 'Verificando identidad' }
     case 'result':
-      return { number: 3, total: 3, title: 'Verificación completa' }
+      return { number: requiresSelfie.value ? 4 : 3, total: totalSteps, title: 'Verificación completa' }
     default:
-      return { number: 1, total: 3, title: 'Verificación de identidad' }
+      return { number: 1, total: totalSteps, title: 'Verificación de identidad' }
   }
 })
 </script>
@@ -238,9 +283,9 @@ const stepInfo = computed(() => {
                 size="lg"
                 full-width
                 :disabled="!canProceedFromBack"
-                @click="startValidation"
+                @click="proceedAfterIneBack"
               >
-                Verificar mi identidad
+                {{ requiresSelfie ? 'Continuar' : 'Verificar mi identidad' }}
               </AppButton>
               <button
                 type="button"
@@ -248,6 +293,37 @@ const stepInfo = computed(() => {
                 @click="goToStep('ine-front')"
               >
                 Volver a capturar frente
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Selfie capture (only if required by product) -->
+        <div v-else-if="currentStep === 'selfie'">
+          <SelfieCapture
+            :captured-image="kycStore.selfieImage"
+            :is-validated="kycStore.isFaceMatched"
+            @captured="handleSelfieCapture"
+            @retake="handleSelfieRetake"
+          />
+
+          <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+            <div class="max-w-md mx-auto space-y-2">
+              <AppButton
+                variant="primary"
+                size="lg"
+                full-width
+                :disabled="!canProceedFromSelfie"
+                @click="startValidation"
+              >
+                Verificar mi identidad
+              </AppButton>
+              <button
+                type="button"
+                class="w-full text-center text-gray-500 text-sm"
+                @click="goToStep('ine-back')"
+              >
+                Volver a capturar INE
               </button>
             </div>
           </div>

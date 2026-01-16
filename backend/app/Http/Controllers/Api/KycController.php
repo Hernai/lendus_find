@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Applicant;
 use App\Models\AuditLog;
 use App\Models\DataVerification;
+use App\Models\Document;
 use App\Services\ExternalApi\NubariumService;
 use App\Services\VerificationService;
 use Illuminate\Http\JsonResponse;
@@ -143,6 +144,12 @@ class KycController extends Controller
         $tenant = app('tenant');
         $service = new NubariumService($tenant);
 
+        // Set context for API logging
+        if ($request->user()?->applicant) {
+            $service->forApplicant($request->user()->applicant->id)
+                ->forUser($request->user()->id);
+        }
+
         if (!$service->isConfigured()) {
             return response()->json([
                 'message' => 'Servicio de validación no configurado',
@@ -227,6 +234,12 @@ class KycController extends Controller
 
         $tenant = app('tenant');
         $service = new NubariumService($tenant);
+
+        // Set context for API logging
+        if ($request->user()?->applicant) {
+            $service->forApplicant($request->user()->applicant->id)
+                ->forUser($request->user()->id);
+        }
 
         if (!$service->isConfigured()) {
             return response()->json([
@@ -313,6 +326,12 @@ class KycController extends Controller
         $tenant = app('tenant');
         $service = new NubariumService($tenant);
 
+        // Set context for API logging
+        if ($request->user()?->applicant) {
+            $service->forApplicant($request->user()->applicant->id)
+                ->forUser($request->user()->id);
+        }
+
         if (!$service->isConfigured()) {
             return response()->json([
                 'message' => 'Servicio de validación no configurado',
@@ -376,6 +395,12 @@ class KycController extends Controller
         $tenant = app('tenant');
         $service = new NubariumService($tenant);
 
+        // Set context for API logging
+        if ($request->user()?->applicant) {
+            $service->forApplicant($request->user()->applicant->id)
+                ->forUser($request->user()->id);
+        }
+
         if (!$service->isConfigured()) {
             return response()->json([
                 'message' => 'Servicio de validación no configurado',
@@ -420,6 +445,9 @@ class KycController extends Controller
                 ]
             );
 
+            // Update and auto-approve INE documents
+            $this->updateAndApproveIneDocuments($applicant, $ocrData, $result['list_validation'] ?? null);
+
             // Update KYC status if all critical fields verified
             $this->verificationService->updateKycStatus($applicant);
         }
@@ -429,6 +457,170 @@ class KycController extends Controller
             'ocr_data' => $result['ocr_data'] ?? null,
             'list_validation' => $result['list_validation'] ?? null,
             'is_valid' => $result['is_valid'] ?? null,
+            'validation_code' => $result['validation_code'] ?? null,
+        ]);
+    }
+
+    /**
+     * Validate face match between selfie and INE photo.
+     * Compares the captured selfie with the face on the INE to verify identity.
+     */
+    public function validateFaceMatch(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'selfie_image' => 'required|string', // Base64 encoded selfie
+            'ine_image' => 'required|string',    // Base64 encoded INE front (with face)
+            'threshold' => 'nullable|integer|min:50|max:100',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Datos inválidos',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $tenant = app('tenant');
+        $service = new NubariumService($tenant);
+
+        // Set context for API logging
+        if ($request->user()?->applicant) {
+            $service->forApplicant($request->user()->applicant->id)
+                ->forUser($request->user()->id);
+        }
+
+        if (!$service->isConfigured()) {
+            return response()->json([
+                'message' => 'Servicio de validación no configurado',
+            ], 503);
+        }
+
+        $threshold = $request->input('threshold', 80);
+
+        $result = $service->validateFaceMatch(
+            $request->selfie_image,
+            $request->ine_image,
+            $threshold
+        );
+
+        // Audit log (don't log images)
+        $this->logKycAction($request, 'face_match', [
+            'success' => $result['success'] ?? false,
+            'match' => $result['match'] ?? false,
+            'score' => $result['score'] ?? null,
+        ]);
+
+        if (!$result['success']) {
+            return response()->json([
+                'message' => $result['error'] ?? 'Error en comparación facial',
+                'error_code' => $result['error_code'] ?? null,
+            ], 400);
+        }
+
+        // Auto-register face match verification if user has an applicant
+        if ($result['match'] && $request->user()?->applicant) {
+            $applicant = $request->user()->applicant;
+
+            $this->verificationService->verify(
+                $applicant,
+                'face_match',
+                $result['match'] ? 'passed' : 'failed',
+                VerificationMethod::KYC_FACE_MATCH,
+                [
+                    'score' => $result['score'],
+                    'threshold' => $result['threshold'],
+                    'validation_code' => $result['validation_code'] ?? null,
+                ]
+            );
+
+            // Update SELFIE document metadata and auto-approve it
+            $this->updateAndApproveSelfieDocument($applicant, [
+                'score' => $result['score'],
+                'threshold' => $result['threshold'],
+                'validation_code' => $result['validation_code'] ?? null,
+            ]);
+
+            // Update KYC status
+            $this->verificationService->updateKycStatus($applicant);
+        }
+
+        return response()->json([
+            'message' => $result['match'] ? 'Rostros coinciden' : 'Rostros no coinciden',
+            'match' => $result['match'],
+            'score' => $result['score'],
+            'threshold' => $result['threshold'],
+            'validation_code' => $result['validation_code'] ?? null,
+        ]);
+    }
+
+    /**
+     * Validate liveness detection from selfie image.
+     * Verifies that the captured face belongs to a real, present person (anti-spoofing).
+     */
+    public function validateLiveness(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'face_image' => 'required|string', // Base64 encoded face/selfie image
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Datos inválidos',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $tenant = app('tenant');
+        $service = new NubariumService($tenant);
+
+        // Set context for API logging
+        if ($request->user()?->applicant) {
+            $service->forApplicant($request->user()->applicant->id)
+                ->forUser($request->user()->id);
+        }
+
+        if (!$service->isConfigured()) {
+            return response()->json([
+                'message' => 'Servicio de validación no configurado',
+            ], 503);
+        }
+
+        $result = $service->validateLiveness($request->face_image);
+
+        // Audit log (don't log image)
+        $this->logKycAction($request, 'liveness', [
+            'success' => $result['success'] ?? false,
+            'passed' => $result['passed'] ?? false,
+            'score' => $result['score'] ?? null,
+        ]);
+
+        if (!$result['success']) {
+            return response()->json([
+                'message' => $result['error'] ?? 'Error en detección de vida',
+                'error_code' => $result['error_code'] ?? null,
+            ], 400);
+        }
+
+        // Auto-register liveness verification if user has an applicant
+        if ($result['passed'] && $request->user()?->applicant) {
+            $applicant = $request->user()->applicant;
+
+            $this->verificationService->verify(
+                $applicant,
+                'liveness',
+                $result['passed'] ? 'passed' : 'failed',
+                VerificationMethod::KYC_LIVENESS,
+                [
+                    'score' => $result['score'],
+                    'validation_code' => $result['validation_code'] ?? null,
+                ]
+            );
+        }
+
+        return response()->json([
+            'message' => $result['passed'] ? 'Prueba de vida exitosa' : 'Prueba de vida fallida',
+            'passed' => $result['passed'],
+            'score' => $result['score'],
             'validation_code' => $result['validation_code'] ?? null,
         ]);
     }
@@ -496,6 +688,12 @@ class KycController extends Controller
         $tenant = app('tenant');
         $service = new NubariumService($tenant);
 
+        // Set context for API logging
+        if ($request->user()?->applicant) {
+            $service->forApplicant($request->user()->applicant->id)
+                ->forUser($request->user()->id);
+        }
+
         if (!$service->isConfigured()) {
             return response()->json([
                 'message' => 'Servicio de validación no configurado',
@@ -548,6 +746,12 @@ class KycController extends Controller
 
         $tenant = app('tenant');
         $service = new NubariumService($tenant);
+
+        // Set context for API logging
+        if ($request->user()?->applicant) {
+            $service->forApplicant($request->user()->applicant->id)
+                ->forUser($request->user()->id);
+        }
 
         if (!$service->isConfigured()) {
             return response()->json([
@@ -606,6 +810,12 @@ class KycController extends Controller
         $tenant = app('tenant');
         $service = new NubariumService($tenant);
 
+        // Set context for API logging
+        if ($request->user()?->applicant) {
+            $service->forApplicant($request->user()->applicant->id)
+                ->forUser($request->user()->id);
+        }
+
         if (!$service->isConfigured()) {
             return response()->json([
                 'message' => 'Servicio de validación no configurado',
@@ -662,6 +872,12 @@ class KycController extends Controller
         $tenant = app('tenant');
         $service = new NubariumService($tenant);
 
+        // Set context for API logging
+        if ($request->user()?->applicant) {
+            $service->forApplicant($request->user()->applicant->id)
+                ->forUser($request->user()->id);
+        }
+
         if (!$service->isConfigured()) {
             return response()->json([
                 'message' => 'Servicio de validación no configurado',
@@ -706,6 +922,12 @@ class KycController extends Controller
 
         $tenant = app('tenant');
         $service = new NubariumService($tenant);
+
+        // Set context for API logging
+        if ($request->user()?->applicant) {
+            $service->forApplicant($request->user()->applicant->id)
+                ->forUser($request->user()->id);
+        }
 
         if (!$service->isConfigured()) {
             return response()->json([
@@ -781,6 +1003,223 @@ class KycController extends Controller
         return substr($rfc, 0, 4) . '****' . substr($rfc, -4);
     }
 
+    /**
+     * Update SELFIE document metadata and auto-approve it when face_match validation passes.
+     * This is the main method called from validateFaceMatch() to handle both
+     * metadata update AND document approval in the backend.
+     */
+    private function updateAndApproveSelfieDocument(Applicant $applicant, array $faceMatchData): void
+    {
+        // Find the SELFIE document for this applicant
+        $selfieDoc = Document::where('applicant_id', $applicant->id)
+            ->where('type', 'SELFIE')
+            ->first();
+
+        if (!$selfieDoc) {
+            \Log::warning('[KycController] No SELFIE document found to update', [
+                'applicant_id' => $applicant->id,
+            ]);
+            return;
+        }
+
+        // Build new metadata with all KYC validation flags
+        $currentMetadata = $selfieDoc->metadata ?? [];
+        $newMetadata = array_merge($currentMetadata, [
+            'kyc_validated' => true,
+            'face_match_passed' => true,
+            'face_match' => true,
+            'nubarium_validated' => true,
+            'source' => 'kyc',
+            'validation_method' => 'KYC_FACE_MATCH',
+            'validated_at' => now()->toIso8601String(),
+            'face_match_score' => $faceMatchData['score'] ?? null,
+            'threshold' => $faceMatchData['threshold'] ?? null,
+            'validation_code' => $faceMatchData['validation_code'] ?? null,
+        ]);
+
+        // Update document with metadata AND auto-approve
+        $selfieDoc->metadata = $newMetadata;
+        $selfieDoc->status = \App\Enums\DocumentStatus::APPROVED;
+        $selfieDoc->reviewed_at = now();
+        $selfieDoc->save();
+
+        // Also register the document verification in data_verifications table
+        $this->verificationService->verifySelfieDocument(
+            $applicant,
+            $selfieDoc->id,
+            [
+                'face_match_score' => $faceMatchData['score'] ?? null,
+                'face_match_passed' => true,
+            ]
+        );
+
+        \Log::info('[KycController] SELFIE document updated and auto-approved via KYC', [
+            'applicant_id' => $applicant->id,
+            'document_id' => $selfieDoc->id,
+            'face_match_score' => $faceMatchData['score'] ?? null,
+            'status' => 'APPROVED',
+        ]);
+    }
+
+    /**
+     * Update SELFIE document metadata when face_match verification is recorded (legacy method for recordVerifications).
+     */
+    private function updateSelfieDocumentMetadata(Applicant $applicant, ?array $verificationMetadata, string $method): void
+    {
+        // Find the SELFIE document for this applicant
+        $selfieDoc = Document::where('applicant_id', $applicant->id)
+            ->where('type', 'SELFIE')
+            ->first();
+
+        if (!$selfieDoc) {
+            return;
+        }
+
+        // Build new metadata
+        $currentMetadata = $selfieDoc->metadata ?? [];
+        $newMetadata = array_merge($currentMetadata, [
+            'kyc_validated' => true,
+            'face_match_passed' => true,
+            'face_match' => true,
+            'nubarium_validated' => true,
+            'source' => 'kyc',
+            'validation_method' => $method,
+            'validated_at' => now()->toIso8601String(),
+        ]);
+
+        // Add face_match_score from verification metadata if available
+        if ($verificationMetadata) {
+            if (isset($verificationMetadata['score'])) {
+                $newMetadata['face_match_score'] = $verificationMetadata['score'];
+            }
+            if (isset($verificationMetadata['face_match_score'])) {
+                $newMetadata['face_match_score'] = $verificationMetadata['face_match_score'];
+            }
+            if (isset($verificationMetadata['liveness_passed'])) {
+                $newMetadata['liveness_passed'] = $verificationMetadata['liveness_passed'];
+            }
+            if (isset($verificationMetadata['liveness_score'])) {
+                $newMetadata['liveness_score'] = $verificationMetadata['liveness_score'];
+            }
+        }
+
+        // Also auto-approve the document if not already approved
+        if ($selfieDoc->status !== \App\Enums\DocumentStatus::APPROVED) {
+            $selfieDoc->status = \App\Enums\DocumentStatus::APPROVED;
+            $selfieDoc->reviewed_at = now();
+        }
+
+        $selfieDoc->metadata = $newMetadata;
+        $selfieDoc->save();
+
+        \Log::info('[KycController] Updated SELFIE document metadata with KYC validation', [
+            'applicant_id' => $applicant->id,
+            'document_id' => $selfieDoc->id,
+            'face_match_score' => $newMetadata['face_match_score'] ?? null,
+        ]);
+    }
+
+    /**
+     * Update INE documents metadata and auto-approve them when INE validation passes.
+     * This is the main method called from validateIne() to handle both
+     * metadata update AND document approval in the backend.
+     */
+    private function updateAndApproveIneDocuments(Applicant $applicant, array $ocrData, ?array $listValidation): void
+    {
+        $documentTypes = ['INE_FRONT', 'INE_BACK'];
+
+        foreach ($documentTypes as $docType) {
+            $ineDoc = Document::where('applicant_id', $applicant->id)
+                ->where('type', $docType)
+                ->first();
+
+            if (!$ineDoc) {
+                continue;
+            }
+
+            // Build new metadata with all KYC validation flags
+            $currentMetadata = $ineDoc->metadata ?? [];
+            $newMetadata = array_merge($currentMetadata, [
+                'kyc_validated' => true,
+                'ine_valid' => true,
+                'ine_ocr' => true,
+                'nubarium_validated' => true,
+                'source' => 'kyc',
+                'validation_method' => 'KYC_INE_OCR',
+                'validated_at' => now()->toIso8601String(),
+            ]);
+
+            // Add OCR data and list validation if available
+            if (!empty($ocrData)) {
+                $newMetadata['ocr_data'] = $ocrData;
+                $newMetadata['ocr_curp'] = $ocrData['curp'] ?? null;
+            }
+            if ($listValidation) {
+                $newMetadata['list_validation'] = $listValidation;
+                $newMetadata['list_valid'] = $listValidation['valid'] ?? false;
+            }
+
+            // Update document with metadata AND auto-approve
+            $ineDoc->metadata = $newMetadata;
+            $ineDoc->status = \App\Enums\DocumentStatus::APPROVED;
+            $ineDoc->reviewed_at = now();
+            $ineDoc->save();
+
+            \Log::info('[KycController] INE document updated and auto-approved via KYC', [
+                'applicant_id' => $applicant->id,
+                'document_id' => $ineDoc->id,
+                'doc_type' => $docType,
+                'status' => 'APPROVED',
+            ]);
+        }
+    }
+
+    /**
+     * Update INE document metadata when INE verification is recorded.
+     */
+    private function updateIneDocumentMetadata(Applicant $applicant, string $docType, ?array $verificationMetadata, string $method): void
+    {
+        // Find the INE document for this applicant
+        $ineDoc = Document::where('applicant_id', $applicant->id)
+            ->where('type', $docType)
+            ->first();
+
+        if (!$ineDoc) {
+            return;
+        }
+
+        // Build new metadata
+        $currentMetadata = $ineDoc->metadata ?? [];
+        $newMetadata = array_merge($currentMetadata, [
+            'kyc_validated' => true,
+            'ine_valid' => true,
+            'ine_ocr' => true,
+            'nubarium_validated' => true,
+            'source' => 'kyc',
+            'validation_method' => $method,
+            'validated_at' => now()->toIso8601String(),
+        ]);
+
+        // Add OCR data from verification metadata if available
+        if ($verificationMetadata) {
+            if (isset($verificationMetadata['ocr_data'])) {
+                $newMetadata['ocr_data'] = $verificationMetadata['ocr_data'];
+            }
+            if (isset($verificationMetadata['ocr_curp'])) {
+                $newMetadata['ocr_curp'] = $verificationMetadata['ocr_curp'];
+            }
+        }
+
+        $ineDoc->metadata = $newMetadata;
+        $ineDoc->save();
+
+        \Log::info('[KycController] Updated INE document metadata with KYC validation', [
+            'applicant_id' => $applicant->id,
+            'document_id' => $ineDoc->id,
+            'doc_type' => $docType,
+        ]);
+    }
+
     // =========================================================================
     // DATA VERIFICATION ENDPOINTS
     // =========================================================================
@@ -849,6 +1288,19 @@ class KycController extends Controller
                         'locked' => $record->is_locked,
                         'method' => $record->method?->value ?? $record->method,
                     ];
+
+                    // When face_match or selfie verification is recorded, update the SELFIE document metadata
+                    if (in_array($field, ['face_match', 'selfie', 'selfie_document']) && $record->is_verified && $record->is_locked) {
+                        $this->updateSelfieDocumentMetadata($applicant, $metadata, $method);
+                    }
+
+                    // When INE document verification is recorded, update the INE document metadata
+                    if (in_array($field, ['ine_document_front', 'ine_front']) && $record->is_verified && $record->is_locked) {
+                        $this->updateIneDocumentMetadata($applicant, 'INE_FRONT', $metadata, $method);
+                    }
+                    if (in_array($field, ['ine_document_back', 'ine_back']) && $record->is_verified && $record->is_locked) {
+                        $this->updateIneDocumentMetadata($applicant, 'INE_BACK', $metadata, $method);
+                    }
                 }
             }
 

@@ -18,12 +18,24 @@ const hasKycData = computed(() => kycStore.verified && !!kycStore.lockedData.cur
 // Get verification info for fields (for showing method badges)
 const getVerification = (field: string) => kycStore.getFieldVerification(field)
 
-// RFC validation state
+// RFC validation state (declared first so they can be used in computed)
 const isValidatingRfc = ref(false)
 const rfcValidated = ref(false)
 const rfcIsValid = ref(false)
 const rfcRazonSocial = ref<string | null>(null)
 const rfcError = ref<string | null>(null)
+
+// Check if RFC is already validated and locked
+const rfcVerification = computed(() => kycStore.getFieldVerification('rfc'))
+const isRfcLocked = computed(() => {
+  // RFC is locked if:
+  // 1. It has a KYC verification from backend (SAT validation)
+  // 2. OR it was validated successfully in the current session
+  const verification = rfcVerification.value
+  const hasBackendVerification = verification?.is_locked === true || verification?.method === 'KYC_RFC_SAT'
+  const validatedInSession = rfcValidated.value && rfcIsValid.value
+  return hasBackendVerification || validatedInSession
+})
 
 // RFC suggestion state
 const rfcSugerido = ref<string | null>(null)
@@ -107,6 +119,11 @@ const validateRfcWithSat = async () => {
 // Auto-validate RFC when it has valid format (debounced) - only if Nubarium is configured
 let rfcValidationTimeout: ReturnType<typeof setTimeout> | null = null
 watch(() => form.rfc, (newRfc) => {
+  // Skip auto-validation if RFC is already locked (verified)
+  if (isRfcLocked.value) {
+    return
+  }
+
   // Reset validation state
   rfcValidated.value = false
   rfcIsValid.value = false
@@ -119,8 +136,12 @@ watch(() => form.rfc, (newRfc) => {
   }
 
   // Auto-validate if format is valid and Nubarium is configured (with debounce)
-  if (kycStore.hasNubarium && newRfc.length >= 12 && validateRfcFormat(newRfc)) {
+  const canValidate = kycStore.hasNubarium && newRfc.length >= 12 && validateRfcFormat(newRfc)
+  console.log('[RFC Watch] RFC changed:', newRfc, 'length:', newRfc.length, 'hasNubarium:', kycStore.hasNubarium, 'formatValid:', validateRfcFormat(newRfc), 'canValidate:', canValidate)
+
+  if (canValidate) {
     rfcValidationTimeout = setTimeout(() => {
+      console.log('[RFC Watch] Triggering SAT validation for:', newRfc)
       validateRfcWithSat()
     }, 500) // 500ms debounce
   }
@@ -152,6 +173,15 @@ const validatePassportNumber = (passport: string): boolean => {
 onMounted(async () => {
   await onboardingStore.init()
 
+  // Ensure KYC services are checked (needed for RFC auto-validation)
+  await kycStore.checkServices()
+
+  // Load KYC verifications if applicant exists
+  const applicantId = applicantStore.applicant?.id
+  if (applicantId) {
+    await kycStore.loadVerifications(applicantId)
+  }
+
   const step2 = onboardingStore.data.step2
 
   // If KYC data is available, use it (takes priority over stored data)
@@ -162,8 +192,16 @@ onMounted(async () => {
     form.numero_ocr = kycStore.lockedData.ocr || step2.numero_ocr
     form.folio_ine = kycStore.lockedData.cic || kycStore.lockedData.identificador_ciudadano || step2.folio_ine
 
-    // Generar RFC automáticamente desde datos del INE y auto-rellenar SIEMPRE
-    if (
+    // Check if RFC is already verified (locked)
+    const rfcVerified = kycStore.getFieldVerification('rfc')
+    if (rfcVerified?.value) {
+      // Use the verified RFC value (complete with homoclave)
+      form.rfc = rfcVerified.value
+      rfcValidated.value = true
+      rfcIsValid.value = true
+      console.log('[RFC] Using verified RFC from KYC:', form.rfc)
+    } else if (
+      // Generate RFC from INE data only if not already verified
       kycStore.lockedData.nombres &&
       kycStore.lockedData.apellido_paterno &&
       kycStore.lockedData.fecha_nacimiento
@@ -176,11 +214,15 @@ onMounted(async () => {
           kycStore.lockedData.apellido_materno || null,
           kycStore.lockedData.fecha_nacimiento
         )
-        // Usar RFC completo con homoclave (13 caracteres)
+        // Store full RFC suggestion (13 chars with homoclave)
         rfcSugerido.value = resultado.rfcSugerido
-        // SIEMPRE auto-rellenar el RFC calculado
-        form.rfc = resultado.rfcSugerido
-        console.log('[RFC] RFC auto-rellenado:', form.rfc)
+
+        // If RFC is NOT validated, only load first 10 characters (without homoclave)
+        // This allows the user to complete/correct the homoclave
+        const rfcBase = resultado.rfcSugerido.substring(0, 10)
+        form.rfc = rfcBase
+        console.log('[RFC] RFC base auto-rellenado (sin homoclave):', form.rfc)
+        console.log('[RFC] RFC sugerido completo:', rfcSugerido.value)
       } catch (error) {
         console.error('[RFC] Error al generar RFC:', error)
         // Si falla, usar el valor guardado
@@ -256,13 +298,15 @@ const validate = () => {
 
   // If KYC verified, skip validation of locked fields (CURP, INE fields)
   if (hasKycData.value) {
-    // Only validate RFC (not from KYC)
-    if (!form.rfc.trim()) {
-      errors.rfc = 'El RFC es requerido'
-      isValid = false
-    } else if (!validateRfcFormat(form.rfc)) {
-      errors.rfc = 'RFC inválido (12-13 caracteres)'
-      isValid = false
+    // Only validate RFC if it's not already locked/verified
+    if (!isRfcLocked.value) {
+      if (!form.rfc.trim()) {
+        errors.rfc = 'El RFC es requerido'
+        isValid = false
+      } else if (!validateRfcFormat(form.rfc)) {
+        errors.rfc = 'RFC inválido (12-13 caracteres)'
+        isValid = false
+      }
     }
     return isValid
   }
@@ -419,70 +463,84 @@ const prevStep = () => router.push('/solicitud/paso-1')
             hint="Validado con RENAPO"
           />
 
-          <!-- RFC editable (not from KYC) -->
-          <div class="border-t border-gray-200 my-4 pt-4">
-            <p class="text-sm text-gray-500 mb-4">Completa la siguiente información:</p>
-          </div>
+          <!-- RFC: Show as locked if already verified, otherwise editable -->
+          <template v-if="isRfcLocked">
+            <!-- RFC already verified and locked -->
+            <LockedField
+              label="RFC"
+              :value="form.rfc"
+              format="uppercase"
+              :verified="true"
+              :verification="rfcVerification"
+              hint="Validado con SAT"
+            />
+          </template>
+          <template v-else>
+            <!-- RFC editable (not yet verified) -->
+            <div class="border-t border-gray-200 my-4 pt-4">
+              <p class="text-sm text-gray-500 mb-4">Completa la siguiente información:</p>
+            </div>
 
-          <div class="space-y-2">
-            <!-- RFC Suggestion (if available from KYC) - only show if form.rfc differs from suggestion -->
-            <div v-if="rfcSugerido && form.rfc !== rfcSugerido" class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-2">
-              <div class="flex items-start justify-between">
-                <div class="flex-1">
-                  <p class="text-xs font-medium text-blue-800 mb-1">RFC sugerido basado en tu INE:</p>
-                  <p class="text-lg font-mono font-bold text-blue-900">{{ rfcSugerido }}</p>
-                  <p class="text-xs text-blue-600 mt-1">
-                    Calculado con el algoritmo oficial del SAT
-                  </p>
+            <div class="space-y-2">
+              <!-- RFC Suggestion (if available from KYC) - only show if form.rfc differs from suggestion -->
+              <div v-if="rfcSugerido && form.rfc !== rfcSugerido" class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-2">
+                <div class="flex items-start justify-between">
+                  <div class="flex-1">
+                    <p class="text-xs font-medium text-blue-800 mb-1">RFC sugerido basado en tu INE:</p>
+                    <p class="text-lg font-mono font-bold text-blue-900">{{ rfcSugerido }}</p>
+                    <p class="text-xs text-blue-600 mt-1">
+                      Calculado con el algoritmo oficial del SAT
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    @click="usarRfcSugerido"
+                    class="ml-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Usar
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  @click="usarRfcSugerido"
-                  class="ml-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors"
-                >
-                  Usar
-                </button>
               </div>
-            </div>
 
-            <div class="relative">
-              <AppInput
-                v-model="form.rfc"
-                label="RFC"
-                placeholder="XXXX000000XXX"
-                :error="errors.rfc"
-                :maxlength="13"
-                uppercase
-                required
-              />
-              <!-- Validation indicator inside input area (only if Nubarium configured) -->
-              <div v-if="kycStore.hasNubarium" class="absolute right-3 top-9 flex items-center">
-                <svg v-if="isValidatingRfc" class="animate-spin h-5 w-5 text-primary-500" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <svg v-else-if="rfcValidated && rfcIsValid" class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                </svg>
-                <svg v-else-if="rfcValidated && !rfcIsValid" class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                </svg>
+              <div class="relative">
+                <AppInput
+                  v-model="form.rfc"
+                  label="RFC"
+                  placeholder="XXXX000000XXX"
+                  :error="errors.rfc"
+                  :maxlength="13"
+                  uppercase
+                  required
+                />
+                <!-- Validation indicator inside input area (only if Nubarium configured) -->
+                <div v-if="kycStore.hasNubarium" class="absolute right-3 top-9 flex items-center">
+                  <svg v-if="isValidatingRfc" class="animate-spin h-5 w-5 text-primary-500" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <svg v-else-if="rfcValidated && rfcIsValid" class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                  </svg>
+                  <svg v-else-if="rfcValidated && !rfcIsValid" class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                  </svg>
+                </div>
               </div>
+              <p class="text-xs text-gray-400">
+                Completa tu RFC con homoclave (3 caracteres adicionales). Si no la conoces, usa XXX.
+              </p>
+              <!-- SAT Validation result (only if Nubarium configured) -->
+              <template v-if="kycStore.hasNubarium">
+                <div v-if="rfcValidated && rfcIsValid && rfcRazonSocial" class="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <p class="text-xs text-green-700 font-medium">RFC validado con SAT</p>
+                  <p class="text-sm text-green-800">{{ rfcRazonSocial }}</p>
+                </div>
+                <div v-else-if="rfcValidated && !rfcIsValid" class="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p class="text-xs text-red-700">{{ rfcError || 'RFC no encontrado en SAT' }}</p>
+                </div>
+              </template>
             </div>
-            <p class="text-xs text-gray-400">
-              12-13 caracteres con homoclave. Completa con XXX si no conoces tu homoclave.
-            </p>
-            <!-- SAT Validation result (only if Nubarium configured) -->
-            <template v-if="kycStore.hasNubarium">
-              <div v-if="rfcValidated && rfcIsValid && rfcRazonSocial" class="bg-green-50 border border-green-200 rounded-lg p-3">
-                <p class="text-xs text-green-700 font-medium">RFC validado con SAT</p>
-                <p class="text-sm text-green-800">{{ rfcRazonSocial }}</p>
-              </div>
-              <div v-else-if="rfcValidated && !rfcIsValid" class="bg-red-50 border border-red-200 rounded-lg p-3">
-                <p class="text-xs text-red-700">{{ rfcError || 'RFC no encontrado en SAT' }}</p>
-              </div>
-            </template>
-          </div>
+          </template>
 
           <!-- INE fields locked -->
           <div class="border-t pt-5 mt-4">

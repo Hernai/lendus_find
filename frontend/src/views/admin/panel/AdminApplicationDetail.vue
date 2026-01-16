@@ -35,6 +35,15 @@ interface Document {
   uploaded_at?: string
   reviewed_at?: string
   mime_type?: string
+  metadata?: {
+    kyc_validated?: boolean
+    face_match_passed?: boolean
+    face_match_score?: number
+    validation_method?: string
+    source?: string
+    [key: string]: unknown
+  }
+  is_kyc_locked?: boolean
 }
 
 interface Reference {
@@ -240,6 +249,8 @@ const isLoadingDocViewer = ref(false)
 const selfieUrl = ref<string | null>(null)
 const selfieStatus = ref<'PENDING' | 'APPROVED' | 'REJECTED'>('PENDING')
 const selfieDocId = ref<string | null>(null)
+const selfieIsKycVerified = ref(false) // True if verified by KYC face match - cannot be unapproved
+const selfieFaceMatchScore = ref<number | null>(null) // Face match score percentage
 const isLoadingSelfie = ref(false)
 const showSelfieViewer = ref(false)
 const showSelfieApproveModal = ref(false)
@@ -471,7 +482,7 @@ const fetchApplication = async () => {
         total_to_pay: 0,
         purpose: ''
       },
-      documents: (data.documents || []).map((d: { id: string; type: string; name?: string; status: string; rejection_reason?: string; rejection_comment?: string; uploaded_at?: string; mime_type?: string }) => ({
+      documents: (data.documents || []).map((d: { id: string; type: string; name?: string; status: string; rejection_reason?: string; rejection_comment?: string; uploaded_at?: string; reviewed_at?: string; mime_type?: string; metadata?: Record<string, unknown>; is_kyc_locked?: boolean }) => ({
         id: d.id,
         type: d.type,
         name: d.name || getDocTypeName(d.type),
@@ -479,7 +490,10 @@ const fetchApplication = async () => {
         rejection_reason: d.rejection_reason,
         rejection_comment: d.rejection_comment,
         uploaded_at: d.uploaded_at,
-        mime_type: d.mime_type
+        reviewed_at: d.reviewed_at,
+        mime_type: d.mime_type,
+        metadata: d.metadata,
+        is_kyc_locked: d.is_kyc_locked
       })),
       references: (data.references || []).map((r: { id: string; full_name: string; relationship: string; phone: string; verified: boolean; verification_result?: string; verification_notes?: string; verified_at?: string }) => ({
         id: r.id,
@@ -543,11 +557,121 @@ const loadSelfie = async () => {
   if (!selfieDoc) {
     selfieUrl.value = null
     selfieDocId.value = null
+    selfieIsKycVerified.value = false
     return
   }
 
   selfieDocId.value = selfieDoc.id
   selfieStatus.value = selfieDoc.status
+
+  // Check if selfie was verified by KYC face match (cannot be unapproved)
+  const metadata = selfieDoc.metadata || {}
+
+  // Also check field_verifications for selfie/face_match verification
+  // The field name could be stored in different formats
+  const fieldVerifications = application.value?.field_verifications || {}
+  const selfieVerification = fieldVerifications['SELFIE'] || fieldVerifications['selfie'] || fieldVerifications['face_match']
+  const livenessVerification = fieldVerifications['liveness']
+
+  // Debug: Log all relevant data
+  console.log('[AdminApplicationDetail] Selfie document found:', {
+    id: selfieDoc.id,
+    status: selfieDoc.status,
+    metadata: metadata,
+    metadataKeys: Object.keys(metadata),
+    face_match_passed: metadata.face_match_passed,
+    validation_method: metadata.validation_method,
+    kyc_validated: metadata.kyc_validated,
+    face_match: metadata.face_match,
+    source: metadata.source,
+    nubarium_validated: metadata.nubarium_validated,
+    selfieVerification: selfieVerification,
+    livenessVerification: livenessVerification,
+    allFieldVerifications: Object.keys(fieldVerifications)
+  })
+
+  // Check various metadata fields that indicate KYC face match verification
+  // The metadata can come from different sources with slightly different field names
+  // Check for any truthy value (JSON parsing may return string or boolean)
+  const hasMetadataVerification = !!(
+    metadata.face_match_passed === true ||
+    metadata.face_match_passed === 'true' ||
+    metadata.face_match === true ||
+    metadata.face_match === 'true' ||
+    metadata.validation_method === 'KYC_FACE_MATCH' ||
+    metadata.kyc_validated === true ||
+    metadata.kyc_validated === 'true' ||
+    metadata.nubarium_validated === true ||
+    metadata.nubarium_validated === 'true' ||
+    metadata.source === 'kyc'
+  )
+
+  // Helper function to check if method is KYC-related
+  // Method can be string (from backend) like 'KYC_FACE_MATCH' or 'KYC_LIVENESS'
+  const isKycMethod = (method: string | undefined | null): boolean => {
+    if (!method) return false
+    const methodStr = String(method).toUpperCase()
+    return methodStr.includes('KYC') || methodStr.includes('NUBARIUM') || methodStr.includes('LIVENESS')
+  }
+
+  // Check if there's a field verification for selfie/face_match/liveness with KYC method
+  const hasFieldVerification = !!(
+    (selfieVerification?.verified === true && isKycMethod(selfieVerification.method)) ||
+    (livenessVerification?.verified === true && isKycMethod(livenessVerification.method))
+  )
+
+  // IMPORTANT: Also check if the applicant has KYC face_match verification recorded
+  // This covers the case where metadata wasn't saved to document but face_match was recorded in data_verifications
+  // If face_match or liveness exists as a verified field, the selfie was KYC verified
+  const hasFaceMatchVerification = !!(
+    fieldVerifications['face_match']?.verified === true ||
+    fieldVerifications['liveness']?.verified === true
+  )
+
+  selfieIsKycVerified.value = hasMetadataVerification || hasFieldVerification || hasFaceMatchVerification
+
+  // Extract face match score from metadata or field verifications
+  // Try multiple sources: document metadata, face_match verification, selfie verification
+  let faceMatchScore: number | null = null
+
+  // 1. Try document metadata first
+  if (metadata.face_match_score !== undefined && metadata.face_match_score !== null) {
+    faceMatchScore = Number(metadata.face_match_score)
+  }
+
+  // 2. Try face_match field verification metadata (cast to access metadata property)
+  if (faceMatchScore === null) {
+    const fmVerification = fieldVerifications['face_match'] as Record<string, unknown> | undefined
+    if (fmVerification?.metadata) {
+      const fmMeta = fmVerification.metadata as Record<string, unknown>
+      if (fmMeta.score !== undefined) {
+        faceMatchScore = Number(fmMeta.score)
+      }
+    }
+  }
+
+  // 3. Try selfie verification metadata (cast to access metadata property)
+  if (faceMatchScore === null && selfieVerification) {
+    const selfieVerificationAny = selfieVerification as Record<string, unknown>
+    if (selfieVerificationAny.metadata) {
+      const selfieMeta = selfieVerificationAny.metadata as Record<string, unknown>
+      if (selfieMeta.face_match_score !== undefined) {
+        faceMatchScore = Number(selfieMeta.face_match_score)
+      } else if (selfieMeta.score !== undefined) {
+        faceMatchScore = Number(selfieMeta.score)
+      }
+    }
+  }
+
+  selfieFaceMatchScore.value = faceMatchScore
+
+  console.log('[AdminApplicationDetail] selfieIsKycVerified:', selfieIsKycVerified.value, {
+    hasMetadataVerification,
+    hasFieldVerification,
+    hasFaceMatchVerification,
+    faceMatchScore
+  })
+
   isLoadingSelfie.value = true
 
   try {
@@ -1587,8 +1711,14 @@ const addNote = async () => {
                   'bg-red-100 text-red-800': selfieStatus === 'REJECTED',
                   'bg-yellow-100 text-yellow-800': selfieStatus === 'PENDING'
                 }"
+                :title="selfieIsKycVerified && selfieFaceMatchScore !== null ? `Face match: ${selfieFaceMatchScore.toFixed(0)}%` : ''"
               >
-                {{ selfieStatus === 'APPROVED' ? 'OK' : selfieStatus === 'REJECTED' ? 'X' : '?' }}
+                <template v-if="selfieStatus === 'APPROVED' && selfieIsKycVerified && selfieFaceMatchScore !== null">
+                  {{ selfieFaceMatchScore.toFixed(0) }}%
+                </template>
+                <template v-else>
+                  {{ selfieStatus === 'APPROVED' ? 'OK' : selfieStatus === 'REJECTED' ? 'X' : '?' }}
+                </template>
               </span>
 
               <!-- Approve/Reject/Unapprove buttons inside photo box (subtle icons) - Solo con permiso de revisar documentos -->
@@ -1617,8 +1747,8 @@ const addNote = async () => {
                     </svg>
                   </button>
                 </template>
-                <!-- APPROVED: show unapprove (back to pending) -->
-                <template v-else-if="selfieStatus === 'APPROVED'">
+                <!-- APPROVED: show unapprove (back to pending) - NOT if KYC verified -->
+                <template v-else-if="selfieStatus === 'APPROVED' && !selfieIsKycVerified">
                   <button
                     class="w-6 h-6 flex items-center justify-center rounded-full bg-black/40 hover:bg-yellow-600 text-white/80 hover:text-white transition-colors"
                     @click.stop="showSelfieUnapproveModal = true"
@@ -1628,6 +1758,17 @@ const addNote = async () => {
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
                     </svg>
                   </button>
+                </template>
+                <!-- APPROVED + KYC verified: show lock indicator only -->
+                <template v-else-if="selfieStatus === 'APPROVED' && selfieIsKycVerified">
+                  <div
+                    class="w-6 h-6 flex items-center justify-center rounded-full bg-green-600/80 text-white"
+                    title="Validado por KYC - No modificable"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
                 </template>
                 <!-- REJECTED: show only unreject (back to pending), no direct approve -->
                 <template v-else-if="selfieStatus === 'REJECTED'">
@@ -3562,9 +3703,16 @@ const addNote = async () => {
               <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
               </svg>
-              <span class="font-medium">Aprobada</span>
+              <span class="font-medium">
+                {{ selfieIsKycVerified ? 'Verificada por KYC' : 'Aprobada' }}
+                <template v-if="selfieIsKycVerified && selfieFaceMatchScore !== null">
+                  ({{ selfieFaceMatchScore.toFixed(0) }}% match)
+                </template>
+              </span>
             </div>
+            <!-- Only show unapprove button if NOT verified by KYC face match -->
             <button
+              v-if="!selfieIsKycVerified"
               class="flex items-center gap-2 bg-yellow-500 text-white px-4 py-2 rounded-full shadow-lg hover:bg-yellow-600 active:bg-yellow-700 transition-colors"
               @click.stop="showSelfieViewer = false; showSelfieUnapproveModal = true"
             >

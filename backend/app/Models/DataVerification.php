@@ -233,14 +233,25 @@ class DataVerification extends Model
             ->where('field_name', $fieldName)
             ->first();
 
-        if ($existing && $existing->is_locked) {
-            // Field is locked, return existing record without error
+        // Determine the method enum for comparison
+        $methodEnum = $method instanceof VerificationMethod ? $method : VerificationMethod::tryFrom($methodValue);
+
+        // Allow RENAPO/SAT to override OCR-locked fields (RENAPO is official government source)
+        // RENAPO data should always take precedence over OCR which can have errors
+        $isOfficialSource = in_array($methodEnum, [
+            VerificationMethod::RENAPO,
+            VerificationMethod::KYC_CURP_RENAPO,
+            VerificationMethod::SAT,
+            VerificationMethod::KYC_RFC_SAT,
+        ]);
+
+        if ($existing && $existing->is_locked && !$isOfficialSource) {
+            // Field is locked and new method is not an official source - return existing record
             return $existing;
         }
 
         // Determine if this method should lock the field
         // Lock if method is automated KYC
-        $methodEnum = $method instanceof VerificationMethod ? $method : VerificationMethod::tryFrom($methodValue);
         $shouldLock = $methodEnum && $methodEnum->isAutomated() && $isVerified;
 
         return static::updateOrCreate(

@@ -2,6 +2,7 @@
 
 namespace App\Services\ExternalApi;
 
+use App\Models\ApiLog;
 use App\Models\SmsLog;
 use App\Models\TenantApiConfig;
 use Illuminate\Support\Facades\Log;
@@ -15,6 +16,40 @@ class TwilioService
     protected ?string $whatsappFrom = null;
     protected ?string $tenantId = null;
     protected ?TenantApiConfig $config = null;
+
+    /**
+     * Context for API logging.
+     */
+    protected ?string $applicantId = null;
+    protected ?string $applicationId = null;
+    protected ?string $userId = null;
+
+    /**
+     * Set the applicant context for API logging.
+     */
+    public function forApplicant(?string $applicantId): static
+    {
+        $this->applicantId = $applicantId;
+        return $this;
+    }
+
+    /**
+     * Set the application context for API logging.
+     */
+    public function forApplication(?string $applicationId): static
+    {
+        $this->applicationId = $applicationId;
+        return $this;
+    }
+
+    /**
+     * Set the user context for API logging.
+     */
+    public function forUser(?string $userId): static
+    {
+        $this->userId = $userId;
+        return $this;
+    }
 
     public function __construct(?string $tenantId = null)
     {
@@ -100,6 +135,8 @@ class TwilioService
      */
     public function sendSms(string $to, string $body): array
     {
+        $startTime = microtime(true);
+
         try {
             // Format phone number (ensure E.164 format)
             $to = $this->formatPhoneNumber($to);
@@ -116,6 +153,8 @@ class TwilioService
                 'from' => $this->fromNumber,
                 'body' => $body,
             ]);
+
+            $durationMs = (int) ((microtime(true) - $startTime) * 1000);
 
             // Log to database
             $this->logMessage([
@@ -135,6 +174,17 @@ class TwilioService
                 'sent_at' => now(),
             ]);
 
+            // Log to api_logs
+            $this->logApiCall(
+                'sms_send',
+                ['to' => $to, 'from' => $this->fromNumber, 'body_length' => strlen($body)],
+                true,
+                ['sid' => $message->sid, 'status' => $message->status, 'price' => $message->price],
+                null,
+                null,
+                $durationMs
+            );
+
             Log::info('SMS sent successfully', [
                 'sid' => $message->sid,
                 'status' => $message->status,
@@ -147,6 +197,8 @@ class TwilioService
                 'message' => 'SMS sent successfully',
             ];
         } catch (TwilioException $e) {
+            $durationMs = (int) ((microtime(true) - $startTime) * 1000);
+
             Log::error('Twilio SMS error', [
                 'to' => $to,
                 'error' => $e->getMessage(),
@@ -166,6 +218,17 @@ class TwilioService
                 'sent_at' => now(),
             ]);
 
+            // Log to api_logs
+            $this->logApiCall(
+                'sms_send',
+                ['to' => $to, 'from' => $this->fromNumber, 'body_length' => strlen($body)],
+                false,
+                null,
+                (string) $e->getCode(),
+                $e->getMessage(),
+                $durationMs
+            );
+
             // Provide better error messages for common issues
             $errorMessage = $e->getMessage();
             if (str_contains($errorMessage, '401') || str_contains($errorMessage, 'Authenticate')) {
@@ -182,10 +245,23 @@ class TwilioService
                 'code' => $e->getCode(),
             ];
         } catch (\Exception $e) {
+            $durationMs = (int) ((microtime(true) - $startTime) * 1000);
+
             Log::error('Unexpected error sending SMS', [
                 'to' => $to,
                 'error' => $e->getMessage(),
             ]);
+
+            // Log to api_logs
+            $this->logApiCall(
+                'sms_send',
+                ['to' => $to, 'from' => $this->fromNumber, 'body_length' => strlen($body)],
+                false,
+                null,
+                'EXCEPTION',
+                $e->getMessage(),
+                $durationMs
+            );
 
             return [
                 'success' => false,
@@ -206,6 +282,8 @@ class TwilioService
             ];
         }
 
+        $startTime = microtime(true);
+
         try {
             // Format phone numbers for WhatsApp
             $to = 'whatsapp:' . $this->formatPhoneNumber($to);
@@ -223,6 +301,8 @@ class TwilioService
                 'from' => $from,
                 'body' => $body,
             ]);
+
+            $durationMs = (int) ((microtime(true) - $startTime) * 1000);
 
             // Log to database
             $this->logMessage([
@@ -242,6 +322,17 @@ class TwilioService
                 'sent_at' => now(),
             ]);
 
+            // Log to api_logs
+            $this->logApiCall(
+                'whatsapp_send',
+                ['to' => $to, 'from' => $from, 'body_length' => strlen($body)],
+                true,
+                ['sid' => $message->sid, 'status' => $message->status, 'price' => $message->price],
+                null,
+                null,
+                $durationMs
+            );
+
             Log::info('WhatsApp sent successfully', [
                 'sid' => $message->sid,
                 'status' => $message->status,
@@ -254,6 +345,8 @@ class TwilioService
                 'message' => 'WhatsApp message sent successfully',
             ];
         } catch (TwilioException $e) {
+            $durationMs = (int) ((microtime(true) - $startTime) * 1000);
+
             Log::error('Twilio WhatsApp error', [
                 'to' => $to,
                 'error' => $e->getMessage(),
@@ -273,16 +366,40 @@ class TwilioService
                 'sent_at' => now(),
             ]);
 
+            // Log to api_logs
+            $this->logApiCall(
+                'whatsapp_send',
+                ['to' => $to, 'from' => $from ?? 'whatsapp:' . $this->whatsappFrom, 'body_length' => strlen($body)],
+                false,
+                null,
+                (string) $e->getCode(),
+                $e->getMessage(),
+                $durationMs
+            );
+
             return [
                 'success' => false,
                 'error' => $e->getMessage(),
                 'code' => $e->getCode(),
             ];
         } catch (\Exception $e) {
+            $durationMs = (int) ((microtime(true) - $startTime) * 1000);
+
             Log::error('Unexpected error sending WhatsApp', [
                 'to' => $to,
                 'error' => $e->getMessage(),
             ]);
+
+            // Log to api_logs
+            $this->logApiCall(
+                'whatsapp_send',
+                ['to' => $to, 'body_length' => strlen($body)],
+                false,
+                null,
+                'EXCEPTION',
+                $e->getMessage(),
+                $durationMs
+            );
 
             return [
                 'success' => false,
@@ -324,7 +441,7 @@ class TwilioService
     }
 
     /**
-     * Log message to database
+     * Log message to database (both sms_logs and api_logs)
      */
     protected function logMessage(array $data): void
     {
@@ -334,6 +451,54 @@ class TwilioService
             Log::error('Failed to log SMS/WhatsApp message', [
                 'error' => $e->getMessage(),
                 'data' => $data,
+            ]);
+        }
+    }
+
+    /**
+     * Log API call to api_logs table.
+     */
+    protected function logApiCall(
+        string $service,
+        array $requestPayload,
+        bool $success,
+        ?array $responseData = null,
+        ?string $errorCode = null,
+        ?string $errorMessage = null,
+        ?int $durationMs = null
+    ): void {
+        try {
+            // Mask sensitive data in payload
+            $maskedPayload = ApiLog::maskSensitiveData($requestPayload);
+            $maskedResponse = $responseData ? ApiLog::maskSensitiveData($responseData) : null;
+
+            ApiLog::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenantId,
+                'applicant_id' => $this->applicantId,
+                'application_id' => $this->applicationId,
+                'user_id' => $this->userId,
+                'provider' => ApiLog::PROVIDER_TWILIO,
+                'service' => $service,
+                'endpoint' => 'https://api.twilio.com/2010-04-01/Accounts/' . ($this->config?->account_sid ?? 'global') . '/Messages.json',
+                'method' => 'POST',
+                'request_headers' => ['Content-Type' => 'application/x-www-form-urlencoded'],
+                'request_payload' => $maskedPayload,
+                'response_status' => $success ? 201 : 400,
+                'response_body' => $maskedResponse,
+                'success' => $success,
+                'error_code' => $errorCode,
+                'error_message' => $errorMessage,
+                'duration_ms' => $durationMs,
+                'metadata' => [
+                    'sandbox' => $this->config?->is_sandbox ?? false,
+                ],
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to log Twilio API call', [
+                'error' => $e->getMessage(),
+                'service' => $service,
             ]);
         }
     }

@@ -912,6 +912,228 @@ class NubariumService extends BaseExternalApiService
     }
 
     /**
+     * Compare a selfie image with an INE photo to verify identity (Face Match).
+     * Endpoint: api.nubarium.com/global/biometrics/v1/compare-id-face
+     *
+     * @param string $selfieImage Base64 encoded selfie image
+     * @param string $ineImage Base64 encoded INE photo (front side with face)
+     * @param int $threshold Minimum similarity percentage to consider a match (default: 80)
+     * @return array Result with similarity score and match boolean
+     */
+    public function validateFaceMatch(string $selfieImage, string $ineImage, int $threshold = 80): array
+    {
+        if (!$this->isConfigured()) {
+            return ['success' => false, 'error' => 'Servicio no configurado'];
+        }
+
+        if (empty($selfieImage) || empty($ineImage)) {
+            return [
+                'success' => false,
+                'error' => 'Se requieren ambas imágenes (selfie e INE)',
+            ];
+        }
+
+        $this->logRequest('POST', 'global/biometrics/v1/compare-id-face', [
+            'has_selfie' => true,
+            'has_ine' => true,
+            'threshold' => $threshold,
+        ]);
+
+        try {
+            // Nubarium compare-id-face endpoint parameters:
+            // - id: Front of the ID in base64 format (INE front image with face)
+            // - face: Selfie in base64 format
+            // - media: Type of capture - "image" or "video"
+            // - threshold: (optional) Minimum similarity percentage, default 80
+            $payload = [
+                'id' => $ineImage,           // INE front image (reference face)
+                'face' => $selfieImage,      // Selfie image (probe face)
+                'media' => 'image',          // We're always sending images
+                'threshold' => (string) $threshold,
+            ];
+
+            $response = $this->apiCall('global', 'POST', '/global/biometrics/v1/compare-id-face', $payload, 60);
+
+            $this->logResponse($response, 'global/biometrics/v1/compare-id-face');
+
+            if ($response->successful()) {
+                $data = $response->json();
+
+                // Log the raw response for debugging
+                Log::info('Nubarium Face Match raw response', [
+                    'status' => $data['status'] ?? $data['estatus'] ?? 'NOT_FOUND',
+                    'similarity' => $data['similarity'] ?? $data['similitud'] ?? 'NOT_FOUND',
+                    'messageCode' => $data['messageCode'] ?? $data['codigoMensaje'] ?? 'NOT_FOUND',
+                    'message' => $data['message'] ?? $data['mensaje'] ?? 'NOT_FOUND',
+                    'all_keys' => array_keys($data),
+                ]);
+
+                // Response format for success (messageCode 0):
+                // { "status": "OK", "messageCode": 0, "message": "Face matching ID", "similarity": 99.85, "validationCode": "..." }
+                //
+                // Response format for no match (messageCode 1):
+                // { "status": "OK", "messageCode": 1, "message": "Face not matching ID", "similarity": 45.23, "validationCode": "..." }
+                //
+                // Response format for errors (status ERROR):
+                // { "status": "ERROR", "messageCode": 2, "message": "Could not find a face on the ID" }
+                // { "status": "ERROR", "messageCode": 3, "message": "Could not find a face on the selfie" }
+                // { "status": "ERROR", "messageCode": 4, "message": "More than one face found" }
+
+                $status = $data['status'] ?? $data['estatus'] ?? '';
+                $messageCode = $data['messageCode'] ?? $data['codigoMensaje'] ?? -1;
+
+                // Check for error response
+                if ($status === 'ERROR') {
+                    return [
+                        'success' => false,
+                        'error' => $data['message'] ?? $data['mensaje'] ?? 'Error en comparación facial',
+                        'error_code' => $messageCode,
+                        'validation_code' => $data['validationCode'] ?? $data['codigoValidacion'] ?? null,
+                    ];
+                }
+
+                // Parse similarity score
+                $score = (float) ($data['similarity'] ?? $data['similitud'] ?? 0);
+
+                // messageCode 0 = match, messageCode 1 = no match
+                $match = $messageCode === 0 && $score >= $threshold;
+
+                return [
+                    'success' => true,
+                    'match' => $match,
+                    'score' => $score,
+                    'threshold' => $threshold,
+                    'message_code' => $messageCode,
+                    'validation_code' => $data['validationCode'] ?? $data['codigoValidacion'] ?? null,
+                    'data' => [
+                        'score' => $score,
+                        'match' => $match,
+                        'threshold' => $threshold,
+                        'message' => $match
+                            ? 'Los rostros coinciden'
+                            : ($data['message'] ?? $data['mensaje'] ?? 'Los rostros no coinciden'),
+                    ],
+                    'raw_response' => $data,
+                ];
+            }
+
+            return $this->handleError($response, 'Comparación facial (Face Match)');
+        } catch (\Exception $e) {
+            Log::error('Nubarium Face Match error', ['error' => $e->getMessage()]);
+
+            return [
+                'success' => false,
+                'error' => 'Error en comparación facial: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Validate liveness detection from a selfie image.
+     * Endpoint: api.nubarium.com/global/biometrics/v1/liveness-face
+     *
+     * This validates that the captured face belongs to a real, present person
+     * and not a photo, video, or mask (anti-spoofing).
+     *
+     * @param string $faceImage Base64 encoded face image
+     * @return array Result with liveness score and pass/fail
+     */
+    public function validateLiveness(string $faceImage): array
+    {
+        if (!$this->isConfigured()) {
+            return ['success' => false, 'error' => 'Servicio no configurado'];
+        }
+
+        if (empty($faceImage)) {
+            return [
+                'success' => false,
+                'error' => 'Se requiere imagen del rostro',
+            ];
+        }
+
+        $this->logRequest('POST', 'global/biometrics/v1/liveness-face', [
+            'has_face' => true,
+        ]);
+
+        try {
+            $payload = [
+                'face' => $faceImage,
+            ];
+
+            $response = $this->apiCall('global', 'POST', '/global/biometrics/v1/liveness-face', $payload, 60);
+
+            $this->logResponse($response, 'global/biometrics/v1/liveness-face');
+
+            if ($response->successful()) {
+                $data = $response->json();
+
+                Log::info('Nubarium Liveness raw response', [
+                    'status' => $data['status'] ?? 'NOT_FOUND',
+                    'messageCode' => $data['messageCode'] ?? 'NOT_FOUND',
+                    'liveness' => $data['liveness'] ?? 'NOT_FOUND',
+                    'all_keys' => array_keys($data),
+                ]);
+
+                // Response format for success (messageCode 0 = live, 1 = not live):
+                // { "status": "OK", "messageCode": 0, "message": "Liveness detected", "liveness": 0.95, "validationCode": "..." }
+                // { "status": "OK", "messageCode": 1, "message": "Liveness not detected", "liveness": 0.2, "validationCode": "..." }
+                //
+                // Response format for errors:
+                // { "status": "ERROR", "messageCode": 2, "message": "No face detected" }
+                // { "status": "ERROR", "messageCode": 3, "message": "Too many faces" }
+
+                $status = $data['status'] ?? '';
+                $messageCode = $data['messageCode'] ?? -1;
+
+                if ($status === 'ERROR') {
+                    return [
+                        'success' => false,
+                        'error' => $data['message'] ?? 'Error en detección de vida',
+                        'error_code' => $messageCode,
+                        'validation_code' => $data['validationCode'] ?? null,
+                    ];
+                }
+
+                // Liveness score (0-1 or 0-100 depending on API version)
+                $livenessScore = (float) ($data['liveness'] ?? $data['score'] ?? 0);
+
+                // Normalize to 0-100 if needed
+                if ($livenessScore > 0 && $livenessScore <= 1) {
+                    $livenessScore = $livenessScore * 100;
+                }
+
+                // messageCode 0 = live person detected
+                $passed = $messageCode === 0;
+
+                return [
+                    'success' => true,
+                    'passed' => $passed,
+                    'score' => $livenessScore,
+                    'message_code' => $messageCode,
+                    'validation_code' => $data['validationCode'] ?? null,
+                    'data' => [
+                        'score' => $livenessScore,
+                        'passed' => $passed,
+                        'message' => $passed
+                            ? 'Prueba de vida exitosa'
+                            : ($data['message'] ?? 'Prueba de vida fallida'),
+                    ],
+                    'raw_response' => $data,
+                ];
+            }
+
+            return $this->handleError($response, 'Detección de vida (Liveness)');
+        } catch (\Exception $e) {
+            Log::error('Nubarium Liveness error', ['error' => $e->getMessage()]);
+
+            return [
+                'success' => false,
+                'error' => 'Error en detección de vida: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
      * Get JWT token for Biometric SDK.
      * The token is used by the frontend SDK for face capture and document scanning.
      *

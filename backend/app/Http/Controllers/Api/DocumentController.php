@@ -144,23 +144,33 @@ class DocumentController extends Controller
 
         // Determine initial document status
         // Auto-approve INE documents when they come from validated KYC process
+        // Auto-approve SELFIE when it comes with face match validation
         $initialStatus = DocumentStatus::PENDING;
         $reviewedBy = null;
         $reviewedAt = null;
 
         $isIneDocument = in_array($type, ['INE_FRONT', 'INE_BACK']);
-        $hasKycValidation = !empty($docMetadata['ine_valid']) && $docMetadata['ine_valid'] === true;
+        $isSelfieDocument = $type === 'SELFIE';
+        $hasIneKycValidation = !empty($docMetadata['ine_valid']) && $docMetadata['ine_valid'] === true;
+        $hasFaceMatchValidation = !empty($docMetadata['face_match_passed']) && $docMetadata['face_match_passed'] === true;
 
-        if ($isIneDocument && $hasKycValidation) {
+        if (($isIneDocument && $hasIneKycValidation) || ($isSelfieDocument && $hasFaceMatchValidation)) {
             $initialStatus = DocumentStatus::APPROVED;
             $reviewedBy = $request->user()->id; // System auto-approval recorded under user
             $reviewedAt = now();
 
-            \Log::info("[DocumentController] Auto-approving {$type} - KYC validated", [
+            $logContext = [
                 'applicant_id' => $applicant->id,
                 'application_id' => $application->id,
-                'ocr_curp' => $docMetadata['ocr_curp'] ?? null,
-            ]);
+            ];
+
+            if ($isIneDocument) {
+                $logContext['ocr_curp'] = $docMetadata['ocr_curp'] ?? null;
+                \Log::info("[DocumentController] Auto-approving {$type} - KYC INE validated", $logContext);
+            } else {
+                $logContext['face_match_score'] = $docMetadata['face_match_score'] ?? null;
+                \Log::info("[DocumentController] Auto-approving {$type} - Face match validated", $logContext);
+            }
         }
 
         // Create document record
@@ -181,19 +191,30 @@ class DocumentController extends Controller
         ]);
 
         // Record document verification if auto-approved
-        if ($initialStatus === DocumentStatus::APPROVED && $isIneDocument) {
-            $side = $type === 'INE_FRONT' ? 'front' : 'back';
+        if ($initialStatus === DocumentStatus::APPROVED) {
+            if ($isIneDocument) {
+                $side = $type === 'INE_FRONT' ? 'front' : 'back';
 
-            // Extract OCR data from various possible metadata formats
-            $ocrDataFromMeta = $docMetadata['ocr_data'] ?? [];
-            $ocrData = [
-                'curp' => $docMetadata['ocr_curp'] ?? $ocrDataFromMeta['curp'] ?? null,
-                'first_name' => $docMetadata['ocr_first_name'] ?? $ocrDataFromMeta['nombres'] ?? null,
-                'last_name_1' => $docMetadata['ocr_last_name_1'] ?? $ocrDataFromMeta['apellido_paterno'] ?? null,
-                'last_name_2' => $docMetadata['ocr_last_name_2'] ?? $ocrDataFromMeta['apellido_materno'] ?? null,
-                'birth_date' => $docMetadata['ocr_birth_date'] ?? $ocrDataFromMeta['fecha_nacimiento'] ?? null,
-            ];
-            $this->verificationService->verifyIneDocument($applicant, $side, $document->id, $ocrData);
+                // Extract OCR data from various possible metadata formats
+                $ocrDataFromMeta = $docMetadata['ocr_data'] ?? [];
+                $ocrData = [
+                    'curp' => $docMetadata['ocr_curp'] ?? $ocrDataFromMeta['curp'] ?? null,
+                    'first_name' => $docMetadata['ocr_first_name'] ?? $ocrDataFromMeta['nombres'] ?? null,
+                    'last_name_1' => $docMetadata['ocr_last_name_1'] ?? $ocrDataFromMeta['apellido_paterno'] ?? null,
+                    'last_name_2' => $docMetadata['ocr_last_name_2'] ?? $ocrDataFromMeta['apellido_materno'] ?? null,
+                    'birth_date' => $docMetadata['ocr_birth_date'] ?? $ocrDataFromMeta['fecha_nacimiento'] ?? null,
+                ];
+                $this->verificationService->verifyIneDocument($applicant, $side, $document->id, $ocrData);
+            } elseif ($isSelfieDocument) {
+                // Record selfie verification with face match data
+                $faceMatchData = [
+                    'face_match_score' => $docMetadata['face_match_score'] ?? null,
+                    'face_match_passed' => $docMetadata['face_match_passed'] ?? false,
+                    'liveness_passed' => $docMetadata['liveness_passed'] ?? null,
+                    'liveness_score' => $docMetadata['liveness_score'] ?? null,
+                ];
+                $this->verificationService->verifySelfieDocument($applicant, $document->id, $faceMatchData);
+            }
         }
 
         // Get metadata for timeline

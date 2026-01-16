@@ -181,6 +181,27 @@ onMounted(async () => {
   }
 })
 
+// When user switches to "different" address, pre-fill with INE postal code if available
+// This helps them get started without re-typing everything
+watch(() => addressIsDifferent.value, (newValue, oldValue) => {
+  if (newValue === 'different' && oldValue !== 'different') {
+    console.log('[Step3] User selected different address, pre-filling CP from INE if available')
+    const ineAddr = parsedIneAddress.value
+
+    // Pre-fill postal code from INE if available (to help lookup state/municipality)
+    if (ineAddr.cp && !form.postal_code) {
+      form.postal_code = ineAddr.cp
+      console.log('[Step3] Pre-filled CP from INE:', ineAddr.cp)
+    }
+
+    // Clear other fields so user enters fresh address data
+    form.street = ''
+    form.ext_number = ''
+    form.int_number = ''
+    // neighborhood, state, municipality will be set by postal code lookup
+  }
+})
+
 // Auto-save to store when form changes (except postal_code which triggers lookup)
 watch([
   () => form.state,
@@ -230,6 +251,7 @@ const lookupPostalCode = async (postalCode: string) => {
     await new Promise(resolve => setTimeout(resolve, 500))
 
     // Mock data for common postal codes
+    // In production, this should call SEPOMEX API
     const mockData: Record<string, { state: string; municipality: string; neighborhoods: string[] }> = {
       '06600': {
         state: 'CIUDAD DE MEXICO',
@@ -250,7 +272,16 @@ const lookupPostalCode = async (postalCode: string) => {
         state: 'NUEVO LEON',
         municipality: 'MONTERREY',
         neighborhoods: ['CENTRO', 'OBISPADO', 'MITRAS CENTRO']
-      }
+      },
+      // Chiapas
+      '29000': { state: 'CHIAPAS', municipality: 'TUXTLA GUTIERREZ', neighborhoods: ['CENTRO'] },
+      '29010': { state: 'CHIAPAS', municipality: 'TUXTLA GUTIERREZ', neighborhoods: ['COLONIA DEL BOSQUE'] },
+      '29020': { state: 'CHIAPAS', municipality: 'TUXTLA GUTIERREZ', neighborhoods: ['MOCTEZUMA'] },
+      '29030': { state: 'CHIAPAS', municipality: 'TUXTLA GUTIERREZ', neighborhoods: ['PATRIA NUEVA'] },
+      '29040': { state: 'CHIAPAS', municipality: 'TUXTLA GUTIERREZ', neighborhoods: ['POTINASPAK'] },
+      '29049': { state: 'CHIAPAS', municipality: 'TUXTLA GUTIERREZ', neighborhoods: ['LAS GRANJAS'] },
+      '29050': { state: 'CHIAPAS', municipality: 'TUXTLA GUTIERREZ', neighborhoods: ['LAS GRANJAS'] },
+      '29060': { state: 'CHIAPAS', municipality: 'TUXTLA GUTIERREZ', neighborhoods: ['INFONAVIT GRIJALVA'] }
     }
 
     const data = mockData[postalCode]
@@ -412,20 +443,57 @@ const validate = () => {
 const handleSubmit = async () => {
   if (!validate()) return
 
+  console.log('[Step3] handleSubmit - form data:', {
+    housing_type: form.housing_type,
+    street: form.street,
+    ext_number: form.ext_number,
+    neighborhood: form.neighborhood,
+    postal_code: form.postal_code,
+    state: form.state,
+    hasIneAddress: hasIneAddress.value,
+    addressIsDifferent: addressIsDifferent.value
+  })
+
   try {
     // Use INE address if same, otherwise use form data
     if (hasIneAddress.value && addressIsDifferent.value === 'same') {
       // Use parsed INE address data
       const addr = parsedIneAddress.value
+
+      // If INE address is missing state/neighborhood, try to get from postal code lookup
+      let finalState = addr.estado?.toUpperCase() || ''
+      let finalMunicipio = addr.municipio?.toUpperCase() || ''
+      let finalColonia = addr.colonia?.toUpperCase() || ''
+
+      // If missing state or colonia, do postal code lookup
+      if (addr.cp && (!finalState || !finalColonia)) {
+        console.log('[Step3] INE address missing state/colonia, looking up CP:', addr.cp)
+        // Do inline lookup from mock data
+        const mockData: Record<string, { state: string; municipality: string; neighborhoods: string[] }> = {
+          '29049': { state: 'CHIAPAS', municipality: 'TUXTLA GUTIERREZ', neighborhoods: ['LAS GRANJAS'] },
+          '29000': { state: 'CHIAPAS', municipality: 'TUXTLA GUTIERREZ', neighborhoods: ['CENTRO'] },
+          '29050': { state: 'CHIAPAS', municipality: 'TUXTLA GUTIERREZ', neighborhoods: ['LAS GRANJAS'] },
+          '06600': { state: 'CIUDAD DE MEXICO', municipality: 'CUAUHTEMOC', neighborhoods: ['ROMA NORTE'] },
+          '64000': { state: 'NUEVO LEON', municipality: 'MONTERREY', neighborhoods: ['CENTRO'] }
+        }
+        const cpData = mockData[addr.cp]
+        if (cpData) {
+          finalState = finalState || cpData.state
+          finalMunicipio = finalMunicipio || cpData.municipality
+          finalColonia = finalColonia || (cpData.neighborhoods[0] || '')
+          console.log('[Step3] Found CP data:', { finalState, finalMunicipio, finalColonia })
+        }
+      }
+
       onboardingStore.updateStepData('step3', {
         street: addr.calle?.toUpperCase() || '',
         ext_number: addr.numExt || '', // Use extracted number from street
         int_number: '',
-        neighborhood: addr.colonia?.toUpperCase() || '',
+        neighborhood: finalColonia,
         postal_code: addr.cp || '',
-        city: addr.municipio?.toUpperCase() || '',
-        state: addr.estado?.toUpperCase() || '',
-        municipality: addr.municipio?.toUpperCase() || '',
+        city: finalMunicipio,
+        state: finalState,
+        municipality: finalMunicipio,
         housing_type: form.housing_type,
         years_at_address: form.years_at_address,
         months_at_address: form.months_at_address,
@@ -452,8 +520,22 @@ const handleSubmit = async () => {
     // Save step 3 explicitly
     await onboardingStore.completeStep(3)
     router.push('/solicitud/paso-4')
-  } catch (e) {
+  } catch (e: unknown) {
     console.error('Failed to save step 3:', e)
+    // Show error to user
+    const errorObj = e as Error
+    const errorMsg = errorObj?.message || 'Error al guardar la dirección'
+
+    // Check if it's a validation error and map to specific fields
+    if (errorMsg.includes('código postal')) {
+      errors.postal_code = 'El código postal es requerido'
+    }
+    if (errorMsg.includes('estado')) {
+      errors.state = 'El estado es requerido - ingresa tu código postal'
+    }
+    if (errorMsg.includes('colonia')) {
+      errors.neighborhood = 'La colonia es requerida'
+    }
   }
 }
 

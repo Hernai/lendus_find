@@ -387,7 +387,8 @@ export const useKycStore = defineStore('kyc', () => {
     selfieImage.value = image
   }
 
-  const validateIne = async (applicantId?: string) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const validateIne = async (_applicantId?: string) => {
     if (!ineFrontImage.value) {
       error.value = 'Se requiere la imagen frontal del INE'
       return false
@@ -451,75 +452,15 @@ export const useKycStore = defineStore('kyc', () => {
           data: response.data.ocr_data as unknown as Record<string, unknown>
         }
 
-        // Auto-record INE verifications if applicant_id is provided
-        if (applicantId && response.data.is_valid) {
-          console.log('[KYC Store] Auto-recording INE verifications...')
-
-          // Record all fields from INE OCR
-          if (ocr.nombres) {
-            await recordSingleVerification(applicantId, 'first_name', ocr.nombres, 'KYC_INE_OCR', true, { source: 'ine_ocr' })
-          }
-          if (ocr.apellido_paterno) {
-            await recordSingleVerification(applicantId, 'last_name_1', ocr.apellido_paterno, 'KYC_INE_OCR', true, { source: 'ine_ocr' })
-          }
-          if (ocr.apellido_materno) {
-            await recordSingleVerification(applicantId, 'last_name_2', ocr.apellido_materno, 'KYC_INE_OCR', true, { source: 'ine_ocr' })
-          }
-          if (ocr.fecha_nacimiento) {
-            await recordSingleVerification(applicantId, 'birth_date', ocr.fecha_nacimiento, 'KYC_INE_OCR', true, { source: 'ine_ocr' })
-          }
-          if (ocr.sexo) {
-            await recordSingleVerification(applicantId, 'gender', ocr.sexo, 'KYC_INE_OCR', true, { source: 'ine_ocr' })
-          }
-          if (entidadNacimiento) {
-            await recordSingleVerification(applicantId, 'birth_state', entidadNacimiento, 'KYC_INE_OCR', true, { source: 'curp_extraction' })
-          }
-          if (cleanCurp) {
-            await recordSingleVerification(applicantId, 'curp', cleanCurp, 'KYC_INE_OCR', true, { source: 'ine_ocr', needs_renapo_validation: true })
-          }
-          if (ocr.clave_elector) {
-            await recordSingleVerification(applicantId, 'ine_clave', ocr.clave_elector, 'KYC_INE_OCR', true, { source: 'ine_ocr' })
-          }
-          if (ocr.ocr) {
-            await recordSingleVerification(applicantId, 'ine_ocr', ocr.ocr, 'KYC_INE_OCR', true, { source: 'ine_ocr' })
-          }
-
-          // Record address fields
-          if (ocr.calle) {
-            await recordSingleVerification(applicantId, 'address_street', ocr.calle, 'KYC_INE_OCR', true, { source: 'ine_address' })
-          }
-          if (ocr.colonia) {
-            await recordSingleVerification(applicantId, 'address_neighborhood', ocr.colonia, 'KYC_INE_OCR', true, { source: 'ine_address' })
-          }
-          if (ocr.cp) {
-            await recordSingleVerification(applicantId, 'address_postal_code', ocr.cp, 'KYC_INE_OCR', true, { source: 'ine_address' })
-          }
-          if (ocr.municipio || ocr.ciudad) {
-            await recordSingleVerification(applicantId, 'address_city', ocr.municipio || ocr.ciudad, 'KYC_INE_OCR', true, { source: 'ine_address' })
-          }
-          if (ocr.estado) {
-            await recordSingleVerification(applicantId, 'address_state', ocr.estado, 'KYC_INE_OCR', true, { source: 'ine_address' })
-          }
-
-          console.log('[KYC Store] INE verifications auto-recorded')
-        }
+        // NOTE: Verifications are now handled automatically by the backend
+        // when calling /kyc/ine/validate - no need to call recordSingleVerification here
+        console.log('[KYC Store] INE validated - backend handles verification records automatically')
       }
 
       // Store list validation
       if (response.data.list_validation) {
         validations.value.ine_lista_nominal = response.data.list_validation
-
-        // Auto-record lista nominal validation if successful
-        if (applicantId && response.data.list_validation.valid && lockedData.value.clave_elector) {
-          await recordSingleVerification(
-            applicantId,
-            'ine_clave',
-            lockedData.value.clave_elector,
-            'KYC_INE_LIST',
-            true,
-            response.data.list_validation
-          )
-        }
+        // NOTE: Backend handles this verification automatically
       }
 
       return response.data.is_valid === true
@@ -537,7 +478,8 @@ export const useKycStore = defineStore('kyc', () => {
     }
   }
 
-  const validateCurp = async (curp?: string, applicantId?: string) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const validateCurp = async (curp?: string, _applicantId?: string) => {
     const curpToValidate = curp || lockedData.value.curp
     if (!curpToValidate) {
       error.value = 'Se requiere CURP para validar'
@@ -557,19 +499,59 @@ export const useKycStore = defineStore('kyc', () => {
         data: response.data.data
       }
 
-      // Auto-record CURP validation if successful and applicant_id provided
-      if (applicantId && response.data.valid) {
-        console.log('[KYC Store] Auto-recording CURP RENAPO validation...')
-        await recordSingleVerification(
-          applicantId,
-          'curp',
-          curpToValidate,
-          'KYC_CURP_RENAPO',
-          true,
-          response.data.data || { source: 'renapo' }
-        )
-        console.log('[KYC Store] CURP RENAPO validation auto-recorded')
+      // IMPORTANT: Use RENAPO data as source of truth for names
+      // RENAPO is the official government registry and has accurate data
+      // OCR from INE can have errors (e.g., "HERNAJ" instead of correct name)
+      if (response.data.valid && response.data.data) {
+        const renapoData = response.data.data as {
+          nombres?: string
+          apellido_paterno?: string
+          apellido_materno?: string
+          fecha_nacimiento?: string
+          sexo?: string
+        }
+
+        console.log('[KYC Store] RENAPO data received:', renapoData)
+        console.log('[KYC Store] Previous OCR data:', {
+          nombres: lockedData.value.nombres,
+          apellido_paterno: lockedData.value.apellido_paterno,
+          apellido_materno: lockedData.value.apellido_materno
+        })
+
+        // Override OCR data with RENAPO data (official government source)
+        if (renapoData.nombres) {
+          lockedData.value.nombres = renapoData.nombres
+          console.log('[KYC Store] Updated nombres from RENAPO:', renapoData.nombres)
+        }
+        if (renapoData.apellido_paterno) {
+          lockedData.value.apellido_paterno = renapoData.apellido_paterno
+          console.log('[KYC Store] Updated apellido_paterno from RENAPO:', renapoData.apellido_paterno)
+        }
+        if (renapoData.apellido_materno) {
+          lockedData.value.apellido_materno = renapoData.apellido_materno
+          console.log('[KYC Store] Updated apellido_materno from RENAPO:', renapoData.apellido_materno)
+        }
+        if (renapoData.fecha_nacimiento) {
+          lockedData.value.fecha_nacimiento = renapoData.fecha_nacimiento
+          console.log('[KYC Store] Updated fecha_nacimiento from RENAPO:', renapoData.fecha_nacimiento)
+        }
+        if (renapoData.sexo) {
+          // RENAPO returns 'HOMBRE'/'MUJER', convert to 'H'/'M'
+          const sexoNormalized = renapoData.sexo.toUpperCase().startsWith('H') ? 'H' : 'M'
+          lockedData.value.sexo = sexoNormalized as 'H' | 'M'
+          console.log('[KYC Store] Updated sexo from RENAPO:', sexoNormalized)
+        }
+
+        console.log('[KYC Store] Updated lockedData with RENAPO (official) data:', {
+          nombres: lockedData.value.nombres,
+          apellido_paterno: lockedData.value.apellido_paterno,
+          apellido_materno: lockedData.value.apellido_materno
+        })
       }
+
+      // NOTE: Verifications are now handled automatically by the backend
+      // when calling /kyc/curp/validate - no need to call recordSingleVerification here
+      console.log('[KYC Store] CURP validated - backend handles verification records automatically')
 
       return response.data.valid
     } catch (err: unknown) {
@@ -585,7 +567,8 @@ export const useKycStore = defineStore('kyc', () => {
     }
   }
 
-  const validateRfc = async (rfc: string, applicantId?: string): Promise<{ valid: boolean; razon_social?: string; error?: string }> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const validateRfc = async (rfc: string, _applicantId?: string): Promise<{ valid: boolean; razon_social?: string; error?: string }> => {
     if (!rfc || rfc.length < 12) {
       return { valid: false, error: 'RFC debe tener al menos 12 caracteres' }
     }
@@ -611,23 +594,9 @@ export const useKycStore = defineStore('kyc', () => {
 
       rfcValidation.value = result
 
-      // Auto-record RFC validation if successful and applicant_id provided
-      if (applicantId && isValid) {
-        console.log('[KYC Store] Auto-recording RFC SAT validation...')
-        await recordSingleVerification(
-          applicantId,
-          'rfc',
-          response.data.data.rfc,
-          'KYC_RFC_SAT',
-          true,
-          {
-            razon_social: razonSocial,
-            tipo_persona: response.data.data.tipo_persona,
-            tipo_persona_label: response.data.data.tipo_persona_label
-          }
-        )
-        console.log('[KYC Store] RFC SAT validation auto-recorded')
-      }
+      // NOTE: Verifications are now handled automatically by the backend
+      // when calling /kyc/rfc/validate - no need to call recordSingleVerification here
+      console.log('[KYC Store] RFC validated - backend handles verification records automatically')
 
       return {
         valid: result.valid,
@@ -769,6 +738,116 @@ export const useKycStore = defineStore('kyc', () => {
       return null
     } finally {
       isLoading.value = false
+    }
+  }
+
+  /**
+   * Validate face match between selfie and INE photo.
+   * Compares the captured selfie with the face on the INE to verify identity.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const validateFaceMatch = async (_applicantId?: string): Promise<boolean> => {
+    console.log('[KYC Store] validateFaceMatch called')
+
+    if (!selfieImage.value) {
+      error.value = 'Se requiere la imagen de selfie'
+      return false
+    }
+
+    if (!ineFrontImage.value) {
+      error.value = 'Se requiere la imagen frontal del INE'
+      return false
+    }
+
+    isValidating.value = true
+    error.value = null
+
+    try {
+      console.log('[KYC Store] Calling /kyc/biometric/face-match API...')
+      const response = await api.post<{
+        message: string
+        match: boolean
+        score: number
+        threshold: number
+        validation_code?: string
+      }>('/kyc/biometric/face-match', {
+        selfie_image: selfieImage.value,
+        ine_image: ineFrontImage.value,
+        threshold: 80 // 80% similarity threshold
+      })
+
+      console.log('[KYC Store] Face match response:', response.data)
+
+      const match = response.data.match
+      const score = response.data.score
+
+      // Store the result
+      validations.value.face_match = { score, match }
+
+      // NOTE: Verifications and document approval are now handled automatically by the backend
+      // when calling /kyc/biometric/face-match - no need to call recordSingleVerification here
+      console.log('[KYC Store] Face match validated - backend handles verification records and document approval automatically')
+
+      return match
+    } catch (err: unknown) {
+      console.error('[KYC Store] Failed to validate face match:', err)
+      const errorResponse = err as { response?: { data?: { message?: string } } }
+      error.value = errorResponse.response?.data?.message || 'Error en comparación facial'
+      validations.value.face_match = { score: 0, match: false }
+      return false
+    } finally {
+      isValidating.value = false
+    }
+  }
+
+  /**
+   * Validate liveness detection from selfie image.
+   * Verifies that the captured face belongs to a real, present person (anti-spoofing).
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const validateLiveness = async (_applicantId?: string): Promise<boolean> => {
+    console.log('[KYC Store] validateLiveness called')
+
+    if (!selfieImage.value) {
+      error.value = 'Se requiere la imagen de selfie'
+      return false
+    }
+
+    isValidating.value = true
+    error.value = null
+
+    try {
+      console.log('[KYC Store] Calling /kyc/biometric/liveness API...')
+      const response = await api.post<{
+        message: string
+        passed: boolean
+        score: number
+        validation_code?: string
+      }>('/kyc/biometric/liveness', {
+        face_image: selfieImage.value
+      })
+
+      console.log('[KYC Store] Liveness response:', response.data)
+
+      const passed = response.data.passed
+      const score = response.data.score
+
+      // Store the result
+      validations.value.liveness = { passed, score }
+
+      // NOTE: Verifications are now handled automatically by the backend
+      // when calling /kyc/biometric/liveness - no need to call recordSingleVerification here
+      console.log('[KYC Store] Liveness validated - backend handles verification records automatically')
+
+      return passed
+    } catch (err: unknown) {
+      console.error('[KYC Store] Failed to validate liveness:', err)
+      const errorResponse = err as { response?: { data?: { message?: string } } }
+      error.value = errorResponse.response?.data?.message || 'Error en prueba de vida'
+      validations.value.liveness = { passed: false, score: 0 }
+      return false
+    } finally {
+      isValidating.value = false
     }
   }
 
@@ -1026,9 +1105,59 @@ export const useKycStore = defineStore('kyc', () => {
     }
   }
 
+  // Batching system for verifications to reduce API calls
+  const pendingVerifications = ref<Array<{
+    applicantId: string
+    field: string
+    value: unknown
+    method: string
+    verified: boolean
+    metadata?: Record<string, unknown>
+  }>>([])
+  let batchTimeout: ReturnType<typeof setTimeout> | null = null
+  const BATCH_DELAY_MS = 100 // Wait 100ms to collect all verifications before sending
+
   /**
-   * Record a single verification immediately (auto-record after validation).
-   * Used to automatically save verifications as they happen (INE, CURP, RFC, etc.)
+   * Flush pending verifications to the backend in a single batch.
+   */
+  const flushPendingVerifications = async (): Promise<void> => {
+    if (pendingVerifications.value.length === 0) return
+
+    // Group verifications by applicantId
+    const grouped = new Map<string, typeof pendingVerifications.value>()
+    for (const v of pendingVerifications.value) {
+      const existing = grouped.get(v.applicantId) || []
+      existing.push(v)
+      grouped.set(v.applicantId, existing)
+    }
+
+    // Clear pending verifications before sending
+    pendingVerifications.value = []
+
+    // Send batch for each applicant
+    for (const [applicantId, verifications] of grouped) {
+      try {
+        console.log(`[KYC Store] Batch sending ${verifications.length} verifications for applicant: ${applicantId}`)
+        await api.post('/kyc/verifications', {
+          applicant_id: applicantId,
+          verifications: verifications.map(v => ({
+            field: v.field,
+            value: v.value,
+            method: v.method,
+            verified: v.verified,
+            metadata: v.metadata
+          }))
+        })
+        console.log(`[KYC Store] Batch of ${verifications.length} verifications recorded successfully`)
+      } catch (err) {
+        console.error('[KYC Store] Failed to batch record verifications:', err)
+      }
+    }
+  }
+
+  /**
+   * Record a single verification with batching (auto-record after validation).
+   * Verifications are queued and sent together after a short delay to reduce API calls.
    */
   const recordSingleVerification = async (
     applicantId: string,
@@ -1043,28 +1172,34 @@ export const useKycStore = defineStore('kyc', () => {
       return false
     }
 
-    try {
-      console.log(`[KYC Store] Auto-recording ${field} verification (${method})`)
-      await api.post('/kyc/verifications', {
-        applicant_id: applicantId,
-        verifications: [{
-          field,
-          value,
-          method,
-          verified,
-          metadata
-        }]
-      })
-      console.log(`[KYC Store] ${field} verification recorded successfully`)
-      return true
-    } catch (err) {
-      console.error(`[KYC Store] Failed to auto-record ${field} verification:`, err)
-      return false
+    // Add to pending batch
+    pendingVerifications.value.push({
+      applicantId,
+      field,
+      value,
+      method,
+      verified,
+      metadata
+    })
+
+    // Clear existing timeout and set new one
+    if (batchTimeout) {
+      clearTimeout(batchTimeout)
     }
+
+    // Flush after delay
+    batchTimeout = setTimeout(() => {
+      flushPendingVerifications()
+      batchTimeout = null
+    }, BATCH_DELAY_MS)
+
+    return true
   }
 
   /**
    * Load verified fields from backend for an applicant.
+   * This also reconstructs lockedData from the verified fields so that
+   * the KYC state is properly restored when returning to onboarding.
    */
   const loadVerifications = async (applicantId: string): Promise<boolean> => {
     if (!applicantId) {
@@ -1073,11 +1208,77 @@ export const useKycStore = defineStore('kyc', () => {
     }
 
     try {
+      console.log('[KYC Store] Loading verifications for applicant:', applicantId)
       const response = await api.get<VerificationsResponse>(`/kyc/verifications/${applicantId}`)
-      verifiedFields.value = response.data.data.verified_fields
-      verificationsSummary.value = response.data.data.summary
-      verified.value = response.data.data.kyc_verified
+      console.log('[KYC Store] API response:', response.data)
+
+      verifiedFields.value = response.data.data.verified_fields || {}
+      verificationsSummary.value = response.data.data.summary || {
+        personal_data: {},
+        contact: {},
+        address: {},
+        kyc: {}
+      }
+
+      // Reconstruct lockedData from verified fields
+      // This is important when returning to onboarding after KYC was already done
+      const fields = verifiedFields.value
+      console.log('[KYC Store] verified_fields from API:', fields)
+
+      // Check if we have KYC data (CURP is the key indicator)
+      const hasCurp = !!fields.curp?.value
+      console.log('[KYC Store] hasCurp:', hasCurp, 'value:', fields.curp?.value)
+
+      if (fields.curp?.value) {
+        lockedData.value.curp = fields.curp.value
+      }
+      if (fields.first_name?.value) {
+        lockedData.value.nombres = fields.first_name.value
+      }
+      if (fields.last_name_1?.value) {
+        lockedData.value.apellido_paterno = fields.last_name_1.value
+      }
+      if (fields.last_name_2?.value) {
+        lockedData.value.apellido_materno = fields.last_name_2.value
+      }
+      if (fields.birth_date?.value) {
+        lockedData.value.fecha_nacimiento = fields.birth_date.value
+      }
+      if (fields.gender?.value) {
+        // Convert M/F to H/M format used internally
+        const genderValue = fields.gender.value.toUpperCase()
+        lockedData.value.sexo = (genderValue === 'H' || genderValue === 'M') ? genderValue as 'H' | 'M' : null
+      }
+      if (fields.birth_state?.value) {
+        lockedData.value.entidad_nacimiento = fields.birth_state.value
+      }
+      if (fields.ine_clave?.value) {
+        lockedData.value.clave_elector = fields.ine_clave.value
+      }
+      if (fields.ine_ocr?.value) {
+        lockedData.value.ocr = fields.ine_ocr.value
+      }
+      if (fields.ine_folio?.value || fields.ine_cic?.value) {
+        lockedData.value.cic = fields.ine_folio?.value || fields.ine_cic?.value || null
+      }
+
+      // Set verified based on backend flag OR if we have CURP data (from backend or existing in memory)
+      // This ensures KYC state is restored even if kyc_verified flag is not set
+      // Also preserve verified state if lockedData already has a CURP from current session
+      const hasExistingCurp = !!lockedData.value.curp
+      verified.value = response.data.data.kyc_verified || hasCurp || hasExistingCurp
+
       console.log('[KYC Store] Loaded verifications:', Object.keys(verifiedFields.value).length)
+      console.log('[KYC Store] hasCurp from API:', hasCurp, 'hasExistingCurp:', hasExistingCurp)
+      console.log('[KYC Store] Reconstructed lockedData:', {
+        curp: lockedData.value.curp,
+        nombres: lockedData.value.nombres,
+        clave_elector: lockedData.value.clave_elector,
+        sexo: lockedData.value.sexo,
+        entidad_nacimiento: lockedData.value.entidad_nacimiento
+      })
+      console.log('[KYC Store] verified flag:', verified.value)
+
       return true
     } catch (err) {
       console.error('[KYC Store] Failed to load verifications:', err)
@@ -1161,6 +1362,57 @@ export const useKycStore = defineStore('kyc', () => {
     } catch (err) {
       console.error('[KYC Store] Failed to upload INE documents:', err)
       return result
+    }
+  }
+
+  /**
+   * Upload selfie document with face match validation metadata.
+   * Should be called after face match validation is successful.
+   */
+  const uploadSelfieDocument = async (applicationId: string): Promise<boolean> => {
+    if (!applicationId) {
+      console.warn('[KYC Store] No application ID for uploading selfie document')
+      return false
+    }
+
+    if (!selfieImage.value) {
+      console.warn('[KYC Store] No selfie image to upload')
+      return false
+    }
+
+    // Prepare metadata with face match validation info
+    const selfieMetadata = {
+      kyc_validated: true,
+      source: 'kyc',
+      nubarium_validated: true,
+      validation_method: 'KYC_FACE_MATCH',
+      face_match: true,
+      validated_at: new Date().toISOString(),
+      face_match_score: validations.value.face_match?.score || null,
+      face_match_passed: validations.value.face_match?.match || false,
+      liveness_passed: validations.value.liveness?.passed || null,
+      liveness_score: validations.value.liveness?.score || null
+    }
+
+    try {
+      console.log('[KYC Store] Uploading SELFIE with face match metadata')
+
+      // Convert base64 to File
+      // selfieImage is stored as base64 without data URI prefix
+      const base64Data = selfieImage.value.startsWith('data:')
+        ? selfieImage.value
+        : `data:image/jpeg;base64,${selfieImage.value}`
+      const selfieBlob = await fetch(base64Data).then(r => r.blob())
+      const selfieFile = new File([selfieBlob], 'selfie.jpg', { type: 'image/jpeg' })
+
+      const applicationService = (await import('@/services/application.service')).default
+      await applicationService.uploadDocument(applicationId, 'SELFIE', selfieFile, selfieMetadata)
+
+      console.log('[KYC Store] SELFIE uploaded with face match metadata')
+      return true
+    } catch (err) {
+      console.error('[KYC Store] Failed to upload selfie document:', err)
+      return false
     }
   }
 
@@ -1256,6 +1508,8 @@ export const useKycStore = defineStore('kyc', () => {
     checkOfac,
     checkPldBlacklists,
     getBiometricToken,
+    validateFaceMatch,
+    validateLiveness,
     setFaceMatchResult,
     setLivenessResult,
     markVerified,
@@ -1266,6 +1520,7 @@ export const useKycStore = defineStore('kyc', () => {
     isFieldLocked,
     getFieldVerification,
     uploadIneDocuments,
+    uploadSelfieDocument,
     reset
   }
 })

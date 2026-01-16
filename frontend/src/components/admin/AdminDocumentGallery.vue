@@ -14,6 +14,7 @@ interface Document {
   reviewed_at?: string
   mime_type?: string
   metadata?: Record<string, unknown>
+  is_kyc_locked?: boolean  // Added by backend - true if verified via KYC and locked
 }
 
 const props = withDefaults(defineProps<{
@@ -100,11 +101,49 @@ const getRejectionReasonLabel = (value?: string): string => {
 
 // Check if document was validated through KYC
 const isKycValidated = (doc: Document): boolean => {
-  // Check if document is INE_FRONT or INE_BACK
-  if (doc.type !== 'INE_FRONT' && doc.type !== 'INE_BACK') return false
-
   // Check if document is APPROVED (which indicates it passed validation)
   if (doc.status !== 'APPROVED') return false
+
+  // Debug log for SELFIE
+  if (doc.type === 'SELFIE') {
+    console.log('[AdminDocumentGallery] isKycValidated check for SELFIE:', {
+      id: doc.id,
+      status: doc.status,
+      is_kyc_locked: doc.is_kyc_locked,
+      metadata: doc.metadata
+    })
+  }
+
+  // First check the backend-provided flag (most reliable)
+  if (doc.is_kyc_locked === true) return true
+
+  // Check for SELFIE with face match validation
+  if (doc.type === 'SELFIE') {
+    if (doc.metadata) {
+      const hasFaceMatchValidation = !!(
+        doc.metadata.face_match_passed === true ||
+        doc.metadata.face_match_passed === 'true' ||
+        doc.metadata.face_match === true ||
+        doc.metadata.face_match === 'true' ||
+        doc.metadata.kyc_validated === true ||
+        doc.metadata.nubarium_validated === true ||
+        doc.metadata.validated_by_kyc === true ||
+        doc.metadata.source === 'kyc' ||
+        doc.metadata.source === 'nubarium' ||
+        doc.metadata.validation_method === 'KYC_FACE_MATCH'
+      )
+      if (hasFaceMatchValidation) return true
+    }
+    // If SELFIE is APPROVED but no explicit metadata, check if it might have been auto-approved
+    // by presence of face_match_score
+    if (doc.metadata?.face_match_score !== undefined && doc.metadata?.face_match_score !== null) {
+      return true
+    }
+    return false
+  }
+
+  // Check if document is INE_FRONT or INE_BACK
+  if (doc.type !== 'INE_FRONT' && doc.type !== 'INE_BACK') return false
 
   // Check if metadata indicates KYC validation
   if (doc.metadata) {
@@ -532,7 +571,12 @@ const getStatusBadge = (status: string) => {
               </div>
               <!-- KYC badge -->
               <p v-if="isKycValidated(doc)" class="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded inline-block mb-1">
-                Validado por KYC
+                <template v-if="doc.type === 'SELFIE' && doc.metadata?.face_match_score">
+                  Face Match: {{ Number(doc.metadata.face_match_score).toFixed(0) }}%
+                </template>
+                <template v-else>
+                  Validado por KYC
+                </template>
               </p>
               <!-- Rejection reason -->
               <p v-if="doc.status === 'REJECTED' && doc.rejection_reason" class="text-xs text-red-600 mt-1 truncate">

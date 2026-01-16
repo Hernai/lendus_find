@@ -640,7 +640,21 @@ class ApplicationController extends Controller
         }
 
         // Cannot unapprove documents validated by KYC
-        if ($document->metadata && isset($document->metadata['kyc_validated']) && $document->metadata['kyc_validated'] === true) {
+        // Check for various KYC validation indicators in metadata
+        $metadata = $document->metadata ?? [];
+        $isKycValidated = (
+            ($metadata['kyc_validated'] ?? false) === true ||
+            ($metadata['nubarium_validated'] ?? false) === true ||
+            ($metadata['ine_valid'] ?? false) === true ||
+            ($metadata['face_match_passed'] ?? false) === true ||
+            ($metadata['face_match'] ?? false) === true ||
+            ($metadata['validated_by_kyc'] ?? false) === true ||
+            ($metadata['source'] ?? '') === 'kyc' ||
+            ($metadata['source'] ?? '') === 'nubarium' ||
+            in_array($metadata['validation_method'] ?? '', ['KYC_INE_OCR', 'KYC_FACE_MATCH'])
+        );
+
+        if ($isKycValidated) {
             return response()->json([
                 'message' => 'No se puede desaprobar un documento validado por KYC automático'
             ], 403);
@@ -1116,14 +1130,15 @@ class ApplicationController extends Controller
                 ->mapWithKeys(fn($v) => [
                     $v->field_name => [
                         'verified' => $v->is_verified,
-                        'method' => $v->method,
+                        'method' => $v->method instanceof \App\Enums\VerificationMethod ? $v->method->value : $v->method,
                         'method_label' => $v->method?->label() ?? null,
                         'verified_at' => $v->created_at?->toIso8601String(),
                         'verified_by' => $v->verifier?->name,
                         'notes' => $v->notes,
                         'rejection_reason' => $v->rejection_reason,
-                        'status' => $v->status,
+                        'status' => $v->status instanceof \BackedEnum ? $v->status->value : $v->status,
                         'is_locked' => $v->is_locked ?? false,
+                        'metadata' => $v->metadata, // Include metadata for face_match score, etc.
                     ]
                 ]) ?? [],
 
@@ -1143,18 +1158,69 @@ class ApplicationController extends Controller
             'required_documents' => $application->product?->required_documents ?? $application->product?->required_docs ?? [],
 
             // Documents (uploaded)
-            'documents' => $application->documents->map(fn($doc) => [
-                'id' => $doc->id,
-                'type' => $doc->type instanceof \App\Enums\DocumentType ? $doc->type->value : $doc->type,
-                'name' => $doc->name ?? $doc->file_name,
-                'status' => $doc->status instanceof \App\Enums\DocumentStatus ? $doc->status->value : $doc->status,
-                'rejection_reason' => $doc->rejection_reason,
-                'rejection_comment' => $doc->rejection_comment,
-                'uploaded_at' => $doc->created_at->toIso8601String(),
-                'reviewed_at' => $doc->reviewed_at?->toIso8601String(),
-                'mime_type' => $doc->mime_type,
-                'metadata' => $doc->metadata,
-            ]),
+            'documents' => $application->documents->map(function ($doc) use ($applicant) {
+                $docType = $doc->type instanceof \App\Enums\DocumentType ? $doc->type->value : $doc->type;
+                $metadata = $doc->metadata ?? [];
+
+                // Check if document is KYC locked (from metadata)
+                $isKycLocked = (
+                    ($metadata['kyc_validated'] ?? false) === true ||
+                    ($metadata['nubarium_validated'] ?? false) === true ||
+                    ($metadata['ine_valid'] ?? false) === true ||
+                    ($metadata['face_match_passed'] ?? false) === true ||
+                    ($metadata['face_match'] ?? false) === true ||
+                    ($metadata['validated_by_kyc'] ?? false) === true ||
+                    ($metadata['source'] ?? '') === 'kyc' ||
+                    ($metadata['source'] ?? '') === 'nubarium' ||
+                    in_array($metadata['validation_method'] ?? '', ['KYC_INE_OCR', 'KYC_FACE_MATCH']) ||
+                    // Also check for face_match_score as indicator of KYC validation (for SELFIE)
+                    ($docType === 'SELFIE' && isset($metadata['face_match_score']) && $metadata['face_match_score'] > 0)
+                );
+
+                // Also check data_verifications for selfie/face_match verification
+                if (!$isKycLocked && $docType === 'SELFIE' && $applicant) {
+                    $selfieVerification = \App\Models\DataVerification::where('applicant_id', $applicant->id)
+                        ->whereIn('field_name', ['selfie_document', 'face_match'])
+                        ->where('is_verified', true)
+                        ->where('is_locked', true)
+                        ->first();
+                    $isKycLocked = $selfieVerification !== null;
+
+                    // If found, add face_match_score to metadata for display
+                    if ($isKycLocked && $selfieVerification) {
+                        $verificationMeta = $selfieVerification->metadata ?? [];
+                        if (isset($verificationMeta['face_match_score']) || isset($verificationMeta['score'])) {
+                            $metadata['face_match_score'] = $verificationMeta['face_match_score'] ?? $verificationMeta['score'] ?? null;
+                            $metadata['face_match_passed'] = true;
+                        }
+                    }
+                }
+
+                // For INE documents, check data_verifications
+                if (!$isKycLocked && in_array($docType, ['INE_FRONT', 'INE_BACK']) && $applicant) {
+                    $fieldName = $docType === 'INE_FRONT' ? 'ine_document_front' : 'ine_document_back';
+                    $ineVerification = \App\Models\DataVerification::where('applicant_id', $applicant->id)
+                        ->where('field_name', $fieldName)
+                        ->where('is_verified', true)
+                        ->where('is_locked', true)
+                        ->first();
+                    $isKycLocked = $ineVerification !== null;
+                }
+
+                return [
+                    'id' => $doc->id,
+                    'type' => $docType,
+                    'name' => $doc->name ?? $doc->file_name,
+                    'status' => $doc->status instanceof \App\Enums\DocumentStatus ? $doc->status->value : $doc->status,
+                    'rejection_reason' => $doc->rejection_reason,
+                    'rejection_comment' => $doc->rejection_comment,
+                    'uploaded_at' => $doc->created_at->toIso8601String(),
+                    'reviewed_at' => $doc->reviewed_at?->toIso8601String(),
+                    'mime_type' => $doc->mime_type,
+                    'metadata' => $metadata,
+                    'is_kyc_locked' => $isKycLocked,
+                ];
+            }),
 
             // References
             'references' => $application->references->map(fn($ref) => [

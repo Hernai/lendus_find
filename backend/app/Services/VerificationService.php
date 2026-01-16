@@ -50,8 +50,17 @@ class VerificationService
             ->where('is_verified', true)
             ->first();
 
-        if ($existing && $existing->is_locked) {
-            return $existing; // Already verified and locked
+        // Allow RENAPO/SAT (official government sources) to override OCR-locked fields
+        // RENAPO data is the authoritative source and should take precedence over OCR which can have errors
+        $isOfficialSource = in_array($methodEnum, [
+            VerificationMethod::RENAPO,
+            VerificationMethod::KYC_CURP_RENAPO,
+            VerificationMethod::SAT,
+            VerificationMethod::KYC_RFC_SAT,
+        ]);
+
+        if ($existing && $existing->is_locked && !$isOfficialSource) {
+            return $existing; // Already verified and locked, and new method is not official source
         }
 
         // Determine if this method should lock the field
@@ -448,6 +457,35 @@ class VerificationService
                 'auto_approved' => true,
             ],
             $fieldsToLock
+        );
+    }
+
+    /**
+     * Verify selfie document with face match validation.
+     *
+     * @param User|Applicant $entity
+     * @param string $documentId
+     * @param array $faceMatchData Face match validation data (score, threshold, etc.)
+     * @return DataVerification|null
+     */
+    public function verifySelfieDocument(
+        User|Applicant $entity,
+        string $documentId,
+        array $faceMatchData = []
+    ): ?DataVerification {
+        return $this->verifyDocument(
+            $entity,
+            'SELFIE',
+            $documentId,
+            VerificationMethod::KYC_FACE_MATCH,
+            [
+                'face_match_score' => $faceMatchData['face_match_score'] ?? null,
+                'face_match_passed' => $faceMatchData['face_match_passed'] ?? false,
+                'liveness_passed' => $faceMatchData['liveness_passed'] ?? null,
+                'liveness_score' => $faceMatchData['liveness_score'] ?? null,
+                'auto_approved' => true,
+            ],
+            [] // No fields to lock from selfie
         );
     }
 
