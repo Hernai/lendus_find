@@ -3,6 +3,9 @@ import { ref, computed } from 'vue'
 import { api } from '@/services/api'
 import type { User, OtpMethod, SendOtpResponse, VerifyOtpResponse } from '@/types'
 import { initializeEcho, disconnectEcho } from '@/plugins/echo'
+import { logger } from '@/utils/logger'
+
+const authLogger = logger.child('Auth')
 
 interface RequestOtpApiResponse {
   success: boolean
@@ -166,7 +169,7 @@ export const useAuthStore = defineStore('auth', () => {
 
         // Log dev code if available
         if (response.data.code) {
-          console.log('🔐 Dev OTP Code:', response.data.code)
+          authLogger.debug('Dev OTP Code', { code: response.data.code })
         }
 
         return {
@@ -178,7 +181,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       throw new Error('Failed to send OTP')
     } catch (error) {
-      console.error('Failed to send OTP:', error)
+      authLogger.error('Failed to send OTP', error)
       throw error
     } finally {
       isLoading.value = false
@@ -205,7 +208,7 @@ export const useAuthStore = defineStore('auth', () => {
         // Check if user changed (different user_id)
         const previousUserId = localStorage.getItem('current_user_id')
         if (previousUserId && previousUserId !== apiUser.id) {
-          console.log('🔄 User changed, clearing onboarding cache')
+          authLogger.info('User changed, clearing onboarding cache')
           clearOnboardingCache()
         }
 
@@ -246,7 +249,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       return { success: false, error: 'INVALID_CODE' }
     } catch (error: unknown) {
-      console.error('Failed to verify OTP:', error)
+      authLogger.error('Failed to verify OTP', error)
 
       // Handle 401 - invalid code
       if ((error as { response?: { status?: number } })?.response?.status === 401) {
@@ -283,7 +286,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
     keysToRemove.forEach(key => localStorage.removeItem(key))
 
-    console.log('🧹 Cleared onboarding cache')
+    authLogger.debug('Cleared onboarding cache')
   }
 
   const logout = async () => {
@@ -292,7 +295,7 @@ export const useAuthStore = defineStore('auth', () => {
         await api.post('/auth/logout')
       }
     } catch (error) {
-      console.error('Logout API error:', error)
+      authLogger.error('Logout API error', error)
     } finally {
       user.value = null
       token.value = null
@@ -326,7 +329,7 @@ export const useAuthStore = defineStore('auth', () => {
       // Check if user changed (different user_id)
       const previousUserId = localStorage.getItem('current_user_id')
       if (previousUserId && previousUserId !== apiUser.id) {
-        console.log('🔄 User changed on checkAuth, clearing onboarding cache')
+        authLogger.info('User changed on checkAuth, clearing onboarding cache')
         clearOnboardingCache()
       }
 
@@ -389,12 +392,11 @@ export const useAuthStore = defineStore('auth', () => {
     isLoading.value = true
     try {
       const cleanPhone = phone.replace(/\D/g, '')
-      console.log('🔐 Store checkUser - Raw phone:', phone)
-      console.log('🔐 Store checkUser - Clean phone:', cleanPhone)
+      authLogger.debug('checkUser called', { rawPhone: phone.slice(0, 4) + '***', cleanPhone: cleanPhone.slice(0, 4) + '***' })
 
       const response = await api.post<CheckUserApiResponse>('/auth/check-user', { phone: cleanPhone })
 
-      console.log('🔐 Store checkUser - Response:', response.data)
+      authLogger.debug('checkUser response', { exists: response.data.exists, hasPin: response.data.has_pin })
 
       hasPin.value = response.data.has_pin
       pinLockoutMinutes.value = response.data.lockout_minutes
@@ -408,22 +410,21 @@ export const useAuthStore = defineStore('auth', () => {
     isLoading.value = true
     try {
       const cleanPhone = phone.replace(/\D/g, '')
-      console.log('🔐 Store loginWithPin - Raw phone:', phone)
-      console.log('🔐 Store loginWithPin - Clean phone:', cleanPhone)
+      authLogger.debug('loginWithPin called', { phonePrefix: cleanPhone.slice(0, 4) + '***' })
 
       const response = await api.post<PinLoginApiResponse>('/auth/pin/login', { phone: cleanPhone, pin })
 
-      console.log('🔐 Store loginWithPin - Response:', response.data)
+      authLogger.debug('loginWithPin response', { success: response.data.success })
 
       if (response.data.success) {
         const apiUser = response.data.user
 
-        console.log('🔐 Store loginWithPin - User from API:', apiUser)
+        authLogger.debug('loginWithPin user', { userId: apiUser.id, type: apiUser.type })
 
         // Check if user changed (different user_id)
         const previousUserId = localStorage.getItem('current_user_id')
         if (previousUserId && previousUserId !== apiUser.id) {
-          console.log('🔄 User changed, clearing onboarding cache')
+          authLogger.info('User changed, clearing onboarding cache')
           clearOnboardingCache()
         }
 
@@ -438,7 +439,7 @@ export const useAuthStore = defineStore('auth', () => {
           updated_at: new Date().toISOString()
         }
 
-        console.log('🔐 Store loginWithPin - User set in store:', user.value)
+        authLogger.debug('loginWithPin user set in store', { userId: user.value?.id })
 
         token.value = response.data.token
         localStorage.setItem('auth_token', response.data.token)
@@ -536,7 +537,7 @@ export const useAuthStore = defineStore('auth', () => {
         // Check if user changed (different user_id)
         const previousUserId = localStorage.getItem('current_user_id')
         if (previousUserId && previousUserId !== apiUser.id) {
-          console.log('🔄 User changed, clearing onboarding cache')
+          authLogger.info('User changed, clearing onboarding cache')
           clearOnboardingCache()
         }
 
@@ -605,7 +606,7 @@ export const useAuthStore = defineStore('auth', () => {
         // Check if user changed (different user_id)
         const previousUserId = localStorage.getItem('current_user_id')
         if (previousUserId && previousUserId !== apiUser.id) {
-          console.log('🔄 User changed, clearing onboarding cache')
+          authLogger.info('User changed, clearing onboarding cache')
           clearOnboardingCache()
         }
 
@@ -645,7 +646,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Inicializar WebSocket si ya hay un token al cargar el store
   if (token.value) {
-    console.log('🔌 Inicializando Echo con token existente...')
+    authLogger.debug('Initializing Echo with existing token')
     initializeEcho(token.value)
   }
 

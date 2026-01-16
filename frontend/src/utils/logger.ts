@@ -103,7 +103,7 @@ function createLogger(options: LoggerOptions = {}) {
   const log = (level: LogLevel, message: string, data?: unknown): void => {
     if (!isDev) return
 
-    const timestamp = new Date().toISOString().split('T')[1].slice(0, 12)
+    const timestamp = new Date().toISOString().split('T')[1]?.slice(0, 12) ?? ''
     const formattedPrefix = `${timestamp} ${prefix}`
 
     const processedData = sanitizeData && data ? sanitize(data) : data
