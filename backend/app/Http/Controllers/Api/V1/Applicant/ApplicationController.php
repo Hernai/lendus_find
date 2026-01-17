@@ -58,7 +58,7 @@ class ApplicationController extends Controller
 
         if (!$applicant) {
             return response()->json([
-                'message' => 'You must complete your profile before applying'
+                'message' => 'Debes completar tu perfil antes de solicitar'
             ], 400);
         }
 
@@ -95,7 +95,7 @@ class ApplicationController extends Controller
         if ($request->requested_amount < $product->min_amount ||
             $request->requested_amount > $product->max_amount) {
             return response()->json([
-                'message' => 'Requested amount is outside product limits',
+                'message' => 'El monto solicitado está fuera de los límites del producto',
                 'errors' => [
                     'requested_amount' => [
                         "Amount must be between {$product->min_amount} and {$product->max_amount}"
@@ -198,7 +198,7 @@ class ApplicationController extends Controller
 
         if (!$application->isEditable()) {
             return response()->json([
-                'message' => 'Application cannot be modified in current status'
+                'message' => 'La solicitud no puede ser modificada en su estado actual'
             ], 400);
         }
 
@@ -281,7 +281,7 @@ class ApplicationController extends Controller
         if ($application->status !== ApplicationStatus::DRAFT &&
             $application->status !== ApplicationStatus::DOCS_PENDING) {
             return response()->json([
-                'message' => 'Application cannot be submitted in current status'
+                'message' => 'La solicitud no puede ser enviada en su estado actual'
             ], 400);
         }
 
@@ -331,7 +331,7 @@ class ApplicationController extends Controller
 
         if (!empty($errors)) {
             return response()->json([
-                'message' => 'Application is incomplete',
+                'message' => 'La solicitud está incompleta',
                 'errors' => $errors
             ], 422);
         }
@@ -379,7 +379,7 @@ class ApplicationController extends Controller
 
         if (!in_array($application->status, $cancelableStatuses)) {
             return response()->json([
-                'message' => 'Application cannot be cancelled in current status'
+                'message' => 'La solicitud no puede ser cancelada en su estado actual'
             ], 400);
         }
 

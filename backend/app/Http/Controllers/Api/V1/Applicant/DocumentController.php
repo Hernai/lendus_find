@@ -314,7 +314,7 @@ class DocumentController extends Controller
 
         if ($document->application_id !== $application->id) {
             return response()->json([
-                'message' => 'Document not found'
+                'message' => 'Documento no encontrado'
             ], 404);
         }
 
@@ -385,7 +385,7 @@ class DocumentController extends Controller
 
         if (!$applicant || $application->applicant_id !== $applicant->id) {
             return response()->json([
-                'message' => 'Document not found'
+                'message' => 'Documento no encontrado'
             ], 404);
         }
 

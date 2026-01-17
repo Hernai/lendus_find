@@ -42,7 +42,7 @@ trait ValidationHelpers
     protected function validationErrorResponse(ValidatorContract $validator): JsonResponse
     {
         return response()->json([
-            'message' => 'Validation error',
+            'message' => 'Error de validación',
             'errors' => $validator->errors()
         ], 422);
     }
@@ -53,10 +53,10 @@ trait ValidationHelpers
      * @param string $resource The resource type that was not found
      * @return JsonResponse
      */
-    protected function notFoundResponse(string $resource = 'Resource'): JsonResponse
+    protected function notFoundResponse(string $resource = 'Recurso'): JsonResponse
     {
         return response()->json([
-            'message' => "{$resource} not found"
+            'message' => "{$resource} no encontrado"
         ], 404);
     }
 
@@ -66,7 +66,7 @@ trait ValidationHelpers
      * @param string $message Custom message (optional)
      * @return JsonResponse
      */
-    protected function unauthorizedResponse(string $message = 'Unauthorized'): JsonResponse
+    protected function unauthorizedResponse(string $message = 'No autorizado'): JsonResponse
     {
         return response()->json([
             'message' => $message
@@ -79,7 +79,7 @@ trait ValidationHelpers
      * @param string $message Custom message (optional)
      * @return JsonResponse
      */
-    protected function forbiddenResponse(string $message = 'Forbidden'): JsonResponse
+    protected function forbiddenResponse(string $message = 'Acceso denegado'): JsonResponse
     {
         return response()->json([
             'message' => $message

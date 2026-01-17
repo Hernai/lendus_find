@@ -200,7 +200,7 @@ class TwilioService implements SmsServiceInterface
                 'success' => true,
                 'sid' => $message->sid,
                 'status' => $message->status,
-                'message' => 'SMS sent successfully',
+                'message' => 'SMS enviado exitosamente',
             ];
         } catch (TwilioException $e) {
             $durationMs = (int) ((microtime(true) - $startTime) * 1000);
@@ -348,7 +348,7 @@ class TwilioService implements SmsServiceInterface
                 'success' => true,
                 'sid' => $message->sid,
                 'status' => $message->status,
-                'message' => 'WhatsApp message sent successfully',
+                'message' => 'Mensaje de WhatsApp enviado exitosamente',
             ];
         } catch (TwilioException $e) {
             $durationMs = (int) ((microtime(true) - $startTime) * 1000);

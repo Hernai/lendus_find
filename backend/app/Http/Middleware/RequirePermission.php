@@ -45,7 +45,7 @@ class RequirePermission
         if ($user === null) {
             return response()->json([
                 'error' => 'Unauthenticated',
-                'message' => 'You must be logged in to access this resource.',
+                'message' => 'Debes iniciar sesión para acceder a este recurso.',
             ], 401);
         }
 
@@ -59,7 +59,7 @@ class RequirePermission
 
             return response()->json([
                 'error' => 'Configuration Error',
-                'message' => 'Invalid permission configuration.',
+                'message' => 'Configuración de permiso inválida.',
             ], 403);
         }
 
@@ -71,7 +71,7 @@ class RequirePermission
 
             return response()->json([
                 'error' => 'Configuration Error',
-                'message' => 'Permission not configured properly.',
+                'message' => 'Permiso no configurado correctamente.',
             ], 403);
         }
 
@@ -79,7 +79,7 @@ class RequirePermission
         if (!$user->$permission()) {
             return response()->json([
                 'error' => 'Forbidden',
-                'message' => 'You do not have permission to perform this action.',
+                'message' => 'No tienes permiso para realizar esta acción.',
                 'required_permission' => $permission,
             ], 403);
         }

@@ -21,14 +21,14 @@ class RequireStaff
         if (!$user) {
             return response()->json([
                 'error' => 'Unauthenticated',
-                'message' => 'You must be logged in to access this resource.',
+                'message' => 'Debes iniciar sesión para acceder a este recurso.',
             ], 401);
         }
 
         if (!$user->isStaff()) {
             return response()->json([
                 'error' => 'Forbidden',
-                'message' => 'You do not have permission to access the admin panel.',
+                'message' => 'No tienes permiso para acceder al panel de administración.',
             ], 403);
         }
 

@@ -37,7 +37,7 @@ class IdentifyTenant
         if (!$tenant->is_active) {
             return response()->json([
                 'error' => 'Tenant inactive',
-                'message' => 'This tenant account is currently inactive.',
+                'message' => 'Esta cuenta está actualmente inactiva.',
             ], 403);
         }
 

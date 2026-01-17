@@ -35,7 +35,7 @@ class EnsureUserBelongsToTenant
 
             return response()->json([
                 'error' => 'Configuration Error',
-                'message' => 'Tenant context is required.',
+                'message' => 'Se requiere contexto de tenant.',
             ], 400);
         }
 
@@ -65,7 +65,7 @@ class EnsureUserBelongsToTenant
 
             return response()->json([
                 'error' => 'Forbidden',
-                'message' => 'You do not have access to this tenant.',
+                'message' => 'No tienes acceso a este tenant.',
             ], 403);
         }
 

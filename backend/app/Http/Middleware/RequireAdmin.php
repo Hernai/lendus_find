@@ -20,14 +20,14 @@ class RequireAdmin
         if (!$user) {
             return response()->json([
                 'error' => 'Unauthenticated',
-                'message' => 'You must be logged in to access this resource.',
+                'message' => 'Debes iniciar sesión para acceder a este recurso.',
             ], 401);
         }
 
         if (!$user->isAdmin()) {
             return response()->json([
                 'error' => 'Forbidden',
-                'message' => 'You do not have permission to access this resource.',
+                'message' => 'No tienes permiso para acceder a este recurso.',
             ], 403);
         }
 

@@ -278,7 +278,7 @@ class ApplicationController extends Controller
         if ($newStatus === ApplicationStatus::ACTIVE->value) {
             if ($application->status->value !== ApplicationStatus::DISBURSED->value) {
                 return response()->json([
-                    'message' => 'Only disbursed applications can be marked as active'
+                    'message' => 'Solo las solicitudes desembolsadas pueden marcarse como activas'
                 ], 400);
             }
         }
@@ -287,7 +287,7 @@ class ApplicationController extends Controller
         if (in_array($newStatus, [ApplicationStatus::COMPLETED->value, ApplicationStatus::DEFAULT->value])) {
             if ($application->status->value !== ApplicationStatus::ACTIVE->value) {
                 return response()->json([
-                    'message' => 'Only active applications can be marked as completed or default'
+                    'message' => 'Solo las solicitudes activas pueden marcarse como completadas o en mora'
                 ], 400);
             }
         }
@@ -329,7 +329,7 @@ class ApplicationController extends Controller
             ApplicationStatus::DOCS_PENDING,
         ])) {
             return response()->json([
-                'message' => 'Counter-offer can only be made for applications in review'
+                'message' => 'Solo se puede hacer contraoferta a solicitudes en revisión'
             ], 400);
         }
 
@@ -665,7 +665,7 @@ class ApplicationController extends Controller
         // Can only unapprove APPROVED or REJECTED documents
         if ($document->status === DocumentStatus::PENDING) {
             return response()->json([
-                'message' => 'Document is already pending'
+                'message' => 'El documento ya está pendiente'
             ], 400);
         }
 
