@@ -406,7 +406,7 @@ class ApplicationController extends Controller
         );
 
         return response()->json([
-            'message' => 'Application assigned',
+            'message' => 'Solicitud asignada',
             'data' => $this->formatApplication($application->fresh()->load(['applicant', 'product', 'assignedAgent']))
         ]);
     }
@@ -748,7 +748,7 @@ class ApplicationController extends Controller
         );
 
         return response()->json([
-            'message' => 'Document set back to pending',
+            'message' => 'Documento devuelto a pendiente',
             'data' => [
                 'id' => $document->id,
                 'type' => $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type,
@@ -820,7 +820,7 @@ class ApplicationController extends Controller
         );
 
         return response()->json([
-            'message' => 'Reference verification recorded',
+            'message' => 'Verificación de referencia registrada',
             'data' => [
                 'id' => $reference->id,
                 'full_name' => $reference->full_name,
@@ -964,7 +964,7 @@ class ApplicationController extends Controller
         );
 
         return response()->json([
-            'message' => 'Bank account verification removed',
+            'message' => 'Verificación de cuenta bancaria removida',
             'data' => [
                 'id' => $bankAccount->id,
                 'bank_name' => $bankAccount->bank_name,
@@ -1644,7 +1644,7 @@ class ApplicationController extends Controller
 
             default:
                 return response()->json([
-                    'message' => 'Invalid action'
+                    'message' => 'Acción inválida'
                 ], 400);
         }
 

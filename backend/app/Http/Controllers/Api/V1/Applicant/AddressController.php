@@ -99,7 +99,7 @@ class AddressController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Address added',
+            'message' => 'Dirección agregada',
             'data' => new AddressResource($address)
         ], 201);
     }

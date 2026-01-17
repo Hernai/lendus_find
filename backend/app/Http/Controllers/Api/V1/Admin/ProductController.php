@@ -308,7 +308,7 @@ class ProductController extends Controller
         // Check if product has applications
         if ($product->applications()->exists()) {
             return response()->json([
-                'message' => 'Cannot delete product with existing applications. Deactivate it instead.'
+                'message' => 'No se puede eliminar un producto con solicitudes existentes. Desactívalo en su lugar.'
             ], 400);
         }
 

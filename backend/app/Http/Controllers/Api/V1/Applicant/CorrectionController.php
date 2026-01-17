@@ -187,7 +187,7 @@ class CorrectionController extends Controller
 
         if (!$verification) {
             return response()->json([
-                'message' => 'No pending correction found for this field',
+                'message' => 'No hay corrección pendiente para este campo',
             ], 404);
         }
 

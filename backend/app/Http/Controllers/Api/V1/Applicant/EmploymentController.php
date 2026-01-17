@@ -98,7 +98,7 @@ class EmploymentController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Employment record added',
+            'message' => 'Registro de empleo agregado',
             'data' => new EmploymentRecordResource($employment)
         ], 201);
     }
@@ -161,7 +161,7 @@ class EmploymentController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Employment info updated',
+            'message' => 'Información de empleo actualizada',
             'data' => new EmploymentRecordResource($employment)
         ]);
     }

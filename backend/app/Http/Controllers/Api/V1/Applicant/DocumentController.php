@@ -76,7 +76,7 @@ class DocumentController extends Controller
             $application->status !== ApplicationStatus::SUBMITTED &&
             $application->status !== ApplicationStatus::IN_REVIEW) {
             return response()->json([
-                'message' => 'Cannot upload documents in current status'
+                'message' => 'No se pueden subir documentos en el estado actual'
             ], 400);
         }
 
@@ -294,7 +294,7 @@ class DocumentController extends Controller
         }
 
         return response()->json([
-            'message' => 'Document uploaded successfully',
+            'message' => 'Documento subido exitosamente',
             'data' => $this->formatDocument($document)
         ], 201);
     }
@@ -320,7 +320,7 @@ class DocumentController extends Controller
 
         if (!$application->isEditable() && $document->status !== DocumentStatus::REJECTED) {
             return response()->json([
-                'message' => 'Cannot delete document in current status'
+                'message' => 'No se puede eliminar el documento en el estado actual'
             ], 400);
         }
 

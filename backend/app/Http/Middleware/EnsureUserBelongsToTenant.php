@@ -50,7 +50,7 @@ class EnsureUserBelongsToTenant
         if (empty($tenantId)) {
             return response()->json([
                 'error' => 'Bad Request',
-                'message' => 'Tenant identification required.',
+                'message' => 'Se requiere identificación de tenant.',
             ], 400);
         }
 

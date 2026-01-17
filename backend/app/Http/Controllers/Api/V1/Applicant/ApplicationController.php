@@ -441,7 +441,7 @@ class ApplicationController extends Controller
 
         if (!$application->isEditable() && $application->status !== ApplicationStatus::SUBMITTED) {
             return response()->json([
-                'message' => 'Cannot add references in current status'
+                'message' => 'No se pueden agregar referencias en el estado actual'
             ], 400);
         }
 
@@ -491,7 +491,7 @@ class ApplicationController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Reference added',
+            'message' => 'Referencia agregada',
             'data' => [
                 'id' => $reference->id,
                 'full_name' => $reference->full_name,

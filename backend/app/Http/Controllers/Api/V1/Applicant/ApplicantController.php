@@ -67,7 +67,7 @@ class ApplicantController extends Controller
 
         if ($user->applicant) {
             return response()->json([
-                'message' => 'Applicant profile already exists'
+                'message' => 'El perfil de solicitante ya existe'
             ], 409);
         }
 

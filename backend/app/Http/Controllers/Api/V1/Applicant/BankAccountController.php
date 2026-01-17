@@ -89,7 +89,7 @@ class BankAccountController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Bank account added',
+            'message' => 'Cuenta bancaria agregada',
             'data' => new BankAccountResource($bankAccount)
         ], 201);
     }
@@ -116,7 +116,7 @@ class BankAccountController extends Controller
         $bankAccount->update(['is_primary' => true]);
 
         return response()->json([
-            'message' => 'Bank account set as primary',
+            'message' => 'Cuenta bancaria establecida como principal',
             'data' => new BankAccountResource($bankAccount->fresh())
         ]);
     }

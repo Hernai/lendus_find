@@ -30,7 +30,7 @@ class IdentifyTenant
         if ($tenant === null) {
             return response()->json([
                 'error' => 'Tenant not found',
-                'message' => 'Unable to identify the tenant for this request.',
+                'message' => 'No se pudo identificar el tenant para esta solicitud.',
             ], 404);
         }
 
