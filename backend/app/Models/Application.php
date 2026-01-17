@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Services\LoanCalculationService;
 
 class Application extends Model
 {
@@ -179,11 +180,68 @@ class Application extends Model
     }
 
     /**
-     * Change the status and record in history.
+     * Valid status transitions matrix.
+     * Key = current status, Value = array of allowed next statuses.
      */
-    public function changeStatus(string $status, ?string $reason = null, ?string $userId = null): void
+    private const VALID_TRANSITIONS = [
+        'DRAFT' => ['SUBMITTED', 'CANCELLED'],
+        'SUBMITTED' => ['IN_REVIEW', 'DOCS_PENDING', 'CANCELLED'],
+        'IN_REVIEW' => ['DOCS_PENDING', 'CORRECTIONS_PENDING', 'APPROVED', 'REJECTED', 'COUNTER_OFFERED', 'CANCELLED'],
+        'DOCS_PENDING' => ['IN_REVIEW', 'SUBMITTED', 'CORRECTIONS_PENDING', 'CANCELLED'],
+        'CORRECTIONS_PENDING' => ['SUBMITTED', 'IN_REVIEW', 'CANCELLED'],
+        'COUNTER_OFFERED' => ['APPROVED', 'REJECTED', 'CANCELLED'],
+        'APPROVED' => ['DISBURSED', 'CANCELLED'],
+        'DISBURSED' => ['ACTIVE', 'COMPLETED'],
+        'ACTIVE' => ['COMPLETED', 'DEFAULT'],
+        // Terminal states - no transitions out
+        'REJECTED' => [],
+        'CANCELLED' => [],
+        'COMPLETED' => [],
+        'DEFAULT' => [],
+    ];
+
+    /**
+     * Check if a status transition is valid.
+     */
+    public function canTransitionTo(string $newStatus): bool
+    {
+        $currentStatus = $this->status instanceof ApplicationStatus
+            ? $this->status->value
+            : $this->status;
+
+        $allowedTransitions = self::VALID_TRANSITIONS[$currentStatus] ?? [];
+
+        return in_array($newStatus, $allowedTransitions);
+    }
+
+    /**
+     * Get allowed next statuses from current status.
+     */
+    public function getAllowedTransitions(): array
+    {
+        $currentStatus = $this->status instanceof ApplicationStatus
+            ? $this->status->value
+            : $this->status;
+
+        return self::VALID_TRANSITIONS[$currentStatus] ?? [];
+    }
+
+    /**
+     * Change the status and record in history.
+     *
+     * @throws \InvalidArgumentException If the status transition is not allowed
+     */
+    public function changeStatus(string $status, ?string $reason = null, ?string $userId = null, bool $force = false): void
     {
         $previousStatus = $this->status->value;
+
+        // Validate transition unless forced (for admin override or data migrations)
+        if (!$force && !$this->canTransitionTo($status)) {
+            $allowed = implode(', ', $this->getAllowedTransitions());
+            throw new \InvalidArgumentException(
+                "Cannot transition from {$previousStatus} to {$status}. Allowed transitions: {$allowed}"
+            );
+        }
 
         // Look up user to get name for history
         $changedBy = $userId ? User::find($userId) : null;
@@ -293,31 +351,13 @@ class Application extends Model
         $this->interest_rate = $interestRate;
         $this->payment_frequency = $paymentFrequency;
 
-        // Recalculate payment
-        $periodsPerYear = match ($paymentFrequency) {
-            'WEEKLY' => 52,
-            'BIWEEKLY', 'QUINCENAL' => 26,
-            default => 12,
-        };
+        // Recalculate payment using centralized service
+        $calculator = app(LoanCalculationService::class);
+        $totalPeriods = $calculator->calculateTotalPeriods($termMonths, $paymentFrequency);
+        $payment = $calculator->calculatePayment($amount, $interestRate, $termMonths, $paymentFrequency);
 
-        $totalPeriods = match ($paymentFrequency) {
-            'WEEKLY' => $termMonths * 4.33,
-            'BIWEEKLY', 'QUINCENAL' => $termMonths * 2.17,
-            default => $termMonths,
-        };
-
-        $totalPeriods = (int) round($totalPeriods);
-        $periodRate = ($interestRate / 100) / $periodsPerYear;
-
-        if ($periodRate > 0) {
-            $payment = $amount * ($periodRate * pow(1 + $periodRate, $totalPeriods)) /
-                (pow(1 + $periodRate, $totalPeriods) - 1);
-        } else {
-            $payment = $amount / $totalPeriods;
-        }
-
-        $this->monthly_payment = round($payment, 2);
-        $this->total_to_pay = round($payment * $totalPeriods, 2);
+        $this->monthly_payment = $payment;
+        $this->total_to_pay = $calculator->calculateTotalToPay($payment, $totalPeriods);
 
         $this->changeStatus(ApplicationStatus::COUNTER_OFFERED->value, $reason, $userId);
     }

@@ -1,13 +1,13 @@
 <script setup lang="ts">
 interface Option {
-  value: string | number
-  label: string
-  description?: string
+  readonly value: string | number
+  readonly label: string
+  readonly description?: string
 }
 
 interface Props {
   modelValue: string | number | null
-  options: Option[]
+  options: readonly Option[]
   label?: string
   error?: string
   required?: boolean

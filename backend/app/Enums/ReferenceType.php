@@ -2,8 +2,11 @@
 
 namespace App\Enums;
 
+use App\Enums\Traits\HasOptions;
+
 enum ReferenceType: string
 {
+    use HasOptions;
     case PERSONAL = 'PERSONAL';
     case WORK = 'WORK';
 

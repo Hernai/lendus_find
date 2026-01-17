@@ -17,6 +17,7 @@ use App\Services\VerificationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -166,10 +167,10 @@ class DocumentController extends Controller
 
             if ($isIneDocument) {
                 $logContext['ocr_curp'] = $docMetadata['ocr_curp'] ?? null;
-                \Log::info("[DocumentController] Auto-approving {$type} - KYC INE validated", $logContext);
+                Log::info("[DocumentController] Auto-approving {$type} - KYC INE validated", $logContext);
             } else {
                 $logContext['face_match_score'] = $docMetadata['face_match_score'] ?? null;
-                \Log::info("[DocumentController] Auto-approving {$type} - Face match validated", $logContext);
+                Log::info("[DocumentController] Auto-approving {$type} - Face match validated", $logContext);
             }
         }
 
@@ -428,9 +429,36 @@ class DocumentController extends Controller
             abort(404, 'File not found');
         }
 
+        // Security: Validate path is within allowed directory (prevent path traversal)
+        $realPath = realpath($path);
+        $allowedDir = realpath(storage_path('app'));
+        if (!$realPath || !str_starts_with($realPath, $allowedDir)) {
+            abort(403, 'Access denied');
+        }
+
+        // Security: Whitelist allowed MIME types
+        $allowedMimeTypes = [
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+            'image/gif',
+            'application/pdf',
+        ];
+
+        $mimeType = $document->mime_type;
+        if (!in_array($mimeType, $allowedMimeTypes)) {
+            // Default to octet-stream for unknown types (forces download)
+            $mimeType = 'application/octet-stream';
+        }
+
+        // Security: Sanitize filename to prevent header injection
+        $safeName = basename($document->original_name ?? 'document');
+        $safeName = preg_replace('/[^a-zA-Z0-9._-]/', '_', $safeName);
+
         return response()->file($path, [
-            'Content-Type' => $document->mime_type,
-            'Content-Disposition' => 'inline; filename="' . $document->original_name . '"',
+            'Content-Type' => $mimeType,
+            'Content-Disposition' => 'inline; filename="' . $safeName . '"',
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
@@ -465,6 +493,7 @@ class DocumentController extends Controller
         }
 
         try {
+            // Note: ip-api.com free tier doesn't support HTTPS, consider using MaxMind GeoIP2 for production
             $response = @file_get_contents("http://ip-api.com/json/{$ip}?fields=status,city,regionName,country&lang=es");
             if ($response) {
                 $data = json_decode($response, true);

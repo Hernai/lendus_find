@@ -1,5 +1,9 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { detectTenantSlug } from '@/utils/tenant'
+import { storage, STORAGE_KEYS } from '@/utils/storage'
+
+// Environment flags
+const isDev = import.meta.env.DEV
 
 // API base URL
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
@@ -12,9 +16,9 @@ const BASE_URL = API_BASE_URL.replace('/api', '')
 const getTenantSlug = (): string => {
   // Only use selected_tenant_id override if user is authenticated
   // This prevents login issues when the override points to a different tenant
-  const authToken = localStorage.getItem('auth_token')
+  const authToken = storage.get<string>(STORAGE_KEYS.AUTH_TOKEN) || localStorage.getItem('auth_token')
   if (authToken) {
-    const selectedTenantId = localStorage.getItem('selected_tenant_id')
+    const selectedTenantId = storage.get<string>(STORAGE_KEYS.SELECTED_TENANT_ID) || localStorage.getItem('selected_tenant_id')
     if (selectedTenantId) {
       return selectedTenantId
     }
@@ -78,7 +82,9 @@ apiClient.interceptors.request.use(
   async (config) => {
     // Add tenant header dynamically (evaluated per request for hybrid detection)
     const tenantSlug = getTenantSlug()
-    console.log('[API] Request to:', config.url, '| Tenant:', tenantSlug)
+    if (isDev) {
+      console.log('[API] Request to:', config.url, '| Tenant:', tenantSlug)
+    }
     if (config.headers) {
       config.headers['X-Tenant-ID'] = tenantSlug
     }
@@ -94,7 +100,8 @@ apiClient.interceptors.request.use(
       }
     }
 
-    const token = localStorage.getItem('auth_token')
+    // Get token from namespaced storage first, fallback to legacy key
+    const token = storage.get<string>(STORAGE_KEYS.AUTH_TOKEN) || localStorage.getItem('auth_token')
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -122,6 +129,7 @@ apiClient.interceptors.response.use(
 
       // Handle 401 Unauthorized - redirect to login (except for auth endpoints)
       if (status === 401 && !isAuthEndpoint) {
+        storage.remove(STORAGE_KEYS.AUTH_TOKEN)
         localStorage.removeItem('auth_token')
         window.location.href = '/auth'
       }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, type ComponentPublicInstance } from 'vue'
 
 interface Props {
   modelValue: string
@@ -99,8 +99,8 @@ const handlePaste = (event: ClipboardEvent) => {
   focusInput(Math.min(digits.length, props.length - 1))
 }
 
-const setInputRef = (el: any, index: number) => {
-  if (el) {
+const setInputRef = (el: Element | ComponentPublicInstance | null, index: number) => {
+  if (el instanceof HTMLInputElement) {
     inputs.value[index] = el
   }
 }

@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '@/services/api'
 import { AppButton } from '@/components/common'
+import { getErrorMessage, type AxiosErrorResponse } from '@/types/api'
 
 interface User {
   id: string
@@ -395,7 +396,7 @@ const saveUser = async () => {
 
     showUserModal.value = false
     await fetchUsers()
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Failed to save user:', e)
     // Clear previous errors first
     formErrors.value = { name: '', email: '', phone: '', role: '', password: '', password_confirmation: '' }
@@ -403,15 +404,16 @@ const saveUser = async () => {
 
     // For 422 errors, axios interceptor rejects with response.data directly
     // For other errors, it's in e.response.data
-    const errorData = e.errors ? e : (e.response?.data || e)
+    const err = e as AxiosErrorResponse & { errors?: Record<string, string | string[]>; message?: string }
+    const errorData = err.errors ? err : (err.response?.data || err)
 
     if (errorData.errors) {
       const errors = errorData.errors
-      if (errors.email) formErrors.value.email = Array.isArray(errors.email) ? errors.email[0] : errors.email
-      if (errors.name) formErrors.value.name = Array.isArray(errors.name) ? errors.name[0] : errors.name
-      if (errors.phone) formErrors.value.phone = Array.isArray(errors.phone) ? errors.phone[0] : errors.phone
-      if (errors.password) formErrors.value.password = Array.isArray(errors.password) ? errors.password[0] : errors.password
-      if (errors.role) formErrors.value.role = Array.isArray(errors.role) ? errors.role[0] : errors.role
+      if (errors.email) formErrors.value.email = (Array.isArray(errors.email) ? errors.email[0] : errors.email) ?? ''
+      if (errors.name) formErrors.value.name = (Array.isArray(errors.name) ? errors.name[0] : errors.name) ?? ''
+      if (errors.phone) formErrors.value.phone = (Array.isArray(errors.phone) ? errors.phone[0] : errors.phone) ?? ''
+      if (errors.password) formErrors.value.password = (Array.isArray(errors.password) ? errors.password[0] : errors.password) ?? ''
+      if (errors.role) formErrors.value.role = (Array.isArray(errors.role) ? errors.role[0] : errors.role) ?? ''
     }
     // Show general error message (translate common messages to Spanish)
     if (errorData.message) {
@@ -447,9 +449,9 @@ const confirmDelete = async () => {
     showDeleteModal.value = false
     userToDelete.value = null
     await fetchUsers()
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Failed to delete user:', e)
-    alert(e.response?.data?.message || 'Error al eliminar el usuario')
+    alert(getErrorMessage(e, 'Error al eliminar el usuario'))
   } finally {
     isDeleting.value = false
   }
@@ -462,9 +464,9 @@ const toggleActiveStatus = async (user: User) => {
       is_active: !user.is_active
     })
     await fetchUsers()
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Failed to toggle user status:', e)
-    alert(e.response?.data?.message || 'Error al cambiar el estado del usuario')
+    alert(getErrorMessage(e, 'Error al cambiar el estado del usuario'))
   }
 }
 

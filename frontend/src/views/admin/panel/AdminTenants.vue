@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '@/services/api'
 import { AppInput, AppConfirmModal } from '@/components/common'
 import TenantBrandingEditor, { type Branding } from '@/components/admin/TenantBrandingEditor.vue'
+import { getErrorMessage } from '@/types/api'
 
 interface Tenant {
   id: string
@@ -672,11 +673,11 @@ const runTest = async () => {
     // Reload config
     const reloadResponse = await api.get<{ data: TenantConfig }>(`/admin/tenants/${configTenant.value.id}/config`)
     configData.value = reloadResponse.data.data
-  } catch (err: any) {
+  } catch (err: unknown) {
     testResult.value = {
       success: false,
       message: 'Error en la prueba',
-      error: err.response?.data?.error || 'Error desconocido'
+      error: getErrorMessage(err, 'Error desconocido')
     }
   } finally {
     isTesting.value = false

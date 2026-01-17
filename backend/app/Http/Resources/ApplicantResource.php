@@ -13,7 +13,7 @@ class ApplicantResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->uuid,
+            'id' => $this->id,
             'type' => $this->type,
 
             // Personal info

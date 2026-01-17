@@ -22,10 +22,10 @@ const authStore = useAuthStore()
 
 // Product rules (from prop or tenant config defaults)
 const activeProduct = computed(() => props.product || tenantStore.activeProducts[0])
-const minAmount = computed(() => activeProduct.value?.rules.min_amount ?? 5000)
-const maxAmount = computed(() => activeProduct.value?.rules.max_amount ?? 500000)
-const minTerm = computed(() => activeProduct.value?.rules.min_term_months ?? 3)
-const maxTerm = computed(() => activeProduct.value?.rules.max_term_months ?? 48)
+const minAmount = computed(() => activeProduct.value?.rules?.min_amount ?? 5000)
+const maxAmount = computed(() => activeProduct.value?.rules?.max_amount ?? 500000)
+const minTerm = computed(() => activeProduct.value?.rules?.min_term_months ?? 3)
+const maxTerm = computed(() => activeProduct.value?.rules?.max_term_months ?? 48)
 
 // Get term_config from product (could be in rules or directly on product)
 const termConfig = computed(() =>
@@ -112,8 +112,11 @@ const termMonths = computed(() => {
   return Math.round(selectedPayments.value / multiplier)
 })
 
+// Track if component is initialized
+const isInitialized = ref(false)
+
 // Initialize values based on product
-onMounted(() => {
+onMounted(async () => {
   // Set initial amount to middle of range
   amount.value = Math.round((minAmount.value + maxAmount.value) / 2 / 1000) * 1000
   // Set initial frequency to first available
@@ -121,6 +124,25 @@ onMounted(() => {
   // Set initial payment count to middle option
   const options = paymentCountOptions.value
   selectedPayments.value = options[Math.floor(options.length / 2)] || 12
+
+  // Mark as initialized and run initial simulation
+  isInitialized.value = true
+
+  // Run initial simulation with valid values
+  if (activeProduct.value) {
+    const term = termMonths.value
+    const minTermMonths = activeProduct.value.rules?.min_term_months ?? 3
+    const maxTermMonths = activeProduct.value.rules?.max_term_months ?? 48
+
+    if (term >= minTermMonths && term <= maxTermMonths) {
+      await applicationStore.runSimulation({
+        product_id: activeProduct.value.id,
+        amount: amount.value,
+        term_months: term,
+        payment_frequency: paymentFrequency.value
+      })
+    }
+  }
 })
 
 // When frequency changes, adjust selected payments to closest valid option
@@ -139,17 +161,30 @@ watch(paymentFrequency, () => {
 const simulation = computed(() => applicationStore.simulation)
 const isLoading = computed(() => applicationStore.isLoading)
 
-// Auto-run simulation on changes
+// Auto-run simulation on changes (only after initialization)
 watch([amount, selectedPayments, paymentFrequency, activeProduct], async () => {
+  // Skip if not initialized yet (onMounted handles initial simulation)
+  if (!isInitialized.value) return
+
   if (activeProduct.value) {
+    // Validate term_months is within product range before calling API
+    const term = termMonths.value
+    const minTermMonths = activeProduct.value.rules?.min_term_months ?? 3
+    const maxTermMonths = activeProduct.value.rules?.max_term_months ?? 48
+
+    if (term < minTermMonths || term > maxTermMonths) {
+      console.warn(`[Simulator] term_months ${term} out of range [${minTermMonths}, ${maxTermMonths}], skipping simulation`)
+      return
+    }
+
     await applicationStore.runSimulation({
       product_id: activeProduct.value.id,
       amount: amount.value,
-      term_months: termMonths.value,
+      term_months: term,
       payment_frequency: paymentFrequency.value
     })
   }
-}, { immediate: true })
+})
 
 // Format currency
 const formatCurrency = (value: number) => {

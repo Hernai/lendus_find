@@ -2,6 +2,14 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\DocumentType;
+use App\Enums\EducationLevel;
+use App\Enums\EmploymentType;
+use App\Enums\Gender;
+use App\Enums\HousingType;
+use App\Enums\MaritalStatus;
+use App\Enums\ReferenceType;
+use App\Enums\Relationship;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
@@ -48,7 +56,27 @@ class ConfigController extends Controller
                 'display_order' => $p->display_order,
                 'is_active' => $p->is_active,
             ]),
+            'options' => $this->getEnumOptions(),
         ]);
+    }
+
+    /**
+     * Get enum options for frontend selects.
+     */
+    private function getEnumOptions(): array
+    {
+        return [
+            'employment_type' => EmploymentType::toOptions(),
+            'housing_type' => HousingType::toOptions(),
+            'marital_status' => MaritalStatus::toOptions(),
+            'gender' => Gender::toOptions(),
+            'education_level' => EducationLevel::toOptions(),
+            'reference_type' => ReferenceType::toOptions(),
+            'relationship' => Relationship::toOptions(),
+            'relationship_family' => Relationship::familyOptions(),
+            'relationship_non_family' => Relationship::nonFamilyOptions(),
+            'document_type' => DocumentType::toOptions(),
+        ];
     }
 
     /**

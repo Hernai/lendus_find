@@ -168,14 +168,10 @@ const applicationService = {
       formData.append('metadata', JSON.stringify(metadata))
     }
 
+    // Note: Content-Type is automatically handled by the api interceptor for FormData
     const response = await api.post<{ message: string; data: ApplicationDocument }>(
       `/applications/${applicationId}/documents`,
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      }
+      formData
     )
     return response.data.data
   },

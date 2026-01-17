@@ -24,6 +24,14 @@ enum UserType: string
     }
 
     /**
+     * Get staff role values as strings for validation.
+     */
+    public static function staffValues(): array
+    {
+        return array_map(fn($role) => $role->value, self::staffRoles());
+    }
+
+    /**
      * Check if this is a staff role.
      */
     public function isStaff(): bool

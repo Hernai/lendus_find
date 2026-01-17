@@ -13,14 +13,14 @@ class ApplicationResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->uuid,
+            'id' => $this->id,
             'folio' => $this->folio,
             'status' => $this->status,
 
             // Applicant (basic)
             'applicant' => $this->when($this->relationLoaded('applicant'), function () {
                 return [
-                    'id' => $this->applicant->uuid,
+                    'id' => $this->applicant->id,
                     'full_name' => $this->applicant->full_name,
                     'phone' => $this->applicant->phone,
                     'email' => $this->applicant->email,
@@ -31,7 +31,7 @@ class ApplicationResource extends JsonResource
             // Product
             'product' => $this->when($this->relationLoaded('product'), function () {
                 return [
-                    'id' => $this->product->uuid,
+                    'id' => $this->product->id,
                     'name' => $this->product->name,
                     'type' => $this->product->type,
                 ];
@@ -65,7 +65,7 @@ class ApplicationResource extends JsonResource
             // Assignment
             'assigned_to' => $this->when($this->relationLoaded('assignedAgent'), function () {
                 return $this->assignedAgent ? [
-                    'id' => $this->assignedAgent->uuid,
+                    'id' => $this->assignedAgent->id,
                     'name' => $this->assignedAgent->name,
                 ] : null;
             }),

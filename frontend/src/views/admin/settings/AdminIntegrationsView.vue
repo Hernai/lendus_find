@@ -521,6 +521,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api } from '@/services/api'
+import { getErrorMessage } from '@/types/api'
 
 interface Integration {
   id: string
@@ -589,8 +590,8 @@ const loadIntegrations = async () => {
     error.value = null
     const response = await api.get<{ data: Integration[] }>('/admin/integrations')
     integrations.value = response.data.data
-  } catch (err: any) {
-    error.value = err.response?.data?.message || 'Error al cargar integraciones'
+  } catch (err: unknown) {
+    error.value = getErrorMessage(err, 'Error al cargar integraciones')
     console.error('Error loading integrations:', err)
   } finally {
     isLoading.value = false
@@ -659,8 +660,8 @@ const saveIntegration = async () => {
     await api.post('/admin/integrations', form.value)
     await loadIntegrations()
     closeEditModal()
-  } catch (err: any) {
-    alert(err.response?.data?.message || 'Error al guardar integración')
+  } catch (err: unknown) {
+    alert(getErrorMessage(err, 'Error al guardar integración'))
     console.error('Error saving integration:', err)
   } finally {
     isSaving.value = false
@@ -698,11 +699,11 @@ const runTest = async () => {
     )
     testResult.value = response.data
     await loadIntegrations() // Reload to show updated test status
-  } catch (err: any) {
+  } catch (err: unknown) {
     testResult.value = {
       success: false,
       message: 'Error en la prueba',
-      error: err.response?.data?.error || err.response?.data?.message || 'Error desconocido',
+      error: getErrorMessage(err, 'Error desconocido'),
     }
     console.error('Error testing integration:', err)
   } finally {
@@ -723,8 +724,8 @@ const toggleIntegrationStatus = async (integration: Integration) => {
     isTogglingStatus.value = integration.id
     await api.patch(`/admin/integrations/${integration.id}/toggle`)
     await loadIntegrations()
-  } catch (err: any) {
-    alert(err.response?.data?.message || 'Error al cambiar el estado de la integración')
+  } catch (err: unknown) {
+    alert(getErrorMessage(err, 'Error al cambiar el estado de la integración'))
     console.error('Error toggling integration status:', err)
   } finally {
     isTogglingStatus.value = null
@@ -740,8 +741,8 @@ const deleteIntegration = async (integration: Integration) => {
   try {
     await api.delete(`/admin/integrations/${integration.id}`)
     await loadIntegrations()
-  } catch (err: any) {
-    alert(err.response?.data?.message || 'Error al eliminar integración')
+  } catch (err: unknown) {
+    alert(getErrorMessage(err, 'Error al eliminar integración'))
     console.error('Error deleting integration:', err)
   }
 }

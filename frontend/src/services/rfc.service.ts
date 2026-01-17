@@ -68,8 +68,9 @@ function obtenerPrimeraVocal(palabra: string, saltarPrimera: boolean = false): s
   const inicio = saltarPrimera ? 1 : 0
 
   for (let i = inicio; i < palabra.length; i++) {
-    if (vocales.includes(palabra[i])) {
-      return palabra[i]
+    const char = palabra[i]
+    if (char && vocales.includes(char)) {
+      return char
     }
   }
 
@@ -90,11 +91,11 @@ function limpiarApellido(apellido: string): string {
 
   if (palabrasFiltradas.length === 0) {
     // Si todas las palabras fueron filtradas, usar el apellido original
-    return palabras[0] || apellido
+    return palabras[0] ?? apellido
   }
 
   // Tomar solo la primera palabra significativa
-  return palabrasFiltradas[0]
+  return palabrasFiltradas[0] ?? apellido
 }
 
 /**
@@ -102,24 +103,26 @@ function limpiarApellido(apellido: string): string {
  */
 function limpiarNombre(nombre: string): string {
   const palabras = nombre.split(/\s+/).filter(p => p.length > 0)
+  const primeraPalabra = palabras[0]
+  const segundaPalabra = palabras[1]
 
-  if (palabras.length === 0) {
+  if (!primeraPalabra) {
     return nombre
   }
 
   // Si el primer nombre es María o José, usar el segundo
-  if (palabras.length > 1 && NOMBRES_COMUNES.includes(palabras[0])) {
+  if (segundaPalabra && NOMBRES_COMUNES.includes(primeraPalabra)) {
     // Verificar si el segundo también es común (José María)
-    if (NOMBRES_COMUNES.includes(palabras[1])) {
+    if (NOMBRES_COMUNES.includes(segundaPalabra)) {
       // José María → usar María
-      return palabras[1]
+      return segundaPalabra
     }
     // María Fernanda → usar Fernanda
-    return palabras[1]
+    return segundaPalabra
   }
 
   // Usar el primer nombre
-  return palabras[0]
+  return primeraPalabra
 }
 
 /**
@@ -138,7 +141,7 @@ function extraerCuatroLetras(data: PersonaFisicaData): string {
   }
 
   // 1. Primera letra del apellido paterno
-  const letra1 = primerApellido[0]
+  const letra1 = primerApellido[0] ?? 'X'
 
   // 2. Primera vocal del apellido paterno
   // Si el apellido empieza con vocal, tomar la siguiente vocal
@@ -146,10 +149,10 @@ function extraerCuatroLetras(data: PersonaFisicaData): string {
   const letra2 = obtenerPrimeraVocal(primerApellido, empiezaConVocal)
 
   // 3. Primera letra del apellido materno (o X si no existe)
-  const letra3 = segundoApellido ? segundoApellido[0] : 'X'
+  const letra3 = segundoApellido ? (segundoApellido[0] ?? 'X') : 'X'
 
   // 4. Primera letra del nombre
-  const letra4 = nombre[0]
+  const letra4 = nombre[0] ?? 'X'
 
   return letra1 + letra2 + letra3 + letra4
 }
@@ -304,7 +307,8 @@ function calcularDigitoVerificador(rfcSinDigito: string): string {
 
   let suma = 0
   for (let i = 0; i < 12; i++) {
-    const valor = tabla[rfcPadded[i]] ?? 0
+    const char = rfcPadded[i] ?? ' '
+    const valor = tabla[char] ?? 0
     suma += valor * (13 - i)
   }
 

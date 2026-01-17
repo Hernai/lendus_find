@@ -146,5 +146,5 @@ export interface DynamicField {
   max?: number
   maxLength?: number
   pattern?: string
-  default?: any
+  default?: string | number | boolean | null
 }

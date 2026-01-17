@@ -54,7 +54,10 @@ const formatValue = (val: string | number | null | undefined): string => {
         // Check DD/MM/YYYY or DD-MM-YYYY format (common in Mexican documents)
         else if (/^\d{2}[/-]\d{2}[/-]\d{4}$/.test(strVal)) {
           const parts = strVal.split(/[/-]/)
-          date = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]))
+          const day = parts[0] ?? '01'
+          const month = parts[1] ?? '01'
+          const year = parts[2] ?? '2000'
+          date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
         }
         // Check YYYY/MM/DD format
         else if (/^\d{4}[/-]\d{2}[/-]\d{2}$/.test(strVal)) {

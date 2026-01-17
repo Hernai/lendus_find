@@ -1,148 +1,76 @@
 <script setup lang="ts">
-import { reactive, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { useOnboardingStore } from '@/stores'
-import { AppButton, AppInput, AppSelect, AppRadioGroup } from '@/components/common'
+import { onMounted, computed } from 'vue'
+import { useOnboardingStore, useTenantStore } from '@/stores'
+import { useStepForm, rules } from '@/composables'
+import { AppButton, AppInput, AppSelect } from '@/components/common'
 
-const router = useRouter()
 const onboardingStore = useOnboardingStore()
+const tenantStore = useTenantStore()
 
-const form = reactive({
-  employment_type: '' as 'EMPLEADO' | 'INDEPENDIENTE' | 'EMPRESARIO' | 'PENSIONADO' | 'ESTUDIANTE' | 'HOGAR' | 'DESEMPLEADO' | 'OTRO' | '',
-  company_name: '',
-  job_title: '',
-  company_phone: '',
-  company_address: '',
-  monthly_income: 0,
-  seniority_years: 0,
-  seniority_months: 0
+// Get employment type options from backend
+const employmentTypeOptions = computed(() => tenantStore.options.employment_type)
+
+// Define form using composable - eliminates 80+ lines of boilerplate
+const { form, errors, submitError, handleSubmit, prevStep, isSaving, init } = useStepForm({
+  step: 4,
+  fields: {
+    employment_type: {
+      default: '' as string,
+      rules: [rules.required('Selecciona tu ocupación')],
+    },
+    company_name: {
+      default: '',
+      rules: [
+        rules.when(
+          (f) => f.employment_type === 'EMPLOYEE',
+          rules.required('El nombre de la empresa es requerido')
+        ),
+      ],
+      transform: (v: string) => v.toUpperCase(),
+    },
+    job_title: {
+      default: '',
+      rules: [
+        rules.when(
+          (f) => f.employment_type === 'EMPLOYEE',
+          rules.required('El puesto es requerido')
+        ),
+      ],
+      transform: (v: string) => v.toUpperCase(),
+    },
+    company_phone: { default: '' },
+    company_address: { default: '' },
+    monthly_income: {
+      default: 0,
+      rules: [rules.min(1000, 'Ingresa un ingreso válido (mínimo $1,000)')],
+    },
+    seniority_years: { default: 0 },
+    seniority_months: { default: 0 },
+  },
+  nextRoute: '/solicitud/paso-5',
+  prevRoute: '/solicitud/paso-3',
 })
 
-const errors = reactive({
-  employment_type: '',
-  company_name: '',
-  job_title: '',
-  monthly_income: '',
-  seniority_years: ''
-})
+// Initialize form on mount
+onMounted(() => init())
 
-const employmentTypeOptions = [
-  { value: 'EMPLEADO', label: 'Empleado' },
-  { value: 'INDEPENDIENTE', label: 'Trabajador independiente' },
-  { value: 'EMPRESARIO', label: 'Dueño de negocio' },
-  { value: 'PENSIONADO', label: 'Jubilado/Pensionado' },
-  { value: 'ESTUDIANTE', label: 'Estudiante' },
-  { value: 'HOGAR', label: 'Ama de casa' },
-  { value: 'DESEMPLEADO', label: 'Desempleado' },
-  { value: 'OTRO', label: 'Otro' }
-]
-
-// Opciones de antigüedad en años
-
-// Sync form from store on mount
-onMounted(async () => {
-  await onboardingStore.init()
-
-  const step4 = onboardingStore.data.step4
-  form.employment_type = (step4.employment_type || '') as typeof form.employment_type
-  form.company_name = step4.company_name || ''
-  form.job_title = step4.job_title || ''
-  form.company_phone = step4.company_phone || ''
-  form.company_address = step4.company_address || ''
-  form.monthly_income = step4.monthly_income || 0
-  form.seniority_years = step4.seniority_years || 0
-  form.seniority_months = step4.seniority_months || 0
-})
-
-// Auto-save to store when form changes
-watch(form, () => {
-  onboardingStore.updateStepData('step4', {
-    employment_type: form.employment_type,
-    company_name: form.company_name,
-    job_title: form.job_title,
-    company_phone: form.company_phone,
-    company_address: form.company_address,
-    monthly_income: form.monthly_income,
-    seniority_years: form.seniority_years,
-    seniority_months: form.seniority_months
-  })
-}, { deep: true })
-
-const formattedIncome = () => {
+// Computed for formatted income display
+const formattedIncome = computed(() => {
   return form.monthly_income ? form.monthly_income.toLocaleString('es-MX') : ''
-}
+})
 
+// Handle income input (parse formatted number)
 const handleIncomeInput = (event: Event) => {
   const target = event.target as HTMLInputElement
   const num = target.value.replace(/\D/g, '')
   form.monthly_income = num ? parseInt(num) : 0
 }
 
-const validate = () => {
-  let isValid = true
-
-  if (!form.employment_type) {
-    errors.employment_type = 'Selecciona tu ocupación'
-    isValid = false
-  } else {
-    errors.employment_type = ''
-  }
-
-  // Only require company details for employed workers
-  if (form.employment_type === 'EMPLEADO') {
-    if (!form.company_name.trim()) {
-      errors.company_name = 'El nombre de la empresa es requerido'
-      isValid = false
-    } else {
-      errors.company_name = ''
-    }
-
-    if (!form.job_title.trim()) {
-      errors.job_title = 'El puesto es requerido'
-      isValid = false
-    } else {
-      errors.job_title = ''
-    }
-  } else {
-    errors.company_name = ''
-    errors.job_title = ''
-  }
-
-  if (form.monthly_income < 1000) {
-    errors.monthly_income = 'Ingresa un ingreso válido (mínimo $1,000)'
-    isValid = false
-  } else {
-    errors.monthly_income = ''
-  }
-
-  return isValid
-}
-
-const handleSubmit = async () => {
-  if (!validate()) return
-
-  try {
-    // Normalize data to uppercase before saving
-    onboardingStore.updateStepData('step4', {
-      employment_type: form.employment_type,
-      company_name: form.company_name.toUpperCase(),
-      job_title: form.job_title.toUpperCase(),
-      company_phone: form.company_phone,
-      company_address: form.company_address,
-      monthly_income: form.monthly_income,
-      seniority_years: form.seniority_years,
-      seniority_months: form.seniority_months
-    })
-
-    // Save step 4 explicitly
-    await onboardingStore.completeStep(4)
-    router.push('/solicitud/paso-5')
-  } catch (e) {
-    console.error('Failed to save step 4:', e)
-  }
-}
-
-const prevStep = () => router.push('/solicitud/paso-3')
+// Check if employment type requires company details
+const showCompanyDetails = computed(() => form.employment_type === 'EMPLOYEE')
+const showBusinessDetails = computed(() =>
+  ['SELF_EMPLOYED', 'BUSINESS_OWNER'].includes(form.employment_type)
+)
 </script>
 
 <template>
@@ -166,7 +94,7 @@ const prevStep = () => router.push('/solicitud/paso-3')
           required
         />
 
-        <template v-if="form.employment_type === 'EMPLEADO'">
+        <template v-if="form.employment_type === 'EMPLOYEE'">
           <AppInput
             v-model="form.company_name"
             label="Nombre de la empresa"
@@ -228,18 +156,18 @@ const prevStep = () => router.push('/solicitud/paso-3')
           </div>
         </template>
 
-        <template v-else-if="form.employment_type === 'INDEPENDIENTE' || form.employment_type === 'EMPRESARIO'">
+        <template v-else-if="form.employment_type === 'SELF_EMPLOYED' || form.employment_type === 'BUSINESS_OWNER'">
           <AppInput
             v-model="form.company_name"
-            :label="form.employment_type === 'EMPRESARIO' ? 'Nombre del negocio' : 'Descripción de actividad'"
-            :placeholder="form.employment_type === 'EMPRESARIO' ? 'MI NEGOCIO S.A.' : 'SERVICIOS PROFESIONALES'"
+            :label="form.employment_type === 'BUSINESS_OWNER' ? 'Nombre del negocio' : 'Descripción de actividad'"
+            :placeholder="form.employment_type === 'BUSINESS_OWNER' ? 'MI NEGOCIO S.A.' : 'SERVICIOS PROFESIONALES'"
             uppercase
           />
 
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">
-                {{ form.employment_type === 'EMPRESARIO' ? 'Años con negocio' : 'Años de experiencia' }}
+                {{ form.employment_type === 'BUSINESS_OWNER' ? 'Años con negocio' : 'Años de experiencia' }}
               </label>
               <div class="relative">
                 <input
@@ -279,7 +207,7 @@ const prevStep = () => router.push('/solicitud/paso-3')
           <div class="relative">
             <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
             <input
-              :value="formattedIncome()"
+              :value="formattedIncome"
               type="text"
               inputmode="numeric"
               placeholder="15,000"

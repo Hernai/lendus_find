@@ -204,7 +204,7 @@ const loadThumbnail = async (doc: Document) => {
       `/admin/applications/${props.applicationId}/documents/${doc.id}/download`,
       { responseType: 'blob' }
     )
-    const blob = new Blob([response.data], { type: doc.mime_type || 'image/jpeg' })
+    const blob = new Blob([response.data as BlobPart], { type: doc.mime_type || 'image/jpeg' })
     documentThumbnails.value[doc.id] = URL.createObjectURL(blob)
   } catch (e) {
     console.error('Failed to load thumbnail:', e)
@@ -222,7 +222,8 @@ const loadAllThumbnails = async () => {
     if (i > 0) {
       await new Promise(resolve => setTimeout(resolve, 150))
     }
-    loadThumbnail(imageDocs[i])
+    const doc = imageDocs[i]
+    if (doc) loadThumbnail(doc)
   }
 }
 
@@ -268,14 +269,15 @@ const viewDocument = async (doc: Document) => {
       window.open(response.data.url, '_blank')
     } else {
       // For images, use the cached thumbnail or fetch as blob
-      if (documentThumbnails.value[doc.id]) {
-        selectedDocumentUrl.value = documentThumbnails.value[doc.id]
+      const cachedUrl = documentThumbnails.value[doc.id]
+      if (cachedUrl) {
+        selectedDocumentUrl.value = cachedUrl
       } else {
         const response = await api.get(
           `/admin/applications/${props.applicationId}/documents/${doc.id}/download`,
           { responseType: 'blob' }
         )
-        const blob = new Blob([response.data], { type: doc.mime_type || 'image/jpeg' })
+        const blob = new Blob([response.data as BlobPart], { type: doc.mime_type || 'image/jpeg' })
         selectedDocumentUrl.value = URL.createObjectURL(blob)
       }
       showViewer.value = true
@@ -295,8 +297,9 @@ const goToDocument = async (doc: Document) => {
   selectedDocument.value = doc
 
   // Use cached thumbnail or fetch
-  if (documentThumbnails.value[doc.id]) {
-    selectedDocumentUrl.value = documentThumbnails.value[doc.id]
+  const cachedUrl = documentThumbnails.value[doc.id]
+  if (cachedUrl) {
+    selectedDocumentUrl.value = cachedUrl
   } else {
     isLoadingViewer.value = true
     try {
@@ -304,7 +307,7 @@ const goToDocument = async (doc: Document) => {
         `/admin/applications/${props.applicationId}/documents/${doc.id}/download`,
         { responseType: 'blob' }
       )
-      const blob = new Blob([response.data], { type: doc.mime_type || 'image/jpeg' })
+      const blob = new Blob([response.data as BlobPart], { type: doc.mime_type || 'image/jpeg' })
       selectedDocumentUrl.value = URL.createObjectURL(blob)
     } catch (e) {
       console.error('Failed to load document:', e)
@@ -317,13 +320,15 @@ const goToDocument = async (doc: Document) => {
 // Navigate to previous document
 const prevDocument = () => {
   if (!canGoPrev.value) return
-  goToDocument(imageDocuments.value[currentDocIndex.value - 1])
+  const doc = imageDocuments.value[currentDocIndex.value - 1]
+  if (doc) goToDocument(doc)
 }
 
 // Navigate to next document
 const nextDocument = () => {
   if (!canGoNext.value) return
-  goToDocument(imageDocuments.value[currentDocIndex.value + 1])
+  const doc = imageDocuments.value[currentDocIndex.value + 1]
+  if (doc) goToDocument(doc)
 }
 
 // Open approve modal

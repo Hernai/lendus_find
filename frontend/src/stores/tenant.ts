@@ -4,9 +4,30 @@ import { api } from '@/services/api'
 import { detectTenantSlug } from '@/utils/tenant'
 import type { Tenant, Product } from '@/types'
 
+/** Option for select/dropdown components */
+interface Option {
+  value: string
+  label: string
+}
+
+/** All enum options from backend */
+interface EnumOptions {
+  employment_type: Option[]
+  housing_type: Option[]
+  marital_status: Option[]
+  gender: Option[]
+  education_level: Option[]
+  reference_type: Option[]
+  relationship: Option[]
+  relationship_family: Option[]
+  relationship_non_family: Option[]
+  document_type: Option[]
+}
+
 interface TenantConfigResponse {
   tenant: Tenant
   products: Product[]
+  options: EnumOptions
 }
 
 // Helper to convert hex to HSL
@@ -100,10 +121,25 @@ function generateColorPalette(baseColor: string): Record<string, string> {
   return palette
 }
 
+/** Default empty options */
+const defaultOptions: EnumOptions = {
+  employment_type: [],
+  housing_type: [],
+  marital_status: [],
+  gender: [],
+  education_level: [],
+  reference_type: [],
+  relationship: [],
+  relationship_family: [],
+  relationship_non_family: [],
+  document_type: [],
+}
+
 export const useTenantStore = defineStore('tenant', () => {
   // State
   const tenant = ref<Tenant | null>(null)
   const products = ref<Product[]>([])
+  const options = ref<EnumOptions>(defaultOptions)
   const isLoading = ref(false)
   const isLoaded = ref(false)
   const loadFailed = ref(false)
@@ -159,11 +195,13 @@ export const useTenantStore = defineStore('tenant', () => {
       const response = await api.get<TenantConfigResponse>('/config')
       tenant.value = response.data.tenant
       products.value = response.data.products
+      options.value = response.data.options ?? defaultOptions
       isLoaded.value = true
       loadFailed.value = false
       console.log('[TenantStore] Config loaded:', {
         tenantName: tenant.value?.name,
-        primaryColor: tenant.value?.branding?.primary_color
+        primaryColor: tenant.value?.branding?.primary_color,
+        optionsLoaded: Object.keys(response.data.options ?? {}).length
       })
     } catch (e) {
       error.value = 'Error al cargar la configuración'
@@ -341,6 +379,7 @@ export const useTenantStore = defineStore('tenant', () => {
   const reset = () => {
     tenant.value = null
     products.value = []
+    options.value = defaultOptions
     isLoaded.value = false
     loadFailed.value = false
     error.value = null
@@ -350,6 +389,7 @@ export const useTenantStore = defineStore('tenant', () => {
     // State
     tenant,
     products,
+    options,
     isLoading,
     isLoaded,
     loadFailed,

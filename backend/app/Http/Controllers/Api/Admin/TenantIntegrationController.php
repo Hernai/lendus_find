@@ -4,14 +4,18 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\TenantApiConfig;
-use App\Services\ExternalApi\NubariumService;
-use App\Services\ExternalApi\TwilioService;
+use App\Services\KycServiceFactory;
+use App\Services\TwilioServiceFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class TenantIntegrationController extends Controller
 {
+    public function __construct(
+        protected KycServiceFactory $kycFactory,
+        protected TwilioServiceFactory $twilioFactory
+    ) {}
     /**
      * List all integrations for current tenant
      */
@@ -159,7 +163,7 @@ class TenantIntegrationController extends Controller
         try {
             // Test Nubarium KYC - just obtain token (no phone needed)
             if ($config->provider === 'nubarium' && $config->service_type === 'kyc') {
-                $nubariumService = new NubariumService(app('tenant'));
+                $nubariumService = $this->kycFactory->forCurrentTenant();
                 $result = $nubariumService->testConnection();
 
                 $config->update([
@@ -187,7 +191,7 @@ class TenantIntegrationController extends Controller
 
             // Test Twilio SMS/WhatsApp - send real test message
             if ($config->provider === 'twilio' && in_array($config->service_type, ['sms', 'whatsapp'])) {
-                $twilioService = new TwilioService(app('tenant.id'));
+                $twilioService = $this->twilioFactory->forCurrentTenant();
                 $testMessage = 'Prueba de integración desde LendusFind - ' . now()->format('H:i:s');
 
                 if ($config->service_type === 'whatsapp') {

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useOnboardingStore, useApplicationStore, useAuthStore } from '@/stores'
 import { AppButton, AppSignaturePad } from '@/components/common'
 import { api } from '@/services/api'
+import { type AxiosErrorResponse } from '@/types/api'
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
@@ -102,10 +103,11 @@ const handleSubmit = async () => {
     } else {
       error.value = 'Error al enviar la solicitud. Intenta de nuevo.'
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Failed to submit application:', e)
     // Show detailed error if available
-    const errorMsg = e.response?.data?.message || e.response?.data?.errors
+    const axiosErr = e as AxiosErrorResponse
+    const errorMsg = axiosErr.response?.data?.message || axiosErr.response?.data?.errors
     if (errorMsg) {
       if (typeof errorMsg === 'object') {
         // Format validation errors

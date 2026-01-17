@@ -40,6 +40,9 @@ const isRfcLocked = computed(() => {
 // RFC suggestion state
 const rfcSugerido = ref<string | null>(null)
 
+// Submit error state
+const submitError = ref('')
+
 const form = reactive({
   id_type: 'INE' as 'INE' | 'PASSPORT',
   curp: '',
@@ -390,8 +393,34 @@ const validate = () => {
   return isValid
 }
 
+// Helper to extract error message from API response
+const getErrorMessage = (e: unknown): string => {
+  const error = e as { response?: { data?: { message?: string; errors?: Record<string, string[]> } }; message?: string }
+
+  // Check for validation errors (422)
+  const validationErrors = error.response?.data?.errors
+  if (validationErrors) {
+    const keys = Object.keys(validationErrors)
+    const firstKey = keys[0]
+    if (firstKey) {
+      const messages = validationErrors[firstKey]
+      return messages?.[0] || 'Error de validación'
+    }
+  }
+
+  // Check for message in response
+  if (error.response?.data?.message) {
+    return error.response.data.message
+  }
+
+  // Fallback
+  return error.message || 'Error al guardar. Intenta de nuevo.'
+}
+
 const handleSubmit = async () => {
   if (!validate()) return
+
+  submitError.value = ''
 
   try {
     // Normalize to uppercase before saving
@@ -412,6 +441,7 @@ const handleSubmit = async () => {
     router.push('/solicitud/paso-3')
   } catch (e) {
     console.error('Failed to save step 2:', e)
+    submitError.value = getErrorMessage(e)
   }
 }
 
@@ -803,6 +833,23 @@ const prevStep = () => router.push('/solicitud/paso-1')
             </div>
           </div>
         </template>
+
+        <!-- Error alert -->
+        <div v-if="submitError" class="bg-red-50 border border-red-200 rounded-xl p-4 flex gap-3">
+          <svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div class="flex-1">
+            <p class="text-sm text-red-800 font-medium">{{ submitError }}</p>
+            <button
+              type="button"
+              class="text-xs text-red-600 underline mt-1"
+              @click="submitError = ''"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
 
         <!-- Auto-save indicator -->
         <div v-if="onboardingStore.isSaving || onboardingStore.lastSavedAt" class="text-xs text-right">

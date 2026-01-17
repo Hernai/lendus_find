@@ -10,11 +10,13 @@ use App\Models\AuditLog;
 use App\Models\DataVerification;
 use App\Models\Document;
 use App\Services\ExternalApi\NubariumService;
+use App\Services\KycServiceFactory;
 use App\Services\VerificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
@@ -22,14 +24,53 @@ use Illuminate\Support\Str;
  *
  * Exposes endpoints for CURP, RFC, INE validation and more.
  * Uses the tenant's configured KYC provider (Nubarium, Mati, etc.)
+ *
+ * @property VerificationService $verificationService
+ * @property KycServiceFactory $kycFactory
  */
 class KycController extends Controller
 {
     protected VerificationService $verificationService;
+    protected KycServiceFactory $kycFactory;
 
-    public function __construct(VerificationService $verificationService)
-    {
+    public function __construct(
+        VerificationService $verificationService,
+        KycServiceFactory $kycFactory
+    ) {
         $this->verificationService = $verificationService;
+        $this->kycFactory = $kycFactory;
+    }
+
+    /**
+     * Get the KYC service for the current tenant.
+     */
+    protected function getKycService(?Request $request = null): NubariumService
+    {
+        $service = $this->kycFactory->forCurrentTenant();
+
+        // Set context for API logging if user is authenticated
+        if ($request?->user()?->applicant) {
+            $service->forApplicant($request->user()->applicant->id)
+                ->forUser($request->user()->id);
+        }
+
+        return $service;
+    }
+
+    /**
+     * Check if KYC service is configured, return error response if not.
+     */
+    protected function ensureServiceConfigured(NubariumService $service): ?JsonResponse
+    {
+        if (!$service->isConfigured()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Servicio de validación no configurado',
+                'configured' => false,
+            ], 503);
+        }
+
+        return null;
     }
 
     /**
@@ -37,15 +78,12 @@ class KycController extends Controller
      */
     public function services(Request $request): JsonResponse
     {
-        $tenant = app('tenant');
-
-        // Check which providers are configured
-        $nubariumService = new NubariumService($tenant);
+        $service = $this->getKycService($request);
 
         $services = [
             'nubarium' => [
-                'configured' => $nubariumService->isConfigured(),
-                'services' => $nubariumService->isConfigured() ? $nubariumService->getAvailableServices() : [],
+                'configured' => $service->isConfigured(),
+                'services' => $service->isConfigured() ? $service->getAvailableServices() : [],
             ],
         ];
 
@@ -61,15 +99,10 @@ class KycController extends Controller
      */
     public function testConnection(Request $request): JsonResponse
     {
-        $tenant = app('tenant');
-        $service = new NubariumService($tenant);
+        $service = $this->getKycService($request);
 
-        if (!$service->isConfigured()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Servicio de validación no configurado',
-                'configured' => false,
-            ], 503);
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
         }
 
         // Clear token cache and test connection
@@ -94,14 +127,10 @@ class KycController extends Controller
      */
     public function refreshToken(Request $request): JsonResponse
     {
-        $tenant = app('tenant');
-        $service = new NubariumService($tenant);
+        $service = $this->getKycService($request);
 
-        if (!$service->isConfigured()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Servicio de validación no configurado',
-            ], 503);
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
         }
 
         // Force refresh the token
@@ -141,19 +170,10 @@ class KycController extends Controller
             ], 422);
         }
 
-        $tenant = app('tenant');
-        $service = new NubariumService($tenant);
+        $service = $this->getKycService($request);
 
-        // Set context for API logging
-        if ($request->user()?->applicant) {
-            $service->forApplicant($request->user()->applicant->id)
-                ->forUser($request->user()->id);
-        }
-
-        if (!$service->isConfigured()) {
-            return response()->json([
-                'message' => 'Servicio de validación no configurado',
-            ], 503);
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
         }
 
         $result = $service->validateCurp($request->curp);
@@ -232,19 +252,10 @@ class KycController extends Controller
             ], 422);
         }
 
-        $tenant = app('tenant');
-        $service = new NubariumService($tenant);
+        $service = $this->getKycService($request);
 
-        // Set context for API logging
-        if ($request->user()?->applicant) {
-            $service->forApplicant($request->user()->applicant->id)
-                ->forUser($request->user()->id);
-        }
-
-        if (!$service->isConfigured()) {
-            return response()->json([
-                'message' => 'Servicio de validación no configurado',
-            ], 503);
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
         }
 
         $result = $service->getCurp($request->only([
@@ -323,19 +334,10 @@ class KycController extends Controller
             ], 422);
         }
 
-        $tenant = app('tenant');
-        $service = new NubariumService($tenant);
+        $service = $this->getKycService($request);
 
-        // Set context for API logging
-        if ($request->user()?->applicant) {
-            $service->forApplicant($request->user()->applicant->id)
-                ->forUser($request->user()->id);
-        }
-
-        if (!$service->isConfigured()) {
-            return response()->json([
-                'message' => 'Servicio de validación no configurado',
-            ], 503);
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
         }
 
         $result = $service->validateRfc($request->rfc);
@@ -392,19 +394,10 @@ class KycController extends Controller
             ], 422);
         }
 
-        $tenant = app('tenant');
-        $service = new NubariumService($tenant);
+        $service = $this->getKycService($request);
 
-        // Set context for API logging
-        if ($request->user()?->applicant) {
-            $service->forApplicant($request->user()->applicant->id)
-                ->forUser($request->user()->id);
-        }
-
-        if (!$service->isConfigured()) {
-            return response()->json([
-                'message' => 'Servicio de validación no configurado',
-            ], 503);
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
         }
 
         $result = $service->validateIne(
@@ -480,19 +473,10 @@ class KycController extends Controller
             ], 422);
         }
 
-        $tenant = app('tenant');
-        $service = new NubariumService($tenant);
+        $service = $this->getKycService($request);
 
-        // Set context for API logging
-        if ($request->user()?->applicant) {
-            $service->forApplicant($request->user()->applicant->id)
-                ->forUser($request->user()->id);
-        }
-
-        if (!$service->isConfigured()) {
-            return response()->json([
-                'message' => 'Servicio de validación no configurado',
-            ], 503);
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
         }
 
         $threshold = $request->input('threshold', 80);
@@ -570,19 +554,10 @@ class KycController extends Controller
             ], 422);
         }
 
-        $tenant = app('tenant');
-        $service = new NubariumService($tenant);
+        $service = $this->getKycService($request);
 
-        // Set context for API logging
-        if ($request->user()?->applicant) {
-            $service->forApplicant($request->user()->applicant->id)
-                ->forUser($request->user()->id);
-        }
-
-        if (!$service->isConfigured()) {
-            return response()->json([
-                'message' => 'Servicio de validación no configurado',
-            ], 503);
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
         }
 
         $result = $service->validateLiveness($request->face_image);
@@ -630,13 +605,10 @@ class KycController extends Controller
      */
     public function getBiometricToken(Request $request): JsonResponse
     {
-        $tenant = app('tenant');
-        $service = new NubariumService($tenant);
+        $service = $this->getKycService($request);
 
-        if (!$service->isConfigured()) {
-            return response()->json([
-                'message' => 'Servicio de validación no configurado',
-            ], 503);
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
         }
 
         // Generate unique transaction ID
@@ -685,19 +657,10 @@ class KycController extends Controller
             ], 422);
         }
 
-        $tenant = app('tenant');
-        $service = new NubariumService($tenant);
+        $service = $this->getKycService($request);
 
-        // Set context for API logging
-        if ($request->user()?->applicant) {
-            $service->forApplicant($request->user()->applicant->id)
-                ->forUser($request->user()->id);
-        }
-
-        if (!$service->isConfigured()) {
-            return response()->json([
-                'message' => 'Servicio de validación no configurado',
-            ], 503);
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
         }
 
         $result = $service->validateCep($request->only([
@@ -744,19 +707,10 @@ class KycController extends Controller
             ], 422);
         }
 
-        $tenant = app('tenant');
-        $service = new NubariumService($tenant);
+        $service = $this->getKycService($request);
 
-        // Set context for API logging
-        if ($request->user()?->applicant) {
-            $service->forApplicant($request->user()->applicant->id)
-                ->forUser($request->user()->id);
-        }
-
-        if (!$service->isConfigured()) {
-            return response()->json([
-                'message' => 'Servicio de validación no configurado',
-            ], 503);
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
         }
 
         $similarity = $request->input('similarity', 80);
@@ -807,19 +761,10 @@ class KycController extends Controller
             ], 422);
         }
 
-        $tenant = app('tenant');
-        $service = new NubariumService($tenant);
+        $service = $this->getKycService($request);
 
-        // Set context for API logging
-        if ($request->user()?->applicant) {
-            $service->forApplicant($request->user()->applicant->id)
-                ->forUser($request->user()->id);
-        }
-
-        if (!$service->isConfigured()) {
-            return response()->json([
-                'message' => 'Servicio de validación no configurado',
-            ], 503);
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
         }
 
         $similarity = $request->input('similarity', 80);
@@ -869,19 +814,10 @@ class KycController extends Controller
             ], 422);
         }
 
-        $tenant = app('tenant');
-        $service = new NubariumService($tenant);
+        $service = $this->getKycService($request);
 
-        // Set context for API logging
-        if ($request->user()?->applicant) {
-            $service->forApplicant($request->user()->applicant->id)
-                ->forUser($request->user()->id);
-        }
-
-        if (!$service->isConfigured()) {
-            return response()->json([
-                'message' => 'Servicio de validación no configurado',
-            ], 503);
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
         }
 
         $result = $service->getImssHistory($request->curp, $request->nss);
@@ -920,19 +856,10 @@ class KycController extends Controller
             ], 422);
         }
 
-        $tenant = app('tenant');
-        $service = new NubariumService($tenant);
+        $service = $this->getKycService($request);
 
-        // Set context for API logging
-        if ($request->user()?->applicant) {
-            $service->forApplicant($request->user()->applicant->id)
-                ->forUser($request->user()->id);
-        }
-
-        if (!$service->isConfigured()) {
-            return response()->json([
-                'message' => 'Servicio de validación no configurado',
-            ], 503);
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
         }
 
         $result = $service->validateCedulaProfesional($request->cedula);
@@ -1016,7 +943,7 @@ class KycController extends Controller
             ->first();
 
         if (!$selfieDoc) {
-            \Log::warning('[KycController] No SELFIE document found to update', [
+            Log::warning('[KycController] No SELFIE document found to update', [
                 'applicant_id' => $applicant->id,
             ]);
             return;
@@ -1053,7 +980,7 @@ class KycController extends Controller
             ]
         );
 
-        \Log::info('[KycController] SELFIE document updated and auto-approved via KYC', [
+        Log::info('[KycController] SELFIE document updated and auto-approved via KYC', [
             'applicant_id' => $applicant->id,
             'document_id' => $selfieDoc->id,
             'face_match_score' => $faceMatchData['score'] ?? null,
@@ -1112,7 +1039,7 @@ class KycController extends Controller
         $selfieDoc->metadata = $newMetadata;
         $selfieDoc->save();
 
-        \Log::info('[KycController] Updated SELFIE document metadata with KYC validation', [
+        Log::info('[KycController] Updated SELFIE document metadata with KYC validation', [
             'applicant_id' => $applicant->id,
             'document_id' => $selfieDoc->id,
             'face_match_score' => $newMetadata['face_match_score'] ?? null,
@@ -1165,7 +1092,7 @@ class KycController extends Controller
             $ineDoc->reviewed_at = now();
             $ineDoc->save();
 
-            \Log::info('[KycController] INE document updated and auto-approved via KYC', [
+            Log::info('[KycController] INE document updated and auto-approved via KYC', [
                 'applicant_id' => $applicant->id,
                 'document_id' => $ineDoc->id,
                 'doc_type' => $docType,
@@ -1213,7 +1140,7 @@ class KycController extends Controller
         $ineDoc->metadata = $newMetadata;
         $ineDoc->save();
 
-        \Log::info('[KycController] Updated INE document metadata with KYC validation', [
+        Log::info('[KycController] Updated INE document metadata with KYC validation', [
             'applicant_id' => $applicant->id,
             'document_id' => $ineDoc->id,
             'doc_type' => $docType,

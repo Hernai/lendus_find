@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Enums\ApplicationStatus;
 use App\Enums\AuditAction;
 use App\Enums\DocumentStatus;
+use App\Enums\PaymentFrequency;
 use App\Enums\VerificationStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
@@ -336,7 +337,7 @@ class ApplicationController extends Controller
             'amount' => 'required|numeric|min:1000',
             'term_months' => 'required|integer|min:1|max:120',
             'interest_rate' => 'required|numeric|min:0|max:100',
-            'payment_frequency' => 'required|in:WEEKLY,BIWEEKLY,QUINCENAL,MONTHLY,MENSUAL',
+            'payment_frequency' => ['required', \Illuminate\Validation\Rule::in(PaymentFrequency::values())],
             'reason' => 'nullable|string|max:500',
         ]);
 

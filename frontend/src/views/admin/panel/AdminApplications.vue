@@ -185,8 +185,9 @@ const applicationsByStatus = computed(() => {
   })
 
   applications.value.forEach(app => {
-    if (grouped[app.status]) {
-      grouped[app.status].push(app)
+    const statusGroup = grouped[app.status]
+    if (statusGroup) {
+      statusGroup.push(app)
     }
   })
 
@@ -755,7 +756,7 @@ const confirmBulkReject = async () => {
 
           <!-- Empty Column State -->
           <div
-            v-if="applicationsByStatus[column.status].length === 0"
+            v-if="(applicationsByStatus[column.status]?.length ?? 0) === 0"
             class="text-center py-8 text-gray-400"
           >
             <svg class="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">

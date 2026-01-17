@@ -91,7 +91,7 @@ const loadImage = async () => {
     const response = await api.get(`/documents/${props.document.id}/download`, {
       responseType: 'blob'
     })
-    const blob = new Blob([response.data], { type: response.headers['content-type'] || 'image/jpeg' })
+    const blob = new Blob([response.data as BlobPart], { type: response.headers['content-type'] || 'image/jpeg' })
     imageUrl.value = URL.createObjectURL(blob)
   } catch (e) {
     console.error('Failed to load document image:', e)

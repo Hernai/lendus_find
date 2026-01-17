@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Enums\PaymentFrequency;
+
 /**
  * Service for loan calculation operations.
  *
@@ -15,10 +17,10 @@ class LoanCalculationService
 {
     /**
      * Payment frequency constants.
+     * @deprecated Use PaymentFrequency enum instead
      */
     public const FREQUENCY_WEEKLY = 'WEEKLY';
     public const FREQUENCY_BIWEEKLY = 'BIWEEKLY';
-    public const FREQUENCY_QUINCENAL = 'QUINCENAL';
     public const FREQUENCY_MONTHLY = 'MONTHLY';
 
     /**
@@ -27,7 +29,6 @@ class LoanCalculationService
     private const PERIODS_PER_YEAR = [
         self::FREQUENCY_WEEKLY => 52,
         self::FREQUENCY_BIWEEKLY => 24,
-        self::FREQUENCY_QUINCENAL => 24,
         self::FREQUENCY_MONTHLY => 12,
     ];
 
@@ -36,7 +37,15 @@ class LoanCalculationService
      */
     public function getPeriodsPerYear(string $frequency): int
     {
-        return self::PERIODS_PER_YEAR[strtoupper($frequency)] ?? 12;
+        $normalizedFrequency = strtoupper($frequency);
+
+        // Use enum if value exists, otherwise try direct lookup
+        $enumFrequency = PaymentFrequency::normalize($normalizedFrequency);
+        if ($enumFrequency !== null) {
+            return $enumFrequency->periodsPerYear();
+        }
+
+        return self::PERIODS_PER_YEAR[$normalizedFrequency] ?? 12;
     }
 
     /**
@@ -44,11 +53,17 @@ class LoanCalculationService
      */
     public function calculateTotalPeriods(int $termMonths, string $frequency): int
     {
-        $frequency = strtoupper($frequency);
+        $normalizedFrequency = strtoupper($frequency);
 
-        $totalPeriods = match ($frequency) {
+        // Normalize legacy Spanish values
+        $enumFrequency = PaymentFrequency::normalize($normalizedFrequency);
+        if ($enumFrequency !== null) {
+            $normalizedFrequency = $enumFrequency->value;
+        }
+
+        $totalPeriods = match ($normalizedFrequency) {
             self::FREQUENCY_WEEKLY => $termMonths * 4.33,
-            self::FREQUENCY_BIWEEKLY, self::FREQUENCY_QUINCENAL => $termMonths * 2,
+            self::FREQUENCY_BIWEEKLY => $termMonths * 2,
             default => $termMonths,
         };
 
@@ -260,9 +275,14 @@ class LoanCalculationService
      */
     public function getFrequencyLabel(string $frequency): string
     {
+        $enumFrequency = PaymentFrequency::normalize($frequency);
+        if ($enumFrequency !== null) {
+            return $enumFrequency->label();
+        }
+
         return match (strtoupper($frequency)) {
             self::FREQUENCY_WEEKLY => 'Semanal',
-            self::FREQUENCY_BIWEEKLY, self::FREQUENCY_QUINCENAL => 'Quincenal',
+            self::FREQUENCY_BIWEEKLY => 'Quincenal',
             self::FREQUENCY_MONTHLY => 'Mensual',
             default => $frequency,
         };

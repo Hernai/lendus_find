@@ -8,6 +8,7 @@ use App\Enums\BankVerificationMethod;
 use App\Traits\HasAuditFields;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
+use App\Traits\NormalizesText;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,7 +16,15 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class BankAccount extends Model
 {
-    use HasFactory, HasUuid, HasTenant, SoftDeletes, HasAuditFields;
+    use HasFactory, HasUuid, HasTenant, SoftDeletes, HasAuditFields, NormalizesText;
+
+    /**
+     * Fields to convert to uppercase on save.
+     */
+    protected array $uppercaseFields = [
+        'holder_name',
+        'holder_rfc',
+    ];
 
     protected $fillable = [
         'tenant_id',

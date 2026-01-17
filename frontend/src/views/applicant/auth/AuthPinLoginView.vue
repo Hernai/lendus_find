@@ -1,17 +1,24 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useTenantStore } from '@/stores'
 import { AppButton } from '@/components/common'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const tenantStore = useTenantStore()
 
 const phone = computed(() => route.query.phone as string || '')
 const pin = ref('')
 const error = ref('')
 const attemptsRemaining = ref<number | null>(null)
+
+// Get tenant slug from route params or store
+const getTenantSlug = (): string | undefined => {
+  const routeTenant = route.params.tenant as string
+  return routeTenant || tenantStore.slug || undefined
+}
 
 const maskedPhone = computed(() => {
   if (!phone.value) return ''
@@ -51,18 +58,28 @@ const handleSubmit = async () => {
     await authStore.checkAuth()
 
     const redirect = route.query.redirect as string
+    const tenantSlug = getTenantSlug()
 
     if (redirect) {
       // Explicit redirect (e.g., from protected route)
       router.push(redirect)
     } else if (!authStore.hasApplicant) {
       // User is new, redirect to onboarding
-      router.push('/solicitud')
+      if (tenantSlug) {
+        router.push(`/${tenantSlug}/solicitud`)
+      } else {
+        router.push('/solicitud')
+      }
     } else {
       // User exists, redirect to dashboard
-      router.push('/dashboard')
+      if (tenantSlug) {
+        router.push(`/${tenantSlug}/dashboard`)
+      } else {
+        router.push('/dashboard')
+      }
     }
   } else {
+    const tenantSlug = getTenantSlug()
     if (result.error === 'INVALID_PIN') {
       attemptsRemaining.value = result.attemptsRemaining ?? null
       error.value = attemptsRemaining.value !== null
@@ -71,7 +88,11 @@ const handleSubmit = async () => {
     } else if (result.error === 'ACCOUNT_LOCKED') {
       error.value = `Cuenta bloqueada. Intenta en ${authStore.pinLockoutMinutes} minutos.`
     } else if (result.error === 'NO_PIN_SET') {
-      router.push({ name: 'auth-phone', query: { phone: phone.value } })
+      if (tenantSlug) {
+        router.push({ name: 'tenant-auth-phone', params: { tenant: tenantSlug }, query: { phone: phone.value } })
+      } else {
+        router.push({ name: 'auth-phone', query: { phone: phone.value } })
+      }
     } else {
       error.value = 'Error al iniciar sesión'
     }
@@ -81,24 +102,50 @@ const handleSubmit = async () => {
 
 const handleForgotPin = async () => {
   // Redirect to OTP flow to reset PIN
-  router.push({
-    name: 'auth-phone',
-    query: {
-      phone: phone.value,
-      forgot_pin: 'true'
-    }
-  })
+  const tenantSlug = getTenantSlug()
+  if (tenantSlug) {
+    router.push({
+      name: 'tenant-auth-phone',
+      params: { tenant: tenantSlug },
+      query: {
+        phone: phone.value,
+        forgot_pin: 'true'
+      }
+    })
+  } else {
+    router.push({
+      name: 'auth-phone',
+      query: {
+        phone: phone.value,
+        forgot_pin: 'true'
+      }
+    })
+  }
 }
 
 const handleUseOtp = () => {
-  router.push({
-    name: 'auth-phone',
-    query: { phone: phone.value }
-  })
+  const tenantSlug = getTenantSlug()
+  if (tenantSlug) {
+    router.push({
+      name: 'tenant-auth-phone',
+      params: { tenant: tenantSlug },
+      query: { phone: phone.value }
+    })
+  } else {
+    router.push({
+      name: 'auth-phone',
+      query: { phone: phone.value }
+    })
+  }
 }
 
 const goBack = () => {
-  router.push('/auth')
+  const tenantSlug = getTenantSlug()
+  if (tenantSlug) {
+    router.push(`/${tenantSlug}/auth`)
+  } else {
+    router.push('/auth')
+  }
 }
 </script>
 

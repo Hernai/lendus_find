@@ -231,11 +231,18 @@ class VerificationService
     /**
      * Check if entity has completed KYC (critical fields verified).
      *
+     * Optimized to use a single query instead of N+1 queries per field.
+     *
      * @param User|Applicant $entity
      * @return bool
      */
     public function hasCompletedKyc(User|Applicant $entity): bool
     {
+        $applicant = $this->resolveApplicant($entity);
+        if (!$applicant) {
+            return false;
+        }
+
         $criticalFields = [
             VerifiableField::CURP->value,
             VerifiableField::FIRST_NAME->value,
@@ -243,13 +250,13 @@ class VerificationService
             VerifiableField::BIRTH_DATE->value,
         ];
 
-        foreach ($criticalFields as $field) {
-            if (!$this->isVerified($entity, $field)) {
-                return false;
-            }
-        }
+        // Single query to count verified critical fields
+        $verifiedCount = DataVerification::where('applicant_id', $applicant->id)
+            ->whereIn('field_name', $criticalFields)
+            ->where('is_verified', true)
+            ->count();
 
-        return true;
+        return $verifiedCount >= count($criticalFields);
     }
 
     /**

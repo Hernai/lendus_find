@@ -114,7 +114,7 @@ watch(form, () => {
     birth_state: form.birth_state,
     gender: form.gender,
     nationality: form.is_mexican === 'SI' ? 'MX' : form.nationality,
-    marital_status: onboardingStore.data.step1.marital_status || 'SOLTERO'
+    marital_status: onboardingStore.data.step1.marital_status || ''
   })
 }, { deep: true })
 
@@ -343,8 +343,8 @@ const handleSubmit = async () => {
 
         params = {
           product_id: product.id,
-          requested_amount: product.rules.min_amount || 10000,
-          term_months: product.rules.min_term_months || 12,
+          requested_amount: product.rules?.min_amount || 10000,
+          term_months: product.rules?.min_term_months || 12,
           payment_frequency: 'MONTHLY'
         }
 

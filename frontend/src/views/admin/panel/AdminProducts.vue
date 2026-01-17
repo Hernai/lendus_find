@@ -411,7 +411,7 @@ const submitForm = async () => {
     if (err.response?.data?.errors) {
       const serverErrors = err.response.data.errors
       for (const [field, messages] of Object.entries(serverErrors)) {
-        formErrors.value[field] = messages[0]
+        formErrors.value[field] = messages[0] ?? ''
       }
     } else {
       formError.value = err.response?.data?.message || 'Error al guardar el producto'
@@ -975,10 +975,10 @@ onMounted(fetchProducts)
                       <div v-if="form.payment_frequencies.includes('WEEKLY')" class="px-4 pb-3 border-t border-gray-100">
                         <div class="flex flex-wrap gap-1.5 pt-3">
                           <!-- All terms (selected + quick options) sorted together -->
-                          <template v-for="term in [...new Set([...(form.term_config['WEEKLY']?.available_terms || []), ...quickTermOptions['WEEKLY']])].sort((a, b) => a - b)" :key="`${term}-${form.min_term_months}-${form.max_term_months}`">
+                          <template v-for="term in [...new Set([...(form.term_config['WEEKLY']?.available_terms ?? []), ...(quickTermOptions['WEEKLY'] ?? [])])].sort((a, b) => a - b)" :key="`${term}-${form.min_term_months}-${form.max_term_months}`">
                             <!-- Selected term from quick options -->
                             <button
-                              v-if="form.term_config['WEEKLY']?.available_terms?.includes(term) && quickTermOptions['WEEKLY'].includes(term)"
+                              v-if="form.term_config['WEEKLY']?.available_terms?.includes(term) && (quickTermOptions['WEEKLY'] ?? []).includes(term)"
                               type="button"
                               @click="removeTerm('WEEKLY', term)"
                               :class="[
@@ -1053,10 +1053,10 @@ onMounted(fetchProducts)
                       <div v-if="form.payment_frequencies.includes('BIWEEKLY')" class="px-4 pb-3 border-t border-gray-100">
                         <div class="flex flex-wrap gap-1.5 pt-3">
                           <!-- All terms (selected + quick options) sorted together -->
-                          <template v-for="term in [...new Set([...(form.term_config['BIWEEKLY']?.available_terms || []), ...quickTermOptions['BIWEEKLY']])].sort((a, b) => a - b)" :key="`${term}-${form.min_term_months}-${form.max_term_months}`">
+                          <template v-for="term in [...new Set([...(form.term_config['BIWEEKLY']?.available_terms ?? []), ...(quickTermOptions['BIWEEKLY'] ?? [])])].sort((a, b) => a - b)" :key="`${term}-${form.min_term_months}-${form.max_term_months}`">
                             <!-- Selected term from quick options -->
                             <button
-                              v-if="form.term_config['BIWEEKLY']?.available_terms?.includes(term) && quickTermOptions['BIWEEKLY'].includes(term)"
+                              v-if="form.term_config['BIWEEKLY']?.available_terms?.includes(term) && (quickTermOptions['BIWEEKLY'] ?? []).includes(term)"
                               type="button"
                               @click="removeTerm('BIWEEKLY', term)"
                               :class="[
@@ -1131,10 +1131,10 @@ onMounted(fetchProducts)
                       <div v-if="form.payment_frequencies.includes('MONTHLY')" class="px-4 pb-3 border-t border-gray-100">
                         <div class="flex flex-wrap gap-1.5 pt-3">
                           <!-- All terms (selected + quick options) sorted together -->
-                          <template v-for="term in [...new Set([...(form.term_config['MONTHLY']?.available_terms || []), ...quickTermOptions['MONTHLY']])].sort((a, b) => a - b)" :key="`${term}-${form.min_term_months}-${form.max_term_months}`">
+                          <template v-for="term in [...new Set([...(form.term_config['MONTHLY']?.available_terms ?? []), ...(quickTermOptions['MONTHLY'] ?? [])])].sort((a, b) => a - b)" :key="`${term}-${form.min_term_months}-${form.max_term_months}`">
                             <!-- Selected term from quick options -->
                             <button
-                              v-if="form.term_config['MONTHLY']?.available_terms?.includes(term) && quickTermOptions['MONTHLY'].includes(term)"
+                              v-if="form.term_config['MONTHLY']?.available_terms?.includes(term) && (quickTermOptions['MONTHLY'] ?? []).includes(term)"
                               type="button"
                               @click="removeTerm('MONTHLY', term)"
                               :class="[

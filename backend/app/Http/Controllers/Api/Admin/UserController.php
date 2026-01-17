@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
@@ -73,7 +74,7 @@ class UserController extends Controller
             'name' => 'required|string|max:100',
             'email' => 'required|email|unique:users,email',
             'phone' => 'nullable|string|size:10|unique:users,phone',
-            'role' => 'required|in:ADMIN,SUPERVISOR,ANALYST',
+            'role' => ['required', Rule::in(UserType::staffValues())],
             'password' => 'nullable|string|min:8',
         ], [
             'email.unique' => 'Este correo electrónico ya está registrado',
@@ -159,7 +160,7 @@ class UserController extends Controller
             'name' => 'sometimes|string|max:100',
             'email' => 'sometimes|email|unique:users,email,' . $user->id,
             'phone' => 'nullable|string|size:10|unique:users,phone,' . $user->id,
-            'role' => 'sometimes|in:ADMIN,SUPERVISOR,ANALYST',
+            'role' => ['sometimes', Rule::in(UserType::staffValues())],
             'password' => 'nullable|string|min:8',
             'is_active' => 'sometimes|boolean',
         ], [

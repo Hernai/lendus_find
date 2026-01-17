@@ -2,8 +2,11 @@
 
 namespace App\Enums;
 
+use App\Enums\Traits\HasOptions;
+
 enum DocumentType: string
 {
+    use HasOptions;
     // Identification documents
     case INE_FRONT = 'INE_FRONT';
     case INE_BACK = 'INE_BACK';
@@ -37,6 +40,14 @@ enum DocumentType: string
     case BUSINESS_LICENSE = 'BUSINESS_LICENSE';
     case CONSTITUTIVE_ACT = 'CONSTITUTIVE_ACT';
     case POWER_OF_ATTORNEY = 'POWER_OF_ATTORNEY';
+
+    /**
+     * Get human-readable label (alias for description).
+     */
+    public function label(): string
+    {
+        return $this->description();
+    }
 
     /**
      * Get human-readable description in Spanish.

@@ -1265,6 +1265,23 @@ export const useKycStore = defineStore('kyc', () => {
         lockedData.value.cic = fields.ine_folio?.value || fields.ine_cic?.value || null
       }
 
+      // Reconstruct direccion_ine from address fields
+      if (fields.address_street?.value) {
+        lockedData.value.direccion_ine.calle = fields.address_street.value
+      }
+      if (fields.address_neighborhood?.value) {
+        lockedData.value.direccion_ine.colonia = fields.address_neighborhood.value
+      }
+      if (fields.address_postal_code?.value) {
+        lockedData.value.direccion_ine.cp = fields.address_postal_code.value
+      }
+      if (fields.address_city?.value) {
+        lockedData.value.direccion_ine.municipio = fields.address_city.value
+      }
+      if (fields.address_state?.value) {
+        lockedData.value.direccion_ine.estado = fields.address_state.value
+      }
+
       // Set verified based on backend flag OR if we have CURP data (from backend or existing in memory)
       // This ensures KYC state is restored even if kyc_verified flag is not set
       // Also preserve verified state if lockedData already has a CURP from current session
@@ -1278,7 +1295,8 @@ export const useKycStore = defineStore('kyc', () => {
         nombres: lockedData.value.nombres,
         clave_elector: lockedData.value.clave_elector,
         sexo: lockedData.value.sexo,
-        entidad_nacimiento: lockedData.value.entidad_nacimiento
+        entidad_nacimiento: lockedData.value.entidad_nacimiento,
+        direccion_ine: lockedData.value.direccion_ine
       })
       kycLogger.debug('verified flag:', verified.value)
 

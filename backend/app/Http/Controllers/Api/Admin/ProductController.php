@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Enums\PaymentFrequency;
+use App\Enums\ProductType;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class ProductController extends Controller
 {
@@ -15,12 +18,8 @@ class ProductController extends Controller
      */
     private function normalizeFrequency(string $freq): string
     {
-        return match ($freq) {
-            'SEMANAL' => 'WEEKLY',
-            'QUINCENAL' => 'BIWEEKLY',
-            'MENSUAL' => 'MONTHLY',
-            default => $freq,
-        };
+        $enum = PaymentFrequency::normalize($freq);
+        return $enum?->value ?? $freq;
     }
 
     /**
@@ -98,7 +97,7 @@ class ProductController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:100',
             'code' => 'required|string|max:20|unique:products,code',
-            'type' => 'required|in:PERSONAL,AUTO,HIPOTECARIO,PYME,NOMINA,ARRENDAMIENTO',
+            'type' => ['required', Rule::in(ProductType::values())],
             'description' => 'nullable|string|max:500',
             'min_amount' => 'required|numeric|min:0',
             'max_amount' => 'required|numeric|gt:min_amount',
@@ -108,7 +107,7 @@ class ProductController extends Controller
             'opening_commission' => 'required|numeric|min:0|max:100',
             'late_fee_rate' => 'nullable|numeric|min:0|max:100',
             'payment_frequencies' => 'required|array|min:1',
-            'payment_frequencies.*' => 'in:SEMANAL,WEEKLY,BIWEEKLY,QUINCENAL,MONTHLY,MENSUAL',
+            'payment_frequencies.*' => [Rule::in(PaymentFrequency::values())],
             'term_config' => 'nullable|array',
             'term_config.*.available_terms' => 'required_with:term_config|array|min:1',
             'term_config.*.available_terms.*' => 'integer|min:1',
@@ -209,7 +208,7 @@ class ProductController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'sometimes|string|max:100',
             'code' => 'sometimes|string|max:20|unique:products,code,' . $product->id,
-            'type' => 'sometimes|in:PERSONAL,AUTO,HIPOTECARIO,PYME,NOMINA,ARRENDAMIENTO',
+            'type' => ['sometimes', Rule::in(ProductType::values())],
             'description' => 'nullable|string|max:500',
             'min_amount' => 'sometimes|numeric|min:0',
             'max_amount' => 'sometimes|numeric',
@@ -219,7 +218,7 @@ class ProductController extends Controller
             'opening_commission' => 'sometimes|numeric|min:0|max:100',
             'late_fee_rate' => 'nullable|numeric|min:0|max:100',
             'payment_frequencies' => 'sometimes|array|min:1',
-            'payment_frequencies.*' => 'in:SEMANAL,WEEKLY,BIWEEKLY,QUINCENAL,MONTHLY,MENSUAL',
+            'payment_frequencies.*' => [Rule::in(PaymentFrequency::values())],
             'term_config' => 'nullable|array',
             'term_config.*.available_terms' => 'array|min:1',
             'term_config.*.available_terms.*' => 'integer|min:1',

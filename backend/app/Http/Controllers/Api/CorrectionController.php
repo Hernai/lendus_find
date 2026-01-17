@@ -127,13 +127,13 @@ class CorrectionController extends Controller
                 'state' => $address->state,
             ] : null,
             'employment' => $employment ? [
-                'type' => $employment->employment_type?->value ?? 'EMPLEADO',
+                'type' => $employment->employment_type?->value ?? 'EMPLOYEE',
                 'company_name' => $employment->company_name ?? '',
                 'position' => $employment->position ?? '',
                 'monthly_income' => (float) ($employment->monthly_income ?? 0),
                 'seniority_months' => (int) ($employment->seniority_months ?? 0),
             ] : [
-                'type' => 'EMPLEADO',
+                'type' => 'EMPLOYEE',
                 'company_name' => '',
                 'position' => '',
                 'monthly_income' => 0,
@@ -395,7 +395,7 @@ class CorrectionController extends Controller
                         // Map the correction values to employment record fields
                         if (isset($value['type'])) {
                             // Convert string to enum
-                            $employment->employment_type = EmploymentType::tryFrom($value['type']) ?? EmploymentType::EMPLEADO;
+                            $employment->employment_type = EmploymentType::tryFrom($value['type']) ?? EmploymentType::EMPLOYEE;
                         }
                         if (isset($value['company_name'])) {
                             $employment->company_name = $value['company_name'];

@@ -59,7 +59,7 @@ export type ApplicantType = 'PERSONA_FISICA' | 'PERSONA_MORAL'
 
 export type KycStatus = 'PENDING' | 'IN_PROGRESS' | 'VERIFIED' | 'REJECTED'
 
-export type MaritalStatus = 'SOLTERO' | 'CASADO' | 'UNION_LIBRE' | 'DIVORCIADO' | 'VIUDO'
+export type MaritalStatus = 'SINGLE' | 'MARRIED' | 'COMMON_LAW' | 'DIVORCED' | 'WIDOWED' | 'SEPARATED'
 
 // Address (normalized table)
 export interface Address {
@@ -96,7 +96,7 @@ export interface Address {
 
 export type AddressType = 'HOME' | 'WORK' | 'FISCAL' | 'CORRESPONDENCE'
 
-export type HousingType = 'PROPIA_PAGADA' | 'PROPIA_HIPOTECA' | 'RENTADA' | 'FAMILIAR' | 'PRESTADA' | 'OTRO'
+export type HousingType = 'OWNED_PAID' | 'OWNED_MORTGAGE' | 'RENTED' | 'FAMILY' | 'BORROWED' | 'OTHER'
 
 // Employment Record (normalized table)
 export interface EmploymentRecord {
@@ -134,7 +134,7 @@ export interface EmploymentRecord {
   updated_at: string
 }
 
-export type EmploymentType = 'EMPLEADO' | 'INDEPENDIENTE' | 'EMPRESARIO' | 'PENSIONADO' | 'ESTUDIANTE' | 'HOGAR' | 'DESEMPLEADO' | 'OTRO'
+export type EmploymentType = 'EMPLOYEE' | 'SELF_EMPLOYED' | 'BUSINESS_OWNER' | 'RETIRED' | 'STUDENT' | 'HOMEMAKER' | 'UNEMPLOYED' | 'OTHER'
 
 export type ContractType = 'INDEFINIDO' | 'TEMPORAL' | 'OBRA_DETERMINADA' | 'HONORARIOS' | 'COMISION'
 
@@ -186,18 +186,20 @@ export interface Reference {
 }
 
 export type ReferenceRelationship =
-  | 'PADRE_MADRE'
-  | 'HERMANO'
-  | 'CONYUGE'
-  | 'HIJO'
-  | 'TIO'
-  | 'PRIMO'
-  | 'ABUELO'
-  | 'AMIGO'
-  | 'VECINO'
-  | 'COMPANERO_TRABAJO'
-  | 'JEFE'
-  | 'OTRO'
+  | 'PARENT'
+  | 'SIBLING'
+  | 'SPOUSE'
+  | 'CHILD'
+  | 'UNCLE_AUNT'
+  | 'COUSIN'
+  | 'GRANDPARENT'
+  | 'OTHER_FAMILY'
+  | 'FRIEND'
+  | 'NEIGHBOR'
+  | 'COWORKER'
+  | 'BOSS'
+  | 'ACQUAINTANCE'
+  | 'OTHER'
 
 export type ReferenceType = 'PERSONAL' | 'WORK'
 

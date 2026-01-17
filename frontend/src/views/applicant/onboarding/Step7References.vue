@@ -1,14 +1,20 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, watch } from 'vue'
+import { reactive, ref, onMounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore, useApplicationStore } from '@/stores'
+import { useOnboardingStore, useApplicationStore, useTenantStore } from '@/stores'
 import { AppButton, AppInput, AppSelect } from '@/components/common'
 import { api } from '@/services/api'
+import { getErrorMessage } from '@/types/api'
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
 const applicationStore = useApplicationStore()
+const tenantStore = useTenantStore()
 const isSaving = ref(false)
+
+// Get relationship options from backend
+const familyRelationshipOptions = computed(() => tenantStore.options.relationship_family)
+const nonFamilyRelationshipOptions = computed(() => tenantStore.options.relationship_non_family)
 
 interface Reference {
   first_name: string
@@ -60,27 +66,9 @@ watch(
   { deep: true }
 )
 
-const familyRelationshipOptions = [
-  { value: 'PADRE_MADRE', label: 'Padre/Madre' },
-  { value: 'HERMANO', label: 'Hermano(a)' },
-  { value: 'CONYUGE', label: 'Cónyuge' },
-  { value: 'HIJO', label: 'Hijo(a)' },
-  { value: 'TIO', label: 'Tío(a)' },
-  { value: 'PRIMO', label: 'Primo(a)' },
-  { value: 'OTRO_FAMILIAR', label: 'Otro familiar' }
-]
-
-const nonFamilyRelationshipOptions = [
-  { value: 'AMIGO', label: 'Amigo(a)' },
-  { value: 'COMPAÑERO_TRABAJO', label: 'Compañero(a) de trabajo' },
-  { value: 'VECINO', label: 'Vecino(a)' },
-  { value: 'CONOCIDO', label: 'Conocido(a)' },
-  { value: 'OTRO', label: 'Otro' }
-]
-
 // Derivar tipo de referencia desde la relación
 const getTypeFromRelationship = (relationship: string): 'PERSONAL' | 'WORK' => {
-  return relationship === 'COMPAÑERO_TRABAJO' ? 'WORK' : 'PERSONAL'
+  return relationship === 'COWORKER' || relationship === 'BOSS' ? 'WORK' : 'PERSONAL'
 }
 
 const isPhoneValid = (phone: string): boolean => {
@@ -141,10 +129,10 @@ const validate = () => {
 
   // Validar que haya al menos 1 familiar y 1 no familiar
   const hasFamily = references.some(r =>
-    familyRelationshipOptions.some(opt => opt.value === r.relationship)
+    familyRelationshipOptions.value.some(opt => opt.value === r.relationship)
   )
   const hasNonFamily = references.some(r =>
-    nonFamilyRelationshipOptions.some(opt => opt.value === r.relationship)
+    nonFamilyRelationshipOptions.value.some(opt => opt.value === r.relationship)
   )
 
   if (!hasFamily) {
@@ -208,9 +196,9 @@ const handleSubmit = async () => {
     }
 
     router.push('/solicitud/paso-8')
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Failed to save step 7:', e)
-    errors['general'] = e.response?.data?.message || 'Error al guardar las referencias'
+    errors['general'] = getErrorMessage(e, 'Error al guardar las referencias')
   } finally {
     isSaving.value = false
   }

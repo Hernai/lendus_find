@@ -13,7 +13,7 @@ class EmploymentRecordResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->uuid,
+            'id' => $this->id,
             'is_current' => $this->is_current,
             'employment_type' => $this->employment_type,
             'occupation' => $this->occupation,

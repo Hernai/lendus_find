@@ -2,6 +2,7 @@
 
 namespace App\Services\Export;
 
+use App\Enums\ApplicationStatus;
 use Illuminate\Support\Collection;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;

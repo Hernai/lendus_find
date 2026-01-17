@@ -3,16 +3,16 @@
 namespace App\Enums;
 
 /**
- * Payment frequency options for loan products.
+ * Payment frequency enum.
  *
- * Uses Spanish values as canonical (SEMANAL, QUINCENAL, MENSUAL)
- * with helper methods to normalize from English equivalents.
+ * Uses English values as canonical for consistency across all enums.
+ * Includes normalize() method for compatibility with legacy Spanish values.
  */
 enum PaymentFrequency: string
 {
-    case SEMANAL = 'SEMANAL';
-    case QUINCENAL = 'QUINCENAL';
-    case MENSUAL = 'MENSUAL';
+    case WEEKLY = 'WEEKLY';
+    case BIWEEKLY = 'BIWEEKLY';
+    case MONTHLY = 'MONTHLY';
 
     /**
      * Get the display label in Spanish.
@@ -20,9 +20,9 @@ enum PaymentFrequency: string
     public function label(): string
     {
         return match ($this) {
-            self::SEMANAL => 'Semanal',
-            self::QUINCENAL => 'Quincenal',
-            self::MENSUAL => 'Mensual',
+            self::WEEKLY => 'Semanal',
+            self::BIWEEKLY => 'Quincenal',
+            self::MONTHLY => 'Mensual',
         };
     }
 
@@ -32,9 +32,9 @@ enum PaymentFrequency: string
     public function periodsPerYear(): int
     {
         return match ($this) {
-            self::SEMANAL => 52,
-            self::QUINCENAL => 24,
-            self::MENSUAL => 12,
+            self::WEEKLY => 52,
+            self::BIWEEKLY => 24,
+            self::MONTHLY => 12,
         };
     }
 
@@ -50,7 +50,7 @@ enum PaymentFrequency: string
 
     /**
      * Normalize a frequency value to the canonical enum.
-     * Handles both Spanish and English values.
+     * Handles both English and legacy Spanish values.
      */
     public static function normalize(string $value): ?self
     {
@@ -62,11 +62,11 @@ enum PaymentFrequency: string
             return $direct;
         }
 
-        // Map English values to Spanish equivalents
+        // Map legacy Spanish values to English equivalents
         return match ($normalized) {
-            'WEEKLY' => self::SEMANAL,
-            'BIWEEKLY' => self::QUINCENAL,
-            'MONTHLY' => self::MENSUAL,
+            'SEMANAL' => self::WEEKLY,
+            'QUINCENAL' => self::BIWEEKLY,
+            'MENSUAL' => self::MONTHLY,
             default => null,
         };
     }

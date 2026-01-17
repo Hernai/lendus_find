@@ -31,8 +31,13 @@ function isReactive<T>(value: MaybeRef<T>): value is Ref<T> | ComputedRef<T> {
   return isRef(value) || (typeof value === 'object' && value !== null && 'value' in value)
 }
 
+interface PrivateChannel {
+  name: string
+  listen(event: string, callback: (...args: unknown[]) => void): PrivateChannel
+}
+
 export function useWebSocket(options: UseWebSocketOptions) {
-  const channels: any[] = []
+  const channels: PrivateChannel[] = []
 
   // Determinar la intención del caller basado en qué opciones fueron provistas
   // (no en sus valores actuales, que pueden ser undefined inicialmente)

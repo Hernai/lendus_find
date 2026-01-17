@@ -147,9 +147,9 @@ const compressImage = (file: File, maxWidth: number, quality: number): Promise<s
 
 const handleLogoUpload = async (event: Event, field: string) => {
   const input = event.target as HTMLInputElement
-  if (!input.files?.length) return
+  const file = input.files?.[0]
+  if (!file) return
 
-  const file = input.files[0]
   uploadError.value = null
 
   if (file.size > 5 * 1024 * 1024) {

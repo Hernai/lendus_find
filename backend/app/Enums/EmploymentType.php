@@ -2,28 +2,37 @@
 
 namespace App\Enums;
 
+use App\Enums\Traits\HasOptions;
+
+/**
+ * Employment type enum.
+ *
+ * Uses English values as canonical for consistency across all enums.
+ * Includes normalize() method for compatibility with legacy Spanish values.
+ */
 enum EmploymentType: string
 {
-    case EMPLEADO = 'EMPLEADO';
-    case INDEPENDIENTE = 'INDEPENDIENTE';
-    case EMPRESARIO = 'EMPRESARIO';
-    case PENSIONADO = 'PENSIONADO';
-    case ESTUDIANTE = 'ESTUDIANTE';
-    case HOGAR = 'HOGAR';
-    case DESEMPLEADO = 'DESEMPLEADO';
-    case OTRO = 'OTRO';
+    use HasOptions;
+    case EMPLOYEE = 'EMPLOYEE';
+    case SELF_EMPLOYED = 'SELF_EMPLOYED';
+    case BUSINESS_OWNER = 'BUSINESS_OWNER';
+    case RETIRED = 'RETIRED';
+    case STUDENT = 'STUDENT';
+    case HOMEMAKER = 'HOMEMAKER';
+    case UNEMPLOYED = 'UNEMPLOYED';
+    case OTHER = 'OTHER';
 
     public function label(): string
     {
         return match ($this) {
-            self::EMPLEADO => 'Empleado',
-            self::INDEPENDIENTE => 'Trabajador Independiente',
-            self::EMPRESARIO => 'Empresario',
-            self::PENSIONADO => 'Pensionado',
-            self::ESTUDIANTE => 'Estudiante',
-            self::HOGAR => 'Hogar',
-            self::DESEMPLEADO => 'Desempleado',
-            self::OTRO => 'Otro',
+            self::EMPLOYEE => 'Empleado',
+            self::SELF_EMPLOYED => 'Trabajador Independiente',
+            self::BUSINESS_OWNER => 'Empresario',
+            self::RETIRED => 'Pensionado',
+            self::STUDENT => 'Estudiante',
+            self::HOMEMAKER => 'Hogar',
+            self::UNEMPLOYED => 'Desempleado',
+            self::OTHER => 'Otro',
         };
     }
 
@@ -33,15 +42,41 @@ enum EmploymentType: string
     public function requiresProofOfIncome(): bool
     {
         return in_array($this, [
-            self::EMPLEADO,
-            self::INDEPENDIENTE,
-            self::EMPRESARIO,
-            self::PENSIONADO,
+            self::EMPLOYEE,
+            self::SELF_EMPLOYED,
+            self::BUSINESS_OWNER,
+            self::RETIRED,
         ]);
     }
 
     public static function values(): array
     {
         return array_column(self::cases(), 'value');
+    }
+
+    /**
+     * Normalize a value to the canonical enum.
+     * Handles both English and legacy Spanish values.
+     */
+    public static function normalize(string $value): ?self
+    {
+        $normalized = strtoupper(trim($value));
+
+        $direct = self::tryFrom($normalized);
+        if ($direct !== null) {
+            return $direct;
+        }
+
+        return match ($normalized) {
+            'EMPLEADO' => self::EMPLOYEE,
+            'INDEPENDIENTE' => self::SELF_EMPLOYED,
+            'EMPRESARIO' => self::BUSINESS_OWNER,
+            'PENSIONADO' => self::RETIRED,
+            'ESTUDIANTE' => self::STUDENT,
+            'HOGAR' => self::HOMEMAKER,
+            'DESEMPLEADO' => self::UNEMPLOYED,
+            'OTRO' => self::OTHER,
+            default => null,
+        };
     }
 }

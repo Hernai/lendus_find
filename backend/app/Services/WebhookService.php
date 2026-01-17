@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\ApplicationStatus;
 use App\Models\Application;
 use App\Models\Tenant;
 use App\Models\WebhookLog;

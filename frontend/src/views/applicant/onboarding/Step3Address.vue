@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { reactive, ref, watch, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore, useKycStore } from '@/stores'
+import { useOnboardingStore, useKycStore, useTenantStore, useApplicantStore } from '@/stores'
 import { AppButton, AppInput, AppSelect } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
 const kycStore = useKycStore()
+const tenantStore = useTenantStore()
+const applicantStore = useApplicantStore()
+
+// Get housing type options from backend
+const housingTypeOptions = computed(() => tenantStore.options.housing_type)
 
 // Check if KYC is verified and has address data
 const isKycVerified = computed(() => kycStore.verified && !!kycStore.lockedData.curp)
@@ -64,14 +69,14 @@ const parsedIneAddress = computed(() => {
   // Try to extract exterior number from calle (e.g., "BLVD PASO LIMON 19" or "AV REFORMA NO. 123")
   // Patterns: "CALLE 123", "CALLE NO 123", "CALLE NO. 123", "CALLE NUM 123", "CALLE # 123"
   const numExtMatch = calle.match(/^(.+?)\s+(?:NO\.?\s*|NUM\.?\s*|#\s*)?(\d+[A-Z]?)$/i)
-  if (numExtMatch) {
+  if (numExtMatch && numExtMatch[1] && numExtMatch[2]) {
     calle = numExtMatch[1].trim()
     numExt = numExtMatch[2]
   }
 
   // Try to extract CP from colonia if it ends with 5 digits (with or without space)
   const cpMatch = colonia.match(/\s*(\d{5})$/)
-  if (cpMatch && !cp) {
+  if (cpMatch && cpMatch[1] && !cp) {
     cp = cpMatch[1]
     colonia = colonia.replace(/\s*\d{5}$/, '').trim()
   }
@@ -80,7 +85,7 @@ const parsedIneAddress = computed(() => {
   if (municipio && !estado) {
     // Check for comma-separated format: "MUNICIPIO, ESTADO"
     const commaMatch = municipio.match(/^(.+?),\s*(.+)$/)
-    if (commaMatch) {
+    if (commaMatch && commaMatch[1] && commaMatch[2]) {
       const possibleMunicipio = commaMatch[1].trim()
       const possibleEstado = commaMatch[2].trim().toUpperCase()
       // Check if it's a known abbreviation
@@ -97,8 +102,9 @@ const parsedIneAddress = computed(() => {
   }
 
   // Expand state abbreviation if needed
-  if (estado && stateAbbreviations[estado.toUpperCase()]) {
-    estado = stateAbbreviations[estado.toUpperCase()]
+  const expandedEstado = estado ? stateAbbreviations[estado.toUpperCase()] : undefined
+  if (expandedEstado) {
+    estado = expandedEstado
   }
 
   return {
@@ -146,20 +152,18 @@ const errors = reactive({
   residence_time: ''
 })
 
-const housingTypeOptions = [
-  { value: 'PROPIA_PAGADA', label: 'Propia pagada' },
-  { value: 'PROPIA_HIPOTECA', label: 'Propia con hipoteca' },
-  { value: 'RENTADA', label: 'Rentada' },
-  { value: 'FAMILIAR', label: 'Familiar' },
-  { value: 'PRESTADA', label: 'Prestada' },
-  { value: 'OTRO', label: 'Otro' }
-]
 
 const neighborhoods = ref<{ value: string; label: string }[]>([])
 
 // Sync form from store on mount
 onMounted(async () => {
   await onboardingStore.init()
+
+  // Load KYC verifications to restore direccion_ine if available
+  const applicantId = applicantStore.applicant?.id
+  if (applicantId) {
+    await kycStore.loadVerifications(applicantId)
+  }
 
   const step3 = onboardingStore.data.step3
   form.postal_code = step3.postal_code || ''

@@ -234,6 +234,8 @@ export const STORAGE_KEYS = {
   CURRENT_TENANT_ID: 'current_tenant_id',
   CURRENT_TENANT_SLUG: 'current_tenant_slug',
   CURRENT_APPLICATION_ID: 'current_application_id',
+  PENDING_APPLICATION: 'pending_application',
+  SELECTED_TENANT_ID: 'selected_tenant_id',
   ONBOARDING_STEP: 'onboarding_step',
   ONBOARDING_DATA: 'onboarding_data',
   KYC_DATA: 'kyc_data',

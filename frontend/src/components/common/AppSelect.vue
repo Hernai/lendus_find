@@ -3,14 +3,14 @@ import { computed, ref, onMounted } from 'vue'
 import AppBottomSheet from './AppBottomSheet.vue'
 
 interface Option {
-  value: string | number
-  label: string
-  disabled?: boolean
+  readonly value: string | number
+  readonly label: string
+  readonly disabled?: boolean
 }
 
 interface Props {
   modelValue: string | number | null
-  options: Option[]
+  options: readonly Option[]
   label?: string
   placeholder?: string
   error?: string

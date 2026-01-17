@@ -21,19 +21,16 @@ return new class extends Migration
         });
 
         // Populate tenant_id from the related application's tenant
-        // Note: 'references' is a reserved word in SQLite, so we use quotes
-        $driver = DB::getDriverName();
-        $tableName = $driver === 'sqlite' ? '"references"' : 'references';
-
-        DB::statement("
-            UPDATE {$tableName}
+        // Note: 'references' is a reserved word in PostgreSQL, SQLite, etc., so we use quotes
+        DB::statement('
+            UPDATE "references"
             SET tenant_id = (
                 SELECT applications.tenant_id
                 FROM applications
-                WHERE applications.id = {$tableName}.application_id
+                WHERE applications.id = "references".application_id
             )
             WHERE tenant_id IS NULL
-        ");
+        ');
 
         // Now make it non-nullable and add foreign key
         Schema::table('references', function (Blueprint $table) {

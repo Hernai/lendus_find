@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\Traits;
 
+use App\Enums\ApplicantType;
+use App\Enums\KycStatus;
 use App\Models\Address;
 use App\Models\Applicant;
 use App\Models\BankAccount;
@@ -29,10 +31,10 @@ trait ApplicantHelpers
                 'id' => Str::uuid(),
                 'tenant_id' => app('tenant.id'),
                 'user_id' => $user->id,
-                'type' => 'PERSONA_FISICA',
+                'type' => ApplicantType::INDIVIDUAL->value,
                 'phone' => $user->phone,
                 'email' => $user->email,
-                'kyc_status' => 'PENDING',
+                'kyc_status' => KycStatus::PENDING->value,
             ]);
 
             return $applicant;

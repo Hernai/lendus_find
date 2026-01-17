@@ -659,14 +659,14 @@ const loadSelfie = async () => {
   // Check for any truthy value (JSON parsing may return string or boolean)
   const hasMetadataVerification = !!(
     metadata.face_match_passed === true ||
-    metadata.face_match_passed === 'true' ||
+    String(metadata.face_match_passed) === 'true' ||
     metadata.face_match === true ||
-    metadata.face_match === 'true' ||
+    String(metadata.face_match) === 'true' ||
     metadata.validation_method === 'KYC_FACE_MATCH' ||
     metadata.kyc_validated === true ||
-    metadata.kyc_validated === 'true' ||
+    String(metadata.kyc_validated) === 'true' ||
     metadata.nubarium_validated === true ||
-    metadata.nubarium_validated === 'true' ||
+    String(metadata.nubarium_validated) === 'true' ||
     metadata.source === 'kyc'
   )
 
@@ -744,7 +744,7 @@ const loadSelfie = async () => {
       `/admin/applications/${application.value.id}/documents/${selfieDoc.id}/download`,
       { responseType: 'blob' }
     )
-    const blob = new Blob([response.data], { type: selfieDoc.mime_type || 'image/jpeg' })
+    const blob = new Blob([response.data as BlobPart], { type: selfieDoc.mime_type || 'image/jpeg' })
     selfieUrl.value = URL.createObjectURL(blob)
   } catch (e) {
     console.error('Failed to load selfie:', e)
@@ -1025,7 +1025,7 @@ const parseChangeValue = (change: string, part: 'old' | 'new'): string => {
   if (!change) return ''
   const parts = change.split(' → ')
   if (parts.length !== 2) return change
-  return part === 'old' ? parts[0] : parts[1]
+  return part === 'old' ? (parts[0] ?? '') : (parts[1] ?? '')
 }
 
 const getStatusBadge = (status: string) => {
@@ -1053,29 +1053,13 @@ const getDocStatusBadge = (status: string) => {
 }
 
 const getEmploymentType = (type: string) => {
-  const types: Record<string, string> = {
-    EMPLEADO: 'Empleado',
-    INDEPENDIENTE: 'Trabajador Independiente',
-    EMPRESARIO: 'Empresario',
-    PENSIONADO: 'Pensionado',
-    ESTUDIANTE: 'Estudiante',
-    HOGAR: 'Hogar',
-    DESEMPLEADO: 'Desempleado',
-    OTRO: 'Otro'
-  }
-  return types[type] || type
+  const option = tenantStore.options.employment_type.find(o => o.value === type)
+  return option?.label || type
 }
 
 const getHousingType = (type: string) => {
-  const types: Record<string, string> = {
-    PROPIA_PAGADA: 'Propia (pagada)',
-    PROPIA_HIPOTECA: 'Propia (con hipoteca)',
-    RENTADA: 'Rentada',
-    FAMILIAR: 'Familiar',
-    PRESTADA: 'Prestada',
-    OTRO: 'Otro'
-  }
-  return types[type] || type
+  const option = tenantStore.options.housing_type.find(o => o.value === type)
+  return option?.label || type
 }
 
 const formatAddressTenure = (years?: number, months?: number) => {
@@ -1230,9 +1214,10 @@ const updateStatus = async () => {
     await fetchApplication()
 
     showStatusModal.value = false
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to update status:', error)
-    alert(error.response?.data?.message || 'Error al cambiar el estado')
+    const axiosError = error as { response?: { data?: { message?: string } } }
+    alert(axiosError.response?.data?.message || 'Error al cambiar el estado')
   } finally {
     isUpdatingStatus.value = false
   }
@@ -1269,9 +1254,10 @@ const assignApplication = async () => {
 
     await fetchApplication()
     showAssignModal.value = false
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to assign application:', error)
-    alert(error.response?.data?.message || 'Error al asignar la solicitud')
+    const axiosError = error as { response?: { data?: { message?: string } } }
+    alert(axiosError.response?.data?.message || 'Error al asignar la solicitud')
   } finally {
     isAssigning.value = false
   }
@@ -1645,6 +1631,22 @@ const addNote = async () => {
     <!-- Loading State -->
     <div v-if="loading" class="flex items-center justify-center py-12">
       <div class="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full" />
+    </div>
+
+    <!-- Error State -->
+    <div v-else-if="error" class="flex flex-col items-center justify-center py-12 text-center">
+      <svg class="w-16 h-16 text-red-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+      <h2 class="text-xl font-semibold text-gray-900 mb-2">{{ error }}</h2>
+      <p class="text-gray-600 mb-4">No se pudo cargar la información de la solicitud.</p>
+      <button
+        class="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors"
+        :style="{ backgroundColor: tenantStore.branding?.primary_color || '#7c3aed' }"
+        @click="fetchApplication"
+      >
+        Reintentar
+      </button>
     </div>
 
     <template v-else-if="application">
@@ -2873,6 +2875,22 @@ const addNote = async () => {
         </div>
       </div>
     </template>
+
+    <!-- Empty State (no loading, no error, no application) -->
+    <div v-else class="flex flex-col items-center justify-center py-12 text-center">
+      <svg class="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <h2 class="text-xl font-semibold text-gray-900 mb-2">Solicitud no encontrada</h2>
+      <p class="text-gray-600 mb-4">La solicitud que buscas no existe o no tienes acceso.</p>
+      <button
+        class="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors"
+        :style="{ backgroundColor: tenantStore.branding?.primary_color || '#7c3aed' }"
+        @click="goBack"
+      >
+        Volver al listado
+      </button>
+    </div>
 
     <!-- API Log Detail Modal -->
     <div

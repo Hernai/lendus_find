@@ -72,34 +72,20 @@ const formatPhone = (phone: string | null | undefined) => {
 
 const formatGender = (gender: string | null | undefined) => {
   if (!gender) return '-'
-  return gender === 'M' ? 'Masculino' : gender === 'F' ? 'Femenino' : 'Otro'
+  const option = tenantStore.options.gender.find(o => o.value === gender)
+  return option?.label || gender
 }
 
 const formatMaritalStatus = (status: string | null | undefined) => {
   if (!status) return '-'
-  const map: Record<string, string> = {
-    'SOLTERO': 'Soltero(a)',
-    'CASADO': 'Casado(a)',
-    'UNION_LIBRE': 'Union libre',
-    'DIVORCIADO': 'Divorciado(a)',
-    'VIUDO': 'Viudo(a)'
-  }
-  return map[status] || status
+  const option = tenantStore.options.marital_status.find(o => o.value === status)
+  return option?.label || status
 }
 
 const formatEmploymentType = (type: string | null | undefined) => {
   if (!type) return '-'
-  const map: Record<string, string> = {
-    'EMPLEADO': 'Empleado',
-    'INDEPENDIENTE': 'Independiente',
-    'EMPRESARIO': 'Empresario',
-    'PENSIONADO': 'Pensionado',
-    'ESTUDIANTE': 'Estudiante',
-    'HOGAR': 'Hogar',
-    'DESEMPLEADO': 'Desempleado',
-    'OTRO': 'Otro'
-  }
-  return map[type] || type
+  const option = tenantStore.options.employment_type.find(o => o.value === type)
+  return option?.label || type
 }
 
 const formatSeniority = (months: number | null | undefined) => {
@@ -128,9 +114,10 @@ const loadBankAccounts = async () => {
 const loadApplicationAndPhoto = async () => {
   try {
     const { data: applications } = await applicationService.list()
-    if (applications.length > 0) {
+    const firstApp = applications[0]
+    if (firstApp) {
       // Get the most recent application
-      activeApplicationId.value = applications[0].id
+      activeApplicationId.value = firstApp.id
       // Try to load the profile photo
       const result = await applicantStore.getProfilePhotoUrl(activeApplicationId.value)
       profilePhotoUrl.value = result.url
@@ -421,20 +408,20 @@ const handleLogout = async () => {
             </div>
           </div>
 
-          <div v-if="applicant?.address" class="text-sm text-gray-700">
+          <div v-if="applicant?.primary_address" class="text-sm text-gray-700">
             <p class="font-medium">
-              {{ applicant.address.street }} {{ applicant.address.ext_number }}
-              <span v-if="applicant.address.int_number">, Int {{ applicant.address.int_number }}</span>
+              {{ applicant.primary_address.street }} {{ applicant.primary_address.ext_number }}
+              <span v-if="applicant.primary_address.int_number">, Int {{ applicant.primary_address.int_number }}</span>
             </p>
             <p class="text-gray-500 mt-1">
-              Col. {{ applicant.address.neighborhood }}, CP {{ applicant.address.postal_code }}
+              Col. {{ applicant.primary_address.neighborhood }}, CP {{ applicant.primary_address.postal_code }}
             </p>
             <p class="text-gray-500">
-              {{ applicant.address.municipality || applicant.address.city }}, {{ applicant.address.state }}
+              {{ applicant.primary_address.municipality || applicant.primary_address.city }}, {{ applicant.primary_address.state }}
             </p>
-            <div v-if="applicant.address.housing_type_label" class="mt-3 pt-3 border-t border-gray-100">
+            <div v-if="applicant.primary_address.housing_type_label" class="mt-3 pt-3 border-t border-gray-100">
               <span class="text-gray-500">Tipo de vivienda:</span>
-              <span class="ml-2 text-gray-900 font-medium">{{ applicant.address.housing_type_label }}</span>
+              <span class="ml-2 text-gray-900 font-medium">{{ applicant.primary_address.housing_type_label }}</span>
             </div>
           </div>
           <p v-else class="text-gray-500 text-sm">Sin direccion registrada</p>
@@ -453,26 +440,26 @@ const handleLogout = async () => {
             </div>
           </div>
 
-          <div v-if="applicant?.employment" class="space-y-3 text-sm">
+          <div v-if="applicant?.current_employment" class="space-y-3 text-sm">
             <div class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">Tipo</span>
-              <span class="text-gray-900 font-medium">{{ formatEmploymentType(applicant.employment.employment_type) }}</span>
+              <span class="text-gray-900 font-medium">{{ formatEmploymentType(applicant.current_employment.employment_type) }}</span>
             </div>
-            <div v-if="applicant.employment.company_name" class="flex justify-between py-2 border-b border-gray-100">
+            <div v-if="applicant.current_employment.company_name" class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">Empresa</span>
-              <span class="text-gray-900 font-medium text-right">{{ applicant.employment.company_name }}</span>
+              <span class="text-gray-900 font-medium text-right">{{ applicant.current_employment.company_name }}</span>
             </div>
-            <div v-if="applicant.employment.position" class="flex justify-between py-2 border-b border-gray-100">
+            <div v-if="applicant.current_employment.position" class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">Puesto</span>
-              <span class="text-gray-900 font-medium">{{ applicant.employment.position }}</span>
+              <span class="text-gray-900 font-medium">{{ applicant.current_employment.position }}</span>
             </div>
             <div class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">Antiguedad</span>
-              <span class="text-gray-900 font-medium">{{ formatSeniority(applicant.employment.seniority_months) }}</span>
+              <span class="text-gray-900 font-medium">{{ formatSeniority(applicant.current_employment.seniority_months) }}</span>
             </div>
             <div class="flex justify-between py-2">
               <span class="text-gray-500">Ingreso mensual</span>
-              <span class="text-gray-900 font-medium">{{ formatMoney(applicant.employment.monthly_income) }}</span>
+              <span class="text-gray-900 font-medium">{{ formatMoney(applicant.current_employment.monthly_income) }}</span>
             </div>
           </div>
           <p v-else class="text-gray-500 text-sm">Sin informacion laboral registrada</p>

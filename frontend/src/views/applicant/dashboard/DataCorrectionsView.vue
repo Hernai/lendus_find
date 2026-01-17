@@ -131,7 +131,7 @@ const formData = reactive({
     state: ''
   },
   empleo: {
-    type: 'EMPLEADO',
+    type: 'EMPLOYEE',
     company_name: '',
     position: '',
     monthly_income: 0,
@@ -193,17 +193,8 @@ const fieldLabels: Record<string, string> = {
   seniority_months: 'Antigüedad (meses)'
 }
 
-// Employment type options (must match backend EmploymentType enum)
-const employmentTypes = [
-  { value: 'EMPLEADO', label: 'Empleado' },
-  { value: 'INDEPENDIENTE', label: 'Trabajador Independiente' },
-  { value: 'EMPRESARIO', label: 'Empresario/Negocio Propio' },
-  { value: 'PENSIONADO', label: 'Pensionado' },
-  { value: 'ESTUDIANTE', label: 'Estudiante' },
-  { value: 'HOGAR', label: 'Ama de casa' },
-  { value: 'DESEMPLEADO', label: 'Desempleado' },
-  { value: 'OTRO', label: 'Otro' }
-]
+// Employment type options from backend
+const employmentTypes = computed(() => tenantStore.options.employment_type)
 
 onMounted(async () => {
   await loadCorrections()
@@ -259,7 +250,7 @@ const initializeFormData = (data: ApplicantData) => {
   }
   if (data.employment) {
     formData.empleo = {
-      type: data.employment.type || 'EMPLEADO',
+      type: data.employment.type || 'EMPLOYEE',
       company_name: data.employment.company_name || '',
       position: data.employment.position || '',
       monthly_income: data.employment.monthly_income || 0,

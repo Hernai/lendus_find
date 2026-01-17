@@ -2,13 +2,17 @@
 
 namespace App\Http\Controllers\Api\Applicant;
 
+use App\Enums\BankAccountType;
+use App\Enums\BankAccountUsageType;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Traits\ApplicantHelpers;
+use App\Http\Controllers\Api\Traits\ValidationHelpers;
+use App\Http\Resources\BankAccountResource;
 use App\Models\BankAccount;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 /**
  * Controller for managing applicant bank accounts.
@@ -18,6 +22,7 @@ use Illuminate\Support\Str;
 class BankAccountController extends Controller
 {
     use ApplicantHelpers;
+    use ValidationHelpers;
 
     /**
      * List all bank accounts for the applicant.
@@ -31,10 +36,9 @@ class BankAccountController extends Controller
         }
 
         return response()->json([
-            'data' => $applicant->bankAccounts
-                ->where('is_active', true)
-                ->map(fn($b) => $this->formatBankAccount($b))
-                ->values()
+            'data' => BankAccountResource::collection(
+                $applicant->bankAccounts->where('is_active', true)->values()
+            )
         ]);
     }
 
@@ -45,32 +49,21 @@ class BankAccountController extends Controller
     {
         $applicant = $this->getOrCreateApplicant($request);
 
-        $validator = Validator::make($request->all(), [
-            'type' => 'sometimes|in:DISBURSEMENT,PAYMENT,BOTH',
+        $validation = $this->validateRequest($request->all(), [
+            'type' => ['sometimes', Rule::in(BankAccountUsageType::values())],
             'is_primary' => 'sometimes|boolean',
             'bank_name' => 'required|string|max:100',
             'bank_code' => 'nullable|string|max:10',
-            'clabe' => 'required|string|size:18',
+            'clabe' => ['required', 'string', 'size:18', new \App\Rules\ValidClabe],
             'account_number' => 'nullable|string|max:20',
-            'account_type' => 'sometimes|in:DEBITO,NOMINA,AHORRO,CHEQUES,INVERSION,OTRO',
+            'account_type' => ['sometimes', Rule::in(BankAccountType::values())],
             'holder_name' => 'required|string|max:200',
             'holder_rfc' => 'nullable|string|max:13',
             'is_own_account' => 'sometimes|boolean',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Validation error',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        // Validate CLABE
-        if (!BankAccount::validateClabe($request->clabe)) {
-            return response()->json([
-                'message' => 'Validation error',
-                'errors' => ['clabe' => ['CLABE inválida']]
-            ], 422);
+        if ($this->isValidationError($validation)) {
+            return $validation;
         }
 
         // If setting as primary, unset other primaries
@@ -82,22 +75,22 @@ class BankAccountController extends Controller
             'id' => Str::uuid(),
             'tenant_id' => $applicant->tenant_id,
             'applicant_id' => $applicant->id,
-            'type' => $request->input('type', 'BOTH'),
+            'type' => $request->input('type', BankAccountUsageType::BOTH->value),
             'is_primary' => $request->input('is_primary', false),
             'bank_name' => $request->bank_name,
             'bank_code' => $request->bank_code ?? substr($request->clabe, 0, 3),
             'clabe' => $request->clabe,
             'account_number' => $request->account_number,
-            'account_type' => $request->input('account_type', 'DEBITO'),
-            'holder_name' => strtoupper($request->holder_name),
-            'holder_rfc' => $request->holder_rfc ? strtoupper($request->holder_rfc) : null,
+            'account_type' => $request->input('account_type', BankAccountType::DEBIT->value),
+            'holder_name' => $request->holder_name,
+            'holder_rfc' => $request->holder_rfc,
             'is_own_account' => $request->input('is_own_account', true),
             'is_active' => true,
         ]);
 
         return response()->json([
             'message' => 'Bank account added',
-            'data' => $this->formatBankAccount($bankAccount)
+            'data' => new BankAccountResource($bankAccount)
         ], 201);
     }
 
@@ -109,11 +102,11 @@ class BankAccountController extends Controller
         $applicant = $request->user()->applicant;
 
         if (!$applicant) {
-            return response()->json(['message' => 'No applicant found'], 404);
+            return $this->notFoundResponse('Applicant');
         }
 
         if ($bankAccount->applicant_id !== $applicant->id) {
-            return response()->json(['message' => 'Bank account not found'], 404);
+            return $this->notFoundResponse('Bank account');
         }
 
         // Unset other primaries
@@ -124,7 +117,7 @@ class BankAccountController extends Controller
 
         return response()->json([
             'message' => 'Bank account set as primary',
-            'data' => $this->formatBankAccount($bankAccount->fresh())
+            'data' => new BankAccountResource($bankAccount->fresh())
         ]);
     }
 
@@ -136,18 +129,16 @@ class BankAccountController extends Controller
         $applicant = $request->user()->applicant;
 
         if (!$applicant) {
-            return response()->json(['message' => 'No applicant found'], 404);
+            return $this->notFoundResponse('Applicant');
         }
 
         if ($bankAccount->applicant_id !== $applicant->id) {
-            return response()->json(['message' => 'Bank account not found'], 404);
+            return $this->notFoundResponse('Bank account');
         }
 
         // Cannot delete verified bank accounts
         if ($bankAccount->is_verified) {
-            return response()->json([
-                'message' => 'No se puede eliminar una cuenta bancaria verificada'
-            ], 400);
+            return $this->errorResponse('No se puede eliminar una cuenta bancaria verificada');
         }
 
         // Soft delete by marking as inactive
@@ -175,29 +166,18 @@ class BankAccountController extends Controller
     {
         $applicant = $this->getOrCreateApplicant($request);
 
-        $validator = Validator::make($request->all(), [
+        $validation = $this->validateRequest($request->all(), [
             'bank_name' => 'required|string|max:100',
             'bank_code' => 'nullable|string|max:10',
-            'clabe' => 'required|string|size:18',
+            'clabe' => ['required', 'string', 'size:18', new \App\Rules\ValidClabe],
             'account_number' => 'nullable|string|max:20',
-            'account_type' => 'sometimes|in:DEBITO,NOMINA,AHORRO,CHEQUES,INVERSION,OTRO',
+            'account_type' => ['sometimes', Rule::in(BankAccountType::values())],
             'holder_name' => 'required|string|max:200',
             'holder_rfc' => 'nullable|string|max:13',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Validation error',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        // Validate CLABE
-        if (!BankAccount::validateClabe($request->clabe)) {
-            return response()->json([
-                'message' => 'Validation error',
-                'errors' => ['clabe' => ['CLABE inválida']]
-            ], 422);
+        if ($this->isValidationError($validation)) {
+            return $validation;
         }
 
         // Deactivate any existing primary bank account
@@ -208,22 +188,22 @@ class BankAccountController extends Controller
             'id' => Str::uuid(),
             'tenant_id' => $applicant->tenant_id,
             'applicant_id' => $applicant->id,
-            'type' => 'BOTH',
+            'type' => BankAccountUsageType::BOTH->value,
             'is_primary' => true,
             'bank_name' => $request->bank_name,
             'bank_code' => $request->bank_code ?? substr($request->clabe, 0, 3),
             'clabe' => $request->clabe,
             'account_number' => $request->account_number,
-            'account_type' => $request->input('account_type', 'DEBITO'),
-            'holder_name' => strtoupper($request->holder_name),
-            'holder_rfc' => $request->holder_rfc ? strtoupper($request->holder_rfc) : null,
+            'account_type' => $request->input('account_type', BankAccountType::DEBIT->value),
+            'holder_name' => $request->holder_name,
+            'holder_rfc' => $request->holder_rfc,
             'is_own_account' => true,
             'is_active' => true,
         ]);
 
         return response()->json([
             'message' => 'Bank info updated',
-            'data' => $this->formatBankAccount($bankAccount)
+            'data' => new BankAccountResource($bankAccount)
         ]);
     }
 
@@ -232,11 +212,11 @@ class BankAccountController extends Controller
      */
     public function validateClabe(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
+        $validation = $this->validateRequest($request->all(), [
             'clabe' => 'required|string|size:18',
         ]);
 
-        if ($validator->fails()) {
+        if ($this->isValidationError($validation)) {
             return response()->json(['data' => ['valid' => false]]);
         }
 

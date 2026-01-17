@@ -2,18 +2,26 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\ApplicantType;
+use App\Enums\EducationLevel;
+use App\Enums\Gender;
+use App\Enums\KycStatus;
+use App\Enums\MaritalStatus;
 use App\Enums\VerificationMethod;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Traits\ApplicantHelpers;
+use App\Http\Controllers\Api\Traits\ValidationHelpers;
 use App\Http\Controllers\Api\Applicant\AddressController;
 use App\Http\Controllers\Api\Applicant\BankAccountController;
 use App\Http\Controllers\Api\Applicant\EmploymentController;
+use App\Http\Requests\UpdatePersonalDataRequest;
 use App\Models\Applicant;
 use App\Services\VerificationService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 /**
  * Controller for applicant profile management.
@@ -24,17 +32,18 @@ use Illuminate\Support\Str;
  * - AddressController: Address management
  * - EmploymentController: Employment records
  * - BankAccountController: Bank accounts
+ *
+ * Note: Deprecated delegation methods resolve controllers from container
+ * to avoid violating Liskov Substitution Principle (LSP).
  */
 class ApplicantController extends Controller
 {
     use ApplicantHelpers;
+    use ValidationHelpers;
 
-    protected VerificationService $verificationService;
-
-    public function __construct(VerificationService $verificationService)
-    {
-        $this->verificationService = $verificationService;
-    }
+    public function __construct(
+        protected VerificationService $verificationService
+    ) {}
 
     /**
      * Get the current user's applicant profile.
@@ -62,31 +71,28 @@ class ApplicantController extends Controller
             ], 409);
         }
 
-        $validator = Validator::make($request->all(), [
-            'type' => 'sometimes|in:PERSONA_FISICA,PERSONA_MORAL',
+        $validation = $this->validateRequest($request->all(), [
+            'type' => ['sometimes', Rule::in(ApplicantType::values())],
             'first_name' => 'sometimes|string|max:100',
             'last_name_1' => 'sometimes|string|max:100',
             'last_name_2' => 'nullable|string|max:100',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Validation error',
-                'errors' => $validator->errors()
-            ], 422);
+        if ($this->isValidationError($validation)) {
+            return $validation;
         }
 
         $applicant = Applicant::create([
             'id' => Str::uuid(),
             'tenant_id' => $request->attributes->get('tenant')->id,
             'user_id' => $user->id,
-            'type' => $request->input('type', 'PERSONA_FISICA'),
+            'type' => $request->input('type', ApplicantType::INDIVIDUAL->value),
             'phone' => $user->phone,
             'email' => $user->email,
             'first_name' => $request->input('first_name'),
             'last_name_1' => $request->input('last_name_1'),
             'last_name_2' => $request->input('last_name_2'),
-            'kyc_status' => 'PENDING',
+            'kyc_status' => KycStatus::PENDING->value,
         ]);
 
         // Sync phone/email verifications from User to Applicant
@@ -106,12 +112,10 @@ class ApplicantController extends Controller
         $applicant = $request->user()->applicant;
 
         if (!$applicant) {
-            return response()->json([
-                'message' => 'Applicant profile not found'
-            ], 404);
+            return $this->notFoundResponse('Applicant profile');
         }
 
-        $validator = Validator::make($request->all(), [
+        $validation = $this->validateRequest($request->all(), [
             'curp' => 'sometimes|string|size:18',
             'rfc' => 'sometimes|string|min:12|max:13',
             'ine_clave' => 'sometimes|string|max:20',
@@ -119,8 +123,8 @@ class ApplicantController extends Controller
             'last_name_1' => 'sometimes|string|max:100',
             'last_name_2' => 'nullable|string|max:100',
             'birth_date' => 'sometimes|date',
-            'gender' => 'sometimes|in:M,F,O',
-            'marital_status' => 'sometimes|string|max:20',
+            'gender' => ['sometimes', Rule::in(Gender::values())],
+            'marital_status' => 'nullable|string|max:20',
             'phone' => 'sometimes|string|max:15',
             'phone_secondary' => 'nullable|string|max:15',
             'email' => 'sometimes|email',
@@ -128,11 +132,8 @@ class ApplicantController extends Controller
             'dependents_count' => 'nullable|integer|min:0',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Validation error',
-                'errors' => $validator->errors()
-            ], 422);
+        if ($this->isValidationError($validation)) {
+            return $validation;
         }
 
         $applicant->fill($request->only([
@@ -156,50 +157,39 @@ class ApplicantController extends Controller
 
     /**
      * Update personal data step (Step 1 & 2).
+     *
+     * Uses UpdatePersonalDataRequest for validation with:
+     * - Automatic normalization (CURP/RFC to uppercase, enum normalization)
+     * - Custom Spanish error messages
+     * - Legacy field name mapping (last_name -> last_name_1)
      */
-    public function updatePersonalData(Request $request): JsonResponse
+    public function updatePersonalData(UpdatePersonalDataRequest $request): JsonResponse
     {
         $applicant = $this->getOrCreateApplicant($request);
 
-        // All fields optional to support partial updates (step 1 = personal, step 2 = identification)
-        $validator = Validator::make($request->all(), [
-            'first_name' => 'sometimes|string|max:100',
-            'last_name_1' => 'nullable|string|max:100',
-            'last_name_2' => 'nullable|string|max:100',
-            // Legacy field mapping support
-            'last_name' => 'nullable|string|max:100',
-            'second_last_name' => 'nullable|string|max:100',
-            'birth_date' => 'sometimes|date|before:-18 years',
-            'gender' => 'sometimes|in:M,F,O',
-            'marital_status' => 'sometimes|string|max:20',
-            'nationality' => 'sometimes|string|max:50',
-            'birth_state' => 'nullable|string|max:50',
-            'curp' => 'nullable|string|size:18',
-            'rfc' => 'nullable|string|min:12|max:13',
-            // INE fields
-            'ine_clave' => 'nullable|string|max:20',
-            'ine_ocr' => 'nullable|string|max:15',
-            'ine_folio' => 'nullable|string|max:25',
-            // Passport fields
-            'passport_number' => 'nullable|string|max:15',
-            'passport_issue_date' => 'nullable|date',
-            'passport_expiry_date' => 'nullable|date|after:today',
-            'email' => 'nullable|email',
-            'education_level' => 'nullable|string|max:50',
-            'dependents_count' => 'nullable|integer|min:0',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Validation error',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
+        // Validation handled by Form Request
         // Only update fields that are provided (supports partial updates)
         $this->updateApplicantFields($applicant, $request);
 
-        $applicant->save();
+        try {
+            $applicant->save();
+        } catch (UniqueConstraintViolationException $e) {
+            // Handle duplicate CURP/RFC
+            $message = $e->getMessage();
+            if (str_contains($message, 'curp')) {
+                return response()->json([
+                    'message' => 'El CURP ingresado ya está registrado con otra cuenta',
+                    'errors' => ['curp' => ['Este CURP ya está registrado en el sistema']]
+                ], 422);
+            }
+            if (str_contains($message, 'rfc')) {
+                return response()->json([
+                    'message' => 'El RFC ingresado ya está registrado con otra cuenta',
+                    'errors' => ['rfc' => ['Este RFC ya está registrado en el sistema']]
+                ], 422);
+            }
+            throw $e;
+        }
 
         // Sync data to users table
         $this->syncApplicantToUser($applicant, $request->user());
@@ -221,20 +211,15 @@ class ApplicantController extends Controller
         $applicant = $request->user()->applicant;
 
         if (!$applicant) {
-            return response()->json([
-                'message' => 'Applicant profile not found'
-            ], 404);
+            return $this->notFoundResponse('Applicant profile');
         }
 
-        $validator = Validator::make($request->all(), [
+        $validation = $this->validateRequest($request->all(), [
             'signature' => 'required|string', // Base64 PNG
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Validation error',
-                'errors' => $validator->errors()
-            ], 422);
+        if ($this->isValidationError($validation)) {
+            return $validation;
         }
 
         $applicant->signature_base64 = $request->signature;
@@ -252,6 +237,7 @@ class ApplicantController extends Controller
 
     // =========================================================================
     // Delegating methods for backward compatibility
+    // These methods resolve controllers from the container to avoid LSP violation
     // =========================================================================
 
     /**
@@ -414,8 +400,9 @@ class ApplicantController extends Controller
         if ($request->has('gender')) {
             $applicant->gender = $request->gender;
         }
-        if ($request->has('marital_status')) {
-            $applicant->marital_status = $request->marital_status;
+        if ($request->filled('marital_status')) {
+            $normalized = MaritalStatus::normalize($request->marital_status);
+            $applicant->marital_status = $normalized?->value ?? $request->marital_status;
         }
         if ($request->has('nationality')) {
             $applicant->nationality = $request->nationality;
@@ -450,8 +437,9 @@ class ApplicantController extends Controller
         if ($request->filled('email')) {
             $applicant->email = $request->email;
         }
-        if ($request->has('education_level')) {
-            $applicant->education_level = $request->education_level;
+        if ($request->filled('education_level')) {
+            $normalized = EducationLevel::normalize($request->education_level);
+            $applicant->education_level = $normalized?->value ?? $request->education_level;
         }
         if ($request->has('dependents_count')) {
             $applicant->dependents_count = $request->dependents_count;

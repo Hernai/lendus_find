@@ -96,10 +96,10 @@ onMounted(async () => {
                   <p class="text-sm text-gray-500 mb-3">{{ product.description }}</p>
                   <div class="flex flex-wrap gap-2 text-xs">
                     <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
-                      {{ formatMoney(product.rules.min_amount) }} - {{ formatMoney(product.rules.max_amount) }}
+                      {{ formatMoney(product.rules?.min_amount ?? 0) }} - {{ formatMoney(product.rules?.max_amount ?? 0) }}
                     </span>
                     <span class="bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                      {{ product.rules.annual_rate }}% anual
+                      {{ product.rules?.annual_rate ?? 0 }}% anual
                     </span>
                   </div>
                 </div>
@@ -145,7 +145,7 @@ onMounted(async () => {
                   <svg class="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                   </svg>
-                  <span class="text-gray-600">Ser mayor de {{ selectedProduct?.rules.min_age || 18 }} años</span>
+                  <span class="text-gray-600">Ser mayor de {{ selectedProduct?.rules?.min_age || 18 }} años</span>
                 </li>
                 <li class="flex items-start gap-3">
                   <svg class="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -153,17 +153,17 @@ onMounted(async () => {
                   </svg>
                   <span class="text-gray-600">INE/IFE vigente</span>
                 </li>
-                <li v-for="doc in selectedProduct?.required_docs.filter(d => d.required)" :key="doc.type" class="flex items-start gap-3">
+                <li v-for="doc in (selectedProduct?.required_docs ?? []).filter(d => typeof d === 'object' && d.required)" :key="typeof doc === 'object' ? doc.type : doc" class="flex items-start gap-3">
                   <svg class="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                   </svg>
-                  <span class="text-gray-600">{{ doc.description }}</span>
+                  <span class="text-gray-600">{{ typeof doc === 'object' ? doc.description : doc }}</span>
                 </li>
                 <li class="flex items-start gap-3">
                   <svg class="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                   </svg>
-                  <span class="text-gray-600">Ingresos mínimos de {{ formatMoney(selectedProduct?.rules.min_income || 8000) }} mensuales</span>
+                  <span class="text-gray-600">Ingresos mínimos de {{ formatMoney(selectedProduct?.rules?.min_income || 8000) }} mensuales</span>
                 </li>
               </ul>
             </div>

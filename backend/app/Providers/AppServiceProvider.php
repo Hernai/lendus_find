@@ -10,6 +10,8 @@ use App\Services\ApiLoggerService;
 use App\Services\DocumentService;
 use App\Services\ExternalApi\NubariumService;
 use App\Services\ExternalApi\TwilioService;
+use App\Services\KycServiceFactory;
+use App\Services\TwilioServiceFactory;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -38,6 +40,17 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(KycServiceInterface::class, function ($app) {
             $tenant = $app->bound('tenant') ? $app->make('tenant') : null;
             return new NubariumService($tenant);
+        });
+
+        // Factory bindings with tenant injection from container
+        $this->app->bind(KycServiceFactory::class, function ($app) {
+            $tenant = $app->bound('tenant') ? $app->make('tenant') : null;
+            return new KycServiceFactory($tenant);
+        });
+
+        $this->app->bind(TwilioServiceFactory::class, function ($app) {
+            $tenantId = $app->bound('tenant.id') ? $app->make('tenant.id') : null;
+            return new TwilioServiceFactory($tenantId);
         });
     }
 
@@ -78,6 +91,16 @@ class AppServiceProvider extends ServiceProvider
         // General API: 60 requests per minute per user/IP
         RateLimiter::for('api', function (Request $request) {
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+        });
+
+        // KYC validation: 10 requests per minute per user (external API calls are expensive)
+        RateLimiter::for('kyc', function (Request $request) {
+            return Limit::perMinute(10)->by($request->user()?->id ?: $request->ip());
+        });
+
+        // KYC biometric: 5 requests per minute (more expensive, sensitive)
+        RateLimiter::for('kyc-biometric', function (Request $request) {
+            return Limit::perMinute(5)->by($request->user()?->id ?: $request->ip());
         });
     }
 }

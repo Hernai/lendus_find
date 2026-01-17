@@ -92,8 +92,8 @@ onMounted(async () => {
                   class="inline-flex items-center justify-center font-semibold px-8 py-4 text-lg rounded-lg border-2 transition-all duration-200 w-full sm:w-auto"
                   style="border-color: var(--tenant-secondary); color: var(--tenant-secondary); background: transparent;"
                   @click="showRequirementsModal = true"
-                  @mouseenter="$event.target.style.background = 'rgb(var(--secondary-50-rgb))'"
-                  @mouseleave="$event.target.style.background = 'transparent'"
+                  @mouseenter="($event.target as HTMLElement).style.background = 'rgb(var(--secondary-50-rgb))'"
+                  @mouseleave="($event.target as HTMLElement).style.background = 'transparent'"
                 >
                   Ver Requisitos
                 </button>
@@ -136,11 +136,11 @@ onMounted(async () => {
                     <div class="flex-1 min-w-0">
                       <p class="font-semibold text-gray-900">{{ product.name }}</p>
                       <p class="text-sm text-gray-500">
-                        {{ formatMoney(product.rules.min_amount) }} - {{ formatMoney(product.rules.max_amount) }}
+                        {{ formatMoney(product.rules?.min_amount ?? 0) }} - {{ formatMoney(product.rules?.max_amount ?? 0) }}
                       </p>
                     </div>
                     <div class="text-right flex-shrink-0">
-                      <p class="text-sm font-medium text-primary-600">{{ product.rules.annual_rate }}% anual</p>
+                      <p class="text-sm font-medium text-primary-600">{{ product.rules?.annual_rate ?? 0 }}% anual</p>
                       <svg class="w-5 h-5 text-gray-400 ml-auto" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
                       </svg>

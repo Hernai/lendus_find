@@ -148,50 +148,59 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'metadata'])->group(
 
     // =============================================
     // KYC - Identity Validation Services
+    // Rate limited to prevent abuse of external API calls
     // =============================================
     Route::prefix('kyc')->group(function () {
-        // Get available services
+        // Get available services (no rate limit - read only)
         Route::get('/services', [KycController::class, 'services']);
 
-        // Connection test and token management
-        Route::post('/test-connection', [KycController::class, 'testConnection']);
-        Route::post('/refresh-token', [KycController::class, 'refreshToken']);
+        // Connection test and token management (standard KYC rate limit)
+        Route::middleware('throttle:kyc')->group(function () {
+            Route::post('/test-connection', [KycController::class, 'testConnection']);
+            Route::post('/refresh-token', [KycController::class, 'refreshToken']);
+        });
 
-        // CURP validation and lookup
-        Route::post('/curp/validate', [KycController::class, 'validateCurp']);
-        Route::post('/curp/get', [KycController::class, 'getCurp']);
+        // Document validation endpoints (standard KYC rate limit: 10/min)
+        Route::middleware('throttle:kyc')->group(function () {
+            // CURP validation and lookup
+            Route::post('/curp/validate', [KycController::class, 'validateCurp']);
+            Route::post('/curp/get', [KycController::class, 'getCurp']);
 
-        // RFC validation
-        Route::post('/rfc/validate', [KycController::class, 'validateRfc']);
+            // RFC validation
+            Route::post('/rfc/validate', [KycController::class, 'validateRfc']);
 
-        // INE/IFE validation with OCR
-        Route::post('/ine/validate', [KycController::class, 'validateIne']);
+            // INE/IFE validation with OCR
+            Route::post('/ine/validate', [KycController::class, 'validateIne']);
 
-        // Biometric SDK token
-        Route::post('/biometric/token', [KycController::class, 'getBiometricToken']);
+            // SPEI CEP validation
+            Route::post('/cep/validate', [KycController::class, 'validateCep']);
 
-        // Face Match - compare selfie with INE photo
-        Route::post('/biometric/face-match', [KycController::class, 'validateFaceMatch']);
+            // OFAC & UN sanctions block lists
+            Route::post('/ofac/check', [KycController::class, 'checkOfac']);
 
-        // Liveness detection - verify real person (anti-spoofing)
-        Route::post('/biometric/liveness', [KycController::class, 'validateLiveness']);
+            // PLD Mexican blacklists (PGR, PGJ, PEPs, SAT 69/69B, etc.)
+            Route::post('/pld/check', [KycController::class, 'checkPldBlacklists']);
 
-        // SPEI CEP validation
-        Route::post('/cep/validate', [KycController::class, 'validateCep']);
+            // IMSS history
+            Route::post('/imss/history', [KycController::class, 'getImssHistory']);
 
-        // OFAC & UN sanctions block lists
-        Route::post('/ofac/check', [KycController::class, 'checkOfac']);
+            // Cédula Profesional
+            Route::post('/cedula/validate', [KycController::class, 'validateCedula']);
+        });
 
-        // PLD Mexican blacklists (PGR, PGJ, PEPs, SAT 69/69B, etc.)
-        Route::post('/pld/check', [KycController::class, 'checkPldBlacklists']);
+        // Biometric endpoints (stricter rate limit: 5/min - more expensive, sensitive)
+        Route::middleware('throttle:kyc-biometric')->group(function () {
+            // Biometric SDK token
+            Route::post('/biometric/token', [KycController::class, 'getBiometricToken']);
 
-        // IMSS history
-        Route::post('/imss/history', [KycController::class, 'getImssHistory']);
+            // Face Match - compare selfie with INE photo
+            Route::post('/biometric/face-match', [KycController::class, 'validateFaceMatch']);
 
-        // Cédula Profesional
-        Route::post('/cedula/validate', [KycController::class, 'validateCedula']);
+            // Liveness detection - verify real person (anti-spoofing)
+            Route::post('/biometric/liveness', [KycController::class, 'validateLiveness']);
+        });
 
-        // Data Verifications - record and retrieve verified fields
+        // Data Verifications - record and retrieve verified fields (no external API)
         Route::post('/verifications', [KycController::class, 'recordVerifications']);
         Route::get('/verifications/{applicantId}', [KycController::class, 'getVerifications']);
         Route::post('/verifications/check', [KycController::class, 'checkFieldsVerified']);

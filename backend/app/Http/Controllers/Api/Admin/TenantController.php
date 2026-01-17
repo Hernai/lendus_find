@@ -12,6 +12,7 @@ use App\Models\TenantBranding;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -608,7 +609,7 @@ class TenantController extends Controller
                 ],
             ];
         } catch (\Twilio\Exceptions\TwilioException $e) {
-            \Log::error('Twilio test error', [
+            Log::error('Twilio test error', [
                 'tenant_id' => $tenant->id,
                 'config_id' => $config->id,
                 'error' => $e->getMessage(),
@@ -621,7 +622,7 @@ class TenantController extends Controller
                 'error' => $e->getMessage(),
             ];
         } catch (\Exception $e) {
-            \Log::error('Test error', [
+            Log::error('Test error', [
                 'tenant_id' => $tenant->id,
                 'config_id' => $config->id,
                 'error' => $e->getMessage(),

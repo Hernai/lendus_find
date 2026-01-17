@@ -11,6 +11,7 @@ use App\Enums\PaymentFrequency;
 use App\Traits\HasAuditFields;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
+use App\Traits\NormalizesText;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -18,7 +19,16 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class EmploymentRecord extends Model
 {
-    use HasFactory, HasUuid, HasTenant, SoftDeletes, HasAuditFields;
+    use HasFactory, HasUuid, HasTenant, SoftDeletes, HasAuditFields, NormalizesText;
+
+    /**
+     * Fields to convert to uppercase on save.
+     */
+    protected array $uppercaseFields = [
+        'company_name',
+        'company_rfc',
+        'position',
+    ];
 
     protected $fillable = [
         'tenant_id',

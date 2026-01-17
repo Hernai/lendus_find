@@ -437,7 +437,7 @@ const getProviderHelpText = (provider: string) => {
                 v-model="tenant.rfc"
                 label="RFC"
                 placeholder="XAXX010101000"
-                maxlength="13"
+                :maxlength="13"
               />
               <AppInput
                 v-model="tenant.phone"

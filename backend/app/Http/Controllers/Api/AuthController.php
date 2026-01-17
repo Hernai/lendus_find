@@ -3,42 +3,43 @@
 namespace App\Http\Controllers\Api;
 
 use App\Enums\AuditAction;
+use App\Enums\OtpChannel;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Traits\ValidationHelpers;
 use App\Models\AuditLog;
 use App\Models\OtpCode;
 use App\Models\User;
-use App\Services\ExternalApi\TwilioService;
+use App\Services\TwilioServiceFactory;
 use App\Services\VerificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
 {
-    protected VerificationService $verificationService;
+    use ValidationHelpers;
 
-    public function __construct(VerificationService $verificationService)
-    {
-        $this->verificationService = $verificationService;
-    }
+    public function __construct(
+        protected VerificationService $verificationService,
+        protected TwilioServiceFactory $twilioFactory
+    ) {}
 
     /**
      * Request OTP code.
      */
     public function requestOtp(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
+        $validation = $this->validateRequest($request->all(), [
             'phone' => 'required_without:email|string|regex:/^[0-9]{10}$/',
             'email' => 'required_without:phone|email',
-            'channel' => 'sometimes|in:SMS,WHATSAPP,EMAIL',
+            'channel' => ['sometimes', Rule::in(OtpChannel::values())],
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
+        if ($this->isValidationError($validation)) {
+            return $validation;
         }
 
         $phone = $request->phone;
@@ -61,7 +62,7 @@ class AuthController extends Controller
 
             if ($channel === 'SMS' || $channel === 'WHATSAPP') {
                 try {
-                    $twilioService = new TwilioService(app('tenant.id'));
+                    $twilioService = $this->twilioFactory->forCurrentTenant();
 
                     if ($channel === 'WHATSAPP') {
                         $result = $twilioService->sendOtp($phone, $otp->code, 'whatsapp');
@@ -152,22 +153,19 @@ class AuthController extends Controller
      */
     public function verifyOtp(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
+        $validation = $this->validateRequest($request->all(), [
             'phone' => 'required_without:email|string|regex:/^[0-9]{10}$/',
             'email' => 'required_without:phone|email',
             'code' => 'required|string|size:6',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
+        if ($this->isValidationError($validation)) {
+            return $validation;
         }
 
         $destination = $request->email ?: $request->phone;
 
-        \Log::info('🔐 OTP Verify Request', [
+        Log::info('🔐 OTP Verify Request', [
             'phone' => $request->phone,
             'email' => $request->email,
             'destination' => $destination,
@@ -177,7 +175,7 @@ class AuthController extends Controller
         $otp = OtpCode::verify($destination, $request->code);
 
         if (!$otp) {
-            \Log::warning('🔐 OTP Verify Failed - Invalid code');
+            Log::warning('🔐 OTP Verify Failed - Invalid code');
             return response()->json([
                 'error' => 'Invalid code',
                 'message' => 'El código es inválido o ha expirado',
@@ -196,7 +194,7 @@ class AuthController extends Controller
             })
             ->first();
 
-        \Log::info('🔐 OTP Verify - User Search Result', [
+        Log::info('🔐 OTP Verify - User Search Result', [
             'tenant_id' => app('tenant.id'),
             'phone_search' => $request->phone,
             'email_search' => $request->email,
@@ -256,7 +254,7 @@ class AuthController extends Controller
             }
         }
 
-        \Log::info('🔐 OTP Verification - Sent status', [
+        Log::info('🔐 OTP Verification - Sent status', [
             'otp_was_sent' => $otpWasSent,
             'phone_verified' => $otpWasSent && $request->phone,
             'email_verified' => $otpWasSent && $request->email,
@@ -306,7 +304,7 @@ class AuthController extends Controller
             ])
         );
 
-        \Log::info('✅ OTP Verify Success - Returning User', [
+        Log::info('✅ OTP Verify Success - Returning User', [
             'user_id' => $user->id,
             'user_phone' => $user->phone,
             'user_email' => $user->email,
@@ -333,22 +331,19 @@ class AuthController extends Controller
      */
     public function checkUser(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
+        $validation = $this->validateRequest($request->all(), [
             'phone' => 'required|string|regex:/^[0-9]{10}$/',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
+        if ($this->isValidationError($validation)) {
+            return $validation;
         }
 
         $user = User::where('phone', $request->phone)
             ->where('tenant_id', app('tenant.id'))
             ->first();
 
-        \Log::info('🔐 Check User', [
+        Log::info('🔐 Check User', [
             'phone_received' => $request->phone,
             'tenant_id' => app('tenant.id'),
             'user_found' => $user !== null,
@@ -432,7 +427,7 @@ class AuthController extends Controller
             ->where('tenant_id', app('tenant.id'))
             ->first();
 
-        \Log::info('🔐 PIN Login Attempt', [
+        Log::info('🔐 PIN Login Attempt', [
             'phone_received' => $request->phone,
             'tenant_id' => app('tenant.id'),
             'user_found' => $user !== null,
@@ -512,7 +507,7 @@ class AuthController extends Controller
             ])
         );
 
-        \Log::info('✅ PIN Login Success', [
+        Log::info('✅ PIN Login Success', [
             'phone_request' => $request->phone,
             'user_id' => $user->id,
             'user_phone' => $user->phone,
@@ -570,7 +565,7 @@ class AuthController extends Controller
             ], 403);
         }
 
-        if (!$user->password || !\Hash::check($request->password, $user->password)) {
+        if (!$user->password || !Hash::check($request->password, $user->password)) {
             return response()->json([
                 'error' => 'Invalid credentials',
                 'message' => 'Correo o contraseña incorrectos',
@@ -658,7 +653,7 @@ class AuthController extends Controller
 
         $metadata = $request->attributes->get('metadata', []);
 
-        if (!$user->password || !\Hash::check($request->password, $user->password)) {
+        if (!$user->password || !Hash::check($request->password, $user->password)) {
             // Log failed admin login
             AuditLog::log(
                 AuditAction::LOGIN_FAILED->value,

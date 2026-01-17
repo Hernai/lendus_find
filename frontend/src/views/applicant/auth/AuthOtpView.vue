@@ -1,16 +1,24 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useTenantStore } from '@/stores'
 import { AppButton, AppOtpInput } from '@/components/common'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const tenantStore = useTenantStore()
 
 const otpCode = ref('')
 const error = ref('')
 const countdown = ref(0)
+const isNavigating = ref(false) // Flag to prevent redirect during navigation
 let countdownInterval: ReturnType<typeof setInterval> | null = null
+
+// Get tenant slug from route params or store
+const getTenantSlug = (): string | undefined => {
+  const routeTenant = router.currentRoute.value.params.tenant as string
+  return routeTenant || tenantStore.slug || undefined
+}
 
 // Computed
 const destination = computed(() => authStore.otpDestination || '')
@@ -47,14 +55,27 @@ const handleOtpComplete = async (code: string) => {
     const result = await authStore.verifyOtp(code)
 
     if (result.success) {
+      // Set flag to prevent any redirect from onMounted/watchers
+      isNavigating.value = true
+
+      const tenantSlug = getTenantSlug()
+      const redirect = router.currentRoute.value.query.redirect as string
+
       // Check if user needs to setup PIN
       if (result.needsPinSetup) {
         // Redirect to PIN setup, preserving the original redirect
-        const redirect = router.currentRoute.value.query.redirect as string
-        router.push({
-          name: 'auth-pin-setup',
-          query: redirect ? { redirect } : undefined
-        })
+        if (tenantSlug) {
+          await router.push({
+            name: 'tenant-auth-pin-setup',
+            params: { tenant: tenantSlug },
+            query: redirect ? { redirect } : undefined
+          })
+        } else {
+          await router.push({
+            name: 'auth-pin-setup',
+            query: redirect ? { redirect } : undefined
+          })
+        }
         return
       }
 
@@ -62,17 +83,23 @@ const handleOtpComplete = async (code: string) => {
       await authStore.checkAuth()
 
       // Redirect based on context
-      const redirect = router.currentRoute.value.query.redirect as string
-
       if (redirect) {
         // Explicit redirect (e.g., from protected route)
-        router.push(redirect)
+        await router.push(redirect)
       } else if (!authStore.hasApplicant) {
         // User is new, redirect to onboarding
-        router.push('/solicitud')
+        if (tenantSlug) {
+          await router.push(`/${tenantSlug}/solicitud`)
+        } else {
+          await router.push('/solicitud')
+        }
       } else {
         // User exists, redirect to dashboard
-        router.push('/dashboard')
+        if (tenantSlug) {
+          await router.push(`/${tenantSlug}/dashboard`)
+        } else {
+          await router.push('/dashboard')
+        }
       }
     } else {
       if (result.error === 'OTP_EXPIRED') {
@@ -85,6 +112,7 @@ const handleOtpComplete = async (code: string) => {
       otpCode.value = ''
     }
   } catch (e) {
+    console.error('OTP verification error:', e)
     error.value = 'Error al verificar el código. Intenta de nuevo.'
     otpCode.value = ''
   }
@@ -109,8 +137,18 @@ const goBack = () => {
 
 // Lifecycle
 onMounted(() => {
+  // Skip redirect if we're already navigating after successful verification
+  if (isNavigating.value) {
+    return
+  }
   if (!destination.value) {
-    router.push('/auth')
+    // Redirect to the correct auth route based on tenant
+    const tenantSlug = getTenantSlug()
+    if (tenantSlug) {
+      router.push(`/${tenantSlug}/auth`)
+    } else {
+      router.push('/auth')
+    }
     return
   }
   startCountdown()

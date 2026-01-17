@@ -2,8 +2,8 @@
 import { computed, ref } from 'vue'
 
 interface Props {
-  modelValue: string | number
-  type?: 'text' | 'email' | 'tel' | 'number' | 'password' | 'date'
+  modelValue: string | number | null
+  type?: 'text' | 'email' | 'tel' | 'number' | 'password' | 'date' | 'url'
   label?: string
   placeholder?: string
   error?: string

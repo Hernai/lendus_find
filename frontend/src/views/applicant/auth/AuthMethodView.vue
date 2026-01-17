@@ -1,9 +1,38 @@
 <script setup lang="ts">
 import { useTenantStore } from '@/stores'
 import { computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 
+const route = useRoute()
 const tenantStore = useTenantStore()
 const tenantName = computed(() => tenantStore.name || 'LendusFind')
+
+// Get tenant slug from route params or store
+const getTenantSlug = (): string | undefined => {
+  const routeTenant = route.params.tenant as string
+  return routeTenant || tenantStore.slug || undefined
+}
+
+// Computed paths for navigation
+const phonePath = computed(() => {
+  const tenantSlug = getTenantSlug()
+  return tenantSlug ? `/${tenantSlug}/auth/phone` : '/auth/phone'
+})
+
+const whatsappPath = computed(() => {
+  const tenantSlug = getTenantSlug()
+  return tenantSlug ? `/${tenantSlug}/auth/phone?method=whatsapp` : '/auth/phone?method=whatsapp'
+})
+
+const emailPath = computed(() => {
+  const tenantSlug = getTenantSlug()
+  return tenantSlug ? `/${tenantSlug}/auth/email` : '/auth/email'
+})
+
+const homePath = computed(() => {
+  const tenantSlug = getTenantSlug()
+  return tenantSlug ? `/${tenantSlug}` : '/'
+})
 
 onMounted(async () => {
   if (!tenantStore.isLoaded) {
@@ -42,7 +71,7 @@ onMounted(async () => {
         <div class="space-y-3">
           <!-- SMS Option -->
           <router-link
-            to="/auth/phone"
+            :to="phonePath"
             class="w-full p-4 bg-white border-2 border-primary-500 rounded-xl flex items-center gap-4 transition hover:bg-primary-50"
           >
             <div class="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
@@ -61,7 +90,7 @@ onMounted(async () => {
 
           <!-- WhatsApp Option -->
           <router-link
-            to="/auth/phone?method=whatsapp"
+            :to="whatsappPath"
             class="w-full p-4 bg-white border-2 border-gray-200 rounded-xl flex items-center gap-4 transition hover:border-green-300 hover:bg-green-50"
           >
             <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
@@ -80,7 +109,7 @@ onMounted(async () => {
 
           <!-- Email Option -->
           <router-link
-            to="/auth/email"
+            :to="emailPath"
             class="w-full p-4 bg-white border-2 border-gray-200 rounded-xl flex items-center gap-4 transition hover:border-blue-300 hover:bg-blue-50"
           >
             <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
@@ -100,7 +129,7 @@ onMounted(async () => {
 
         <!-- Back link -->
         <div class="mt-8 text-center">
-          <router-link to="/" class="text-gray-500 hover:text-gray-700 text-sm">
+          <router-link :to="homePath" class="text-gray-500 hover:text-gray-700 text-sm">
             ← Volver al inicio
           </router-link>
         </div>

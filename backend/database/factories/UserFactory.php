@@ -21,6 +21,7 @@ class UserFactory extends Factory
         return [
             'id' => Str::uuid(),
             'tenant_id' => Tenant::factory(),
+            'name' => fake()->name(),
             'phone' => '+52' . fake()->numerify('55########'),
             'email' => fake()->unique()->safeEmail(),
             'role' => 'applicant',

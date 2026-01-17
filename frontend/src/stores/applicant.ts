@@ -367,7 +367,7 @@ export const useApplicantStore = defineStore('applicant', () => {
         const imageResponse = await api.get(`/documents/${selfieDoc.id}/download`, {
           responseType: 'blob'
         })
-        const blob = new Blob([imageResponse.data], { type: imageResponse.headers['content-type'] || 'image/jpeg' })
+        const blob = new Blob([imageResponse.data as BlobPart], { type: imageResponse.headers['content-type'] || 'image/jpeg' })
         const isVerified = selfieDoc.status === 'APPROVED'
         return { url: URL.createObjectURL(blob), isVerified }
       }

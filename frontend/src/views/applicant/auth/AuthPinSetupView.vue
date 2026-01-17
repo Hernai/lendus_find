@@ -1,16 +1,23 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores'
+import { useAuthStore, useTenantStore } from '@/stores'
 import { AppButton } from '@/components/common'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const tenantStore = useTenantStore()
 
 const pin = ref('')
 const confirmPin = ref('')
 const error = ref('')
 const currentInput = ref<'pin' | 'confirm'>('pin')
+
+// Get tenant slug from route params or store
+const getTenantSlug = (): string | undefined => {
+  const routeTenant = router.currentRoute.value.params.tenant as string
+  return routeTenant || tenantStore.slug || undefined
+}
 
 const isValid = computed(() => {
   return pin.value.length === 4 && confirmPin.value.length === 4 && pin.value === confirmPin.value
@@ -62,15 +69,24 @@ const handleSubmit = async () => {
     await authStore.checkAuth()
 
     const redirect = router.currentRoute.value.query.redirect as string
+    const tenantSlug = getTenantSlug()
 
     if (redirect) {
       router.push(redirect)
     } else if (!authStore.hasApplicant) {
       // User is new, redirect to onboarding
-      router.push('/solicitud')
+      if (tenantSlug) {
+        router.push(`/${tenantSlug}/solicitud`)
+      } else {
+        router.push('/solicitud')
+      }
     } else {
       // User exists, redirect to dashboard
-      router.push('/dashboard')
+      if (tenantSlug) {
+        router.push(`/${tenantSlug}/dashboard`)
+      } else {
+        router.push('/dashboard')
+      }
     }
   } else {
     error.value = result.error || 'Error al configurar el NIP'
@@ -88,15 +104,24 @@ const skipSetup = async () => {
   await authStore.checkAuth()
 
   const redirect = router.currentRoute.value.query.redirect as string
+  const tenantSlug = getTenantSlug()
 
   if (redirect) {
     router.push(redirect)
   } else if (!authStore.hasApplicant) {
     // User is new, redirect to onboarding
-    router.push('/solicitud')
+    if (tenantSlug) {
+      router.push(`/${tenantSlug}/solicitud`)
+    } else {
+      router.push('/solicitud')
+    }
   } else {
     // User exists, redirect to dashboard
-    router.push('/dashboard')
+    if (tenantSlug) {
+      router.push(`/${tenantSlug}/dashboard`)
+    } else {
+      router.push('/dashboard')
+    }
   }
 }
 </script>

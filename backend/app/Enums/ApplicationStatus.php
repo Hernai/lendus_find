@@ -2,6 +2,12 @@
 
 namespace App\Enums;
 
+/**
+ * Application status enum.
+ *
+ * Uses English values as canonical for consistency across all enums.
+ * Includes normalize() method for compatibility with legacy Spanish values.
+ */
 enum ApplicationStatus: string
 {
     case DRAFT = 'DRAFT';
@@ -97,5 +103,38 @@ enum ApplicationStatus: string
     public static function values(): array
     {
         return array_column(self::cases(), 'value');
+    }
+
+    /**
+     * Normalize a status value to the canonical enum.
+     * Handles both English and legacy Spanish values.
+     */
+    public static function normalize(string $value): ?self
+    {
+        $normalized = strtoupper(trim($value));
+
+        // Direct match
+        $direct = self::tryFrom($normalized);
+        if ($direct !== null) {
+            return $direct;
+        }
+
+        // Map legacy Spanish values to English equivalents
+        return match ($normalized) {
+            'BORRADOR' => self::DRAFT,
+            'ENVIADA' => self::SUBMITTED,
+            'EN_REVISION' => self::IN_REVIEW,
+            'DOCS_PENDIENTES' => self::DOCS_PENDING,
+            'CORRECCIONES_PENDIENTES' => self::CORRECTIONS_PENDING,
+            'CONTRAOFERTA' => self::COUNTER_OFFERED,
+            'APROBADA' => self::APPROVED,
+            'RECHAZADA' => self::REJECTED,
+            'CANCELADA' => self::CANCELLED,
+            'DESEMBOLSADA' => self::DISBURSED,
+            'ACTIVA' => self::ACTIVE,
+            'COMPLETADA' => self::COMPLETED,
+            'EN_MORA' => self::DEFAULT,
+            default => null,
+        };
     }
 }
