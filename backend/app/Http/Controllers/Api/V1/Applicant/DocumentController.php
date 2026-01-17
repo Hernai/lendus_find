@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\Api\V1\Applicant;
 
 use App\Enums\ApplicationStatus;
 use App\Enums\AuditAction;
@@ -40,7 +40,7 @@ class DocumentController extends Controller
 
         if (!$applicant || $application->applicant_id !== $applicant->id) {
             return response()->json([
-                'message' => 'Application not found'
+                'message' => 'Solicitud no encontrada'
             ], 404);
         }
 
@@ -60,7 +60,7 @@ class DocumentController extends Controller
 
         if (!$applicant || $application->applicant_id !== $applicant->id) {
             return response()->json([
-                'message' => 'Application not found'
+                'message' => 'Solicitud no encontrada'
             ], 404);
         }
 
@@ -88,7 +88,7 @@ class DocumentController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -308,7 +308,7 @@ class DocumentController extends Controller
 
         if (!$applicant || $application->applicant_id !== $applicant->id) {
             return response()->json([
-                'message' => 'Application not found'
+                'message' => 'Solicitud no encontrada'
             ], 404);
         }
 
@@ -371,7 +371,7 @@ class DocumentController extends Controller
         ));
 
         return response()->json([
-            'message' => 'Document deleted'
+            'message' => 'Documento eliminado'
         ]);
     }
 

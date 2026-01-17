@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\ApiLog;
@@ -70,7 +70,7 @@ class ApiLogController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($apiLog->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'Not found'], 404);
+            return response()->json(['message' => 'No encontrado'], 404);
         }
 
         // Load relations

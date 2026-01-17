@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\TenantApiConfig;
@@ -56,7 +56,7 @@ class TenantConfigController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -106,7 +106,7 @@ class TenantConfigController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -168,7 +168,7 @@ class TenantConfigController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }

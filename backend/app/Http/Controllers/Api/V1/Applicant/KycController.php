@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\Api\V1\Applicant;
 
 use App\Enums\VerifiableField;
 use App\Enums\VerificationMethod;

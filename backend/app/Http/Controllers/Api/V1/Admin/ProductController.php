@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Enums\PaymentFrequency;
 use App\Enums\ProductType;
@@ -118,7 +118,7 @@ class ProductController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -173,7 +173,7 @@ class ProductController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Product created',
+            'message' => 'Producto creado',
             'data' => $this->formatProduct($product)
         ], 201);
     }
@@ -186,7 +186,7 @@ class ProductController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($product->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'Product not found'], 404);
+            return response()->json(['message' => 'Producto no encontrado'], 404);
         }
 
         return response()->json([
@@ -202,7 +202,7 @@ class ProductController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($product->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'Product not found'], 404);
+            return response()->json(['message' => 'Producto no encontrado'], 404);
         }
 
         $validator = Validator::make($request->all(), [
@@ -229,7 +229,7 @@ class ProductController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -289,7 +289,7 @@ class ProductController extends Controller
         $product->save();
 
         return response()->json([
-            'message' => 'Product updated',
+            'message' => 'Producto actualizado',
             'data' => $this->formatProduct($product->fresh())
         ]);
     }
@@ -302,7 +302,7 @@ class ProductController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($product->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'Product not found'], 404);
+            return response()->json(['message' => 'Producto no encontrado'], 404);
         }
 
         // Check if product has applications
@@ -315,7 +315,7 @@ class ProductController extends Controller
         $product->delete();
 
         return response()->json([
-            'message' => 'Product deleted'
+            'message' => 'Producto eliminado'
         ]);
     }
 

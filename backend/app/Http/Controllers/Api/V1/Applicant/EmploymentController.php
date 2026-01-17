@@ -1,13 +1,13 @@
 <?php
 
-namespace App\Http\Controllers\Api\Applicant;
+namespace App\Http\Controllers\Api\V1\Applicant;
 
 use App\Enums\ContractType;
 use App\Enums\EmploymentType;
 use App\Enums\IncomeType;
 use App\Enums\PaymentFrequency;
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\Api\Traits\ApplicantHelpers;
+use App\Http\Traits\ApplicantHelpers;
 use App\Http\Controllers\Api\Traits\ValidationHelpers;
 use App\Http\Resources\EmploymentRecordResource;
 use App\Models\EmploymentRecord;

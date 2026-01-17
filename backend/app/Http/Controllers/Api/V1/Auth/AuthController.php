@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\Enums\AuditAction;
 use App\Enums\OtpChannel;
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\Api\Traits\ValidationHelpers;
+use App\Http\Traits\ValidationHelpers;
 use App\Models\AuditLog;
 use App\Models\OtpCode;
 use App\Models\User;
@@ -851,7 +851,7 @@ class AuthController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Logged out successfully',
+            'message' => 'Sesión cerrada',
         ]);
     }
 

@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Http\Controllers\Api\Applicant;
+namespace App\Http\Controllers\Api\V1\Applicant;
 
 use App\Enums\AddressType;
 use App\Enums\HousingType;
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\Api\Traits\ApplicantHelpers;
+use App\Http\Traits\ApplicantHelpers;
 use App\Http\Controllers\Api\Traits\ValidationHelpers;
 use App\Http\Resources\AddressResource;
 use App\Models\Address;
@@ -145,7 +145,7 @@ class AddressController extends Controller
         $address->save();
 
         return response()->json([
-            'message' => 'Address updated',
+            'message' => 'Dirección actualizada',
             'data' => new AddressResource($address)
         ]);
     }
@@ -163,7 +163,7 @@ class AddressController extends Controller
 
         $address->delete();
 
-        return response()->json(['message' => 'Address deleted']);
+        return response()->json(['message' => 'Dirección eliminada']);
     }
 
     /**
@@ -224,7 +224,7 @@ class AddressController extends Controller
         }
 
         return response()->json([
-            'message' => 'Address updated',
+            'message' => 'Dirección actualizada',
             'data' => new AddressResource($address)
         ]);
     }

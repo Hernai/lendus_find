@@ -1,16 +1,21 @@
 <?php
 
-use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\ConfigController;
-use App\Http\Controllers\Api\ApplicationController;
-use App\Http\Controllers\Api\ApplicantController;
-use App\Http\Controllers\Api\CorrectionController;
-use App\Http\Controllers\Api\DocumentController;
-use App\Http\Controllers\Api\KycController;
-use App\Http\Controllers\Api\SimulatorController;
-use App\Http\Controllers\Api\Admin\DashboardController;
-use App\Http\Controllers\Api\Admin\ApplicationController as AdminApplicationController;
-use App\Http\Controllers\Api\Admin\TenantIntegrationController;
+use App\Http\Controllers\Api\V1\Auth\AuthController;
+use App\Http\Controllers\Api\V1\Public\ConfigController;
+use App\Http\Controllers\Api\V1\Public\SimulatorController;
+use App\Http\Controllers\Api\V1\Applicant\ApplicationController;
+use App\Http\Controllers\Api\V1\Applicant\ApplicantController;
+use App\Http\Controllers\Api\V1\Applicant\CorrectionController;
+use App\Http\Controllers\Api\V1\Applicant\DocumentController;
+use App\Http\Controllers\Api\V1\Applicant\KycController;
+use App\Http\Controllers\Api\V1\Admin\DashboardController;
+use App\Http\Controllers\Api\V1\Admin\ApplicationController as AdminApplicationController;
+use App\Http\Controllers\Api\V1\Admin\TenantIntegrationController;
+use App\Http\Controllers\Api\V1\Admin\ProductController;
+use App\Http\Controllers\Api\V1\Admin\UserController;
+use App\Http\Controllers\Api\V1\Admin\TenantController;
+use App\Http\Controllers\Api\V1\Admin\TenantConfigController;
+use App\Http\Controllers\Api\V1\Admin\ApiLogController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Broadcast;
 
@@ -283,14 +288,14 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff', 'metadata']
     // PRODUCTS MANAGEMENT - Admin only
     // =============================================
     Route::middleware('permission:canManageProducts')->group(function () {
-        Route::apiResource('products', \App\Http\Controllers\Api\Admin\ProductController::class);
+        Route::apiResource('products', ProductController::class);
     });
 
     // =============================================
     // USERS MANAGEMENT - Admin only
     // =============================================
     Route::middleware('permission:canManageUsers')->group(function () {
-        Route::apiResource('users', \App\Http\Controllers\Api\Admin\UserController::class);
+        Route::apiResource('users', UserController::class);
     });
 
     // =============================================
@@ -323,44 +328,44 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff', 'metadata']
     // TENANT CONFIGURATION - Admin can configure their own tenant
     // =============================================
     Route::middleware('permission:canManageProducts')->prefix('config')->group(function () {
-        Route::get('/', [\App\Http\Controllers\Api\Admin\TenantConfigController::class, 'show']);
-        Route::put('/tenant', [\App\Http\Controllers\Api\Admin\TenantConfigController::class, 'updateTenant']);
-        Route::put('/branding', [\App\Http\Controllers\Api\Admin\TenantConfigController::class, 'updateBranding']);
-        Route::get('/api-configs', [\App\Http\Controllers\Api\Admin\TenantConfigController::class, 'listApiConfigs']);
-        Route::post('/api-configs', [\App\Http\Controllers\Api\Admin\TenantConfigController::class, 'saveApiConfig']);
-        Route::delete('/api-configs/{config}', [\App\Http\Controllers\Api\Admin\TenantConfigController::class, 'deleteApiConfig']);
-        Route::post('/api-configs/{config}/test', [\App\Http\Controllers\Api\Admin\TenantConfigController::class, 'testApiConfig']);
+        Route::get('/', [TenantConfigController::class, 'show']);
+        Route::put('/tenant', [TenantConfigController::class, 'updateTenant']);
+        Route::put('/branding', [TenantConfigController::class, 'updateBranding']);
+        Route::get('/api-configs', [TenantConfigController::class, 'listApiConfigs']);
+        Route::post('/api-configs', [TenantConfigController::class, 'saveApiConfig']);
+        Route::delete('/api-configs/{config}', [TenantConfigController::class, 'deleteApiConfig']);
+        Route::post('/api-configs/{config}/test', [TenantConfigController::class, 'testApiConfig']);
     });
 
     // =============================================
     // TENANTS MANAGEMENT - Super Admin only
     // =============================================
     Route::middleware('permission:canConfigureTenant')->prefix('tenants')->group(function () {
-        Route::get('/', [\App\Http\Controllers\Api\Admin\TenantController::class, 'index']);
-        Route::post('/', [\App\Http\Controllers\Api\Admin\TenantController::class, 'store']);
-        Route::get('/{tenant}', [\App\Http\Controllers\Api\Admin\TenantController::class, 'show']);
-        Route::put('/{tenant}', [\App\Http\Controllers\Api\Admin\TenantController::class, 'update']);
-        Route::delete('/{tenant}', [\App\Http\Controllers\Api\Admin\TenantController::class, 'destroy']);
-        Route::get('/{tenant}/stats', [\App\Http\Controllers\Api\Admin\TenantController::class, 'stats']);
+        Route::get('/', [TenantController::class, 'index']);
+        Route::post('/', [TenantController::class, 'store']);
+        Route::get('/{tenant}', [TenantController::class, 'show']);
+        Route::put('/{tenant}', [TenantController::class, 'update']);
+        Route::delete('/{tenant}', [TenantController::class, 'destroy']);
+        Route::get('/{tenant}/stats', [TenantController::class, 'stats']);
 
         // Tenant-specific configuration (including API configs)
-        Route::get('/{tenant}/config', [\App\Http\Controllers\Api\Admin\TenantController::class, 'getConfig']);
-        Route::put('/{tenant}/branding', [\App\Http\Controllers\Api\Admin\TenantController::class, 'updateBranding']);
-        Route::post('/{tenant}/upload-logo', [\App\Http\Controllers\Api\Admin\TenantController::class, 'uploadLogo']);
-        Route::get('/{tenant}/api-configs', [\App\Http\Controllers\Api\Admin\TenantController::class, 'listApiConfigs']);
-        Route::post('/{tenant}/api-configs', [\App\Http\Controllers\Api\Admin\TenantController::class, 'saveApiConfig']);
-        Route::delete('/{tenant}/api-configs/{config}', [\App\Http\Controllers\Api\Admin\TenantController::class, 'deleteApiConfig']);
-        Route::post('/{tenant}/api-configs/{config}/test', [\App\Http\Controllers\Api\Admin\TenantController::class, 'testApiConfig']);
+        Route::get('/{tenant}/config', [TenantController::class, 'getConfig']);
+        Route::put('/{tenant}/branding', [TenantController::class, 'updateBranding']);
+        Route::post('/{tenant}/upload-logo', [TenantController::class, 'uploadLogo']);
+        Route::get('/{tenant}/api-configs', [TenantController::class, 'listApiConfigs']);
+        Route::post('/{tenant}/api-configs', [TenantController::class, 'saveApiConfig']);
+        Route::delete('/{tenant}/api-configs/{config}', [TenantController::class, 'deleteApiConfig']);
+        Route::post('/{tenant}/api-configs/{config}/test', [TenantController::class, 'testApiConfig']);
     });
 
     // =============================================
     // API LOGS - Admin+ can view API call history
     // =============================================
     Route::middleware('permission:canManageProducts')->prefix('api-logs')->group(function () {
-        Route::get('/', [\App\Http\Controllers\Api\Admin\ApiLogController::class, 'index']);
-        Route::get('/stats', [\App\Http\Controllers\Api\Admin\ApiLogController::class, 'stats']);
-        Route::get('/providers', [\App\Http\Controllers\Api\Admin\ApiLogController::class, 'providers']);
-        Route::get('/services', [\App\Http\Controllers\Api\Admin\ApiLogController::class, 'services']);
-        Route::get('/{apiLog}', [\App\Http\Controllers\Api\Admin\ApiLogController::class, 'show']);
+        Route::get('/', [ApiLogController::class, 'index']);
+        Route::get('/stats', [ApiLogController::class, 'stats']);
+        Route::get('/providers', [ApiLogController::class, 'providers']);
+        Route::get('/services', [ApiLogController::class, 'services']);
+        Route::get('/{apiLog}', [ApiLogController::class, 'show']);
     });
 });

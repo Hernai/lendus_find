@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Http\Controllers\Api\Applicant;
+namespace App\Http\Controllers\Api\V1\Applicant;
 
 use App\Enums\BankAccountType;
 use App\Enums\BankAccountUsageType;
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\Api\Traits\ApplicantHelpers;
+use App\Http\Traits\ApplicantHelpers;
 use App\Http\Controllers\Api\Traits\ValidationHelpers;
 use App\Http\Resources\BankAccountResource;
 use App\Models\BankAccount;
@@ -156,7 +156,7 @@ class BankAccountController extends Controller
             }
         }
 
-        return response()->json(['message' => 'Bank account deleted']);
+        return response()->json(['message' => 'Cuenta bancaria eliminada']);
     }
 
     /**
@@ -202,7 +202,7 @@ class BankAccountController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Bank info updated',
+            'message' => 'Información bancaria actualizada',
             'data' => new BankAccountResource($bankAccount)
         ]);
     }

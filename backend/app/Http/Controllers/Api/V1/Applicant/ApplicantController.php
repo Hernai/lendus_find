@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\Api\V1\Applicant;
 
 use App\Enums\ApplicantType;
 use App\Enums\EducationLevel;
@@ -9,8 +9,8 @@ use App\Enums\KycStatus;
 use App\Enums\MaritalStatus;
 use App\Enums\VerificationMethod;
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\Api\Traits\ApplicantHelpers;
-use App\Http\Controllers\Api\Traits\ValidationHelpers;
+use App\Http\Traits\ApplicantHelpers;
+use App\Http\Traits\ValidationHelpers;
 use App\Http\Controllers\Api\Applicant\AddressController;
 use App\Http\Controllers\Api\Applicant\BankAccountController;
 use App\Http\Controllers\Api\Applicant\EmploymentController;
@@ -99,7 +99,7 @@ class ApplicantController extends Controller
         $this->syncUserVerificationsToApplicant($user, $applicant);
 
         return response()->json([
-            'message' => 'Applicant profile created',
+            'message' => 'Perfil de solicitante creado',
             'data' => $this->formatApplicant($applicant)
         ], 201);
     }
@@ -150,7 +150,7 @@ class ApplicantController extends Controller
         $this->syncUserVerificationsToApplicant($request->user(), $applicant);
 
         return response()->json([
-            'message' => 'Applicant profile updated',
+            'message' => 'Perfil de solicitante actualizado',
             'data' => $this->formatApplicant($applicant->fresh())
         ]);
     }
@@ -198,7 +198,7 @@ class ApplicantController extends Controller
         $this->syncUserVerificationsToApplicant($request->user(), $applicant);
 
         return response()->json([
-            'message' => 'Personal data updated',
+            'message' => 'Datos personales actualizados',
             'data' => $this->formatApplicant($applicant->fresh())
         ]);
     }
@@ -228,7 +228,7 @@ class ApplicantController extends Controller
         $applicant->save();
 
         return response()->json([
-            'message' => 'Signature saved',
+            'message' => 'Firma guardada',
             'data' => [
                 'signed_at' => $applicant->signature_date->toIso8601String(),
             ]

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\Api\V1\Applicant;
 
 use App\Enums\ApplicationStatus;
 use App\Enums\AuditAction;
@@ -73,7 +73,7 @@ class ApplicationController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -87,7 +87,7 @@ class ApplicationController extends Controller
 
         if (!$product) {
             return response()->json([
-                'message' => 'Product not found or not available'
+                'message' => 'Producto no encontrado o no disponible'
             ], 404);
         }
 
@@ -158,7 +158,7 @@ class ApplicationController extends Controller
         );
 
         return response()->json([
-            'message' => 'Application created',
+            'message' => 'Solicitud creada',
             'data' => $this->transformer->toArray($application->load('product'))
         ], 201);
     }
@@ -172,7 +172,7 @@ class ApplicationController extends Controller
 
         if (!$applicant || $application->applicant_id !== $applicant->id) {
             return response()->json([
-                'message' => 'Application not found'
+                'message' => 'Solicitud no encontrada'
             ], 404);
         }
 
@@ -192,7 +192,7 @@ class ApplicationController extends Controller
 
         if (!$applicant || $application->applicant_id !== $applicant->id) {
             return response()->json([
-                'message' => 'Application not found'
+                'message' => 'Solicitud no encontrada'
             ], 404);
         }
 
@@ -212,7 +212,7 @@ class ApplicationController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -260,7 +260,7 @@ class ApplicationController extends Controller
         );
 
         return response()->json([
-            'message' => 'Application updated',
+            'message' => 'Solicitud actualizada',
             'data' => $this->transformer->toArray($application->fresh()->load('product'))
         ]);
     }
@@ -274,7 +274,7 @@ class ApplicationController extends Controller
 
         if (!$applicant || $application->applicant_id !== $applicant->id) {
             return response()->json([
-                'message' => 'Application not found'
+                'message' => 'Solicitud no encontrada'
             ], 404);
         }
 
@@ -351,7 +351,7 @@ class ApplicationController extends Controller
         );
 
         return response()->json([
-            'message' => 'Application submitted successfully',
+            'message' => 'Solicitud enviada exitosamente',
             'data' => $this->transformer->toArray($application->fresh()->load('product'))
         ]);
     }
@@ -365,7 +365,7 @@ class ApplicationController extends Controller
 
         if (!$applicant || $application->applicant_id !== $applicant->id) {
             return response()->json([
-                'message' => 'Application not found'
+                'message' => 'Solicitud no encontrada'
             ], 404);
         }
 
@@ -394,7 +394,7 @@ class ApplicationController extends Controller
         );
 
         return response()->json([
-            'message' => 'Application cancelled',
+            'message' => 'Solicitud cancelada',
             'data' => $this->transformer->toArray($application->fresh()->load('product'))
         ]);
     }
@@ -408,7 +408,7 @@ class ApplicationController extends Controller
 
         if (!$applicant || $application->applicant_id !== $applicant->id) {
             return response()->json([
-                'message' => 'Application not found'
+                'message' => 'Solicitud no encontrada'
             ], 404);
         }
 
@@ -435,7 +435,7 @@ class ApplicationController extends Controller
 
         if (!$applicant || $application->applicant_id !== $applicant->id) {
             return response()->json([
-                'message' => 'Application not found'
+                'message' => 'Solicitud no encontrada'
             ], 404);
         }
 
@@ -456,7 +456,7 @@ class ApplicationController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }

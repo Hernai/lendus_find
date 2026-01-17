@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\Api\V1\Applicant;
 
 use App\Enums\ApplicationStatus;
 use App\Enums\AuditAction;
@@ -165,7 +165,7 @@ class CorrectionController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors(),
             ], 422);
         }
@@ -888,7 +888,7 @@ class CorrectionController extends Controller
 
         if (!$verification) {
             return response()->json([
-                'message' => 'Field verification not found',
+                'message' => 'Verificación de campo no encontrada',
             ], 404);
         }
 

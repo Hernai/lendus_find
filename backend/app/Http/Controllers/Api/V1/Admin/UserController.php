@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Enums\UserType;
 use App\Http\Controllers\Controller;
@@ -84,7 +84,7 @@ class UserController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -103,7 +103,7 @@ class UserController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'User created',
+            'message' => 'Usuario creado',
             'data' => $this->formatUser($user),
             'temporary_password' => $request->password ? null : $password, // Only show if auto-generated
         ], 201);
@@ -117,7 +117,7 @@ class UserController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($user->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'User not found'], 404);
+            return response()->json(['message' => 'Usuario no encontrado'], 404);
         }
 
         // Get additional stats
@@ -143,13 +143,13 @@ class UserController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($user->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'User not found'], 404);
+            return response()->json(['message' => 'Usuario no encontrado'], 404);
         }
 
         // Prevent self-demotion
         if ($user->id === $request->user()->id && $request->has('role') && $request->role !== 'ADMIN') {
             return response()->json([
-                'message' => 'You cannot change your own admin role'
+                'message' => 'No puedes cambiar tu propio rol de administrador'
             ], 400);
         }
 
@@ -171,7 +171,7 @@ class UserController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -191,7 +191,7 @@ class UserController extends Controller
         $user->save();
 
         return response()->json([
-            'message' => 'User updated',
+            'message' => 'Usuario actualizado',
             'data' => $this->formatUser($user->fresh())
         ]);
     }
@@ -204,27 +204,27 @@ class UserController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($user->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'User not found'], 404);
+            return response()->json(['message' => 'Usuario no encontrado'], 404);
         }
 
         // Prevent self-deletion
         if ($user->id === $request->user()->id) {
             return response()->json([
-                'message' => 'You cannot delete your own account'
+                'message' => 'No puedes eliminar tu propia cuenta'
             ], 400);
         }
 
         // Check if user has assigned applications
         if ($user->assignedApplications()->exists()) {
             return response()->json([
-                'message' => 'Cannot delete user with assigned applications. Reassign or deactivate instead.'
+                'message' => 'No se puede eliminar un usuario con solicitudes asignadas. Reasigna o desactiva la cuenta.'
             ], 400);
         }
 
         $user->delete();
 
         return response()->json([
-            'message' => 'User deleted'
+            'message' => 'Usuario eliminado'
         ]);
     }
 

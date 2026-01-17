@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\Api\V1\Public;
 
 use App\Enums\DocumentType;
 use App\Enums\EducationLevel;

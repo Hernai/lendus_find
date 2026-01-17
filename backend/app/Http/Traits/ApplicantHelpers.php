@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\Traits;
+namespace App\Http\Traits;
 
 use App\Enums\ApplicantType;
 use App\Enums\KycStatus;

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Enums\ApplicationStatus;
 use App\Enums\AuditAction;
@@ -139,7 +139,7 @@ class ApplicationController extends Controller
         $user = $request->user();
 
         if ($application->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'Application not found'], 404);
+            return response()->json(['message' => 'Solicitud no encontrada'], 404);
         }
 
         $application->load([
@@ -212,7 +212,7 @@ class ApplicationController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($application->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'Application not found'], 404);
+            return response()->json(['message' => 'Solicitud no encontrada'], 404);
         }
 
         $validator = Validator::make($request->all(), [
@@ -236,7 +236,7 @@ class ApplicationController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -268,7 +268,7 @@ class ApplicationController extends Controller
         if ($newStatus === ApplicationStatus::DISBURSED->value) {
             if ($application->status->value !== ApplicationStatus::APPROVED->value) {
                 return response()->json([
-                    'message' => 'Only approved applications can be disbursed'
+                    'message' => 'Solo las solicitudes aprobadas pueden ser desembolsadas'
                 ], 400);
             }
             $application->disbursement_reference = $request->disbursement_reference;
@@ -308,7 +308,7 @@ class ApplicationController extends Controller
         );
 
         return response()->json([
-            'message' => 'Status updated',
+            'message' => 'Estatus actualizado',
             'data' => $this->formatApplication($application->fresh()->load(['applicant', 'product']))
         ]);
     }
@@ -321,7 +321,7 @@ class ApplicationController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($application->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'Application not found'], 404);
+            return response()->json(['message' => 'Solicitud no encontrada'], 404);
         }
 
         if (!in_array($application->status, [
@@ -343,7 +343,7 @@ class ApplicationController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -358,7 +358,7 @@ class ApplicationController extends Controller
         );
 
         return response()->json([
-            'message' => 'Counter-offer created',
+            'message' => 'Contraoferta creada',
             'data' => $this->formatApplication($application->fresh()->load(['applicant', 'product']))
         ]);
     }
@@ -371,7 +371,7 @@ class ApplicationController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($application->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'Application not found'], 404);
+            return response()->json(['message' => 'Solicitud no encontrada'], 404);
         }
 
         $validator = Validator::make($request->all(), [
@@ -381,7 +381,7 @@ class ApplicationController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -419,7 +419,7 @@ class ApplicationController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($application->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'Application not found'], 404);
+            return response()->json(['message' => 'Solicitud no encontrada'], 404);
         }
 
         $validator = Validator::make($request->all(), [
@@ -429,7 +429,7 @@ class ApplicationController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -455,7 +455,7 @@ class ApplicationController extends Controller
         $application->save();
 
         return response()->json([
-            'message' => 'Note added',
+            'message' => 'Nota agregada',
             'data' => [
                 'id' => $note->id,
                 'content' => $note->content,
@@ -474,12 +474,12 @@ class ApplicationController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($application->tenant_id !== $tenant->id || $document->application_id !== $application->id) {
-            return response()->json(['message' => 'Document not found'], 404);
+            return response()->json(['message' => 'Documento no encontrado'], 404);
         }
 
         if ($document->status !== DocumentStatus::PENDING) {
             return response()->json([
-                'message' => 'Only pending documents can be approved'
+                'message' => 'Solo los documentos pendientes pueden ser aprobados'
             ], 400);
         }
 
@@ -536,7 +536,7 @@ class ApplicationController extends Controller
         );
 
         return response()->json([
-            'message' => 'Document approved',
+            'message' => 'Documento aprobado',
             'data' => [
                 'id' => $document->id,
                 'type' => $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type,
@@ -553,12 +553,12 @@ class ApplicationController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($application->tenant_id !== $tenant->id || $document->application_id !== $application->id) {
-            return response()->json(['message' => 'Document not found'], 404);
+            return response()->json(['message' => 'Documento no encontrado'], 404);
         }
 
         if ($document->status !== DocumentStatus::PENDING) {
             return response()->json([
-                'message' => 'Only pending documents can be rejected'
+                'message' => 'Solo los documentos pendientes pueden ser rechazados'
             ], 400);
         }
 
@@ -569,7 +569,7 @@ class ApplicationController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -641,7 +641,7 @@ class ApplicationController extends Controller
         );
 
         return response()->json([
-            'message' => 'Document rejected',
+            'message' => 'Documento rechazado',
             'data' => [
                 'id' => $document->id,
                 'type' => $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type,
@@ -659,7 +659,7 @@ class ApplicationController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($application->tenant_id !== $tenant->id || $document->application_id !== $application->id) {
-            return response()->json(['message' => 'Document not found'], 404);
+            return response()->json(['message' => 'Documento no encontrado'], 404);
         }
 
         // Can only unapprove APPROVED or REJECTED documents
@@ -765,7 +765,7 @@ class ApplicationController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($application->tenant_id !== $tenant->id || $reference->application_id !== $application->id) {
-            return response()->json(['message' => 'Reference not found'], 404);
+            return response()->json(['message' => 'Referencia no encontrada'], 404);
         }
 
         $validator = Validator::make($request->all(), [
@@ -775,7 +775,7 @@ class ApplicationController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -838,17 +838,17 @@ class ApplicationController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($application->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'Application not found'], 404);
+            return response()->json(['message' => 'Solicitud no encontrada'], 404);
         }
 
         // Verify the bank account belongs to the applicant of this application
         if ($bankAccount->applicant_id !== $application->applicant_id) {
-            return response()->json(['message' => 'Bank account not found for this applicant'], 404);
+            return response()->json(['message' => 'Cuenta bancaria no encontrada'], 404);
         }
 
         if ($bankAccount->is_verified) {
             return response()->json([
-                'message' => 'Bank account is already verified'
+                'message' => 'La cuenta bancaria ya está verificada'
             ], 400);
         }
 
@@ -892,7 +892,7 @@ class ApplicationController extends Controller
         );
 
         return response()->json([
-            'message' => 'Bank account verified',
+            'message' => 'Cuenta bancaria verificada',
             'data' => [
                 'id' => $bankAccount->id,
                 'bank_name' => $bankAccount->bank_name,
@@ -910,17 +910,17 @@ class ApplicationController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($application->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'Application not found'], 404);
+            return response()->json(['message' => 'Solicitud no encontrada'], 404);
         }
 
         // Verify the bank account belongs to the applicant of this application
         if ($bankAccount->applicant_id !== $application->applicant_id) {
-            return response()->json(['message' => 'Bank account not found for this applicant'], 404);
+            return response()->json(['message' => 'Cuenta bancaria no encontrada'], 404);
         }
 
         if (!$bankAccount->is_verified) {
             return response()->json([
-                'message' => 'Bank account is not verified'
+                'message' => 'La cuenta bancaria no está verificada'
             ], 400);
         }
 
@@ -1345,7 +1345,7 @@ class ApplicationController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($application->tenant_id !== $tenant->id || $document->application_id !== $application->id) {
-            return response()->json(['message' => 'Document not found'], 404);
+            return response()->json(['message' => 'Documento no encontrado'], 404);
         }
 
         if ($document->storage_disk === 's3') {
@@ -1524,7 +1524,7 @@ class ApplicationController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($application->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'Application not found'], 404);
+            return response()->json(['message' => 'Solicitud no encontrada'], 404);
         }
 
         $validFields = [
@@ -1543,7 +1543,7 @@ class ApplicationController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'message' => 'Validation error',
+                'message' => 'Error de validación',
                 'errors' => $validator->errors()
             ], 422);
         }
@@ -1554,7 +1554,7 @@ class ApplicationController extends Controller
         $applicant = $application->applicant;
 
         if (!$applicant) {
-            return response()->json(['message' => 'Applicant not found'], 404);
+            return response()->json(['message' => 'Solicitante no encontrado'], 404);
         }
 
         // Get the field value being verified
@@ -1738,7 +1738,7 @@ class ApplicationController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($application->tenant_id !== $tenant->id || $document->application_id !== $application->id) {
-            return response()->json(['message' => 'Document not found'], 404);
+            return response()->json(['message' => 'Documento no encontrado'], 404);
         }
 
         // Get audit logs for this document
@@ -1788,7 +1788,7 @@ class ApplicationController extends Controller
         $tenant = $request->attributes->get('tenant');
 
         if ($application->tenant_id !== $tenant->id) {
-            return response()->json(['message' => 'Application not found'], 404);
+            return response()->json(['message' => 'Solicitud no encontrada'], 404);
         }
 
         $applicant = $application->applicant;
