@@ -77,6 +77,24 @@ class Person extends Model
 
     protected $table = 'persons';
 
+    // =====================================================
+    // KYC Status Constants
+    // =====================================================
+
+    public const KYC_PENDING = 'PENDING';
+    public const KYC_IN_PROGRESS = 'IN_PROGRESS';
+    public const KYC_VERIFIED = 'VERIFIED';
+    public const KYC_REJECTED = 'REJECTED';
+    public const KYC_EXPIRED = 'EXPIRED';
+
+    public const KYC_STATUSES = [
+        self::KYC_PENDING,
+        self::KYC_IN_PROGRESS,
+        self::KYC_VERIFIED,
+        self::KYC_REJECTED,
+        self::KYC_EXPIRED,
+    ];
+
     protected $fillable = [
         'tenant_id',
         'account_id',
@@ -265,7 +283,7 @@ class Person extends Model
      */
     public function getIsKycVerifiedAttribute(): bool
     {
-        return $this->kyc_status === 'VERIFIED';
+        return $this->kyc_status === self::KYC_VERIFIED;
     }
 
     /**
@@ -434,7 +452,7 @@ class Person extends Model
             'kyc_status' => $status,
         ];
 
-        if ($status === 'VERIFIED') {
+        if ($status === self::KYC_VERIFIED) {
             $updateData['kyc_verified_at'] = now();
             $updateData['kyc_verified_by'] = $verifiedBy;
         }
@@ -458,7 +476,7 @@ class Person extends Model
      */
     public function scopeKycVerified($query)
     {
-        return $query->where('kyc_status', 'VERIFIED');
+        return $query->where('kyc_status', self::KYC_VERIFIED);
     }
 
     /**

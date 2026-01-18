@@ -18,6 +18,20 @@ class ApplicantIdentity extends Model
 {
     use HasFactory, HasUuids;
 
+    // =====================================================
+    // Identity Type Constants
+    // =====================================================
+
+    public const TYPE_PHONE = 'PHONE';
+    public const TYPE_EMAIL = 'EMAIL';
+    public const TYPE_WHATSAPP = 'WHATSAPP';
+
+    public const TYPES = [
+        self::TYPE_PHONE,
+        self::TYPE_EMAIL,
+        self::TYPE_WHATSAPP,
+    ];
+
     protected $fillable = [
         'account_id',
         'type',
@@ -69,7 +83,7 @@ class ApplicantIdentity extends Model
      */
     public function isPhone(): bool
     {
-        return $this->type === 'PHONE';
+        return $this->type === self::TYPE_PHONE;
     }
 
     /**
@@ -77,7 +91,7 @@ class ApplicantIdentity extends Model
      */
     public function isEmail(): bool
     {
-        return $this->type === 'EMAIL';
+        return $this->type === self::TYPE_EMAIL;
     }
 
     /**
@@ -85,7 +99,7 @@ class ApplicantIdentity extends Model
      */
     public function isWhatsApp(): bool
     {
-        return $this->type === 'WHATSAPP';
+        return $this->type === self::TYPE_WHATSAPP;
     }
 
     // =====================================================
@@ -219,9 +233,9 @@ class ApplicantIdentity extends Model
     public function getTypeLabelAttribute(): string
     {
         return match ($this->type) {
-            'PHONE' => 'Teléfono',
-            'EMAIL' => 'Correo electrónico',
-            'WHATSAPP' => 'WhatsApp',
+            self::TYPE_PHONE => 'Teléfono',
+            self::TYPE_EMAIL => 'Correo electrónico',
+            self::TYPE_WHATSAPP => 'WhatsApp',
             default => $this->type,
         };
     }

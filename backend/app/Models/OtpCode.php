@@ -61,8 +61,8 @@ class OtpCode extends Model
 
         $otp = static::create([
             'tenant_id' => $tenantId,
-            'phone' => $channel !== 'EMAIL' ? $destination : null,
-            'email' => $channel === 'EMAIL' ? $destination : null,
+            'phone' => $channel !== OtpChannel::EMAIL->value ? $destination : null,
+            'email' => $channel === OtpChannel::EMAIL->value ? $destination : null,
             'code' => $code,
             'channel' => $channel,
             'purpose' => $purpose,
