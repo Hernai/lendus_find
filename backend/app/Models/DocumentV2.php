@@ -197,6 +197,62 @@ class DocumentV2 extends Model
         return self::CATEGORY_OTHER;
     }
 
+    /**
+     * Get all valid document types.
+     */
+    public static function validTypes(): array
+    {
+        $types = [];
+        foreach (self::typesByCategory() as $categoryTypes) {
+            $types = array_merge($types, $categoryTypes);
+        }
+        return $types;
+    }
+
+    /**
+     * Get type labels for display.
+     */
+    public static function typeLabels(): array
+    {
+        return [
+            self::TYPE_INE_FRONT => 'INE (Frente)',
+            self::TYPE_INE_BACK => 'INE (Reverso)',
+            self::TYPE_PASSPORT => 'Pasaporte',
+            self::TYPE_CURP_DOC => 'CURP',
+            self::TYPE_RFC_CONSTANCIA => 'Constancia RFC',
+            self::TYPE_DRIVER_LICENSE_FRONT => 'Licencia de Conducir (Frente)',
+            self::TYPE_DRIVER_LICENSE_BACK => 'Licencia de Conducir (Reverso)',
+            self::TYPE_PROOF_OF_ADDRESS => 'Comprobante de Domicilio',
+            self::TYPE_UTILITY_BILL => 'Recibo de Servicios',
+            self::TYPE_BANK_STATEMENT_ADDRESS => 'Estado de Cuenta (Domicilio)',
+            self::TYPE_LEASE_AGREEMENT => 'Contrato de Arrendamiento',
+            self::TYPE_PROPERTY_DEED => 'Escrituras',
+            self::TYPE_PAYSLIP => 'Recibo de Nómina',
+            self::TYPE_BANK_STATEMENT => 'Estado de Cuenta Bancario',
+            self::TYPE_TAX_RETURN => 'Declaración de Impuestos',
+            self::TYPE_IMSS_STATEMENT => 'Estado de Cuenta IMSS',
+            self::TYPE_EMPLOYMENT_LETTER => 'Carta de Empleo',
+            self::TYPE_INCOME_AFFIDAVIT => 'Declaración de Ingresos',
+            self::TYPE_CONSTITUTIVE_ACT => 'Acta Constitutiva',
+            self::TYPE_POWER_OF_ATTORNEY => 'Poder Notarial',
+            self::TYPE_TAX_ID_COMPANY => 'RFC Empresa',
+            self::TYPE_FISCAL_SITUATION => 'Constancia de Situación Fiscal',
+            self::TYPE_LEGAL_REP_ID => 'Identificación Representante Legal',
+            self::TYPE_SHAREHOLDER_STRUCTURE => 'Estructura Accionaria',
+            self::TYPE_SELFIE => 'Selfie',
+            self::TYPE_SIGNATURE => 'Firma',
+            self::TYPE_OTHER => 'Otro',
+        ];
+    }
+
+    /**
+     * Get type label for a specific type.
+     */
+    public function getTypeLabelAttribute(): string
+    {
+        return self::typeLabels()[$this->type] ?? $this->type;
+    }
+
     // =====================================================
     // Statuses
     // =====================================================
@@ -336,6 +392,22 @@ class DocumentV2 extends Model
     public function getIsCurrentVersionAttribute(): bool
     {
         return is_null($this->replaced_at);
+    }
+
+    /**
+     * Alias for file_name for backward compatibility.
+     */
+    public function getOriginalFilenameAttribute(): string
+    {
+        return $this->file_name ?? '';
+    }
+
+    /**
+     * Alias for valid_until for API compatibility.
+     */
+    public function getExpiresAtAttribute(): ?\Carbon\Carbon
+    {
+        return $this->valid_until;
     }
 
     // =====================================================
