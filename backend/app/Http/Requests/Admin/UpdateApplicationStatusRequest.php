@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin;
 
 use App\Enums\ApplicationStatus;
+use App\Http\Requests\Traits\ApiFormRequest;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -13,6 +14,8 @@ use Illuminate\Validation\Rule;
  */
 class UpdateApplicationStatusRequest extends FormRequest
 {
+    use ApiFormRequest;
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -113,11 +116,21 @@ class UpdateApplicationStatusRequest extends FormRequest
                 ApplicationStatus::CANCELLED->value,
             ],
             ApplicationStatus::APPROVED->value => [
-                ApplicationStatus::SYNCED->value,
+                ApplicationStatus::DISBURSED->value,
                 ApplicationStatus::CANCELLED->value,
             ],
             ApplicationStatus::REJECTED->value => [],
-            ApplicationStatus::SYNCED->value => [],
+            ApplicationStatus::DISBURSED->value => [
+                ApplicationStatus::ACTIVE->value,
+                ApplicationStatus::COMPLETED->value,
+                ApplicationStatus::DEFAULT->value,
+            ],
+            ApplicationStatus::ACTIVE->value => [
+                ApplicationStatus::COMPLETED->value,
+                ApplicationStatus::DEFAULT->value,
+            ],
+            ApplicationStatus::COMPLETED->value => [],
+            ApplicationStatus::DEFAULT->value => [],
             ApplicationStatus::CANCELLED->value => [],
         ];
 

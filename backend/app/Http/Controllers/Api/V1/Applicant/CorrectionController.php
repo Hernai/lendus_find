@@ -95,7 +95,7 @@ class CorrectionController extends Controller
                 'application_id' => $doc->application_id,
                 'type' => $doc->type->value,
                 'type_label' => $doc->type->description(),
-                'name' => $doc->name ?? $doc->original_name,
+                'name' => $doc->name ?? $doc->file_name,
                 'rejection_reason' => $doc->rejection_reason,
                 'rejected_at' => $doc->reviewed_at?->toIso8601String(),
             ]);

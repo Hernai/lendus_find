@@ -34,9 +34,8 @@ class ReviewDocumentRequest extends FormRequest
             'rejection_reason' => [
                 'nullable',
                 'string',
-                Rule::in($this->getValidRejectionReasons()),
+                'max:500',
             ],
-            'rejection_comment' => ['nullable', 'string', 'max:500'],
         ];
     }
 
@@ -48,8 +47,7 @@ class ReviewDocumentRequest extends FormRequest
         return [
             'status.required' => 'El estado es requerido.',
             'status.in' => 'El estado debe ser APPROVED o REJECTED.',
-            'rejection_reason.in' => 'La razón de rechazo no es válida.',
-            'rejection_comment.max' => 'El comentario no puede exceder 500 caracteres.',
+            'rejection_reason.max' => 'La razón de rechazo no puede exceder 500 caracteres.',
         ];
     }
 
@@ -70,21 +68,5 @@ class ReviewDocumentRequest extends FormRequest
                 );
             }
         });
-    }
-
-    /**
-     * Get valid rejection reasons.
-     */
-    protected function getValidRejectionReasons(): array
-    {
-        return [
-            'ILLEGIBLE',
-            'EXPIRED',
-            'INCOMPLETE',
-            'WRONG_DOCUMENT',
-            'LOW_QUALITY',
-            'DATA_MISMATCH',
-            'OTHER',
-        ];
     }
 }

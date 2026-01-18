@@ -92,7 +92,7 @@ class AdminDashboardTest extends TestCase
         ]);
 
         $response = $this->actingAsAdmin()
-            ->putJson("/api/admin/applications/{$application->uuid}/status", [
+            ->putJson("/api/admin/applications/{$application->id}/status", [
                 'status' => 'IN_REVIEW',
             ]);
 

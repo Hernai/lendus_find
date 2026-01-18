@@ -55,7 +55,8 @@ class EnsureUserBelongsToTenant
         }
 
         // Check if user belongs to the tenant
-        if ($user->tenant_id !== $tenantId) {
+        // Cast both to string to handle UUID objects vs string comparison
+        if ((string) $user->tenant_id !== (string) $tenantId) {
             Log::warning('User attempted to access different tenant', [
                 'user_id' => $user->id,
                 'user_tenant' => $user->tenant_id,

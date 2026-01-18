@@ -115,16 +115,16 @@ class DocumentController extends Controller
         if ($existingDoc) {
             $isReplacement = true;
             $oldDocInfo = [
-                'filename' => $existingDoc->original_name ?? $existingDoc->file_name ?? 'unknown',
-                'size' => $existingDoc->size ?? $existingDoc->file_size ?? 0,
+                'filename' => $existingDoc->name ?? $existingDoc->file_name ?? 'unknown',
+                'size' => $existingDoc->file_size ?? 0,
                 'mime_type' => $existingDoc->mime_type,
                 'status' => $existingDoc->status instanceof DocumentStatus ? $existingDoc->status->value : $existingDoc->status,
                 'rejection_reason' => $existingDoc->rejection_reason,
             ];
 
             // Delete old file
-            if ($existingDoc->storage_path) {
-                Storage::disk($existingDoc->storage_disk)->delete($existingDoc->storage_path);
+            if ($existingDoc->file_path) {
+                Storage::disk($existingDoc->storage_disk)->delete($existingDoc->file_path);
             }
             $existingDoc->delete();
         }
@@ -180,11 +180,12 @@ class DocumentController extends Controller
             'applicant_id' => $applicant->id,
             'application_id' => $application->id,
             'type' => $type,
-            'original_name' => $file->getClientOriginalName(),
+            'name' => $file->getClientOriginalName(),
+            'file_name' => $file->getClientOriginalName(),
             'storage_disk' => $disk,
-            'storage_path' => $path,
+            'file_path' => $path,
             'mime_type' => $file->getMimeType(),
-            'size' => $file->getSize(),
+            'file_size' => $file->getSize(),
             'status' => $initialStatus,
             'metadata' => $docMetadata,
             'reviewed_by' => $reviewedBy,
@@ -327,7 +328,7 @@ class DocumentController extends Controller
         // Soft delete - NO eliminar archivo físico para permitir restauración
         $docId = $document->id;
         $docType = $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type;
-        $docName = $document->original_name ?? $document->file_name ?? 'unknown';
+        $docName = $document->name ?? $document->file_name ?? 'unknown';
         $document->delete(); // Soft delete por trait SoftDeletes
 
         // Add to application timeline
@@ -391,7 +392,7 @@ class DocumentController extends Controller
 
         if ($document->storage_disk === 's3') {
             $url = Storage::disk('s3')->temporaryUrl(
-                $document->storage_path,
+                $document->file_path,
                 now()->addMinutes(15)
             );
         } else {
@@ -423,7 +424,7 @@ class DocumentController extends Controller
             abort(400, 'Direct download not available for this storage type');
         }
 
-        $path = Storage::disk('local')->path($document->storage_path);
+        $path = Storage::disk('local')->path($document->file_path);
 
         if (!file_exists($path)) {
             abort(404, 'File not found');
@@ -452,7 +453,7 @@ class DocumentController extends Controller
         }
 
         // Security: Sanitize filename to prevent header injection
-        $safeName = basename($document->original_name ?? 'document');
+        $safeName = basename($document->name ?? $document->file_name ?? 'document');
         $safeName = preg_replace('/[^a-zA-Z0-9._-]/', '_', $safeName);
 
         return response()->file($path, [
@@ -470,11 +471,11 @@ class DocumentController extends Controller
         return [
             'id' => $document->id,
             'type' => $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type,
-            'name' => $document->original_name,
+            'name' => $document->name ?? $document->file_name,
             'status' => $document->status instanceof \App\Enums\DocumentStatus ? $document->status->value : $document->status,
             'rejection_reason' => $document->rejection_reason,
             'mime_type' => $document->mime_type,
-            'size' => $document->size,
+            'size' => $document->file_size,
             'uploaded_at' => $document->created_at->toIso8601String(),
         ];
     }

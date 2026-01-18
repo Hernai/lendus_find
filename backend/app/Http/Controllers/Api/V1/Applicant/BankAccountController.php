@@ -6,7 +6,7 @@ use App\Enums\BankAccountType;
 use App\Enums\BankAccountUsageType;
 use App\Http\Controllers\Controller;
 use App\Http\Traits\ApplicantHelpers;
-use App\Http\Controllers\Api\Traits\ValidationHelpers;
+use App\Http\Traits\ValidationHelpers;
 use App\Http\Resources\BankAccountResource;
 use App\Models\BankAccount;
 use Illuminate\Http\JsonResponse;

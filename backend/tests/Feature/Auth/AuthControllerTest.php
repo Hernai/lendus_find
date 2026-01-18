@@ -187,7 +187,7 @@ class AuthControllerTest extends TestCase
 
         $response->assertStatus(401)
             ->assertJson([
-                'error' => 'Invalid code',
+                'error' => 'INVALID_CODE',
             ]);
     }
 
@@ -287,7 +287,7 @@ class AuthControllerTest extends TestCase
 
         $response->assertStatus(400)
             ->assertJson([
-                'error' => 'PIN already set',
+                'error' => 'PIN_ALREADY_SET',
             ]);
     }
 
@@ -367,7 +367,7 @@ class AuthControllerTest extends TestCase
 
         $response->assertStatus(401)
             ->assertJson([
-                'error' => 'Invalid PIN',
+                'error' => 'INVALID_PIN',
             ]);
     }
 
@@ -386,7 +386,7 @@ class AuthControllerTest extends TestCase
 
         $response->assertStatus(400)
             ->assertJson([
-                'error' => 'No PIN set',
+                'error' => 'NO_PIN_SET',
                 'requires_otp' => true,
             ]);
     }
@@ -402,7 +402,7 @@ class AuthControllerTest extends TestCase
 
         $response->assertStatus(404)
             ->assertJson([
-                'error' => 'User not found',
+                'error' => 'USER_NOT_FOUND',
             ]);
     }
 
@@ -457,7 +457,7 @@ class AuthControllerTest extends TestCase
 
         $response->assertStatus(403)
             ->assertJson([
-                'error' => 'Unauthorized',
+                'error' => 'UNAUTHORIZED',
             ]);
     }
 
@@ -479,7 +479,7 @@ class AuthControllerTest extends TestCase
 
         $response->assertStatus(401)
             ->assertJson([
-                'error' => 'Invalid credentials',
+                'error' => 'INVALID_CREDENTIALS',
             ]);
     }
 
@@ -502,7 +502,7 @@ class AuthControllerTest extends TestCase
 
         $response->assertStatus(403)
             ->assertJson([
-                'error' => 'Account disabled',
+                'error' => 'ACCOUNT_DISABLED',
             ]);
     }
 
@@ -546,7 +546,7 @@ class AuthControllerTest extends TestCase
 
         $response->assertStatus(401)
             ->assertJson([
-                'error' => 'Invalid PIN',
+                'error' => 'INVALID_PIN',
             ]);
     }
 
@@ -633,7 +633,7 @@ class AuthControllerTest extends TestCase
 
         $response->assertStatus(404)
             ->assertJson([
-                'error' => 'User not found',
+                'error' => 'USER_NOT_FOUND',
             ]);
     }
 }

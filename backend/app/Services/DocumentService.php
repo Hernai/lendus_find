@@ -82,11 +82,12 @@ class DocumentService implements DocumentStorageInterface
             'applicant_id' => $applicant->id,
             'application_id' => $application?->id,
             'type' => strtoupper($type),
-            'original_name' => $file->getClientOriginalName(),
+            'name' => $file->getClientOriginalName(),
+            'file_name' => $file->getClientOriginalName(),
             'storage_disk' => $this->disk,
-            'storage_path' => $path,
+            'file_path' => $path,
             'mime_type' => $file->getMimeType(),
-            'size' => strlen($fileContent),
+            'file_size' => strlen($fileContent),
             'status' => DocumentStatus::PENDING,
             'checksum' => $checksum,
             'metadata' => $metadata,
@@ -101,7 +102,7 @@ class DocumentService implements DocumentStorageInterface
     {
         if ($this->disk === 's3') {
             return Storage::disk('s3')->temporaryUrl(
-                $document->storage_path,
+                $document->file_path,
                 now()->addMinutes($expirationMinutes)
             );
         }
@@ -188,11 +189,12 @@ class DocumentService implements DocumentStorageInterface
             'applicant_id' => $applicant->id,
             'application_id' => $application?->id,
             'type' => strtoupper($type),
-            'original_name' => $originalName,
+            'name' => $originalName,
+            'file_name' => $originalName,
             'storage_disk' => $this->disk,
-            'storage_path' => $path,
+            'file_path' => $path,
             'mime_type' => $mimeType,
-            'size' => $size,
+            'file_size' => $size,
             'status' => DocumentStatus::PENDING,
             'is_sensitive' => $this->isSensitiveDocType($type),
         ]);
@@ -204,8 +206,8 @@ class DocumentService implements DocumentStorageInterface
     public function delete(Document $document): bool
     {
         // Delete from storage
-        if ($document->storage_path) {
-            Storage::disk($document->storage_disk)->delete($document->storage_path);
+        if ($document->file_path) {
+            Storage::disk($document->storage_disk)->delete($document->file_path);
         }
 
         // Soft delete the record
@@ -220,8 +222,8 @@ class DocumentService implements DocumentStorageInterface
         UploadedFile $file
     ): Document {
         // Delete old file
-        if ($document->storage_path) {
-            Storage::disk($document->storage_disk)->delete($document->storage_path);
+        if ($document->file_path) {
+            Storage::disk($document->storage_disk)->delete($document->file_path);
         }
 
         // Validate new file
@@ -241,15 +243,15 @@ class DocumentService implements DocumentStorageInterface
 
         // Update document record
         $document->update([
-            'original_name' => $file->getClientOriginalName(),
+            'name' => $file->getClientOriginalName(),
+            'file_name' => $file->getClientOriginalName(),
             'storage_disk' => $this->disk,
-            'storage_path' => $path,
+            'file_path' => $path,
             'mime_type' => $file->getMimeType(),
-            'size' => strlen($fileContent),
+            'file_size' => strlen($fileContent),
             'status' => DocumentStatus::PENDING,
             'checksum' => md5($fileContent),
             'rejection_reason' => null,
-            'rejection_comment' => null,
             'reviewed_by' => null,
             'reviewed_at' => null,
         ]);
@@ -266,11 +268,11 @@ class DocumentService implements DocumentStorageInterface
         $newPath = str_replace(
             "applications/{$document->application->uuid}",
             "applications/{$newApplication->uuid}",
-            $document->storage_path
+            $document->file_path
         );
 
         Storage::disk($document->storage_disk)->copy(
-            $document->storage_path,
+            $document->file_path,
             $newPath
         );
 
@@ -280,11 +282,12 @@ class DocumentService implements DocumentStorageInterface
             'applicant_id' => $document->applicant_id,
             'application_id' => $newApplication->id,
             'type' => $document->type,
-            'original_name' => $document->original_name,
+            'name' => $document->name ?? $document->file_name,
+            'file_name' => $document->file_name,
             'storage_disk' => $document->storage_disk,
-            'storage_path' => $newPath,
+            'file_path' => $newPath,
             'mime_type' => $document->mime_type,
-            'size' => $document->size,
+            'file_size' => $document->file_size,
             'status' => DocumentStatus::PENDING,
             'checksum' => $document->checksum,
             'metadata' => $document->metadata,
@@ -458,12 +461,11 @@ class DocumentService implements DocumentStorageInterface
         return [
             'id' => $document->uuid,
             'type' => $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type,
-            'name' => $document->original_name,
+            'name' => $document->name ?? $document->file_name,
             'status' => $document->status instanceof \App\Enums\DocumentStatus ? $document->status->value : $document->status,
             'rejection_reason' => $document->rejection_reason,
-            'rejection_comment' => $document->rejection_comment,
             'mime_type' => $document->mime_type,
-            'size' => $document->size,
+            'size' => $document->file_size,
             'uploaded_at' => $document->created_at->toIso8601String(),
             'reviewed_at' => $document->reviewed_at?->toIso8601String(),
         ];

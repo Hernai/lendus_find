@@ -61,10 +61,19 @@ class AuditLog extends Model
     ): self {
         $request = request();
 
+        // Only use user_id if explicitly provided or if the authenticated user is a User model
+        // (not StaffAccount or ApplicantAccount which are stored in separate tables)
+        $userId = null;
+        if (array_key_exists('user_id', $options)) {
+            $userId = $options['user_id'];
+        } elseif ($request->user() instanceof \App\Models\User) {
+            $userId = $request->user()->id;
+        }
+
         $data = [
             'tenant_id' => $tenantId ?? $request->attributes->get('tenant')?->id,
             'action' => $action,
-            'user_id' => $options['user_id'] ?? $request->user()?->id,
+            'user_id' => $userId,
             'applicant_id' => $options['applicant_id'] ?? null,
             'application_id' => $options['application_id'] ?? null,
             'entity_type' => $options['entity_type'] ?? null,

@@ -38,12 +38,12 @@ class ApplicantFactory extends Factory
             'rfc' => strtoupper(substr($lastName1, 0, 2) . substr($lastName2, 0, 1) . substr($firstName, 0, 1)) .
                 $birthDate->format('ymd') . fake()->regexify('[A-Z0-9]{3}'),
             'nationality' => 'MEXICANA',
-            'country_of_birth' => 'MEXICO',
-            'state_of_birth' => fake()->randomElement(['CDMX', 'JAL', 'NL', 'PUE', 'GTO']),
-            'marital_status' => fake()->randomElement(['SOLTERO', 'CASADO', 'UNION_LIBRE', 'DIVORCIADO']),
-            'education_level' => fake()->randomElement(['PREPARATORIA', 'LICENCIATURA', 'MAESTRIA']),
-            'onboarding_step' => 8, // Completed
-            'onboarding_completed_at' => now(),
+            'birth_country' => 'MEXICO',
+            'birth_state' => fake()->randomElement(['CDMX', 'JAL', 'NL', 'PUE', 'GTO']),
+            'type' => fake()->randomElement(['INDIVIDUAL', 'BUSINESS']),
+            'marital_status' => fake()->randomElement(['SINGLE', 'MARRIED', 'COMMON_LAW', 'DIVORCED']),
+            'education_level' => fake()->randomElement(['HIGH_SCHOOL', 'BACHELOR', 'MASTER']),
+            'kyc_status' => 'PENDING',
         ];
     }
 
@@ -67,13 +67,23 @@ class ApplicantFactory extends Factory
     }
 
     /**
-     * Applicant in onboarding process.
+     * Applicant with verified KYC.
      */
-    public function inOnboarding(int $step = 3): static
+    public function kycVerified(): static
     {
         return $this->state(fn(array $attributes) => [
-            'onboarding_step' => $step,
-            'onboarding_completed_at' => null,
+            'kyc_status' => 'VERIFIED',
+            'kyc_verified_at' => now(),
+        ]);
+    }
+
+    /**
+     * Applicant with rejected KYC.
+     */
+    public function kycRejected(): static
+    {
+        return $this->state(fn(array $attributes) => [
+            'kyc_status' => 'REJECTED',
         ]);
     }
 }

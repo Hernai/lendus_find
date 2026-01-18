@@ -62,11 +62,9 @@ abstract class TestCase extends BaseTestCase
             $this->setUpTenant();
         }
 
-        $this->user = User::factory()->create([
+        $this->user = User::factory()->applicant()->create([
             'tenant_id' => $this->tenant->id,
             'phone' => '+525512345678',
-            'role' => 'applicant',
-            'is_active' => true,
         ]);
 
         return $this->user;
@@ -81,11 +79,9 @@ abstract class TestCase extends BaseTestCase
             $this->setUpTenant();
         }
 
-        $this->admin = User::factory()->create([
+        $this->admin = User::factory()->admin()->create([
             'tenant_id' => $this->tenant->id,
             'phone' => '+525500000001',
-            'role' => 'admin',
-            'is_active' => true,
         ]);
 
         return $this->admin;

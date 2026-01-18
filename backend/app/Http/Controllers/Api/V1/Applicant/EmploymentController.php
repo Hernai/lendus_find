@@ -8,7 +8,7 @@ use App\Enums\IncomeType;
 use App\Enums\PaymentFrequency;
 use App\Http\Controllers\Controller;
 use App\Http\Traits\ApplicantHelpers;
-use App\Http\Controllers\Api\Traits\ValidationHelpers;
+use App\Http\Traits\ValidationHelpers;
 use App\Http\Resources\EmploymentRecordResource;
 use App\Models\EmploymentRecord;
 use Illuminate\Http\JsonResponse;

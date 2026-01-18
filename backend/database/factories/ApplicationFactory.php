@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\ApplicationStatus;
 use App\Models\Tenant;
 use App\Models\Applicant;
 use App\Models\Product;
@@ -32,12 +33,11 @@ class ApplicationFactory extends Factory
 
         return [
             'id' => Str::uuid(),
-            'uuid' => Str::uuid(),
             'tenant_id' => Tenant::factory(),
             'applicant_id' => Applicant::factory(),
             'product_id' => Product::factory(),
             'folio' => 'APP-' . now()->format('Ymd') . '-' . strtoupper(Str::random(6)),
-            'status' => Application::STATUS_DRAFT,
+            'status' => ApplicationStatus::DRAFT->value,
             'requested_amount' => $requestedAmount,
             'approved_amount' => null,
             'term_months' => $termMonths,
@@ -59,8 +59,7 @@ class ApplicationFactory extends Factory
     public function submitted(): static
     {
         return $this->state(fn(array $attributes) => [
-            'status' => Application::STATUS_SUBMITTED,
-            'submitted_at' => now(),
+            'status' => ApplicationStatus::SUBMITTED->value,
         ]);
     }
 
@@ -70,8 +69,7 @@ class ApplicationFactory extends Factory
     public function approved(): static
     {
         return $this->state(fn(array $attributes) => [
-            'status' => Application::STATUS_APPROVED,
-            'submitted_at' => now()->subDays(5),
+            'status' => ApplicationStatus::APPROVED->value,
             'approved_at' => now(),
             'approved_amount' => $attributes['requested_amount'],
         ]);
@@ -83,8 +81,7 @@ class ApplicationFactory extends Factory
     public function disbursed(): static
     {
         return $this->state(fn(array $attributes) => [
-            'status' => Application::STATUS_DISBURSED,
-            'submitted_at' => now()->subDays(10),
+            'status' => ApplicationStatus::DISBURSED->value,
             'approved_at' => now()->subDays(5),
             'disbursed_at' => now(),
             'approved_amount' => $attributes['requested_amount'],
@@ -98,8 +95,7 @@ class ApplicationFactory extends Factory
     public function rejected(): static
     {
         return $this->state(fn(array $attributes) => [
-            'status' => Application::STATUS_REJECTED,
-            'submitted_at' => now()->subDays(5),
+            'status' => ApplicationStatus::REJECTED->value,
             'rejection_reason' => fake()->randomElement([
                 'Historial crediticio insuficiente',
                 'Ingresos no comprobables',

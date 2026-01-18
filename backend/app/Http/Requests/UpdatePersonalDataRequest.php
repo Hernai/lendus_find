@@ -5,9 +5,8 @@ namespace App\Http\Requests;
 use App\Enums\EducationLevel;
 use App\Enums\Gender;
 use App\Enums\MaritalStatus;
-use Illuminate\Contracts\Validation\Validator;
+use App\Http\Requests\Traits\ApiFormRequest;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Validation\Rule;
 
 /**
@@ -18,6 +17,7 @@ use Illuminate\Validation\Rule;
  */
 class UpdatePersonalDataRequest extends FormRequest
 {
+    use ApiFormRequest;
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -171,19 +171,5 @@ class UpdatePersonalDataRequest extends FormRequest
         if (!empty($data)) {
             $this->merge($data);
         }
-    }
-
-    /**
-     * Handle a failed validation attempt.
-     * Returns JSON response instead of redirect for API.
-     */
-    protected function failedValidation(Validator $validator): void
-    {
-        throw new HttpResponseException(
-            response()->json([
-                'message' => 'Error de validación',
-                'errors' => $validator->errors(),
-            ], 422)
-        );
     }
 }

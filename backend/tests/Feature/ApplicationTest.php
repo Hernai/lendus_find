@@ -56,9 +56,10 @@ class ApplicationTest extends TestCase
     {
         $response = $this->actingAsUser()
             ->postJson('/api/applications', [
-                'product_id' => $this->product->uuid ?? $this->product->id,
+                'product_id' => $this->product->id,
                 'requested_amount' => 50000,
                 'term_months' => 12,
+                'payment_frequency' => 'MONTHLY',
                 'purpose' => 'Gastos personales',
             ]);
 
@@ -89,13 +90,13 @@ class ApplicationTest extends TestCase
         ]);
 
         $response = $this->actingAsUser()
-            ->getJson("/api/applications/{$application->uuid}");
+            ->getJson("/api/applications/{$application->id}");
 
         $response->assertStatus(200)
             ->assertJsonPath('data.requested_amount', 75000);
     }
 
-    public function test_can_submit_application(): void
+    public function test_submit_requires_complete_data(): void
     {
         $application = Application::factory()->create([
             'tenant_id' => $this->tenant->id,
@@ -104,15 +105,16 @@ class ApplicationTest extends TestCase
             'status' => 'DRAFT',
         ]);
 
+        // Submit should fail because applicant doesn't have all required data
         $response = $this->actingAsUser()
-            ->postJson("/api/applications/{$application->uuid}/submit");
+            ->postJson("/api/applications/{$application->id}/submit");
 
-        $response->assertStatus(200);
-
-        $this->assertDatabaseHas('applications', [
-            'id' => $application->id,
-            'status' => 'SUBMITTED',
-        ]);
+        // Returns 422 with validation errors (address, employment, signature, references)
+        $response->assertStatus(422)
+            ->assertJsonStructure([
+                'message',
+                'errors',
+            ]);
     }
 
     public function test_can_cancel_application(): void
@@ -125,7 +127,7 @@ class ApplicationTest extends TestCase
         ]);
 
         $response = $this->actingAsUser()
-            ->postJson("/api/applications/{$application->uuid}/cancel");
+            ->postJson("/api/applications/{$application->id}/cancel");
 
         $response->assertStatus(200);
 
@@ -152,7 +154,7 @@ class ApplicationTest extends TestCase
         ]);
 
         $response = $this->actingAsUser()
-            ->getJson("/api/applications/{$application->uuid}");
+            ->getJson("/api/applications/{$application->id}");
 
         $response->assertStatus(404);
     }

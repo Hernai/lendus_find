@@ -3,9 +3,15 @@
 namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\Enums\AuditAction;
-use App\Enums\OtpChannel;
 use App\Http\Controllers\Controller;
-use App\Http\Traits\ValidationHelpers;
+use App\Http\Requests\Auth\ChangePinRequest;
+use App\Http\Requests\Auth\CheckUserRequest;
+use App\Http\Requests\Auth\LoginWithPasswordRequest;
+use App\Http\Requests\Auth\LoginWithPinRequest;
+use App\Http\Requests\Auth\RequestOtpRequest;
+use App\Http\Requests\Auth\ResetPinWithOtpRequest;
+use App\Http\Requests\Auth\SetupPinRequest;
+use App\Http\Requests\Auth\VerifyOtpRequest;
 use App\Models\AuditLog;
 use App\Models\OtpCode;
 use App\Models\User;
@@ -15,13 +21,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
 {
-    use ValidationHelpers;
-
     public function __construct(
         protected VerificationService $verificationService,
         protected TwilioServiceFactory $twilioFactory
@@ -30,18 +32,8 @@ class AuthController extends Controller
     /**
      * Request OTP code.
      */
-    public function requestOtp(Request $request): JsonResponse
+    public function requestOtp(RequestOtpRequest $request): JsonResponse
     {
-        $validation = $this->validateRequest($request->all(), [
-            'phone' => 'required_without:email|string|regex:/^[0-9]{10}$/',
-            'email' => 'required_without:phone|email',
-            'channel' => ['sometimes', Rule::in(OtpChannel::values())],
-        ]);
-
-        if ($this->isValidationError($validation)) {
-            return $validation;
-        }
-
         $phone = $request->phone;
         $email = $request->email;
         $channel = $request->channel ?? ($email ? 'EMAIL' : 'SMS');
@@ -142,8 +134,8 @@ class AuthController extends Controller
             ]);
 
             return response()->json([
-                'error' => 'Failed to send OTP',
-                'message' => $e->getMessage(),
+                'error' => 'OTP_GENERATION_FAILED',
+                'message' => 'Error al generar el código de verificación',
             ], 500);
         }
     }
@@ -151,18 +143,8 @@ class AuthController extends Controller
     /**
      * Verify OTP code and authenticate.
      */
-    public function verifyOtp(Request $request): JsonResponse
+    public function verifyOtp(VerifyOtpRequest $request): JsonResponse
     {
-        $validation = $this->validateRequest($request->all(), [
-            'phone' => 'required_without:email|string|regex:/^[0-9]{10}$/',
-            'email' => 'required_without:phone|email',
-            'code' => 'required|string|size:6',
-        ]);
-
-        if ($this->isValidationError($validation)) {
-            return $validation;
-        }
-
         $destination = $request->email ?: $request->phone;
 
         Log::info('🔐 OTP Verify Request', [
@@ -177,7 +159,7 @@ class AuthController extends Controller
         if (!$otp) {
             Log::warning('🔐 OTP Verify Failed - Invalid code');
             return response()->json([
-                'error' => 'Invalid code',
+                'error' => 'INVALID_CODE',
                 'message' => 'El código es inválido o ha expirado',
             ], 401);
         }
@@ -329,16 +311,8 @@ class AuthController extends Controller
     /**
      * Check if user has PIN set (for login flow decision).
      */
-    public function checkUser(Request $request): JsonResponse
+    public function checkUser(CheckUserRequest $request): JsonResponse
     {
-        $validation = $this->validateRequest($request->all(), [
-            'phone' => 'required|string|regex:/^[0-9]{10}$/',
-        ]);
-
-        if ($this->isValidationError($validation)) {
-            return $validation;
-        }
-
         $user = User::where('phone', $request->phone)
             ->where('tenant_id', app('tenant.id'))
             ->first();
@@ -364,25 +338,13 @@ class AuthController extends Controller
     /**
      * Setup PIN after OTP verification.
      */
-    public function setupPin(Request $request): JsonResponse
+    public function setupPin(SetupPinRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'pin' => 'required|string|digits:4',
-            'pin_confirmation' => 'required|string|same:pin',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $user = $request->user();
 
         if ($user->hasPin()) {
             return response()->json([
-                'error' => 'PIN already set',
+                'error' => 'PIN_ALREADY_SET',
                 'message' => 'Ya tienes un NIP configurado. Usa la opción de cambiar NIP.',
             ], 400);
         }
@@ -409,20 +371,8 @@ class AuthController extends Controller
     /**
      * Login with phone + PIN.
      */
-    public function loginWithPin(Request $request): JsonResponse
+    public function loginWithPin(LoginWithPinRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'phone' => 'required|string|regex:/^[0-9]{10}$/',
-            'pin' => 'required|string|digits:4',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $user = User::where('phone', $request->phone)
             ->where('tenant_id', app('tenant.id'))
             ->first();
@@ -438,14 +388,14 @@ class AuthController extends Controller
 
         if (!$user) {
             return response()->json([
-                'error' => 'User not found',
+                'error' => 'USER_NOT_FOUND',
                 'message' => 'No existe una cuenta con este número de teléfono',
             ], 404);
         }
 
         if (!$user->hasPin()) {
             return response()->json([
-                'error' => 'No PIN set',
+                'error' => 'NO_PIN_SET',
                 'message' => 'No tienes un NIP configurado. Inicia sesión con OTP.',
                 'requires_otp' => true,
             ], 400);
@@ -453,7 +403,7 @@ class AuthController extends Controller
 
         if ($user->isPinLocked()) {
             return response()->json([
-                'error' => 'Account locked',
+                'error' => 'ACCOUNT_LOCKED',
                 'message' => 'Cuenta bloqueada por intentos fallidos. Intenta en ' . $user->getPinLockoutMinutes() . ' minutos.',
                 'lockout_minutes' => $user->getPinLockoutMinutes(),
             ], 423);
@@ -481,7 +431,7 @@ class AuthController extends Controller
             );
 
             return response()->json([
-                'error' => 'Invalid PIN',
+                'error' => 'INVALID_PIN',
                 'message' => 'NIP incorrecto. ' . ($remaining > 0 ? "Te quedan $remaining intentos." : 'Cuenta bloqueada.'),
                 'attempts_remaining' => $remaining,
             ], 401);
@@ -532,27 +482,15 @@ class AuthController extends Controller
     /**
      * Login with email + password (for admin/staff users).
      */
-    public function loginWithPassword(Request $request): JsonResponse
+    public function loginWithPassword(LoginWithPasswordRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'email' => 'required|email',
-            'password' => 'required|string|min:6',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $user = User::where('email', $request->email)
             ->where('tenant_id', app('tenant.id'))
             ->first();
 
         if (!$user) {
             return response()->json([
-                'error' => 'User not found',
+                'error' => 'USER_NOT_FOUND',
                 'message' => 'No existe una cuenta con este correo electrónico',
             ], 404);
         }
@@ -560,14 +498,14 @@ class AuthController extends Controller
         // Only allow staff users to login with password
         if (!$user->isStaff()) {
             return response()->json([
-                'error' => 'Unauthorized',
+                'error' => 'UNAUTHORIZED',
                 'message' => 'Este método de autenticación no está disponible para tu cuenta',
             ], 403);
         }
 
         if (!$user->password || !Hash::check($request->password, $user->password)) {
             return response()->json([
-                'error' => 'Invalid credentials',
+                'error' => 'INVALID_CREDENTIALS',
                 'message' => 'Correo o contraseña incorrectos',
             ], 401);
         }
@@ -610,27 +548,15 @@ class AuthController extends Controller
      * Admin/Staff Login (email + password).
      * Specific endpoint for admin panel authentication.
      */
-    public function adminLogin(Request $request): JsonResponse
+    public function adminLogin(LoginWithPasswordRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'email' => 'required|email',
-            'password' => 'required|string|min:6',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $user = User::where('email', $request->email)
             ->where('tenant_id', app('tenant.id'))
             ->first();
 
         if (!$user) {
             return response()->json([
-                'error' => 'Invalid credentials',
+                'error' => 'INVALID_CREDENTIALS',
                 'message' => 'Correo o contraseña incorrectos',
             ], 401);
         }
@@ -638,7 +564,7 @@ class AuthController extends Controller
         // Only allow staff users to login via admin endpoint
         if (!$user->isStaff()) {
             return response()->json([
-                'error' => 'Unauthorized',
+                'error' => 'UNAUTHORIZED',
                 'message' => 'Acceso denegado. Solo personal autorizado.',
             ], 403);
         }
@@ -646,7 +572,7 @@ class AuthController extends Controller
         // Check if account is active
         if (!$user->is_active) {
             return response()->json([
-                'error' => 'Account disabled',
+                'error' => 'ACCOUNT_DISABLED',
                 'message' => 'Tu cuenta ha sido desactivada. Contacta al administrador.',
             ], 403);
         }
@@ -669,7 +595,7 @@ class AuthController extends Controller
             );
 
             return response()->json([
-                'error' => 'Invalid credentials',
+                'error' => 'INVALID_CREDENTIALS',
                 'message' => 'Correo o contraseña incorrectos',
             ], 401);
         }
@@ -722,33 +648,20 @@ class AuthController extends Controller
     /**
      * Change PIN (requires authentication).
      */
-    public function changePin(Request $request): JsonResponse
+    public function changePin(ChangePinRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'current_pin' => 'required|string|digits:4',
-            'new_pin' => 'required|string|digits:4',
-            'new_pin_confirmation' => 'required|string|same:new_pin',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $user = $request->user();
 
         if (!$user->hasPin()) {
             return response()->json([
-                'error' => 'No PIN set',
+                'error' => 'NO_PIN_SET',
                 'message' => 'No tienes un NIP configurado.',
             ], 400);
         }
 
         if ($user->isPinLocked()) {
             return response()->json([
-                'error' => 'Account locked',
+                'error' => 'ACCOUNT_LOCKED',
                 'message' => 'Cuenta bloqueada por intentos fallidos.',
                 'lockout_minutes' => $user->getPinLockoutMinutes(),
             ], 423);
@@ -756,7 +669,7 @@ class AuthController extends Controller
 
         if (!$user->changePin($request->current_pin, $request->new_pin)) {
             return response()->json([
-                'error' => 'Invalid PIN',
+                'error' => 'INVALID_PIN',
                 'message' => 'NIP actual incorrecto',
             ], 401);
         }
@@ -770,27 +683,13 @@ class AuthController extends Controller
     /**
      * Reset PIN via OTP (forgot PIN flow).
      */
-    public function resetPinWithOtp(Request $request): JsonResponse
+    public function resetPinWithOtp(ResetPinWithOtpRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'phone' => 'required|string|regex:/^[0-9]{10}$/',
-            'code' => 'required|string|size:6',
-            'new_pin' => 'required|string|digits:4',
-            'new_pin_confirmation' => 'required|string|same:new_pin',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $otp = OtpCode::verify($request->phone, $request->code);
 
         if (!$otp) {
             return response()->json([
-                'error' => 'Invalid code',
+                'error' => 'INVALID_CODE',
                 'message' => 'El código es inválido o ha expirado',
             ], 401);
         }
@@ -801,7 +700,7 @@ class AuthController extends Controller
 
         if (!$user) {
             return response()->json([
-                'error' => 'User not found',
+                'error' => 'USER_NOT_FOUND',
                 'message' => 'No existe una cuenta con este número de teléfono',
             ], 404);
         }

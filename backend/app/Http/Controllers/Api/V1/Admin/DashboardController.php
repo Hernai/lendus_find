@@ -41,8 +41,8 @@ class DashboardController extends Controller
             ->count();
 
         // Pending review (in review + docs pending)
-        $pendingReview = ($statusCounts[ApplicationStatus::IN_REVIEW] ?? 0) +
-            ($statusCounts[ApplicationStatus::DOCS_PENDING] ?? 0);
+        $pendingReview = ($statusCounts[ApplicationStatus::IN_REVIEW->value] ?? 0) +
+            ($statusCounts[ApplicationStatus::DOCS_PENDING->value] ?? 0);
 
         // Total amounts
         $amounts = Application::where('tenant_id', $tenant->id)
@@ -80,9 +80,9 @@ class DashboardController extends Controller
                     'today_applications' => $todayApplications,
                     'month_applications' => $monthApplications,
                     'pending_review' => $pendingReview,
-                    'approved' => $statusCounts[ApplicationStatus::APPROVED] ?? 0,
-                    'disbursed' => $statusCounts[ApplicationStatus::DISBURSED] ?? 0,
-                    'rejected' => $statusCounts[ApplicationStatus::REJECTED] ?? 0,
+                    'approved' => $statusCounts[ApplicationStatus::APPROVED->value] ?? 0,
+                    'disbursed' => $statusCounts[ApplicationStatus::DISBURSED->value] ?? 0,
+                    'rejected' => $statusCounts[ApplicationStatus::REJECTED->value] ?? 0,
                 ],
                 'amounts' => [
                     'pending' => (float) ($amounts->pending_amount ?? 0),
@@ -141,11 +141,12 @@ class DashboardController extends Controller
             ->count();
 
         // Average processing time (submitted to approved)
+        // Use database-agnostic approach - compute in PHP for accuracy across DB drivers
         $avgProcessingDays = Application::where('tenant_id', $tenant->id)
             ->whereNotNull('approved_at')
             ->whereNotNull('created_at')
-            ->selectRaw('AVG(DATEDIFF(approved_at, created_at)) as avg_days')
-            ->value('avg_days');
+            ->get(['created_at', 'approved_at'])
+            ->avg(fn($app) => $app->created_at->diffInDays($app->approved_at));
 
         // Top products
         $topProducts = Application::where('applications.tenant_id', $tenant->id)

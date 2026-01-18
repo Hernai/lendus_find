@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Http\Requests\Traits\ApiFormRequest;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -11,6 +12,8 @@ use Illuminate\Foundation\Http\FormRequest;
  */
 class AssignApplicationRequest extends FormRequest
 {
+    use ApiFormRequest;
+
     /**
      * Determine if the user is authorized to make this request.
      */

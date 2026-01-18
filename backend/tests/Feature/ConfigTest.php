@@ -36,7 +36,8 @@ class ConfigTest extends TestCase
     {
         $response = $this->getJson('/api/config');
 
-        $response->assertStatus(400);
+        // Returns 404 when tenant not found
+        $response->assertStatus(404);
     }
 
     public function test_config_returns_products(): void

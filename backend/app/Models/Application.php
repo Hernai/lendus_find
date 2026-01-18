@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ApplicationStatus;
+use App\Enums\PaymentFrequency;
 use App\Traits\HasAuditFields;
 use App\Traits\HasTenant;
 use App\Traits\HasUuid;
@@ -52,6 +53,7 @@ class Application extends Model
 
     protected $casts = [
         'status' => ApplicationStatus::class,
+        'payment_frequency' => PaymentFrequency::class,
         'requested_amount' => 'decimal:2',
         'approved_amount' => 'decimal:2',
         'interest_rate' => 'decimal:2',
@@ -95,10 +97,11 @@ class Application extends Model
 
         return DB::transaction(function () use ($prefix, $year, $tenantId) {
             // Use FOR UPDATE lock to prevent race conditions
+            // Use database-agnostic approach: fetch all matching folios and extract max in PHP
             $lastFolio = static::withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
                 ->where('folio', 'LIKE', "{$prefix}-{$year}-%")
-                ->orderByRaw("CAST(SUBSTRING(folio FROM '\\d+$') AS INTEGER) DESC")
+                ->orderByDesc('folio')
                 ->lockForUpdate()
                 ->value('folio');
 

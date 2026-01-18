@@ -18,22 +18,40 @@ class ProductFactory extends Factory
      */
     public function definition(): array
     {
-        $types = ['PERSONAL', 'PAYROLL', 'SME'];
+        // Use ProductType enum values
+        $types = ['PERSONAL', 'NOMINA', 'PYME'];
         $type = fake()->randomElement($types);
+
+        $code = strtoupper(match ($type) {
+            'PERSONAL' => 'PER',
+            'NOMINA' => 'NOM',
+            'PYME' => 'PYM',
+            default => 'GEN',
+        } . '-' . fake()->unique()->numerify('###'));
 
         return [
             'id' => Str::uuid(),
             'tenant_id' => Tenant::factory(),
-            'code' => strtoupper(fake()->unique()->lexify('PROD-????')),
+            'code' => $code,
             'name' => match ($type) {
                 'PERSONAL' => 'Crédito Personal',
-                'PAYROLL' => 'Crédito de Nómina',
-                'SME' => 'Crédito PyME',
+                'NOMINA' => 'Crédito de Nómina',
+                'PYME' => 'Crédito PyME',
+                default => 'Crédito General',
             },
             'type' => $type,
             'description' => fake()->sentence(),
             'is_active' => true,
             'display_order' => fake()->numberBetween(1, 10),
+            // Database columns (with defaults from migration)
+            'min_amount' => 5000,
+            'max_amount' => 100000,
+            'min_term_months' => 6,
+            'max_term_months' => 36,
+            'interest_rate' => 24.0,
+            'opening_commission' => 3.0,
+            'payment_frequencies' => ['MONTHLY'],
+            // Legacy JSON fields
             'rules' => [
                 'min_amount' => 5000,
                 'max_amount' => 100000,
@@ -43,7 +61,6 @@ class ProductFactory extends Factory
             ],
             'required_docs' => ['INE', 'COMPROBANTE_DOMICILIO'],
             'extra_fields' => [],
-            'eligibility_rules' => [],
         ];
     }
 
@@ -55,17 +72,31 @@ class ProductFactory extends Factory
         return $this->state(fn(array $attributes) => [
             'name' => 'Crédito Personal',
             'type' => 'PERSONAL',
+            'code' => 'PER-' . fake()->unique()->numerify('###'),
         ]);
     }
 
     /**
-     * Payroll loan product.
+     * Payroll/Nomina loan product.
      */
-    public function payroll(): static
+    public function nomina(): static
     {
         return $this->state(fn(array $attributes) => [
             'name' => 'Crédito de Nómina',
-            'type' => 'PAYROLL',
+            'type' => 'NOMINA',
+            'code' => 'NOM-' . fake()->unique()->numerify('###'),
+        ]);
+    }
+
+    /**
+     * PyME loan product.
+     */
+    public function pyme(): static
+    {
+        return $this->state(fn(array $attributes) => [
+            'name' => 'Crédito PyME',
+            'type' => 'PYME',
+            'code' => 'PYM-' . fake()->unique()->numerify('###'),
         ]);
     }
 

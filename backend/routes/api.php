@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\V1\Applicant\DocumentController;
 use App\Http\Controllers\Api\V1\Applicant\KycController;
 use App\Http\Controllers\Api\V1\Admin\DashboardController;
 use App\Http\Controllers\Api\V1\Admin\ApplicationController as AdminApplicationController;
+use App\Http\Controllers\Api\V1\Admin\ApplicationDocumentController;
+use App\Http\Controllers\Api\V1\Admin\ApplicationVerificationController;
 use App\Http\Controllers\Api\V1\Admin\TenantIntegrationController;
 use App\Http\Controllers\Api\V1\Admin\ProductController;
 use App\Http\Controllers\Api\V1\Admin\UserController;
@@ -253,34 +255,34 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff', 'metadata']
             ->middleware('permission:canAssignApplications');
 
         // Document review - requires canReviewDocuments (analyst+)
-        Route::put('/{application}/documents/{document}/approve', [AdminApplicationController::class, 'approveDocument'])
+        Route::put('/{application}/documents/{document}/approve', [ApplicationDocumentController::class, 'approve'])
             ->middleware('permission:canReviewDocuments');
-        Route::put('/{application}/documents/{document}/reject', [AdminApplicationController::class, 'rejectDocument'])
+        Route::put('/{application}/documents/{document}/reject', [ApplicationDocumentController::class, 'reject'])
             ->middleware('permission:canReviewDocuments');
-        Route::put('/{application}/documents/{document}/unapprove', [AdminApplicationController::class, 'unapproveDocument'])
+        Route::put('/{application}/documents/{document}/unapprove', [ApplicationDocumentController::class, 'unapprove'])
             ->middleware('permission:canReviewDocuments');
 
         // Document view - all staff can view
-        Route::get('/{application}/documents/{document}/url', [AdminApplicationController::class, 'getDocumentUrl']);
-        Route::get('/{application}/documents/{document}/download', [AdminApplicationController::class, 'downloadDocument'])
+        Route::get('/{application}/documents/{document}/url', [ApplicationDocumentController::class, 'getUrl']);
+        Route::get('/{application}/documents/{document}/download', [ApplicationDocumentController::class, 'download'])
             ->name('api.admin.documents.download');
-        Route::get('/{application}/documents/{document}/history', [AdminApplicationController::class, 'getDocumentHistory']);
+        Route::get('/{application}/documents/{document}/history', [ApplicationDocumentController::class, 'history']);
 
         // API Logs for applicant - all staff can view
         Route::get('/{application}/api-logs', [AdminApplicationController::class, 'getApiLogs']);
 
         // Reference verification - requires canVerifyReferences (analyst+)
-        Route::put('/{application}/references/{reference}/verify', [AdminApplicationController::class, 'verifyReference'])
+        Route::put('/{application}/references/{reference}/verify', [ApplicationVerificationController::class, 'verifyReference'])
             ->middleware('permission:canVerifyReferences');
 
         // Data verification - requires canVerifyReferences (analyst+)
-        Route::put('/{application}/verify-data', [AdminApplicationController::class, 'verifyData'])
+        Route::put('/{application}/verify-data', [ApplicationVerificationController::class, 'verifyData'])
             ->middleware('permission:canVerifyReferences');
 
         // Bank account verification - requires canVerifyReferences (analyst+)
-        Route::put('/{application}/bank-accounts/{bankAccount}/verify', [AdminApplicationController::class, 'verifyBankAccount'])
+        Route::put('/{application}/bank-accounts/{bankAccount}/verify', [ApplicationVerificationController::class, 'verifyBankAccount'])
             ->middleware('permission:canVerifyReferences');
-        Route::put('/{application}/bank-accounts/{bankAccount}/unverify', [AdminApplicationController::class, 'unverifyBankAccount'])
+        Route::put('/{application}/bank-accounts/{bankAccount}/unverify', [ApplicationVerificationController::class, 'unverifyBankAccount'])
             ->middleware('permission:canVerifyReferences');
     });
 
@@ -369,3 +371,135 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff', 'metadata']
         Route::get('/{apiLog}', [ApiLogController::class, 'show']);
     });
 });
+
+/*
+|--------------------------------------------------------------------------
+| API V2 Routes - New Architecture
+|--------------------------------------------------------------------------
+|
+| V2 routes use the new normalized architecture with separate tables
+| for staff and applicants. These routes run parallel to V1 for
+| backwards compatibility during migration.
+|
+*/
+
+use App\Http\Controllers\Api\V2\Staff\AuthController as StaffAuthController;
+use App\Http\Controllers\Api\V2\Applicant\AuthController as ApplicantAuthController;
+
+// =============================================
+// V2: STAFF AUTHENTICATION (uses StaffAccount model)
+// =============================================
+Route::middleware(['tenant', 'metadata'])->prefix('v2/staff/auth')->group(function () {
+    // Public staff login
+    Route::post('/login', [StaffAuthController::class, 'login']);
+
+    // Protected staff endpoints
+    Route::middleware(['auth:sanctum'])->group(function () {
+        Route::get('/me', [StaffAuthController::class, 'me']);
+        Route::post('/logout', [StaffAuthController::class, 'logout']);
+        Route::post('/refresh', [StaffAuthController::class, 'refresh']);
+    });
+});
+
+// =============================================
+// V2: APPLICANT AUTHENTICATION (uses ApplicantAccount model)
+// =============================================
+Route::middleware(['tenant', 'metadata'])->prefix('v2/applicant/auth')->group(function () {
+    // Public applicant endpoints (with rate limiting)
+    Route::middleware('throttle:otp')->post('/otp/request', [ApplicantAuthController::class, 'requestOtp']);
+    Route::middleware('throttle:otp-verify')->post('/otp/verify', [ApplicantAuthController::class, 'verifyOtp']);
+    Route::post('/check-user', [ApplicantAuthController::class, 'checkUser']);
+    Route::middleware('throttle:pin-login')->post('/pin/login', [ApplicantAuthController::class, 'loginWithPin']);
+
+    // Protected applicant endpoints
+    Route::middleware(['auth:sanctum'])->group(function () {
+        Route::get('/me', [ApplicantAuthController::class, 'me']);
+        Route::post('/logout', [ApplicantAuthController::class, 'logout']);
+        Route::post('/refresh', [ApplicantAuthController::class, 'refresh']);
+        Route::post('/pin/setup', [ApplicantAuthController::class, 'setupPin']);
+        Route::post('/pin/change', [ApplicantAuthController::class, 'changePin']);
+    });
+});
+
+// =============================================
+// V2: PERSON MANAGEMENT ROUTES
+// =============================================
+// Routes for managing persons and their related entities
+// Requires authentication and tenant context
+require __DIR__ . '/api/person.php';
+
+// =============================================
+// V2: COMPANY MANAGEMENT ROUTES
+// =============================================
+// Routes for managing companies (personas morales) and their related entities
+// Requires authentication and tenant context
+require __DIR__ . '/api/company.php';
+
+// =============================================
+// V2: APPLICANT APPLICATIONS & DOCUMENTS
+// =============================================
+use App\Http\Controllers\Api\V2\Applicant\ApplicationController as ApplicantAppController;
+use App\Http\Controllers\Api\V2\Applicant\DocumentController as ApplicantDocController;
+
+Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
+    ->prefix('v2/applicant')
+    ->group(function () {
+        // Applications
+        Route::get('/applications', [ApplicantAppController::class, 'index']);
+        Route::post('/applications', [ApplicantAppController::class, 'store']);
+        Route::get('/applications/{id}', [ApplicantAppController::class, 'show']);
+        Route::patch('/applications/{id}', [ApplicantAppController::class, 'update']);
+        Route::post('/applications/{id}/submit', [ApplicantAppController::class, 'submit']);
+        Route::post('/applications/{id}/cancel', [ApplicantAppController::class, 'cancel']);
+        Route::post('/applications/{id}/counter-offer/respond', [ApplicantAppController::class, 'respondToCounterOffer']);
+        Route::get('/applications/{id}/history', [ApplicantAppController::class, 'history']);
+
+        // Documents
+        Route::get('/documents', [ApplicantDocController::class, 'index']);
+        Route::post('/documents', [ApplicantDocController::class, 'store']);
+        Route::get('/documents/types', [ApplicantDocController::class, 'types']);
+        Route::get('/documents/rejected', [ApplicantDocController::class, 'rejected']);
+        Route::get('/documents/missing', [ApplicantDocController::class, 'missing']);
+        Route::get('/documents/{id}', [ApplicantDocController::class, 'show']);
+        Route::get('/documents/{id}/download', [ApplicantDocController::class, 'download']);
+        Route::delete('/documents/{id}', [ApplicantDocController::class, 'destroy']);
+    });
+
+// =============================================
+// V2: STAFF APPLICATIONS & DOCUMENTS
+// =============================================
+use App\Http\Controllers\Api\V2\Staff\ApplicationController as StaffAppController;
+use App\Http\Controllers\Api\V2\Staff\DocumentController as StaffDocController;
+
+Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
+    ->prefix('v2/staff')
+    ->group(function () {
+        // Applications
+        Route::get('/applications', [StaffAppController::class, 'index']);
+        Route::get('/applications/statistics', [StaffAppController::class, 'statistics']);
+        Route::get('/applications/unassigned', [StaffAppController::class, 'unassigned']);
+        Route::get('/applications/my-queue', [StaffAppController::class, 'myQueue']);
+        Route::get('/applications/{id}', [StaffAppController::class, 'show']);
+        Route::post('/applications/{id}/assign', [StaffAppController::class, 'assign']);
+        Route::post('/applications/{id}/status', [StaffAppController::class, 'changeStatus']);
+        Route::post('/applications/{id}/approve', [StaffAppController::class, 'approve']);
+        Route::post('/applications/{id}/reject', [StaffAppController::class, 'reject']);
+        Route::post('/applications/{id}/counter-offer', [StaffAppController::class, 'sendCounterOffer']);
+        Route::patch('/applications/{id}/verification', [StaffAppController::class, 'updateVerification']);
+        Route::post('/applications/{id}/risk-assessment', [StaffAppController::class, 'setRiskAssessment']);
+        Route::get('/applications/{id}/history', [StaffAppController::class, 'history']);
+
+        // Documents
+        Route::get('/documents/types', [StaffDocController::class, 'types']);
+        Route::get('/documents/pending', [StaffDocController::class, 'pending']);
+        Route::get('/documents/expiring', [StaffDocController::class, 'expiring']);
+        Route::get('/documents/{id}', [StaffDocController::class, 'show']);
+        Route::get('/documents/{id}/download', [StaffDocController::class, 'download']);
+        Route::post('/documents/{id}/approve', [StaffDocController::class, 'approve']);
+        Route::post('/documents/{id}/reject', [StaffDocController::class, 'reject']);
+        Route::post('/documents/{id}/ocr', [StaffDocController::class, 'setOcrData']);
+
+        // Person documents
+        Route::get('/persons/{personId}/documents', [StaffDocController::class, 'forPerson']);
+        Route::get('/persons/{personId}/documents/check', [StaffDocController::class, 'checkRequired']);
+    });

@@ -5,6 +5,19 @@ namespace App\Http\Controllers\Api\V1\Applicant;
 use App\Enums\VerifiableField;
 use App\Enums\VerificationMethod;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kyc\CheckFieldsVerifiedRequest;
+use App\Http\Requests\Kyc\CheckOfacRequest;
+use App\Http\Requests\Kyc\CheckPldBlacklistsRequest;
+use App\Http\Requests\Kyc\GetCurpRequest;
+use App\Http\Requests\Kyc\GetImssHistoryRequest;
+use App\Http\Requests\Kyc\RecordVerificationsRequest;
+use App\Http\Requests\Kyc\ValidateCedulaRequest;
+use App\Http\Requests\Kyc\ValidateCepRequest;
+use App\Http\Requests\Kyc\ValidateCurpRequest;
+use App\Http\Requests\Kyc\ValidateFaceMatchRequest;
+use App\Http\Requests\Kyc\ValidateIneRequest;
+use App\Http\Requests\Kyc\ValidateLivenessRequest;
+use App\Http\Requests\Kyc\ValidateRfcRequest;
 use App\Models\Applicant;
 use App\Models\AuditLog;
 use App\Models\DataVerification;
@@ -15,7 +28,6 @@ use App\Services\VerificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -157,19 +169,8 @@ class KycController extends Controller
     /**
      * Validate CURP with RENAPO.
      */
-    public function validateCurp(Request $request): JsonResponse
+    public function validateCurp(ValidateCurpRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'curp' => 'required|string|size:18|alpha_num',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Datos inválidos',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $service = $this->getKycService($request);
 
         if ($error = $this->ensureServiceConfigured($service)) {
@@ -234,24 +235,8 @@ class KycController extends Controller
     /**
      * Get CURP by personal data.
      */
-    public function getCurp(Request $request): JsonResponse
+    public function getCurp(GetCurpRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'nombres' => 'required|string|max:100',
-            'apellido_paterno' => 'required|string|max:50',
-            'apellido_materno' => 'nullable|string|max:50',
-            'fecha_nacimiento' => 'required|date',
-            'sexo' => 'required|string|in:H,M,HOMBRE,MUJER,MASCULINO,FEMENINO',
-            'entidad_nacimiento' => 'required|string|size:2',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Datos inválidos',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $service = $this->getKycService($request);
 
         if ($error = $this->ensureServiceConfigured($service)) {
@@ -321,19 +306,8 @@ class KycController extends Controller
     /**
      * Validate RFC with SAT.
      */
-    public function validateRfc(Request $request): JsonResponse
+    public function validateRfc(ValidateRfcRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'rfc' => 'required|string|min:12|max:13|alpha_num',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Datos inválidos',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $service = $this->getKycService($request);
 
         if ($error = $this->ensureServiceConfigured($service)) {
@@ -379,21 +353,8 @@ class KycController extends Controller
     /**
      * Validate INE/IFE with OCR extraction and optional list validation.
      */
-    public function validateIne(Request $request): JsonResponse
+    public function validateIne(ValidateIneRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'front_image' => 'required|string', // Base64 encoded image
-            'back_image' => 'nullable|string',  // Base64 encoded image (recommended)
-            'validate_list' => 'nullable|boolean', // Whether to validate against INE list
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Datos inválidos',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $service = $this->getKycService($request);
 
         if ($error = $this->ensureServiceConfigured($service)) {
@@ -458,21 +419,8 @@ class KycController extends Controller
      * Validate face match between selfie and INE photo.
      * Compares the captured selfie with the face on the INE to verify identity.
      */
-    public function validateFaceMatch(Request $request): JsonResponse
+    public function validateFaceMatch(ValidateFaceMatchRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'selfie_image' => 'required|string', // Base64 encoded selfie
-            'ine_image' => 'required|string',    // Base64 encoded INE front (with face)
-            'threshold' => 'nullable|integer|min:50|max:100',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Datos inválidos',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $service = $this->getKycService($request);
 
         if ($error = $this->ensureServiceConfigured($service)) {
@@ -541,19 +489,8 @@ class KycController extends Controller
      * Validate liveness detection from selfie image.
      * Verifies that the captured face belongs to a real, present person (anti-spoofing).
      */
-    public function validateLiveness(Request $request): JsonResponse
+    public function validateLiveness(ValidateLivenessRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'face_image' => 'required|string', // Base64 encoded face/selfie image
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Datos inválidos',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $service = $this->getKycService($request);
 
         if ($error = $this->ensureServiceConfigured($service)) {
@@ -640,23 +577,8 @@ class KycController extends Controller
     /**
      * Validate SPEI CEP (payment proof).
      */
-    public function validateCep(Request $request): JsonResponse
+    public function validateCep(ValidateCepRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'clave_rastreo' => 'required|string|max:50',
-            'fecha_operacion' => 'required|date',
-            'monto' => 'required|numeric|min:0.01',
-            'cuenta_beneficiario' => 'nullable|string|max:20',
-            'cuenta_ordenante' => 'nullable|string|max:20',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Datos inválidos',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $service = $this->getKycService($request);
 
         if ($error = $this->ensureServiceConfigured($service)) {
@@ -693,20 +615,8 @@ class KycController extends Controller
     /**
      * Check OFAC & UN sanctions block lists.
      */
-    public function checkOfac(Request $request): JsonResponse
+    public function checkOfac(CheckOfacRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:200',
-            'similarity' => 'nullable|integer|min:0|max:100',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Datos inválidos',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $service = $this->getKycService($request);
 
         if ($error = $this->ensureServiceConfigured($service)) {
@@ -746,21 +656,8 @@ class KycController extends Controller
      * Check Mexican PLD (Anti-Money Laundering) blacklists.
      * Includes PGR, PGJ, PEPs, SAT 69/69B, Interpol, DEA, FBI, etc.
      */
-    public function checkPldBlacklists(Request $request): JsonResponse
+    public function checkPldBlacklists(CheckPldBlacklistsRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:200',
-            'curp' => 'nullable|string|size:18',
-            'similarity' => 'nullable|integer|min:0|max:100',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Datos inválidos',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $service = $this->getKycService($request);
 
         if ($error = $this->ensureServiceConfigured($service)) {
@@ -800,20 +697,8 @@ class KycController extends Controller
     /**
      * Get IMSS employment history.
      */
-    public function getImssHistory(Request $request): JsonResponse
+    public function getImssHistory(GetImssHistoryRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'curp' => 'required|string|size:18|alpha_num',
-            'nss' => 'nullable|string|max:11',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Datos inválidos',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $service = $this->getKycService($request);
 
         if ($error = $this->ensureServiceConfigured($service)) {
@@ -843,19 +728,8 @@ class KycController extends Controller
     /**
      * Validate professional license (Cédula Profesional).
      */
-    public function validateCedula(Request $request): JsonResponse
+    public function validateCedula(ValidateCedulaRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'cedula' => 'required|string|max:20',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Datos inválidos',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $service = $this->getKycService($request);
 
         if ($error = $this->ensureServiceConfigured($service)) {
@@ -1157,26 +1031,8 @@ class KycController extends Controller
      * This endpoint should be called after completing KYC verification
      * to persist the verified data in the database.
      */
-    public function recordVerifications(Request $request): JsonResponse
+    public function recordVerifications(RecordVerificationsRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'applicant_id' => 'required|uuid',
-            'verifications' => 'required|array',
-            'verifications.*.field' => 'required|string',
-            'verifications.*.value' => 'nullable',
-            'verifications.*.method' => 'required|string',
-            'verifications.*.verified' => 'boolean',
-            'verifications.*.metadata' => 'nullable|array',
-            'verifications.*.notes' => 'nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Datos inválidos',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         // Find applicant (with tenant scope)
         $applicant = Applicant::find($request->applicant_id);
 
@@ -1331,21 +1187,8 @@ class KycController extends Controller
     /**
      * Check if specific fields are verified for an applicant.
      */
-    public function checkFieldsVerified(Request $request): JsonResponse
+    public function checkFieldsVerified(CheckFieldsVerifiedRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'applicant_id' => 'required|uuid',
-            'fields' => 'required|array',
-            'fields.*' => 'string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Datos inválidos',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
         $applicant = Applicant::find($request->applicant_id);
 
         if (!$applicant) {

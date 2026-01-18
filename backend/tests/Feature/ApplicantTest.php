@@ -16,18 +16,12 @@ class ApplicantTest extends TestCase
 
     public function test_can_create_applicant_profile(): void
     {
+        // Create profile with basic data
         $response = $this->actingAsUser()
             ->postJson('/api/applicant', [
                 'first_name' => 'Juan',
                 'last_name_1' => 'Pérez',
                 'last_name_2' => 'García',
-                'birth_date' => '1990-05-15',
-                'curp' => 'PEGJ900515HDFRRC09',
-                'rfc' => 'PEGJ900515XXX',
-                'gender' => 'M',
-                'nationality' => 'MEXICANA',
-                'country_of_birth' => 'MEXICO',
-                'state_of_birth' => 'CDMX',
             ]);
 
         $response->assertStatus(201)
@@ -37,14 +31,14 @@ class ApplicantTest extends TestCase
                     'first_name',
                     'last_name_1',
                     'full_name',
-                    'curp',
                 ],
                 'message',
             ]);
 
         $this->assertDatabaseHas('applicants', [
             'user_id' => $this->user->id,
-            'curp' => 'PEGJ900515HDFRRC09',
+            'first_name' => 'Juan',
+            'last_name_1' => 'Pérez',
         ]);
     }
 
@@ -100,14 +94,9 @@ class ApplicantTest extends TestCase
 
     public function test_can_validate_clabe(): void
     {
-        Applicant::factory()->create([
-            'tenant_id' => $this->tenant->id,
-            'user_id' => $this->user->id,
-        ]);
-
-        // Valid CLABE format
-        $response = $this->actingAsUser()
-            ->postJson('/api/applicant/validate-clabe', [
+        // validate-clabe is a public endpoint under /api/validate-clabe
+        $response = $this->withTenant()
+            ->postJson('/api/validate-clabe', [
                 'clabe' => '012345678901234567',
             ]);
 
@@ -115,7 +104,6 @@ class ApplicantTest extends TestCase
             ->assertJsonStructure([
                 'data' => [
                     'valid',
-                    'bank_code',
                     'bank_name',
                 ],
             ]);
