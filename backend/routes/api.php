@@ -488,11 +488,11 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff'])
         Route::post('/applications/{id}/status', [StaffAppController::class, 'changeStatus'])
             ->middleware('permission:canChangeApplicationStatus');
         Route::post('/applications/{id}/approve', [StaffAppController::class, 'approve'])
-            ->middleware('permission:canApproveRejectApplications');
+            ->middleware(['permission:canApproveRejectApplications', 'throttle:30,1']); // 30 per minute
         Route::post('/applications/{id}/reject', [StaffAppController::class, 'reject'])
-            ->middleware('permission:canApproveRejectApplications');
+            ->middleware(['permission:canApproveRejectApplications', 'throttle:30,1']); // 30 per minute
         Route::post('/applications/{id}/counter-offer', [StaffAppController::class, 'sendCounterOffer'])
-            ->middleware('permission:canApproveRejectApplications');
+            ->middleware(['permission:canApproveRejectApplications', 'throttle:30,1']); // 30 per minute
         Route::patch('/applications/{id}/verification', [StaffAppController::class, 'updateVerification'])
             ->middleware('permission:canVerifyReferences');
         Route::post('/applications/{id}/risk-assessment', [StaffAppController::class, 'setRiskAssessment'])
@@ -507,9 +507,9 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff'])
 
         // Documents - Actions requiring permissions
         Route::post('/documents/{id}/approve', [StaffDocController::class, 'approve'])
-            ->middleware('permission:canReviewDocuments');
+            ->middleware(['permission:canReviewDocuments', 'throttle:60,1']); // 60 per minute
         Route::post('/documents/{id}/reject', [StaffDocController::class, 'reject'])
-            ->middleware('permission:canReviewDocuments');
+            ->middleware(['permission:canReviewDocuments', 'throttle:60,1']); // 60 per minute
         Route::post('/documents/{id}/ocr', [StaffDocController::class, 'setOcrData'])
             ->middleware('permission:canReviewDocuments');
 

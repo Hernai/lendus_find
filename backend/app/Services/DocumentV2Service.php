@@ -287,7 +287,8 @@ class DocumentV2Service
     ): \Illuminate\Database\Eloquent\Collection {
         $query = DocumentV2::where('tenant_id', $tenant->id)
             ->pending()
-            ->currentVersion();
+            ->currentVersion()
+            ->with('documentable'); // Eager load to prevent N+1
 
         if ($category) {
             $query->ofCategory($category);

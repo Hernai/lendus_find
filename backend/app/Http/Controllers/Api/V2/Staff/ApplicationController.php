@@ -46,6 +46,12 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
+        // ANALYST can only see applications assigned to them
+        // SUPERVISOR and above can see all applications
+        if (!$staff->canViewAllApplications()) {
+            $validated['assigned_to'] = $staff->id;
+        }
+
         $applications = $this->service->list(
             $staff->tenant,
             $validated,
