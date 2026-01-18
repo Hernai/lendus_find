@@ -16,6 +16,11 @@ use Illuminate\Support\Facades\DB;
  * - Status transition validation
  * - Permission checking
  * - Status change execution with audit logging
+ *
+ * @deprecated Use ApplicationV2Service instead for new functionality.
+ *             This service remains for legacy Application model.
+ *             ApplicationV2Service works with the new ApplicationV2 model.
+ * @see \App\Services\ApplicationV2Service
  */
 class ApplicationStatusService
 {

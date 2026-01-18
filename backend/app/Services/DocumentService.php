@@ -17,6 +17,10 @@ use Intervention\Image\Facades\Image;
  * Document storage and management service.
  *
  * Implements DocumentStorageInterface for consistent storage operations.
+ *
+ * @deprecated Use DocumentV2Service instead. This service will be removed in v3.0.
+ *             DocumentV2Service uses polymorphic DocumentV2 model and DB transactions.
+ * @see \App\Services\DocumentV2Service
  */
 class DocumentService implements DocumentStorageInterface
 {
