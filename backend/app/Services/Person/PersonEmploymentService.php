@@ -247,6 +247,10 @@ class PersonEmploymentService
      */
     public function getByEmployer(string $tenantId, string $employerName): Collection
     {
+        // Escapar wildcards SQL y limitar longitud
+        $employerName = str_replace(['%', '_'], ['\\%', '\\_'], $employerName);
+        $employerName = mb_substr($employerName, 0, 200);
+
         return PersonEmployment::where('tenant_id', $tenantId)
             ->where('employer_name', 'LIKE', '%' . $employerName . '%')
             ->where('is_current', true)

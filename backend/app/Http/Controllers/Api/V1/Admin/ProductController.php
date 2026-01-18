@@ -74,6 +74,9 @@ class ProductController extends Controller
 
         // Search
         if ($search = $request->input('search')) {
+            // Escapar wildcards SQL y limitar longitud
+            $search = str_replace(['%', '_'], ['\\%', '\\_'], $search);
+            $search = mb_substr($search, 0, 100);
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'LIKE', "%{$search}%")
                     ->orWhere('code', 'LIKE', "%{$search}%");

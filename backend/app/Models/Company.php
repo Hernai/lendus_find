@@ -282,7 +282,10 @@ class Company extends Model
 
     public function scopeSearch($query, string $term)
     {
-        $term = strtolower($term);
+        // Escapar wildcards SQL y limitar longitud
+        $term = str_replace(['%', '_'], ['\\%', '\\_'], $term);
+        $term = mb_substr(strtolower($term), 0, 100);
+
         return $query->where(function ($q) use ($term) {
             $q->whereRaw('LOWER(legal_name) LIKE ?', ["%{$term}%"])
                 ->orWhereRaw('LOWER(trade_name) LIKE ?', ["%{$term}%"])

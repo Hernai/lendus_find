@@ -316,6 +316,9 @@ class ApplicationController extends Controller
         }
 
         if ($search = $request->input('search')) {
+            // Escapar wildcards SQL y limitar longitud
+            $search = str_replace(['%', '_'], ['\\%', '\\_'], $search);
+            $search = mb_substr($search, 0, 100);
             $tenantId = $tenant->id;
             $query->where(function ($q) use ($search, $tenantId) {
                 $q->where('folio', 'LIKE', "%{$search}%")

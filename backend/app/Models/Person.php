@@ -481,6 +481,10 @@ class Person extends Model
      */
     public function scopeSearchByName($query, string $search)
     {
+        // Escapar wildcards SQL para prevenir inyección
+        $search = str_replace(['%', '_'], ['\\%', '\\_'], $search);
+        $search = mb_substr($search, 0, 100);
+
         return $query->where(function ($q) use ($search) {
             $q->where('first_name', 'LIKE', "%{$search}%")
               ->orWhere('last_name_1', 'LIKE', "%{$search}%")

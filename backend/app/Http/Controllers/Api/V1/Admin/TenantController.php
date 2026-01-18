@@ -28,6 +28,9 @@ class TenantController extends Controller
 
         // Search filter
         if ($search = $request->input('search')) {
+            // Escapar wildcards SQL y limitar longitud
+            $search = str_replace(['%', '_'], ['\\%', '\\_'], $search);
+            $search = mb_substr($search, 0, 100);
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'LIKE', "%{$search}%")
                     ->orWhere('slug', 'LIKE', "%{$search}%")
