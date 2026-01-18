@@ -379,6 +379,25 @@ class ApplicationV2 extends Model
         return $this->isActive() && !$this->isSynced();
     }
 
+    public function canBeApproved(): bool
+    {
+        return in_array($this->status, [
+            self::STATUS_IN_REVIEW,
+            self::STATUS_ANALYST_REVIEW,
+            self::STATUS_SUPERVISOR_REVIEW,
+        ]);
+    }
+
+    public function canBeRejected(): bool
+    {
+        return in_array($this->status, [
+            self::STATUS_SUBMITTED,
+            self::STATUS_IN_REVIEW,
+            self::STATUS_ANALYST_REVIEW,
+            self::STATUS_SUPERVISOR_REVIEW,
+        ]);
+    }
+
     // =====================================================
     // Actions
     // =====================================================

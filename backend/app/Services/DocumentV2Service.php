@@ -7,13 +7,23 @@ use App\Models\StaffAccount;
 use App\Models\Tenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class DocumentV2Service
 {
     /**
+     * Allowed file extensions for security.
+     */
+    private const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx'];
+
+    /**
      * Upload a document and attach to any documentable entity.
+     *
+     * @throws \InvalidArgumentException
+     * @throws \RuntimeException
      */
     public function upload(
         Tenant $tenant,
@@ -22,70 +32,96 @@ class DocumentV2Service
         UploadedFile $file,
         array $options = []
     ): DocumentV2 {
+        // Validate file extension for security
+        $extension = strtolower($file->getClientOriginalExtension());
+        if (!in_array($extension, self::ALLOWED_EXTENSIONS)) {
+            throw new \InvalidArgumentException("Tipo de archivo no permitido: {$extension}");
+        }
+
         $category = DocumentV2::getCategoryForType($type);
         $isSensitive = $this->isSensitiveType($type);
 
         // Generate storage path
-        $extension = $file->getClientOriginalExtension();
         $filename = Str::lower($type) . '_' . now()->format('YmdHis') . '.' . $extension;
         $entityType = class_basename($documentable);
         $path = "tenants/{$tenant->id}/{$entityType}/{$documentable->id}/documents/{$filename}";
 
-        // Store file
         $disk = config('app.env') === 'production' ? 's3' : 'local';
-        Storage::disk($disk)->put($path, file_get_contents($file), 'private');
 
-        // Calculate checksum
-        $checksum = md5_file($file->getRealPath());
-
-        // Check for existing document of same type
+        // Check for existing document of same type BEFORE storing file
         $existingDoc = DocumentV2::where('documentable_type', get_class($documentable))
             ->where('documentable_id', $documentable->id)
             ->where('type', $type)
             ->whereNull('replaced_at')
             ->first();
 
-        // If replacing, mark old as superseded
-        $versionNumber = 1;
-        $previousVersionId = null;
-        if ($existingDoc) {
-            // Cannot replace approved documents unless explicitly allowed
-            if ($existingDoc->isApproved() && !($options['allow_replace_approved'] ?? false)) {
-                throw new \InvalidArgumentException('Cannot replace an approved document');
-            }
-
-            $previousVersionId = $existingDoc->id;
-            $versionNumber = $existingDoc->version_number + 1;
-
-            $reason = $existingDoc->isRejected()
-                ? DocumentV2::REASON_REJECTED
-                : DocumentV2::REASON_UPDATED;
-
-            $existingDoc->supersede($existingDoc->id, $reason);
+        if ($existingDoc && $existingDoc->isApproved() && !($options['allow_replace_approved'] ?? false)) {
+            throw new \InvalidArgumentException('Cannot replace an approved document');
         }
 
-        // Create document record
-        return DocumentV2::create([
-            'tenant_id' => $tenant->id,
-            'documentable_type' => get_class($documentable),
-            'documentable_id' => $documentable->id,
-            'type' => $type,
-            'category' => $category,
-            'file_name' => $file->getClientOriginalName(),
-            'file_path' => $path,
-            'storage_disk' => $disk,
-            'mime_type' => $file->getMimeType(),
-            'file_size' => $file->getSize(),
-            'checksum' => $checksum,
-            'status' => $options['status'] ?? DocumentV2::STATUS_PENDING,
-            'is_sensitive' => $isSensitive,
-            'is_encrypted' => $options['encrypt'] ?? false,
-            'previous_version_id' => $previousVersionId,
-            'version_number' => $versionNumber,
-            'valid_until' => $options['valid_until'] ?? null,
-            'metadata' => $options['metadata'] ?? null,
-            'created_by' => $options['created_by'] ?? null,
-        ]);
+        // Calculate checksum before storing
+        $checksum = md5_file($file->getRealPath());
+
+        // Use transaction for DB operations and handle file storage atomically
+        return DB::transaction(function () use (
+            $tenant, $documentable, $type, $category, $file, $path, $disk,
+            $checksum, $isSensitive, $options, $existingDoc, $extension
+        ) {
+            // Store file using stream for better memory management
+            try {
+                Storage::disk($disk)->put($path, fopen($file->getRealPath(), 'r'), 'private');
+            } catch (\Exception $e) {
+                Log::error('Document upload failed', [
+                    'tenant_id' => $tenant->id,
+                    'type' => $type,
+                    'error' => $e->getMessage(),
+                ]);
+                throw new \RuntimeException('Error al subir el archivo: ' . $e->getMessage());
+            }
+
+            try {
+                // If replacing, mark old as superseded
+                $versionNumber = 1;
+                $previousVersionId = null;
+                if ($existingDoc) {
+                    $previousVersionId = $existingDoc->id;
+                    $versionNumber = $existingDoc->version_number + 1;
+
+                    $reason = $existingDoc->isRejected()
+                        ? DocumentV2::REASON_REJECTED
+                        : DocumentV2::REASON_UPDATED;
+
+                    $existingDoc->supersede($existingDoc->id, $reason);
+                }
+
+                // Create document record
+                return DocumentV2::create([
+                    'tenant_id' => $tenant->id,
+                    'documentable_type' => get_class($documentable),
+                    'documentable_id' => $documentable->id,
+                    'type' => $type,
+                    'category' => $category,
+                    'file_name' => $file->getClientOriginalName(),
+                    'file_path' => $path,
+                    'storage_disk' => $disk,
+                    'mime_type' => $file->getMimeType(),
+                    'file_size' => $file->getSize(),
+                    'checksum' => $checksum,
+                    'status' => $options['status'] ?? DocumentV2::STATUS_PENDING,
+                    'is_sensitive' => $isSensitive,
+                    'is_encrypted' => $options['encrypt'] ?? false,
+                    'previous_version_id' => $previousVersionId,
+                    'version_number' => $versionNumber,
+                    'valid_until' => $options['valid_until'] ?? null,
+                    'metadata' => $options['metadata'] ?? null,
+                    'created_by' => $options['created_by'] ?? null,
+                ]);
+            } catch (\Exception $e) {
+                // Clean up uploaded file if DB operation fails
+                Storage::disk($disk)->delete($path);
+                throw $e;
+            }
+        });
     }
 
     /**
@@ -168,12 +204,29 @@ class DocumentV2Service
      */
     public function forceDelete(DocumentV2 $document): bool
     {
-        // Delete the physical file
-        if (Storage::disk($document->storage_disk)->exists($document->file_path)) {
-            Storage::disk($document->storage_disk)->delete($document->file_path);
-        }
+        return DB::transaction(function () use ($document) {
+            $filePath = $document->file_path;
+            $disk = $document->storage_disk;
 
-        return $document->forceDelete();
+            // Delete DB record first (transaction will rollback if fails)
+            $deleted = $document->forceDelete();
+
+            // Then delete file (if DB delete succeeded)
+            if ($deleted && Storage::disk($disk)->exists($filePath)) {
+                try {
+                    Storage::disk($disk)->delete($filePath);
+                } catch (\Exception $e) {
+                    // Log but don't fail - file can be cleaned up later
+                    Log::warning('Failed to delete document file', [
+                        'document_id' => $document->id,
+                        'file_path' => $filePath,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            return $deleted;
+        });
     }
 
     /**
@@ -286,6 +339,8 @@ class DocumentV2Service
 
     /**
      * Copy documents from one entity to another (e.g., for application snapshots).
+     *
+     * @throws \RuntimeException
      */
     public function copyDocuments(
         Model $sourceEntity,
@@ -306,48 +361,78 @@ class DocumentV2Service
         }
 
         $sourceDocuments = $query->get();
-        $copiedDocuments = [];
 
-        foreach ($sourceDocuments as $sourceDoc) {
-            // Copy file to new location
-            $newPath = str_replace(
-                $sourceEntity->id,
-                $targetEntity->id,
-                $sourceDoc->file_path
-            );
-
-            Storage::disk($sourceDoc->storage_disk)->copy(
-                $sourceDoc->file_path,
-                $newPath
-            );
-
-            // Create new document record
-            $copiedDocuments[] = DocumentV2::create([
-                'tenant_id' => $sourceDoc->tenant_id,
-                'documentable_type' => get_class($targetEntity),
-                'documentable_id' => $targetEntity->id,
-                'type' => $sourceDoc->type,
-                'category' => $sourceDoc->category,
-                'file_name' => $sourceDoc->file_name,
-                'file_path' => $newPath,
-                'storage_disk' => $sourceDoc->storage_disk,
-                'mime_type' => $sourceDoc->mime_type,
-                'file_size' => $sourceDoc->file_size,
-                'checksum' => $sourceDoc->checksum,
-                'status' => $sourceDoc->status,
-                'is_sensitive' => $sourceDoc->is_sensitive,
-                'is_encrypted' => $sourceDoc->is_encrypted,
-                'ocr_processed' => $sourceDoc->ocr_processed,
-                'ocr_data' => $sourceDoc->ocr_data,
-                'ocr_confidence' => $sourceDoc->ocr_confidence,
-                'metadata' => array_merge($sourceDoc->metadata ?? [], [
-                    'copied_from' => $sourceDoc->id,
-                    'copied_at' => now()->toIso8601String(),
-                ]),
-            ]);
+        if ($sourceDocuments->isEmpty()) {
+            return [];
         }
 
-        return $copiedDocuments;
+        return DB::transaction(function () use ($sourceDocuments, $sourceEntity, $targetEntity) {
+            $copiedDocuments = [];
+            $copiedFiles = []; // Track copied files for cleanup on failure
+
+            try {
+                foreach ($sourceDocuments as $sourceDoc) {
+                    // Generate new path safely (don't rely on str_replace with IDs)
+                    $filename = basename($sourceDoc->file_path);
+                    $targetType = class_basename($targetEntity);
+                    $newPath = "tenants/{$sourceDoc->tenant_id}/{$targetType}/{$targetEntity->id}/documents/{$filename}";
+
+                    // Copy file
+                    Storage::disk($sourceDoc->storage_disk)->copy(
+                        $sourceDoc->file_path,
+                        $newPath
+                    );
+                    $copiedFiles[] = ['disk' => $sourceDoc->storage_disk, 'path' => $newPath];
+
+                    // Create new document record
+                    $copiedDocuments[] = DocumentV2::create([
+                        'tenant_id' => $sourceDoc->tenant_id,
+                        'documentable_type' => get_class($targetEntity),
+                        'documentable_id' => $targetEntity->id,
+                        'type' => $sourceDoc->type,
+                        'category' => $sourceDoc->category,
+                        'file_name' => $sourceDoc->file_name,
+                        'file_path' => $newPath,
+                        'storage_disk' => $sourceDoc->storage_disk,
+                        'mime_type' => $sourceDoc->mime_type,
+                        'file_size' => $sourceDoc->file_size,
+                        'checksum' => $sourceDoc->checksum,
+                        'status' => $sourceDoc->status,
+                        'is_sensitive' => $sourceDoc->is_sensitive,
+                        'is_encrypted' => $sourceDoc->is_encrypted,
+                        'ocr_processed' => $sourceDoc->ocr_processed,
+                        'ocr_data' => $sourceDoc->ocr_data,
+                        'ocr_confidence' => $sourceDoc->ocr_confidence,
+                        'metadata' => array_merge($sourceDoc->metadata ?? [], [
+                            'copied_from' => $sourceDoc->id,
+                            'copied_at' => now()->toIso8601String(),
+                        ]),
+                    ]);
+                }
+
+                return $copiedDocuments;
+            } catch (\Exception $e) {
+                // Clean up any copied files on failure
+                foreach ($copiedFiles as $file) {
+                    try {
+                        Storage::disk($file['disk'])->delete($file['path']);
+                    } catch (\Exception $cleanupError) {
+                        Log::warning('Failed to cleanup copied file', [
+                            'path' => $file['path'],
+                            'error' => $cleanupError->getMessage(),
+                        ]);
+                    }
+                }
+
+                Log::error('Document copy failed', [
+                    'source_id' => $sourceEntity->id,
+                    'target_id' => $targetEntity->id,
+                    'error' => $e->getMessage(),
+                ]);
+
+                throw new \RuntimeException('Error al copiar documentos: ' . $e->getMessage());
+            }
+        });
     }
 
     /**

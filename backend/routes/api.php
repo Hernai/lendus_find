@@ -471,33 +471,47 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
 use App\Http\Controllers\Api\V2\Staff\ApplicationController as StaffAppController;
 use App\Http\Controllers\Api\V2\Staff\DocumentController as StaffDocController;
 
-Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
+Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff'])
     ->prefix('v2/staff')
     ->group(function () {
-        // Applications
+        // Applications - Read (any staff)
         Route::get('/applications', [StaffAppController::class, 'index']);
         Route::get('/applications/statistics', [StaffAppController::class, 'statistics']);
         Route::get('/applications/unassigned', [StaffAppController::class, 'unassigned']);
         Route::get('/applications/my-queue', [StaffAppController::class, 'myQueue']);
         Route::get('/applications/{id}', [StaffAppController::class, 'show']);
-        Route::post('/applications/{id}/assign', [StaffAppController::class, 'assign']);
-        Route::post('/applications/{id}/status', [StaffAppController::class, 'changeStatus']);
-        Route::post('/applications/{id}/approve', [StaffAppController::class, 'approve']);
-        Route::post('/applications/{id}/reject', [StaffAppController::class, 'reject']);
-        Route::post('/applications/{id}/counter-offer', [StaffAppController::class, 'sendCounterOffer']);
-        Route::patch('/applications/{id}/verification', [StaffAppController::class, 'updateVerification']);
-        Route::post('/applications/{id}/risk-assessment', [StaffAppController::class, 'setRiskAssessment']);
         Route::get('/applications/{id}/history', [StaffAppController::class, 'history']);
 
-        // Documents
+        // Applications - Actions requiring permissions
+        Route::post('/applications/{id}/assign', [StaffAppController::class, 'assign'])
+            ->middleware('permission:canAssignApplications');
+        Route::post('/applications/{id}/status', [StaffAppController::class, 'changeStatus'])
+            ->middleware('permission:canChangeApplicationStatus');
+        Route::post('/applications/{id}/approve', [StaffAppController::class, 'approve'])
+            ->middleware('permission:canApproveRejectApplications');
+        Route::post('/applications/{id}/reject', [StaffAppController::class, 'reject'])
+            ->middleware('permission:canApproveRejectApplications');
+        Route::post('/applications/{id}/counter-offer', [StaffAppController::class, 'sendCounterOffer'])
+            ->middleware('permission:canApproveRejectApplications');
+        Route::patch('/applications/{id}/verification', [StaffAppController::class, 'updateVerification'])
+            ->middleware('permission:canVerifyReferences');
+        Route::post('/applications/{id}/risk-assessment', [StaffAppController::class, 'setRiskAssessment'])
+            ->middleware('permission:canChangeApplicationStatus');
+
+        // Documents - Read (any staff)
         Route::get('/documents/types', [StaffDocController::class, 'types']);
         Route::get('/documents/pending', [StaffDocController::class, 'pending']);
         Route::get('/documents/expiring', [StaffDocController::class, 'expiring']);
         Route::get('/documents/{id}', [StaffDocController::class, 'show']);
         Route::get('/documents/{id}/download', [StaffDocController::class, 'download']);
-        Route::post('/documents/{id}/approve', [StaffDocController::class, 'approve']);
-        Route::post('/documents/{id}/reject', [StaffDocController::class, 'reject']);
-        Route::post('/documents/{id}/ocr', [StaffDocController::class, 'setOcrData']);
+
+        // Documents - Actions requiring permissions
+        Route::post('/documents/{id}/approve', [StaffDocController::class, 'approve'])
+            ->middleware('permission:canReviewDocuments');
+        Route::post('/documents/{id}/reject', [StaffDocController::class, 'reject'])
+            ->middleware('permission:canReviewDocuments');
+        Route::post('/documents/{id}/ocr', [StaffDocController::class, 'setOcrData'])
+            ->middleware('permission:canReviewDocuments');
 
         // Person documents
         Route::get('/persons/{personId}/documents', [StaffDocController::class, 'forPerson']);

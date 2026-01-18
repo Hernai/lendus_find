@@ -419,6 +419,39 @@ class ApplicationV2Service
     }
 
     /**
+     * Find an application by ID for a specific tenant.
+     */
+    public function findByIdForTenant(string $id, Tenant $tenant, array $relations = []): ?ApplicationV2
+    {
+        $query = ApplicationV2::where('id', $id)
+            ->where('tenant_id', $tenant->id);
+
+        if (!empty($relations)) {
+            $query->with($relations);
+        }
+
+        return $query->first();
+    }
+
+    /**
+     * Find an application by ID for a specific tenant or fail.
+     *
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
+     */
+    public function findByIdForTenantOrFail(string $id, Tenant $tenant, array $relations = []): ApplicationV2
+    {
+        $application = $this->findByIdForTenant($id, $tenant, $relations);
+
+        if (!$application) {
+            throw new \Illuminate\Database\Eloquent\ModelNotFoundException(
+                "Application [{$id}] not found for tenant [{$tenant->id}]"
+            );
+        }
+
+        return $application;
+    }
+
+    /**
      * Get applications for a person.
      */
     public function getForPerson(Person $person, ?string $status = null): Collection
@@ -550,9 +583,17 @@ class ApplicationV2Service
             });
         }
 
-        // Sorting
-        $sortBy = $filters['sort_by'] ?? 'created_at';
-        $sortDir = $filters['sort_dir'] ?? 'desc';
+        // Sorting with validation to prevent SQL injection
+        $allowedSortColumns = [
+            'created_at', 'submitted_at', 'requested_amount',
+            'status', 'decision_at', 'updated_at',
+        ];
+        $sortBy = in_array($filters['sort_by'] ?? '', $allowedSortColumns)
+            ? $filters['sort_by']
+            : 'created_at';
+        $sortDir = in_array(strtolower($filters['sort_dir'] ?? ''), ['asc', 'desc'])
+            ? $filters['sort_dir']
+            : 'desc';
         $query->orderBy($sortBy, $sortDir);
 
         return $query->paginate($perPage);
