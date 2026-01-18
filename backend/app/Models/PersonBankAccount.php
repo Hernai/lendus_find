@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Person bank account for disbursement/collection.
@@ -215,16 +216,20 @@ class PersonBankAccount extends Model
 
     /**
      * Set as primary account.
+     *
+     * Uses a transaction to ensure atomic update of all accounts.
      */
     public function setAsPrimary(): void
     {
-        // Remove primary from other accounts of same owner
-        self::where('owner_type', $this->owner_type)
-            ->where('owner_id', $this->owner_id)
-            ->where('id', '!=', $this->id)
-            ->update(['is_primary' => false]);
+        DB::transaction(function () {
+            // Remove primary from other accounts of same owner
+            self::where('owner_type', $this->owner_type)
+                ->where('owner_id', $this->owner_id)
+                ->where('id', '!=', $this->id)
+                ->update(['is_primary' => false]);
 
-        $this->update(['is_primary' => true]);
+            $this->update(['is_primary' => true]);
+        });
     }
 
     /**

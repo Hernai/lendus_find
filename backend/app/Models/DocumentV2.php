@@ -228,6 +228,50 @@ class DocumentV2 extends Model
     public const REASON_BETTER_QUALITY = 'BETTER_QUALITY';
 
     // =====================================================
+    // Allowed Documentable Types (Security)
+    // =====================================================
+
+    /**
+     * Whitelist of allowed entity types for polymorphic relationship.
+     * This prevents arbitrary class instantiation attacks.
+     */
+    public const ALLOWED_DOCUMENTABLE_TYPES = [
+        'persons' => Person::class,
+        'person_identifications' => PersonIdentification::class,
+        'person_addresses' => PersonAddress::class,
+        'person_employments' => PersonEmployment::class,
+        'companies' => Company::class,
+        'company_addresses' => CompanyAddress::class,
+        'applications_v2' => ApplicationV2::class,
+    ];
+
+    /**
+     * Get the full class name for a documentable type alias.
+     */
+    public static function resolveDocumentableType(string $type): ?string
+    {
+        return self::ALLOWED_DOCUMENTABLE_TYPES[$type] ?? null;
+    }
+
+    /**
+     * Check if a documentable type is allowed.
+     */
+    public static function isValidDocumentableType(string $type): bool
+    {
+        // Allow both short aliases and full class names
+        return isset(self::ALLOWED_DOCUMENTABLE_TYPES[$type])
+            || in_array($type, self::ALLOWED_DOCUMENTABLE_TYPES, true);
+    }
+
+    /**
+     * Get all allowed documentable type aliases.
+     */
+    public static function getAllowedDocumentableTypes(): array
+    {
+        return array_keys(self::ALLOWED_DOCUMENTABLE_TYPES);
+    }
+
+    // =====================================================
     // Relationships
     // =====================================================
 

@@ -8,11 +8,12 @@ use App\Enums\MaritalStatus;
 use App\Traits\HasTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Person entity - base data for individuals.
@@ -343,69 +344,73 @@ class Person extends Model
 
     /**
      * Calculate and update profile completeness.
+     *
+     * Uses a transaction to ensure atomic read-calculate-update.
      */
     public function calculateCompleteness(): int
     {
-        $requiredFields = [
-            'first_name',
-            'last_name_1',
-            'birth_date',
-            'gender',
-            'marital_status',
-            'education_level',
-        ];
+        return DB::transaction(function () {
+            $requiredFields = [
+                'first_name',
+                'last_name_1',
+                'birth_date',
+                'gender',
+                'marital_status',
+                'education_level',
+            ];
 
-        $filledCount = 0;
-        $missing = [];
+            $filledCount = 0;
+            $missing = [];
 
-        foreach ($requiredFields as $field) {
-            if (!empty($this->$field)) {
+            foreach ($requiredFields as $field) {
+                if (!empty($this->$field)) {
+                    $filledCount++;
+                } else {
+                    $missing[] = $field;
+                }
+            }
+
+            // Check for required related data
+            $hasCurrentAddress = $this->addresses()->where('is_current', true)->exists();
+            $hasCurp = $this->identifications()->where('type', 'CURP')->where('is_current', true)->exists();
+            $hasRfc = $this->identifications()->where('type', 'RFC')->where('is_current', true)->exists();
+            $hasEmployment = $this->employments()->where('is_current', true)->exists();
+
+            $totalItems = count($requiredFields) + 4; // +4 for address, CURP, RFC, employment
+
+            if ($hasCurrentAddress) {
                 $filledCount++;
             } else {
-                $missing[] = $field;
+                $missing[] = 'current_address';
             }
-        }
 
-        // Check for required related data
-        $hasCurrentAddress = $this->addresses()->where('is_current', true)->exists();
-        $hasCurp = $this->identifications()->where('type', 'CURP')->where('is_current', true)->exists();
-        $hasRfc = $this->identifications()->where('type', 'RFC')->where('is_current', true)->exists();
-        $hasEmployment = $this->employments()->where('is_current', true)->exists();
+            if ($hasCurp) {
+                $filledCount++;
+            } else {
+                $missing[] = 'curp';
+            }
 
-        $totalItems = count($requiredFields) + 4; // +4 for address, CURP, RFC, employment
+            if ($hasRfc) {
+                $filledCount++;
+            } else {
+                $missing[] = 'rfc';
+            }
 
-        if ($hasCurrentAddress) {
-            $filledCount++;
-        } else {
-            $missing[] = 'current_address';
-        }
+            if ($hasEmployment) {
+                $filledCount++;
+            } else {
+                $missing[] = 'current_employment';
+            }
 
-        if ($hasCurp) {
-            $filledCount++;
-        } else {
-            $missing[] = 'curp';
-        }
+            $completeness = (int) round(($filledCount / $totalItems) * 100);
 
-        if ($hasRfc) {
-            $filledCount++;
-        } else {
-            $missing[] = 'rfc';
-        }
+            $this->update([
+                'profile_completeness' => $completeness,
+                'missing_data' => $missing,
+            ]);
 
-        if ($hasEmployment) {
-            $filledCount++;
-        } else {
-            $missing[] = 'current_employment';
-        }
-
-        $completeness = (int) round(($filledCount / $totalItems) * 100);
-
-        $this->update([
-            'profile_completeness' => $completeness,
-            'missing_data' => $missing,
-        ]);
-
-        return $completeness;
+            return $completeness;
+        });
     }
 
     /**

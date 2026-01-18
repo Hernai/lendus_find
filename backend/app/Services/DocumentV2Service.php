@@ -44,6 +44,14 @@ class DocumentV2Service
         UploadedFile $file,
         array $options = []
     ): DocumentV2 {
+        // Validate documentable entity type (security: prevent arbitrary class associations)
+        $documentableClass = get_class($documentable);
+        if (!DocumentV2::isValidDocumentableType($documentableClass)) {
+            throw new \InvalidArgumentException(
+                "Tipo de entidad no permitido para documentos: " . class_basename($documentable)
+            );
+        }
+
         // Validate file extension for security
         $extension = strtolower($file->getClientOriginalExtension());
         if (!in_array($extension, self::ALLOWED_EXTENSIONS)) {

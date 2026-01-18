@@ -23,6 +23,42 @@ class StaffAccount extends Authenticatable
 {
     use HasApiTokens, HasFactory, HasUuids, Notifiable;
 
+    // =====================================================
+    // Role Constants
+    // =====================================================
+
+    public const ROLE_ANALYST = 'ANALYST';
+    public const ROLE_SUPERVISOR = 'SUPERVISOR';
+    public const ROLE_ADMIN = 'ADMIN';
+    public const ROLE_SUPER_ADMIN = 'SUPER_ADMIN';
+
+    /**
+     * All valid staff roles.
+     */
+    public const ROLES = [
+        self::ROLE_ANALYST,
+        self::ROLE_SUPERVISOR,
+        self::ROLE_ADMIN,
+        self::ROLE_SUPER_ADMIN,
+    ];
+
+    /**
+     * Roles with supervisor-level access or above.
+     */
+    public const SUPERVISOR_OR_ABOVE = [
+        self::ROLE_SUPERVISOR,
+        self::ROLE_ADMIN,
+        self::ROLE_SUPER_ADMIN,
+    ];
+
+    /**
+     * Roles with admin-level access.
+     */
+    public const ADMIN_ROLES = [
+        self::ROLE_ADMIN,
+        self::ROLE_SUPER_ADMIN,
+    ];
+
     protected $fillable = [
         'tenant_id',
         'email',
@@ -102,22 +138,22 @@ class StaffAccount extends Authenticatable
 
     public function isAnalyst(): bool
     {
-        return $this->role === 'ANALYST';
+        return $this->role === self::ROLE_ANALYST;
     }
 
     public function isSupervisor(): bool
     {
-        return $this->role === 'SUPERVISOR';
+        return $this->role === self::ROLE_SUPERVISOR;
     }
 
     public function isAdmin(): bool
     {
-        return in_array($this->role, ['ADMIN', 'SUPER_ADMIN']);
+        return in_array($this->role, self::ADMIN_ROLES, true);
     }
 
     public function isSuperAdmin(): bool
     {
-        return $this->role === 'SUPER_ADMIN';
+        return $this->role === self::ROLE_SUPER_ADMIN;
     }
 
     public function isStaff(): bool
@@ -127,12 +163,12 @@ class StaffAccount extends Authenticatable
 
     public function isSupervisorOrAbove(): bool
     {
-        return in_array($this->role, ['SUPERVISOR', 'ADMIN', 'SUPER_ADMIN']);
+        return in_array($this->role, self::SUPERVISOR_OR_ABOVE, true);
     }
 
     public function isAtLeastAnalyst(): bool
     {
-        return in_array($this->role, ['ANALYST', 'SUPERVISOR', 'ADMIN', 'SUPER_ADMIN']);
+        return in_array($this->role, self::ROLES, true);
     }
 
     // =====================================================
