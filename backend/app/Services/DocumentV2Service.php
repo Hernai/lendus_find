@@ -20,6 +20,18 @@ class DocumentV2Service
     private const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx'];
 
     /**
+     * Allowed MIME types mapped to extensions for double validation.
+     */
+    private const ALLOWED_MIME_TYPES = [
+        'image/jpeg' => ['jpg', 'jpeg'],
+        'image/png' => ['png'],
+        'image/gif' => ['gif'],
+        'application/pdf' => ['pdf'],
+        'application/msword' => ['doc'],
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => ['docx'],
+    ];
+
+    /**
      * Upload a document and attach to any documentable entity.
      *
      * @throws \InvalidArgumentException
@@ -36,6 +48,15 @@ class DocumentV2Service
         $extension = strtolower($file->getClientOriginalExtension());
         if (!in_array($extension, self::ALLOWED_EXTENSIONS)) {
             throw new \InvalidArgumentException("Tipo de archivo no permitido: {$extension}");
+        }
+
+        // Validate MIME type matches extension (prevent extension spoofing)
+        $mimeType = $file->getMimeType();
+        if (!isset(self::ALLOWED_MIME_TYPES[$mimeType])) {
+            throw new \InvalidArgumentException("Tipo MIME no permitido: {$mimeType}");
+        }
+        if (!in_array($extension, self::ALLOWED_MIME_TYPES[$mimeType])) {
+            throw new \InvalidArgumentException("La extensión no coincide con el tipo de archivo");
         }
 
         $category = DocumentV2::getCategoryForType($type);
@@ -59,8 +80,8 @@ class DocumentV2Service
             throw new \InvalidArgumentException('Cannot replace an approved document');
         }
 
-        // Calculate checksum before storing
-        $checksum = md5_file($file->getRealPath());
+        // Calculate checksum before storing (SHA-256 for cryptographic strength)
+        $checksum = hash_file('sha256', $file->getRealPath());
 
         // Use transaction for DB operations and handle file storage atomically
         return DB::transaction(function () use (

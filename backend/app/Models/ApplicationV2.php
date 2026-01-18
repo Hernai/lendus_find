@@ -182,6 +182,61 @@ class ApplicationV2 extends Model
     }
 
     // =====================================================
+    // Status Transitions (State Machine)
+    // =====================================================
+
+    /**
+     * Allowed status transitions.
+     * Key: current status, Value: array of allowed next statuses.
+     */
+    private const STATUS_TRANSITIONS = [
+        self::STATUS_DRAFT => [self::STATUS_SUBMITTED, self::STATUS_CANCELLED],
+        self::STATUS_SUBMITTED => [self::STATUS_IN_REVIEW, self::STATUS_DOCS_PENDING, self::STATUS_CANCELLED],
+        self::STATUS_IN_REVIEW => [self::STATUS_DOCS_PENDING, self::STATUS_ANALYST_REVIEW, self::STATUS_APPROVED, self::STATUS_REJECTED, self::STATUS_CANCELLED],
+        self::STATUS_DOCS_PENDING => [self::STATUS_IN_REVIEW, self::STATUS_CANCELLED],
+        self::STATUS_ANALYST_REVIEW => [self::STATUS_SUPERVISOR_REVIEW, self::STATUS_DOCS_PENDING, self::STATUS_APPROVED, self::STATUS_REJECTED, self::STATUS_CANCELLED],
+        self::STATUS_SUPERVISOR_REVIEW => [self::STATUS_APPROVED, self::STATUS_REJECTED, self::STATUS_CANCELLED],
+        self::STATUS_APPROVED => [self::STATUS_SYNCED, self::STATUS_CANCELLED],
+        self::STATUS_REJECTED => [], // Terminal state
+        self::STATUS_CANCELLED => [], // Terminal state
+        self::STATUS_SYNCED => [], // Terminal state
+    ];
+
+    /**
+     * Check if transition to new status is allowed.
+     */
+    public function canTransitionTo(string $newStatus): bool
+    {
+        $allowedTransitions = self::STATUS_TRANSITIONS[$this->status] ?? [];
+
+        return in_array($newStatus, $allowedTransitions, true);
+    }
+
+    /**
+     * Get allowed next statuses from current status.
+     */
+    public function getAllowedTransitions(): array
+    {
+        return self::STATUS_TRANSITIONS[$this->status] ?? [];
+    }
+
+    /**
+     * Validate and throw if transition is not allowed.
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function validateTransition(string $newStatus): void
+    {
+        if (!$this->canTransitionTo($newStatus)) {
+            $currentLabel = self::statuses()[$this->status] ?? $this->status;
+            $newLabel = self::statuses()[$newStatus] ?? $newStatus;
+            throw new \InvalidArgumentException(
+                "No se puede cambiar el estado de '{$currentLabel}' a '{$newLabel}'."
+            );
+        }
+    }
+
+    // =====================================================
     // Relationships
     // =====================================================
 
@@ -421,10 +476,15 @@ class ApplicationV2 extends Model
     }
 
     /**
-     * Change status.
+     * Change status with transition validation.
+     *
+     * @throws \InvalidArgumentException if transition is not allowed
      */
     public function changeStatus(string $newStatus, string $changedById, string $changedByType, ?string $notes = null): void
     {
+        // Validate transition is allowed
+        $this->validateTransition($newStatus);
+
         $oldStatus = $this->status;
 
         $this->update([

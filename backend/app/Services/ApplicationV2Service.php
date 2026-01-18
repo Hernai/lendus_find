@@ -569,7 +569,9 @@ class ApplicationV2Service
         }
 
         if (!empty($filters['search'])) {
-            $search = $filters['search'];
+            // Sanitize search input: escape SQL wildcards and limit length
+            $search = str_replace(['%', '_'], ['\\%', '\\_'], $filters['search']);
+            $search = mb_substr($search, 0, 100);
             $query->where(function ($q) use ($search) {
                 $q->whereHas('person', function ($pq) use ($search) {
                     $pq->where('first_name', 'ILIKE', "%{$search}%")

@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\StaffAccount;
 use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
@@ -13,7 +14,7 @@ class RequirePermission
     /**
      * Allowed permission method names.
      *
-     * This whitelist prevents arbitrary method invocation on the User model.
+     * This whitelist prevents arbitrary method invocation on User/StaffAccount models.
      */
     private const ALLOWED_PERMISSIONS = [
         'canReviewDocuments',
@@ -39,7 +40,7 @@ class RequirePermission
      */
     public function handle(Request $request, Closure $next, string $permission): Response
     {
-        /** @var User|null $user */
+        /** @var User|StaffAccount|null $user */
         $user = $request->user();
 
         if ($user === null) {
@@ -54,6 +55,7 @@ class RequirePermission
             Log::warning('Invalid permission requested', [
                 'permission' => $permission,
                 'user_id' => $user->id,
+                'user_type' => get_class($user),
                 'ip' => $request->ip(),
             ]);
 
@@ -63,10 +65,11 @@ class RequirePermission
             ], 403);
         }
 
-        // Check if the permission method exists on User model
+        // Check if the permission method exists on the authenticated model (User or StaffAccount)
         if (!method_exists($user, $permission)) {
             Log::error('Permission method not implemented', [
                 'permission' => $permission,
+                'user_type' => get_class($user),
             ]);
 
             return response()->json([
