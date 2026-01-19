@@ -174,16 +174,18 @@ class TenantController extends Controller
 
         // Update branding (merge with existing)
         if ($request->has('branding')) {
+            $existingBranding = $tenant->branding ?? [];
             $tenant->branding = array_merge(
-                $tenant->getRawOriginal('branding') ?? [],
+                is_array($existingBranding) ? $existingBranding : [],
                 $validated['branding']
             );
         }
 
         // Update settings (merge with existing)
         if ($request->has('settings')) {
+            $existingSettings = $tenant->settings ?? [];
             $tenant->settings = array_merge(
-                $tenant->getRawOriginal('settings') ?? [],
+                is_array($existingSettings) ? $existingSettings : [],
                 $validated['settings']
             );
         }
