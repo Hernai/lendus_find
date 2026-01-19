@@ -759,23 +759,45 @@ class AuthController extends Controller
      */
     public function me(Request $request): JsonResponse
     {
-        $user = $request->user()->load('applicant');
+        $user = $request->user();
+
+        // Only load applicant relation for User model (applicants), not StaffAccount
+        $isStaff = $user instanceof \App\Models\StaffAccount;
+        if (!$isStaff && method_exists($user, 'applicant')) {
+            $user->load('applicant');
+        }
 
         $response = [
             'user' => [
                 'id' => $user->id,
-                'phone' => $user->phone,
+                'phone' => $user->phone ?? null,
                 'email' => $user->email,
-                'type' => $user->type,
-                'is_admin' => $user->isAdmin(),
-                'is_staff' => $user->isStaff(),
-                'has_pin' => $user->hasPin(),
-                'applicant' => $user->applicant,
+                'type' => $user->type ?? ($isStaff ? $user->role : null),
+                'is_admin' => method_exists($user, 'isAdmin') ? $user->isAdmin() : false,
+                'is_staff' => $isStaff || (method_exists($user, 'isStaff') && $user->isStaff()),
+                'has_pin' => method_exists($user, 'hasPin') ? $user->hasPin() : false,
+                'applicant' => !$isStaff ? ($user->applicant ?? null) : null,
             ],
         ];
 
-        // Include permissions for staff users
-        if ($user->isStaff()) {
+        // Include staff-specific data
+        if ($isStaff) {
+            $response['user']['name'] = $user->name;
+            $response['user']['role'] = $user->role;
+            $response['user']['permissions'] = [
+                'canViewAllApplications' => $user->canViewAllApplications(),
+                'canReviewDocuments' => $user->canReviewDocuments(),
+                'canVerifyReferences' => $user->canVerifyReferences(),
+                'canChangeApplicationStatus' => $user->canChangeApplicationStatus(),
+                'canApproveRejectApplications' => $user->canApproveRejectApplications(),
+                'canAssignApplications' => $user->canAssignApplications(),
+                'canManageProducts' => $user->canManageProducts(),
+                'canManageUsers' => $user->canManageUsers(),
+                'canViewReports' => $user->canViewReports(),
+                'canConfigureTenant' => $user->canConfigureTenant(),
+            ];
+        } elseif (method_exists($user, 'isStaff') && $user->isStaff()) {
+            // Legacy User model with staff role
             $response['user']['permissions'] = [
                 'canViewAllApplications' => $user->canViewAllApplications(),
                 'canReviewDocuments' => $user->canReviewDocuments(),

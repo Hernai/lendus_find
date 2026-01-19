@@ -444,7 +444,7 @@ const fetchApplication = async () => {
       status: data.status,
       created_at: data.created_at,
       updated_at: data.updated_at,
-      assigned_to: data.assigned_agent?.name ?? undefined,
+      assigned_to: data.assigned_to?.name ?? undefined,
       required_documents: requiredDocTypes,
       completeness: {
         personal_data: !!person,
@@ -586,9 +586,9 @@ const fetchApplication = async () => {
       timeline: data.status_history?.map((h, idx) => ({
         id: String(idx),
         action: 'STATUS_CHANGE',
-        description: `Estado cambiado a ${h.status}${h.reason ? `: ${h.reason}` : ''}`,
+        description: `Estado cambiado${h.from_status ? ` de ${h.from_status}` : ''} a ${h.to_status || h.status}${h.notes || h.reason ? `: ${h.notes || h.reason}` : ''}`,
         author: h.changed_by || 'Sistema',
-        created_at: h.timestamp
+        created_at: h.created_at || h.timestamp
       })) || [],
       signature: {
         has_signed: false,
@@ -606,7 +606,7 @@ const fetchApplication = async () => {
         address_verified: personAddress?.verification_status === 'VERIFIED',
         employment_verified: personEmployment?.verification_status === 'VERIFIED'
       },
-      field_verifications: {}
+      field_verifications: data.field_verifications || {}
     }
   } catch (e) {
     log.error('Error al cargar solicitud', { error: e })

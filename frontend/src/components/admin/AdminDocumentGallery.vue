@@ -179,11 +179,9 @@ const isKycValidated = (doc: Document): boolean => {
     if (hasKycMetadata) return true
   }
 
-  // If no explicit KYC metadata, but document is APPROVED INE document,
-  // we can infer it was validated through KYC if uploaded shortly after other KYC validations
-  // For now, we'll show the indicator for all APPROVED INE documents
-  // This is a reasonable assumption since manual INE approval would be rare
-  return true
+  // Only return true if explicitly marked as KYC validated
+  // Manual approvals should NOT show as KYC validated
+  return false
 }
 
 const isImage = (mimeType?: string) => mimeType?.startsWith('image/')
@@ -201,7 +199,7 @@ const loadThumbnail = async (doc: Document) => {
   try {
     // Fetch the image as blob with auth headers
     const response = await api.get(
-      `/admin/applications/${props.applicationId}/documents/${doc.id}/download`,
+      `/v2/staff/applications/${props.applicationId}/documents/${doc.id}/download`,
       { responseType: 'blob' }
     )
     const blob = new Blob([response.data as BlobPart], { type: doc.mime_type || 'image/jpeg' })
@@ -264,7 +262,7 @@ const viewDocument = async (doc: Document) => {
     if (isPdf(doc.mime_type)) {
       // For PDFs, get the URL and open in new tab
       const response = await api.get<{ url: string }>(
-        `/admin/applications/${props.applicationId}/documents/${doc.id}/url`
+        `/v2/staff/applications/${props.applicationId}/documents/${doc.id}/url`
       )
       window.open(response.data.url, '_blank')
     } else {
@@ -274,7 +272,7 @@ const viewDocument = async (doc: Document) => {
         selectedDocumentUrl.value = cachedUrl
       } else {
         const response = await api.get(
-          `/admin/applications/${props.applicationId}/documents/${doc.id}/download`,
+          `/v2/staff/applications/${props.applicationId}/documents/${doc.id}/download`,
           { responseType: 'blob' }
         )
         const blob = new Blob([response.data as BlobPart], { type: doc.mime_type || 'image/jpeg' })
@@ -304,7 +302,7 @@ const goToDocument = async (doc: Document) => {
     isLoadingViewer.value = true
     try {
       const response = await api.get(
-        `/admin/applications/${props.applicationId}/documents/${doc.id}/download`,
+        `/v2/staff/applications/${props.applicationId}/documents/${doc.id}/download`,
         { responseType: 'blob' }
       )
       const blob = new Blob([response.data as BlobPart], { type: doc.mime_type || 'image/jpeg' })
@@ -344,7 +342,7 @@ const confirmApprove = async () => {
   isApproving.value = true
 
   try {
-    await api.put(`/admin/applications/${props.applicationId}/documents/${docToAction.value.id}/approve`)
+    await api.put(`/v2/staff/applications/${props.applicationId}/documents/${docToAction.value.id}/approve`)
     docToAction.value.status = 'APPROVED'
     emit('document-approved', docToAction.value)
     emit('refresh')
@@ -370,7 +368,7 @@ const confirmReject = async (data: { selectValue?: string; comment?: string }) =
   isRejecting.value = true
 
   try {
-    await api.put(`/admin/applications/${props.applicationId}/documents/${docToAction.value.id}/reject`, {
+    await api.put(`/v2/staff/applications/${props.applicationId}/documents/${docToAction.value.id}/reject`, {
       reason: data.selectValue,
       comment: data.comment || null
     })
@@ -416,7 +414,7 @@ const confirmUnapprove = async () => {
   isUnapproving.value = true
 
   try {
-    await api.put(`/admin/applications/${props.applicationId}/documents/${docToAction.value.id}/unapprove`)
+    await api.put(`/v2/staff/applications/${props.applicationId}/documents/${docToAction.value.id}/unapprove`)
     docToAction.value.status = 'PENDING'
     emit('refresh')
     showUnapproveModal.value = false
@@ -441,7 +439,7 @@ const confirmUnreject = async () => {
   isUnrejecting.value = true
 
   try {
-    await api.put(`/admin/applications/${props.applicationId}/documents/${docToAction.value.id}/unapprove`)
+    await api.put(`/v2/staff/applications/${props.applicationId}/documents/${docToAction.value.id}/unapprove`)
     docToAction.value.status = 'PENDING'
     docToAction.value.rejection_reason = undefined
     docToAction.value.rejection_comment = undefined
@@ -491,7 +489,7 @@ const loadDocumentHistory = async (doc: Document) => {
 
   try {
     const response = await api.get<{ data: { history: ReviewHistoryEntry[] } }>(
-      `/admin/applications/${props.applicationId}/documents/${doc.id}/history`
+      `/v2/staff/applications/${props.applicationId}/documents/${doc.id}/history`
     )
     docHistory.value = response.data.data.history
   } catch (e) {

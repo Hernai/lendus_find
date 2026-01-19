@@ -71,7 +71,7 @@ Route::middleware(['tenant'])->group(function () {
 
 // Broadcasting auth (for WebSocket channel authorization)
 Route::middleware(['tenant', 'auth:sanctum'])->post('/broadcasting/auth', function () {
-    \Log::info('Broadcasting auth request', [
+    \Illuminate\Support\Facades\Log::info('Broadcasting auth request', [
         'user_id' => auth()->id(),
         'channel_name' => request('channel_name'),
         'socket_id' => request('socket_id'),
@@ -79,10 +79,10 @@ Route::middleware(['tenant', 'auth:sanctum'])->post('/broadcasting/auth', functi
 
     try {
         $response = Broadcast::auth(request());
-        \Log::info('Broadcasting auth success', ['response' => $response]);
+        \Illuminate\Support\Facades\Log::info('Broadcasting auth success', ['response' => $response]);
         return $response;
     } catch (\Exception $e) {
-        \Log::error('Broadcasting auth error', [
+        \Illuminate\Support\Facades\Log::error('Broadcasting auth error', [
             'error' => $e->getMessage(),
             'trace' => $e->getTraceAsString(),
         ]);
@@ -582,6 +582,37 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff'])
             ->middleware('permission:canVerifyReferences');
         Route::post('/applications/{id}/risk-assessment', [StaffAppController::class, 'setRiskAssessment'])
             ->middleware('permission:canChangeApplicationStatus');
+
+        // Application Notes (any staff can read/write)
+        Route::get('/applications/{id}/notes', [StaffAppController::class, 'getNotes']);
+        Route::post('/applications/{id}/notes', [StaffAppController::class, 'addNote']);
+
+        // Application Documents (nested under application)
+        Route::get('/applications/{appId}/documents/{docId}/url', [StaffAppController::class, 'getDocumentUrl']);
+        Route::get('/applications/{appId}/documents/{docId}/download', [StaffAppController::class, 'downloadDocument']);
+        Route::put('/applications/{appId}/documents/{docId}/approve', [StaffAppController::class, 'approveDocument'])
+            ->middleware('permission:canReviewDocuments');
+        Route::put('/applications/{appId}/documents/{docId}/reject', [StaffAppController::class, 'rejectDocument'])
+            ->middleware('permission:canReviewDocuments');
+        Route::put('/applications/{appId}/documents/{docId}/unapprove', [StaffAppController::class, 'unapproveDocument'])
+            ->middleware('permission:canReviewDocuments');
+
+        // Application References
+        Route::put('/applications/{appId}/references/{refId}/verify', [StaffAppController::class, 'verifyReference'])
+            ->middleware('permission:canVerifyReferences');
+
+        // Application Bank Accounts
+        Route::put('/applications/{appId}/bank-accounts/{baId}/verify', [StaffAppController::class, 'verifyBankAccount'])
+            ->middleware('permission:canVerifyReferences');
+        Route::put('/applications/{appId}/bank-accounts/{baId}/unverify', [StaffAppController::class, 'unverifyBankAccount'])
+            ->middleware('permission:canVerifyReferences');
+
+        // Application Data Verification
+        Route::put('/applications/{id}/verify-data', [StaffAppController::class, 'verifyData'])
+            ->middleware('permission:canVerifyReferences');
+
+        // Application API Logs
+        Route::get('/applications/{id}/api-logs', [StaffAppController::class, 'getApiLogs']);
 
         // Documents - Read (any staff)
         Route::get('/documents/types', [StaffDocController::class, 'types']);

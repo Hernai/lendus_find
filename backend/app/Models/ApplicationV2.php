@@ -105,6 +105,7 @@ class ApplicationV2 extends Model
         'sync_data' => 'array',
         'expires_at' => 'datetime',
         'expiration_notified' => 'boolean',
+        'notes' => 'array',
         'metadata' => 'array',
     ];
 

@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\ApplicationStatusHistory;
 use App\Models\ApplicationV2;
 use App\Models\DocumentV2;
 use App\Models\Person;
@@ -755,6 +756,69 @@ class V2DemoDataSeeder extends Seeder
 
             // Create documents for the application
             $this->createApplicationDocuments($application, $appData['status']);
+
+            // Create status history for this application
+            $this->createStatusHistory($application, $appData['status']);
+        }
+    }
+
+    /**
+     * Create status history entries for an application based on its current status.
+     */
+    private function createStatusHistory(ApplicationV2 $application, string $currentStatus): void
+    {
+        $statusFlow = [
+            ApplicationV2::STATUS_DRAFT => [],
+            ApplicationV2::STATUS_SUBMITTED => [
+                ['from' => ApplicationV2::STATUS_DRAFT, 'to' => ApplicationV2::STATUS_SUBMITTED, 'days_ago' => 10, 'notes' => 'Solicitud enviada por el cliente'],
+            ],
+            ApplicationV2::STATUS_IN_REVIEW => [
+                ['from' => ApplicationV2::STATUS_DRAFT, 'to' => ApplicationV2::STATUS_SUBMITTED, 'days_ago' => 12, 'notes' => 'Solicitud enviada por el cliente'],
+                ['from' => ApplicationV2::STATUS_SUBMITTED, 'to' => ApplicationV2::STATUS_IN_REVIEW, 'days_ago' => 10, 'notes' => 'Solicitud en revisión inicial'],
+            ],
+            ApplicationV2::STATUS_ANALYST_REVIEW => [
+                ['from' => ApplicationV2::STATUS_DRAFT, 'to' => ApplicationV2::STATUS_SUBMITTED, 'days_ago' => 15, 'notes' => 'Solicitud enviada por el cliente'],
+                ['from' => ApplicationV2::STATUS_SUBMITTED, 'to' => ApplicationV2::STATUS_IN_REVIEW, 'days_ago' => 13, 'notes' => 'Solicitud en revisión inicial'],
+                ['from' => ApplicationV2::STATUS_IN_REVIEW, 'to' => ApplicationV2::STATUS_ANALYST_REVIEW, 'days_ago' => 10, 'notes' => 'Asignada a analista para revisión'],
+            ],
+            ApplicationV2::STATUS_SUPERVISOR_REVIEW => [
+                ['from' => ApplicationV2::STATUS_DRAFT, 'to' => ApplicationV2::STATUS_SUBMITTED, 'days_ago' => 18, 'notes' => 'Solicitud enviada por el cliente'],
+                ['from' => ApplicationV2::STATUS_SUBMITTED, 'to' => ApplicationV2::STATUS_IN_REVIEW, 'days_ago' => 16, 'notes' => 'Solicitud en revisión inicial'],
+                ['from' => ApplicationV2::STATUS_IN_REVIEW, 'to' => ApplicationV2::STATUS_ANALYST_REVIEW, 'days_ago' => 12, 'notes' => 'Asignada a analista para revisión'],
+                ['from' => ApplicationV2::STATUS_ANALYST_REVIEW, 'to' => ApplicationV2::STATUS_SUPERVISOR_REVIEW, 'days_ago' => 8, 'notes' => 'Revisión de analista completada, pendiente supervisor'],
+            ],
+            ApplicationV2::STATUS_DOCS_PENDING => [
+                ['from' => ApplicationV2::STATUS_DRAFT, 'to' => ApplicationV2::STATUS_SUBMITTED, 'days_ago' => 14, 'notes' => 'Solicitud enviada por el cliente'],
+                ['from' => ApplicationV2::STATUS_SUBMITTED, 'to' => ApplicationV2::STATUS_IN_REVIEW, 'days_ago' => 12, 'notes' => 'Solicitud en revisión inicial'],
+                ['from' => ApplicationV2::STATUS_IN_REVIEW, 'to' => ApplicationV2::STATUS_DOCS_PENDING, 'days_ago' => 8, 'notes' => 'Documentación pendiente de completar'],
+            ],
+            ApplicationV2::STATUS_APPROVED => [
+                ['from' => ApplicationV2::STATUS_DRAFT, 'to' => ApplicationV2::STATUS_SUBMITTED, 'days_ago' => 20, 'notes' => 'Solicitud enviada por el cliente'],
+                ['from' => ApplicationV2::STATUS_SUBMITTED, 'to' => ApplicationV2::STATUS_IN_REVIEW, 'days_ago' => 18, 'notes' => 'Solicitud en revisión inicial'],
+                ['from' => ApplicationV2::STATUS_IN_REVIEW, 'to' => ApplicationV2::STATUS_ANALYST_REVIEW, 'days_ago' => 14, 'notes' => 'Asignada a analista para revisión'],
+                ['from' => ApplicationV2::STATUS_ANALYST_REVIEW, 'to' => ApplicationV2::STATUS_SUPERVISOR_REVIEW, 'days_ago' => 8, 'notes' => 'Revisión de analista completada'],
+                ['from' => ApplicationV2::STATUS_SUPERVISOR_REVIEW, 'to' => ApplicationV2::STATUS_APPROVED, 'days_ago' => 3, 'notes' => 'Solicitud aprobada'],
+            ],
+            ApplicationV2::STATUS_REJECTED => [
+                ['from' => ApplicationV2::STATUS_DRAFT, 'to' => ApplicationV2::STATUS_SUBMITTED, 'days_ago' => 16, 'notes' => 'Solicitud enviada por el cliente'],
+                ['from' => ApplicationV2::STATUS_SUBMITTED, 'to' => ApplicationV2::STATUS_IN_REVIEW, 'days_ago' => 14, 'notes' => 'Solicitud en revisión inicial'],
+                ['from' => ApplicationV2::STATUS_IN_REVIEW, 'to' => ApplicationV2::STATUS_ANALYST_REVIEW, 'days_ago' => 10, 'notes' => 'Asignada a analista'],
+                ['from' => ApplicationV2::STATUS_ANALYST_REVIEW, 'to' => ApplicationV2::STATUS_REJECTED, 'days_ago' => 5, 'notes' => 'Rechazada: ingresos insuficientes'],
+            ],
+        ];
+
+        $history = $statusFlow[$currentStatus] ?? [];
+
+        foreach ($history as $entry) {
+            ApplicationStatusHistory::create([
+                'application_id' => $application->id,
+                'from_status' => $entry['from'],
+                'to_status' => $entry['to'],
+                'changed_by' => $this->supervisor?->id ?? $this->analyst?->id,
+                'changed_by_type' => StaffAccount::class,
+                'notes' => $entry['notes'],
+                'created_at' => now()->subDays($entry['days_ago']),
+            ]);
         }
     }
 
