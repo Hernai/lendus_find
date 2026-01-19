@@ -745,3 +745,127 @@ export interface V2CompanyMemberPayload {
   ownership_percentage?: number
   is_authorized_signer?: boolean
 }
+
+// =====================================================
+// Profile Types (V2 Applicant Profile API)
+// =====================================================
+
+export interface V2PersonalData {
+  first_name: string
+  last_name_1: string
+  last_name_2: string | null
+  full_name: string
+  birth_date: string | null
+  birth_state: string | null
+  birth_country: string | null
+  age: number | null
+  gender: 'M' | 'F' | null
+  gender_label: string | null
+  nationality: string | null
+  marital_status: string | null
+  marital_status_label: string | null
+  education_level: string | null
+  education_level_label: string | null
+  dependents_count: number | null
+}
+
+export interface V2Identifications {
+  curp: string | null
+  curp_verified: boolean
+  rfc: string | null
+  rfc_verified: boolean
+  ine: {
+    clave_elector: string | null
+    ocr: string | null
+    folio: string | null
+    expiration_date: string | null
+    verified: boolean
+  } | null
+}
+
+export interface V2Profile {
+  id: string
+  personal_data: V2PersonalData
+  identifications: V2Identifications
+  address: V2ProfileAddress | null
+  employment: V2ProfileEmployment | null
+  bank_account: V2ProfileBankAccount | null
+  references: V2ProfileReference[]
+  profile_completeness: number
+  missing_data: string[]
+  kyc_status: string
+  is_kyc_verified: boolean
+}
+
+export interface V2ProfileSummary {
+  id: string
+  full_name: string
+  profile_completeness: number
+  kyc_status: string
+  is_kyc_verified: boolean
+  has_address: boolean
+  has_employment: boolean
+  has_bank_account: boolean
+}
+
+export interface V2ProfileAddress {
+  id: string
+  street: string
+  ext_number: string | null
+  int_number: string | null
+  neighborhood: string
+  municipality: string | null
+  city: string | null
+  state: string
+  postal_code: string
+  country: string
+  housing_type: string | null
+  years_at_address: number | null
+  months_at_address: number | null
+  full_address?: string
+  is_verified: boolean
+}
+
+export interface V2ProfileEmployment {
+  id: string
+  employment_type: string
+  company_name: string | null
+  position: string | null
+  department: string | null
+  work_phone: string | null
+  monthly_income: number | null
+  payment_frequency: string | null
+  seniority_months: number | null
+  start_date: string | null
+  is_verified: boolean
+  income_verified: boolean
+}
+
+export interface V2ProfileBankAccount {
+  id: string
+  bank_name: string
+  bank_code: string | null
+  clabe: string
+  clabe_masked: string | null
+  account_number: string | null
+  holder_name: string
+  account_type: string | null
+  is_verified: boolean
+}
+
+export interface V2ProfileReference {
+  id: string
+  type: 'PERSONAL' | 'WORK'
+  full_name: string
+  phone: string
+  relationship: string
+  years_known: number | null
+  is_verified: boolean
+  verification_status: string
+}
+
+export interface V2ClabeValidation {
+  is_valid: boolean
+  bank_code: string | null
+  bank_name: string | null
+}

@@ -31,6 +31,7 @@ import applicantApplication from './application.applicant.service'
 import staffApplication from './application.staff.service'
 import applicantDocument from './document.applicant.service'
 import staffDocument from './document.staff.service'
+import applicantProfile from './profile.service'
 import staffUser from './user.staff.service'
 import staffProduct from './product.staff.service'
 import staffConfig from './config.staff.service'
@@ -61,6 +62,7 @@ export const v2 = {
     auth: applicantAuth,
     application: applicantApplication,
     document: applicantDocument,
+    profile: applicantProfile,
   },
 
   /**
@@ -100,6 +102,7 @@ export {
   staffApplication,
   applicantDocument,
   staffDocument,
+  applicantProfile,
   staffUser,
   staffProduct,
   staffConfig,
@@ -194,6 +197,17 @@ export type {
   V2CompanyMemberPayload,
   V2MemberRole,
   V2MemberStatus,
+
+  // Profile types
+  V2Profile,
+  V2ProfileSummary,
+  V2PersonalData,
+  V2Identifications,
+  V2ProfileAddress,
+  V2ProfileEmployment,
+  V2ProfileBankAccount,
+  V2ProfileReference,
+  V2ClabeValidation,
 } from '@/types/v2'
 
 // Re-export types from services
