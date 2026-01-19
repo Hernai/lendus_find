@@ -384,7 +384,7 @@ class TenantController extends Controller
         );
 
         // Generate the public URL
-        $url = Storage::disk('public')->url($path);
+        $url = asset('storage/' . $path);
 
         // Update the branding record
         TenantBranding::updateOrCreate(

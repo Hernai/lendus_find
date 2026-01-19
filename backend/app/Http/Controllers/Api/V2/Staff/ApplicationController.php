@@ -201,7 +201,18 @@ class ApplicationController extends Controller
 
         $application = ApplicationV2::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
-            ->with(['product', 'person', 'company', 'assignedTo', 'statusHistory'])
+            ->with([
+                'product',
+                'person.identifications',
+                'person.addresses' => fn($q) => $q->where('is_current', true),
+                'person.employments' => fn($q) => $q->where('is_current', true),
+                'person.references',
+                'person.bankAccounts',
+                'company',
+                'assignedTo',
+                'statusHistory',
+                'documents',
+            ])
             ->first();
 
         if (!$application) {
@@ -629,6 +640,10 @@ class ApplicationController extends Controller
         $data['external_system'] = $app->external_system;
         $data['synced_at'] = $app->synced_at?->toIso8601String();
 
+        // Full applicant data with all relations (for detail view)
+        $data['applicant'] = $app->person ? $this->formatPerson($app->person) : null;
+
+        // Keep simplified person for backward compatibility
         $data['person'] = $app->person ? [
             'id' => $app->person->id,
             'full_name' => $app->person->full_name,
@@ -653,6 +668,106 @@ class ApplicationController extends Controller
             'created_at' => $h->created_at->toIso8601String(),
         ]);
 
+        // Documents attached to the application
+        $data['documents'] = $app->documents->map(fn($d) => [
+            'id' => $d->id,
+            'type' => $d->type,
+            'category' => $d->category,
+            'file_name' => $d->file_name,
+            'mime_type' => $d->mime_type,
+            'file_size' => $d->file_size,
+            'status' => $d->status,
+            'rejection_reason' => $d->rejection_reason,
+            'reviewed_at' => $d->reviewed_at?->toIso8601String(),
+            'ocr_data' => $d->ocr_data,
+            'created_at' => $d->created_at?->toIso8601String(),
+        ]);
+
         return $data;
+    }
+
+    /**
+     * Format person with all relations for detail view.
+     */
+    private function formatPerson($person): array
+    {
+        $currentAddress = $person->addresses->first();
+        $currentEmployment = $person->employments->first();
+
+        return [
+            'id' => $person->id,
+            'full_name' => $person->full_name,
+            'first_name' => $person->first_name,
+            'last_name_1' => $person->last_name_1,
+            'last_name_2' => $person->last_name_2,
+            'email' => $person->email,
+            'phone' => $person->phone,
+            'curp' => $person->curp,
+            'rfc' => $person->rfc,
+            'birth_date' => $person->birth_date?->format('Y-m-d'),
+            'nationality' => $person->nationality,
+            'gender' => $person->gender,
+            'marital_status' => $person->marital_status,
+            'education_level' => $person->education_level,
+            'dependents_count' => $person->dependents_count,
+            'kyc_status' => $person->kyc_status,
+            'kyc_verified_at' => $person->kyc_verified_at?->toIso8601String(),
+            'current_home_address' => $currentAddress ? [
+                'id' => $currentAddress->id,
+                'street' => $currentAddress->street,
+                'exterior_number' => $currentAddress->exterior_number,
+                'interior_number' => $currentAddress->interior_number,
+                'neighborhood' => $currentAddress->neighborhood,
+                'municipality' => $currentAddress->municipality,
+                'state' => $currentAddress->state,
+                'postal_code' => $currentAddress->postal_code,
+                'housing_type' => $currentAddress->housing_type,
+                'years_at_address' => $currentAddress->years_at_address,
+                'months_at_address' => $currentAddress->months_at_address,
+                'verification_status' => $currentAddress->status,
+            ] : null,
+            'current_employment' => $currentEmployment ? [
+                'id' => $currentEmployment->id,
+                'employment_type' => $currentEmployment->employment_type,
+                'company_name' => $currentEmployment->employer_name,
+                'employer_name' => $currentEmployment->employer_name,
+                'employer_rfc' => $currentEmployment->employer_rfc,
+                'job_title' => $currentEmployment->job_title,
+                'position' => $currentEmployment->job_title,
+                'department' => $currentEmployment->department,
+                'monthly_income' => $currentEmployment->monthly_income,
+                'additional_income' => $currentEmployment->additional_income,
+                'start_date' => $currentEmployment->start_date?->format('Y-m-d'),
+                'years_employed' => $currentEmployment->years_employed,
+                'months_employed' => $currentEmployment->months_employed,
+                'verification_status' => $currentEmployment->status,
+            ] : null,
+            'references' => $person->references->map(fn($r) => [
+                'id' => $r->id,
+                'full_name' => $r->full_name,
+                'first_name' => $r->first_name,
+                'last_name_1' => $r->last_name_1,
+                'last_name_2' => $r->last_name_2,
+                'phone' => $r->phone,
+                'email' => $r->email,
+                'relationship' => $r->relationship,
+                'type' => $r->type,
+                'years_known' => $r->years_known,
+                'verification_status' => $r->status,
+                'verified_at' => $r->verified_at?->toIso8601String(),
+                'notes' => $r->verification_notes,
+            ]),
+            'bank_accounts' => $person->bankAccounts->map(fn($ba) => [
+                'id' => $ba->id,
+                'bank_name' => $ba->bank_name,
+                'bank_code' => $ba->bank_code,
+                'clabe' => $ba->clabe,
+                'account_type' => $ba->account_type,
+                'account_holder_name' => $ba->holder_name,
+                'is_primary' => $ba->is_primary,
+                'is_verified' => $ba->is_verified,
+                'created_at' => $ba->created_at?->toIso8601String(),
+            ]),
+        ];
     }
 }
