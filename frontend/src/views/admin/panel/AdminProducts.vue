@@ -188,6 +188,38 @@ const quickTermOptions: Record<string, number[]> = {
   MONTHLY: [3, 6, 9, 12, 18, 24, 36, 48, 60]
 }
 
+// Computed: merged and sorted terms for each frequency (selected + quick options)
+const mergedTerms = computed(() => {
+  const result: Record<string, number[]> = {}
+  for (const freq of ['WEEKLY', 'BIWEEKLY', 'MONTHLY']) {
+    const selected = form.value.term_config[freq]?.available_terms ?? []
+    const quick = quickTermOptions[freq] ?? []
+    result[freq] = [...new Set([...selected, ...quick])].sort((a, b) => a - b)
+  }
+  return result
+})
+
+// Helper: check if term is selected for a frequency
+const isTermSelected = (freq: string, term: number): boolean => {
+  return form.value.term_config[freq]?.available_terms?.includes(term) ?? false
+}
+
+// Helper: check if term is a quick option
+const isQuickOption = (freq: string, term: number): boolean => {
+  return (quickTermOptions[freq] ?? []).includes(term)
+}
+
+// Helper: add term to frequency config
+const addTermToFrequency = (freq: string, term: number): void => {
+  if (!form.value.term_config[freq]) {
+    form.value.term_config[freq] = { available_terms: [] }
+  }
+  if (!form.value.term_config[freq].available_terms.includes(term)) {
+    form.value.term_config[freq].available_terms.push(term)
+    form.value.term_config[freq].available_terms.sort((a, b) => a - b)
+  }
+}
+
 const formErrors = ref<Record<string, string>>({})
 
 // Type options
@@ -979,26 +1011,26 @@ onMounted(fetchProducts)
                       <div v-if="form.payment_frequencies.includes('WEEKLY')" class="px-4 pb-3 border-t border-gray-100">
                         <div class="flex flex-wrap gap-1.5 pt-3">
                           <!-- All terms (selected + quick options) sorted together -->
-                          <template v-for="term in [...new Set([...(form.term_config['WEEKLY']?.available_terms ?? []), ...(quickTermOptions['WEEKLY'] ?? [])])].sort((a, b) => a - b)" :key="`${term}-${form.min_term_months}-${form.max_term_months}`">
+                          <template v-for="term in mergedTerms['WEEKLY']" :key="`weekly-${term}-${form.min_term_months}-${form.max_term_months}`">
                             <!-- Selected term from quick options -->
                             <button
-                              v-if="form.term_config['WEEKLY']?.available_terms?.includes(term) && (quickTermOptions['WEEKLY'] ?? []).includes(term)"
+                              v-if="isTermSelected('WEEKLY', term) && isQuickOption('WEEKLY', term)"
                               type="button"
-                              @click="removeTerm('WEEKLY', term)"
                               :class="[
                                 'w-10 h-8 text-xs rounded-md transition-all font-medium',
                                 isTermInRange('WEEKLY', term) ? 'bg-primary-600 text-white shadow-sm' : 'bg-red-500 text-white shadow-sm'
                               ]"
+                              @click="removeTerm('WEEKLY', term)"
                             >{{ term }}</button>
                             <!-- Selected custom term -->
                             <button
-                              v-else-if="form.term_config['WEEKLY']?.available_terms?.includes(term)"
+                              v-else-if="isTermSelected('WEEKLY', term)"
                               type="button"
-                              @click="removeTerm('WEEKLY', term)"
                               :class="[
                                 'h-8 px-2 text-xs rounded-md font-medium text-white shadow-sm flex items-center gap-1',
                                 isTermInRange('WEEKLY', term) ? 'bg-green-600 hover:bg-green-700' : 'bg-red-500 hover:bg-red-600'
                               ]"
+                              @click="removeTerm('WEEKLY', term)"
                             >
                               {{ term }}
                               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1009,12 +1041,8 @@ onMounted(fetchProducts)
                             <button
                               v-else
                               type="button"
-                              @click="() => {
-                                if (!form.term_config['WEEKLY']) form.term_config['WEEKLY'] = { available_terms: [] }
-                                form.term_config['WEEKLY'].available_terms.push(term)
-                                form.term_config['WEEKLY'].available_terms.sort((a, b) => a - b)
-                              }"
                               class="w-10 h-8 text-xs rounded-md transition-all font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
+                              @click="addTermToFrequency('WEEKLY', term)"
                             >{{ term }}</button>
                           </template>
                           <!-- Add custom input -->
@@ -1057,26 +1085,26 @@ onMounted(fetchProducts)
                       <div v-if="form.payment_frequencies.includes('BIWEEKLY')" class="px-4 pb-3 border-t border-gray-100">
                         <div class="flex flex-wrap gap-1.5 pt-3">
                           <!-- All terms (selected + quick options) sorted together -->
-                          <template v-for="term in [...new Set([...(form.term_config['BIWEEKLY']?.available_terms ?? []), ...(quickTermOptions['BIWEEKLY'] ?? [])])].sort((a, b) => a - b)" :key="`${term}-${form.min_term_months}-${form.max_term_months}`">
+                          <template v-for="term in mergedTerms['BIWEEKLY']" :key="`biweekly-${term}-${form.min_term_months}-${form.max_term_months}`">
                             <!-- Selected term from quick options -->
                             <button
-                              v-if="form.term_config['BIWEEKLY']?.available_terms?.includes(term) && (quickTermOptions['BIWEEKLY'] ?? []).includes(term)"
+                              v-if="isTermSelected('BIWEEKLY', term) && isQuickOption('BIWEEKLY', term)"
                               type="button"
-                              @click="removeTerm('BIWEEKLY', term)"
                               :class="[
                                 'w-10 h-8 text-xs rounded-md transition-all font-medium',
                                 isTermInRange('BIWEEKLY', term) ? 'bg-primary-600 text-white shadow-sm' : 'bg-red-500 text-white shadow-sm'
                               ]"
+                              @click="removeTerm('BIWEEKLY', term)"
                             >{{ term }}</button>
                             <!-- Selected custom term -->
                             <button
-                              v-else-if="form.term_config['BIWEEKLY']?.available_terms?.includes(term)"
+                              v-else-if="isTermSelected('BIWEEKLY', term)"
                               type="button"
-                              @click="removeTerm('BIWEEKLY', term)"
                               :class="[
                                 'h-8 px-2 text-xs rounded-md font-medium text-white shadow-sm flex items-center gap-1',
                                 isTermInRange('BIWEEKLY', term) ? 'bg-green-600 hover:bg-green-700' : 'bg-red-500 hover:bg-red-600'
                               ]"
+                              @click="removeTerm('BIWEEKLY', term)"
                             >
                               {{ term }}
                               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1087,12 +1115,8 @@ onMounted(fetchProducts)
                             <button
                               v-else
                               type="button"
-                              @click="() => {
-                                if (!form.term_config['BIWEEKLY']) form.term_config['BIWEEKLY'] = { available_terms: [] }
-                                form.term_config['BIWEEKLY'].available_terms.push(term)
-                                form.term_config['BIWEEKLY'].available_terms.sort((a, b) => a - b)
-                              }"
                               class="w-10 h-8 text-xs rounded-md transition-all font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
+                              @click="addTermToFrequency('BIWEEKLY', term)"
                             >{{ term }}</button>
                           </template>
                           <!-- Add custom input -->
@@ -1135,26 +1159,26 @@ onMounted(fetchProducts)
                       <div v-if="form.payment_frequencies.includes('MONTHLY')" class="px-4 pb-3 border-t border-gray-100">
                         <div class="flex flex-wrap gap-1.5 pt-3">
                           <!-- All terms (selected + quick options) sorted together -->
-                          <template v-for="term in [...new Set([...(form.term_config['MONTHLY']?.available_terms ?? []), ...(quickTermOptions['MONTHLY'] ?? [])])].sort((a, b) => a - b)" :key="`${term}-${form.min_term_months}-${form.max_term_months}`">
+                          <template v-for="term in mergedTerms['MONTHLY']" :key="`monthly-${term}-${form.min_term_months}-${form.max_term_months}`">
                             <!-- Selected term from quick options -->
                             <button
-                              v-if="form.term_config['MONTHLY']?.available_terms?.includes(term) && (quickTermOptions['MONTHLY'] ?? []).includes(term)"
+                              v-if="isTermSelected('MONTHLY', term) && isQuickOption('MONTHLY', term)"
                               type="button"
-                              @click="removeTerm('MONTHLY', term)"
                               :class="[
                                 'w-10 h-8 text-xs rounded-md transition-all font-medium',
                                 isTermInRange('MONTHLY', term) ? 'bg-primary-600 text-white shadow-sm' : 'bg-red-500 text-white shadow-sm'
                               ]"
+                              @click="removeTerm('MONTHLY', term)"
                             >{{ term }}</button>
                             <!-- Selected custom term -->
                             <button
-                              v-else-if="form.term_config['MONTHLY']?.available_terms?.includes(term)"
+                              v-else-if="isTermSelected('MONTHLY', term)"
                               type="button"
-                              @click="removeTerm('MONTHLY', term)"
                               :class="[
                                 'h-8 px-2 text-xs rounded-md font-medium text-white shadow-sm flex items-center gap-1',
                                 isTermInRange('MONTHLY', term) ? 'bg-green-600 hover:bg-green-700' : 'bg-red-500 hover:bg-red-600'
                               ]"
+                              @click="removeTerm('MONTHLY', term)"
                             >
                               {{ term }}
                               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1165,12 +1189,8 @@ onMounted(fetchProducts)
                             <button
                               v-else
                               type="button"
-                              @click="() => {
-                                if (!form.term_config['MONTHLY']) form.term_config['MONTHLY'] = { available_terms: [] }
-                                form.term_config['MONTHLY'].available_terms.push(term)
-                                form.term_config['MONTHLY'].available_terms.sort((a, b) => a - b)
-                              }"
                               class="w-10 h-8 text-xs rounded-md transition-all font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
+                              @click="addTermToFrequency('MONTHLY', term)"
                             >{{ term }}</button>
                           </template>
                           <!-- Add custom input -->

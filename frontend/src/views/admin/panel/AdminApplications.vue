@@ -459,19 +459,22 @@ const analysts = ref<Analyst[]>([])
 
 const isSelected = (id: string) => selectedIds.value.has(id)
 
+// Use proper Set reassignment to trigger Vue reactivity
 const toggleSelection = (id: string) => {
-  if (selectedIds.value.has(id)) {
-    selectedIds.value.delete(id)
+  const newSet = new Set(selectedIds.value)
+  if (newSet.has(id)) {
+    newSet.delete(id)
   } else {
-    selectedIds.value.add(id)
+    newSet.add(id)
   }
+  selectedIds.value = newSet
 }
 
 const toggleSelectAll = () => {
   if (selectedIds.value.size === applications.value.length) {
-    selectedIds.value.clear()
+    selectedIds.value = new Set()
   } else {
-    applications.value.forEach(app => selectedIds.value.add(app.id))
+    selectedIds.value = new Set(applications.value.map(app => app.id))
   }
 }
 
@@ -486,7 +489,7 @@ const isSomeSelected = computed(() => {
 })
 
 const clearSelection = () => {
-  selectedIds.value.clear()
+  selectedIds.value = new Set()
 }
 
 const openBulkAssignModal = async () => {
@@ -542,9 +545,6 @@ const confirmBulkAssign = async (): Promise<void> => {
     } else {
       toast.error('Error al asignar las solicitudes')
     }
-  } catch (e) {
-    log.error('Error al asignar solicitudes', { error: e })
-    toast.error('Error al asignar las solicitudes')
   } finally {
     isAssigning.value = false
   }
@@ -603,9 +603,6 @@ const confirmBulkReject = async (): Promise<void> => {
     } else {
       toast.error('Error al rechazar las solicitudes')
     }
-  } catch (e) {
-    log.error('Error al rechazar solicitudes', { error: e })
-    toast.error('Error al rechazar las solicitudes')
   } finally {
     isRejecting.value = false
   }
@@ -840,7 +837,7 @@ const confirmBulkReject = async (): Promise<void> => {
               <div class="flex items-center gap-1.5">
                 <div class="w-5 h-5 rounded-full bg-primary-100 flex items-center justify-center">
                   <span class="text-[10px] font-medium text-primary-700">
-                    {{ app.assigned_to.charAt(0).toUpperCase() }}
+                    {{ app.assigned_to?.charAt(0)?.toUpperCase() ?? '?' }}
                   </span>
                 </div>
                 <span class="text-[10px] text-gray-500 truncate">{{ app.assigned_to }}</span>

@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('TenantBrandingEditor')
 
 export interface Branding {
   primary_color: string
@@ -45,6 +48,12 @@ const updateField = (key: keyof Branding, value: string | null) => {
   emit('update:modelValue', { ...props.modelValue, [key]: value })
 }
 
+// Type-safe color accessor for template bindings
+type ColorKey = 'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'text_color'
+const getColorValue = (key: ColorKey): string => {
+  return branding.value[key] || '#000000'
+}
+
 // Preview state
 const previewMode = ref<'desktop' | 'mobile'>('desktop')
 const showPreview = ref(true)
@@ -61,13 +70,22 @@ const logoUploadRefs = ref<Record<string, HTMLInputElement | null>>({})
 const uploadingLogo = ref<string | null>(null)
 const uploadError = ref<string | null>(null)
 
-// Clear error after a few seconds
+// Clear error after a few seconds with tracked timeout
+let uploadErrorTimeoutId: ReturnType<typeof setTimeout> | null = null
 const showUploadError = (message: string) => {
+  if (uploadErrorTimeoutId) {
+    clearTimeout(uploadErrorTimeoutId)
+  }
   uploadError.value = message
-  setTimeout(() => {
+  uploadErrorTimeoutId = setTimeout(() => {
     uploadError.value = null
   }, 5000)
 }
+onBeforeUnmount(() => {
+  if (uploadErrorTimeoutId) {
+    clearTimeout(uploadErrorTimeoutId)
+  }
+})
 
 // Suggested fonts
 const suggestedFonts = [
@@ -177,7 +195,7 @@ const handleLogoUpload = async (event: Event, field: string) => {
 
     updateField(field as keyof Branding, compressedDataUrl)
   } catch (error) {
-    console.error('Error compressing image:', error)
+    log.error('Error compressing image', { error })
     showUploadError('Error al procesar la imagen. Intenta con otro formato (PNG, JPG).')
   } finally {
     uploadingLogo.value = null
@@ -357,27 +375,27 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
 
         <div v-show="brandingSections.colors" class="space-y-3 mt-4">
           <div v-for="color in [
-            { key: 'primary_color', label: 'Color Primario', desc: 'Botones y acentos principales' },
-            { key: 'secondary_color', label: 'Color Secundario', desc: 'Elementos complementarios' },
-            { key: 'accent_color', label: 'Color de Acento', desc: 'Badges y notificaciones' }
+            { key: 'primary_color' as ColorKey, label: 'Color Primario', desc: 'Botones y acentos principales' },
+            { key: 'secondary_color' as ColorKey, label: 'Color Secundario', desc: 'Elementos complementarios' },
+            { key: 'accent_color' as ColorKey, label: 'Color de Acento', desc: 'Badges y notificaciones' }
           ]" :key="color.key" class="flex items-center gap-3">
             <div class="relative">
               <div
                 class="w-10 h-10 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:scale-105 transition-transform"
-                :style="{ backgroundColor: (branding as Record<string, any>)[color.key] }"
+                :style="{ backgroundColor: getColorValue(color.key) }"
               ></div>
               <input
                 type="color"
-                :value="(branding as Record<string, any>)[color.key]"
-                @input="updateField(color.key as keyof Branding, ($event.target as HTMLInputElement).value)"
+                :value="getColorValue(color.key)"
                 class="absolute inset-0 w-full h-full cursor-pointer opacity-0"
+                @input="updateField(color.key, ($event.target as HTMLInputElement).value)"
               />
             </div>
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium text-gray-700">{{ color.label }}</p>
               <p class="text-xs text-gray-400 truncate">{{ color.desc }}</p>
             </div>
-            <span class="text-xs font-mono text-gray-400">{{ (branding as Record<string, any>)[color.key] }}</span>
+            <span class="text-xs font-mono text-gray-400">{{ getColorValue(color.key) }}</span>
           </div>
 
           <!-- Background & Text Colors -->
@@ -385,20 +403,20 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
             <p class="text-xs font-medium text-gray-500 mb-2">Fondo y texto</p>
             <div class="flex gap-3">
               <div v-for="color in [
-                { key: 'background_color', label: 'Fondo' },
-                { key: 'text_color', label: 'Texto' }
+                { key: 'background_color' as ColorKey, label: 'Fondo' },
+                { key: 'text_color' as ColorKey, label: 'Texto' }
               ]" :key="color.key" class="flex-1">
                 <div class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
                   <div class="relative">
                     <div
                       class="w-6 h-6 rounded border border-gray-300 cursor-pointer"
-                      :style="{ backgroundColor: (branding as Record<string, any>)[color.key] }"
+                      :style="{ backgroundColor: getColorValue(color.key) }"
                     ></div>
                     <input
                       type="color"
-                      :value="(branding as Record<string, any>)[color.key]"
-                      @input="updateField(color.key as keyof Branding, ($event.target as HTMLInputElement).value)"
+                      :value="getColorValue(color.key)"
                       class="absolute inset-0 w-full h-full cursor-pointer opacity-0"
+                      @input="updateField(color.key, ($event.target as HTMLInputElement).value)"
                     />
                   </div>
                   <span class="text-xs text-gray-600">{{ color.label }}</span>

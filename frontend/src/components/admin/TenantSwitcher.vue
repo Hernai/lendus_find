@@ -2,6 +2,9 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { v2 } from '@/services/v2'
 import { useAuthStore, useTenantStore } from '@/stores'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('TenantSwitcher')
 
 interface Tenant {
   id: string
@@ -33,33 +36,42 @@ const displayName = computed(() => {
   return currentTenantName.value
 })
 
-const loadTenants = async () => {
+const loadTenants = async (): Promise<void> => {
   if (!isSuperAdmin.value) return
 
   isLoading.value = true
   try {
-    const response = await v2.staff.tenant.list({ is_active: true })
+    // Limit to reasonable number of tenants for dropdown
+    const response = await v2.staff.tenant.list({ is_active: true, per_page: 50 })
     tenants.value = response.data || []
   } catch (error) {
-    console.error('Failed to load tenants:', error)
+    log.error('Failed to load tenants', { error })
+    tenants.value = []
   } finally {
     isLoading.value = false
   }
 }
 
-const selectTenant = async (tenant: Tenant | null) => {
-  if (tenant) {
-    authStore.setSelectedTenant(tenant.id)
-    // Reload tenant config for the selected tenant
-    await tenantStore.loadConfig()
-  } else {
-    authStore.clearSelectedTenant()
-    await tenantStore.loadConfig()
-  }
-  isOpen.value = false
+const selectTenant = async (tenant: Tenant | null): Promise<void> => {
+  try {
+    if (tenant) {
+      authStore.setSelectedTenant(tenant.id)
+      // Reload tenant config for the selected tenant
+      await tenantStore.loadConfig()
+    } else {
+      authStore.clearSelectedTenant()
+      await tenantStore.loadConfig()
+    }
+    isOpen.value = false
 
-  // Reload the current page to apply new tenant context
-  window.location.reload()
+    // Reload the current page to apply new tenant context
+    window.location.reload()
+  } catch (error) {
+    log.error('Failed to switch tenant', { error })
+    // Still close dropdown and reload to reset state
+    isOpen.value = false
+    window.location.reload()
+  }
 }
 
 const closeDropdown = () => {

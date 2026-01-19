@@ -31,17 +31,22 @@ const isSaving = ref(false)
 const saveMessage = ref('')
 const saveError = ref('')
 
-// Timeout cleanup
-const messageTimeouts: ReturnType<typeof setTimeout>[] = []
+// Timeout cleanup - single timer pattern to avoid memory buildup
+let messageTimeoutId: ReturnType<typeof setTimeout> | null = null
 const clearMessageAfterDelay = () => {
-  const timeoutId = setTimeout(() => {
+  // Clear any existing timer first
+  if (messageTimeoutId) {
+    clearTimeout(messageTimeoutId)
+  }
+  messageTimeoutId = setTimeout(() => {
     saveMessage.value = ''
     saveError.value = ''
   }, 3000)
-  messageTimeouts.push(timeoutId)
 }
 onBeforeUnmount(() => {
-  messageTimeouts.forEach(clearTimeout)
+  if (messageTimeoutId) {
+    clearTimeout(messageTimeoutId)
+  }
 })
 
 // API Config modal

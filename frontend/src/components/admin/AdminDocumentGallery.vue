@@ -1,7 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { api } from '@/services/api'
+import { logger } from '@/utils/logger'
+import { useToast } from '@/composables'
 import ConfirmModal from './ConfirmModal.vue'
+
+const log = logger.child('AdminDocumentGallery')
+const toast = useToast()
 
 interface Document {
   id: string
@@ -123,16 +128,6 @@ const isKycValidated = (doc: Document): boolean => {
   // Check if document is APPROVED (which indicates it passed validation)
   if (doc.status !== 'APPROVED') return false
 
-  // Debug log for SELFIE
-  if (doc.type === 'SELFIE') {
-    console.log('[AdminDocumentGallery] isKycValidated check for SELFIE:', {
-      id: doc.id,
-      status: doc.status,
-      is_kyc_locked: doc.is_kyc_locked,
-      metadata: doc.metadata
-    })
-  }
-
   // First check the backend-provided flag (most reliable)
   if (doc.is_kyc_locked === true) return true
 
@@ -205,7 +200,7 @@ const loadThumbnail = async (doc: Document) => {
     const blob = new Blob([response.data as BlobPart], { type: doc.mime_type || 'image/jpeg' })
     documentThumbnails.value[doc.id] = URL.createObjectURL(blob)
   } catch (e) {
-    console.error('Failed to load thumbnail:', e)
+    log.error('Failed to load thumbnail', { error: e })
   } finally {
     loadingThumbnails.value[doc.id] = false
   }
@@ -229,6 +224,18 @@ const loadAllThumbnails = async () => {
 onMounted(() => {
   if (props.documents.length > 0) {
     loadAllThumbnails()
+  }
+})
+
+// Cleanup Object URLs to prevent memory leaks
+onBeforeUnmount(() => {
+  // Revoke all thumbnail URLs
+  Object.values(documentThumbnails.value).forEach(url => {
+    URL.revokeObjectURL(url)
+  })
+  // Revoke selected document URL if exists
+  if (selectedDocumentUrl.value) {
+    URL.revokeObjectURL(selectedDocumentUrl.value)
   }
 })
 
@@ -281,8 +288,8 @@ const viewDocument = async (doc: Document) => {
       showViewer.value = true
     }
   } catch (e) {
-    console.error('Failed to load document:', e)
-    alert('Error al cargar el documento')
+    log.error('Failed to load document', { error: e })
+    toast.error('Error al cargar el documento')
   } finally {
     isLoadingViewer.value = false
   }
@@ -308,7 +315,7 @@ const goToDocument = async (doc: Document) => {
       const blob = new Blob([response.data as BlobPart], { type: doc.mime_type || 'image/jpeg' })
       selectedDocumentUrl.value = URL.createObjectURL(blob)
     } catch (e) {
-      console.error('Failed to load document:', e)
+      log.error('Failed to load document', { error: e })
     } finally {
       isLoadingViewer.value = false
     }
@@ -348,8 +355,8 @@ const confirmApprove = async () => {
     emit('refresh')
     showApproveModal.value = false
   } catch (e) {
-    console.error('Failed to approve document:', e)
-    alert('Error al aprobar el documento')
+    log.error('Failed to approve document', { error: e })
+    toast.error('Error al aprobar el documento')
   } finally {
     isApproving.value = false
   }
@@ -379,8 +386,8 @@ const confirmReject = async (data: { selectValue?: string; comment?: string }) =
     emit('refresh')
     showRejectModal.value = false
   } catch (e) {
-    console.error('Failed to reject document:', e)
-    alert('Error al rechazar el documento')
+    log.error('Failed to reject document', { error: e })
+    toast.error('Error al rechazar el documento')
   } finally {
     isRejecting.value = false
   }
@@ -419,8 +426,8 @@ const confirmUnapprove = async () => {
     emit('refresh')
     showUnapproveModal.value = false
   } catch (e) {
-    console.error('Failed to unapprove document:', e)
-    alert('Error al desaprobar el documento')
+    log.error('Failed to unapprove document', { error: e })
+    toast.error('Error al desaprobar el documento')
   } finally {
     isUnapproving.value = false
   }
@@ -446,8 +453,8 @@ const confirmUnreject = async () => {
     emit('refresh')
     showUnrejectModal.value = false
   } catch (e) {
-    console.error('Failed to unreject document:', e)
-    alert('Error al desrechazar el documento')
+    log.error('Failed to unreject document', { error: e })
+    toast.error('Error al desrechazar el documento')
   } finally {
     isUnrejecting.value = false
   }
@@ -493,7 +500,7 @@ const loadDocumentHistory = async (doc: Document) => {
     )
     docHistory.value = response.data.data.history
   } catch (e) {
-    console.error('Failed to load document history:', e)
+    log.error('Failed to load document history', { error: e })
   } finally {
     docHistoryLoading.value = false
   }

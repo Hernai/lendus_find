@@ -93,17 +93,21 @@ const configActiveTab = ref<'branding' | 'apis'>('branding')
 const configSaveMessage = ref('')
 const configSaveError = ref('')
 
-// Timeout cleanup for messages
-const configMessageTimeouts: ReturnType<typeof setTimeout>[] = []
+// Timeout cleanup for messages - single timer pattern
+let configMessageTimeoutId: ReturnType<typeof setTimeout> | null = null
 const clearConfigMessageAfterDelay = () => {
-  const timeoutId = setTimeout(() => {
+  if (configMessageTimeoutId) {
+    clearTimeout(configMessageTimeoutId)
+  }
+  configMessageTimeoutId = setTimeout(() => {
     configSaveMessage.value = ''
     configSaveError.value = ''
   }, 3000)
-  configMessageTimeouts.push(timeoutId)
 }
 onBeforeUnmount(() => {
-  configMessageTimeouts.forEach(clearTimeout)
+  if (configMessageTimeoutId) {
+    clearTimeout(configMessageTimeoutId)
+  }
 })
 
 // Preview state
