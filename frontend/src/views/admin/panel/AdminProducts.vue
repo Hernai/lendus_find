@@ -4,10 +4,15 @@ import { v2 } from '@/services/v2'
 import type { V2Product, V2TermConfig } from '@/services/v2/product.staff.service'
 import { AppButton } from '@/components/common'
 import { useToast } from '@/composables'
+import { useAuthStore } from '@/stores/auth'
 import { logger } from '@/utils/logger'
 
 const log = logger.child('AdminProducts')
 const toast = useToast()
+const authStore = useAuthStore()
+
+// Permission check
+const canManageProducts = computed(() => authStore.permissions?.canManageProducts ?? false)
 
 // Use V2 Product type
 type Product = V2Product
@@ -414,7 +419,12 @@ const submitForm = async () => {
 }
 
 // Toggle active status
-const toggleActive = async (product: Product) => {
+const toggleActive = async (product: Product): Promise<void> => {
+  if (!canManageProducts.value) {
+    toast.error('No tienes permisos para modificar productos')
+    return
+  }
+
   try {
     await v2.staff.product.update(product.id, {
       is_active: !product.is_active

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { v2 } from '@/services/v2'
 import type { V2ApplicationFilters } from '@/types/v2'
@@ -261,7 +261,17 @@ onMounted(() => {
   fetchProducts()
 })
 
-// Watch filters and refetch
+// Debounce timer for filter changes
+let filterDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+// Cleanup on unmount
+onBeforeUnmount(() => {
+  if (filterDebounceTimer) {
+    clearTimeout(filterDebounceTimer)
+  }
+})
+
+// Watch filters and refetch with debounce to prevent race conditions
 watch([statusFilter, searchQuery, assignmentFilter, productFilter, staleFilter, viewMode], () => {
   currentPage.value = 1
   if (activeQuickFilter.value) {
@@ -275,7 +285,14 @@ watch([statusFilter, searchQuery, assignmentFilter, productFilter, staleFilter, 
       }
     }
   }
-  fetchApplications()
+
+  // Debounce the fetch to prevent multiple rapid calls
+  if (filterDebounceTimer) {
+    clearTimeout(filterDebounceTimer)
+  }
+  filterDebounceTimer = setTimeout(() => {
+    fetchApplications()
+  }, 150)
 })
 
 watch(currentPage, () => {
@@ -385,7 +402,17 @@ const hasActiveFilters = computed(() => {
   return searchQuery.value || statusFilter.value || assignmentFilter.value || productFilter.value || staleFilter.value || activeQuickFilter.value
 })
 
-const exportToCSV = () => {
+// Escape CSV value to handle commas, quotes, and newlines
+const escapeCsvValue = (value: unknown): string => {
+  const str = String(value ?? '')
+  // If contains comma, quote, or newline, wrap in quotes and escape existing quotes
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`
+  }
+  return str
+}
+
+const exportToCSV = (): void => {
   const headers = ['Folio', 'Solicitante', 'Email', 'Teléfono', 'Monto', 'Plazo', 'Producto', 'Estado', 'Fecha']
   const rows = applications.value.map(app => [
     app.folio,
@@ -399,12 +426,19 @@ const exportToCSV = () => {
     formatDateOnly(app.created_at)
   ])
 
-  const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n')
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  // Properly escape all values for CSV format
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(escapeCsvValue).join(','))
+    .join('\n')
+
+  // Add BOM for UTF-8 compatibility with Excel
+  const bom = '\uFEFF'
+  const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
   link.download = `solicitudes_${new Date().toISOString().split('T')[0]}.csv`
   link.click()
+  URL.revokeObjectURL(link.href) // Clean up
 }
 
 // Analyst interface
@@ -481,22 +515,33 @@ const closeBulkAssignModal = () => {
   selectedAgentId.value = ''
 }
 
-const confirmBulkAssign = async () => {
+const confirmBulkAssign = async (): Promise<void> => {
   if (!selectedAgentId.value || selectedIds.value.size === 0) return
 
   isAssigning.value = true
 
   try {
-    for (const appId of selectedIds.value) {
-      await v2.staff.application.assign(appId, {
-        user_id: selectedAgentId.value
-      })
-    }
+    // Use Promise.allSettled to handle partial failures gracefully
+    const results = await Promise.allSettled(
+      Array.from(selectedIds.value).map(appId =>
+        v2.staff.application.assign(appId, { user_id: selectedAgentId.value })
+      )
+    )
+
+    const succeeded = results.filter(r => r.status === 'fulfilled').length
+    const failed = results.filter(r => r.status === 'rejected').length
 
     await fetchApplications()
     clearSelection()
     closeBulkAssignModal()
-    toast.success('Solicitudes asignadas correctamente')
+
+    if (failed === 0) {
+      toast.success(`${succeeded} solicitudes asignadas correctamente`)
+    } else if (succeeded > 0) {
+      toast.warning(`${succeeded} asignadas, ${failed} fallaron`)
+    } else {
+      toast.error('Error al asignar las solicitudes')
+    }
   } catch (e) {
     log.error('Error al asignar solicitudes', { error: e })
     toast.error('Error al asignar las solicitudes')
@@ -531,22 +576,33 @@ const closeBulkRejectModal = () => {
   bulkRejectReason.value = ''
 }
 
-const confirmBulkReject = async () => {
+const confirmBulkReject = async (): Promise<void> => {
   if (!bulkRejectReason.value || selectedIds.value.size === 0) return
 
   isRejecting.value = true
 
   try {
-    for (const appId of selectedIds.value) {
-      await v2.staff.application.reject(appId, {
-        reason: bulkRejectReason.value
-      })
-    }
+    // Use Promise.allSettled to handle partial failures gracefully
+    const results = await Promise.allSettled(
+      Array.from(selectedIds.value).map(appId =>
+        v2.staff.application.reject(appId, { reason: bulkRejectReason.value })
+      )
+    )
+
+    const succeeded = results.filter(r => r.status === 'fulfilled').length
+    const failed = results.filter(r => r.status === 'rejected').length
 
     await fetchApplications()
     clearSelection()
     closeBulkRejectModal()
-    toast.success('Solicitudes rechazadas')
+
+    if (failed === 0) {
+      toast.success(`${succeeded} solicitudes rechazadas`)
+    } else if (succeeded > 0) {
+      toast.warning(`${succeeded} rechazadas, ${failed} fallaron`)
+    } else {
+      toast.error('Error al rechazar las solicitudes')
+    }
   } catch (e) {
     log.error('Error al rechazar solicitudes', { error: e })
     toast.error('Error al rechazar las solicitudes')
@@ -566,15 +622,17 @@ const confirmBulkReject = async () => {
       </div>
       <div class="flex items-center gap-2">
         <!-- View Toggle -->
-        <div class="bg-gray-100 rounded-lg p-1 flex">
+        <div class="bg-gray-100 rounded-lg p-1 flex" role="group" aria-label="Cambiar vista">
           <button
             :class="[
               'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
               viewMode === 'board' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
             ]"
+            :aria-pressed="viewMode === 'board'"
+            aria-label="Vista tablero Kanban"
             @click="viewMode = 'board'"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
             </svg>
           </button>
@@ -583,9 +641,11 @@ const confirmBulkReject = async () => {
               'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
               viewMode === 'table' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
             ]"
+            :aria-pressed="viewMode === 'table'"
+            aria-label="Vista tabla"
             @click="viewMode = 'table'"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
             </svg>
           </button>
@@ -594,6 +654,7 @@ const confirmBulkReject = async () => {
         <button
           class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
           :disabled="isLoading"
+          aria-label="Actualizar lista"
           @click="fetchApplications"
         >
           <svg
@@ -602,15 +663,17 @@ const confirmBulkReject = async () => {
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </button>
         <button
           class="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+          aria-label="Exportar a CSV"
           @click="exportToCSV"
         >
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
           CSV
@@ -619,17 +682,18 @@ const confirmBulkReject = async () => {
     </div>
 
     <!-- Filters Bar -->
-    <div class="bg-white rounded-xl shadow-sm p-3 mb-4">
+    <div class="bg-white rounded-xl shadow-sm p-3 mb-4" role="search" aria-label="Filtros de solicitudes">
       <div class="flex flex-wrap items-center gap-3">
         <!-- Search -->
         <div class="relative flex-1 min-w-[280px] max-w-lg">
-          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input
             v-model="searchQuery"
             type="text"
             placeholder="Buscar por nombre, folio, email..."
+            aria-label="Buscar solicitudes"
             class="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 focus:bg-white transition-colors"
           >
         </div>
@@ -637,6 +701,7 @@ const confirmBulkReject = async () => {
         <!-- Product Filter -->
         <select
           v-model="productFilter"
+          aria-label="Filtrar por producto"
           class="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white"
         >
           <option value="">Todos los productos</option>
