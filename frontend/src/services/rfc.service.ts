@@ -21,9 +21,9 @@ export interface PersonaFisicaData {
 }
 
 export interface RfcResult {
-  rfcBase: string // 10 caracteres (4 letras + 6 dígitos)
-  rfcSugerido: string // 13 caracteres (con homoclave placeholder)
-  advertencia: string
+  rfcBase: string // 10 characters (4 letters + 6 digits)
+  suggestedRfc: string // 13 characters (with homoclave placeholder)
+  warning: string
 }
 
 // Lista completa de palabras inconvenientes del SAT
@@ -377,12 +377,12 @@ export function generarRFCSugerido(data: PersonaFisicaData): RfcResult {
   const digitoVerificador = calcularDigitoVerificador(rfcSinDigito)
   log.debug('Dígito verificador:', { digitoVerificador })
 
-  const rfcSugerido = rfcBase + homoclave + digitoVerificador
+  const suggestedRfc = rfcBase + homoclave + digitoVerificador
 
   return {
     rfcBase,
-    rfcSugerido,
-    advertencia: 'Este RFC fue calculado con el algoritmo oficial del SAT. Se validará automáticamente con Nubarium.'
+    suggestedRfc,
+    warning: 'Este RFC fue calculado con el algoritmo oficial del SAT. Se validará automáticamente con Nubarium.'
   }
 }
 

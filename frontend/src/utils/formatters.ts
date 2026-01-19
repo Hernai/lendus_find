@@ -380,3 +380,76 @@ export function truncate(text: string | null | undefined, maxLength = 50): strin
   if (text.length <= maxLength) return text
   return `${text.slice(0, maxLength)}...`
 }
+
+// =====================================================
+// Housing Type Formatters
+// =====================================================
+
+const housingTypeLabels: Record<string, string> = {
+  OWNED: 'Propia',
+  RENTED: 'Rentada',
+  FAMILY: 'Familiar',
+  MORTGAGED: 'Hipotecada',
+  EMPLOYER: 'Del empleador',
+}
+
+/**
+ * Format housing type code to Spanish display text.
+ * @param type - Housing type code
+ * @returns Spanish housing type string
+ */
+export function formatHousingType(type: string | null | undefined): string {
+  if (!type) return '-'
+  return housingTypeLabels[type] || type
+}
+
+// =====================================================
+// Marital Status Formatters
+// =====================================================
+
+const maritalStatusLabels: Record<string, string> = {
+  SINGLE: 'Soltero(a)',
+  MARRIED: 'Casado(a)',
+  DIVORCED: 'Divorciado(a)',
+  WIDOWED: 'Viudo(a)',
+  FREE_UNION: 'Unión libre',
+  SEPARATED: 'Separado(a)',
+}
+
+/**
+ * Format marital status code to Spanish display text.
+ * @param status - Marital status code
+ * @returns Spanish marital status string
+ */
+export function formatMaritalStatus(status: string | null | undefined): string {
+  if (!status) return '-'
+  return maritalStatusLabels[status] || status
+}
+
+// =====================================================
+// Bank Account Type Formatters
+// =====================================================
+
+const accountTypeLabels: Record<string, string> = {
+  DEBIT: 'Débito',
+  PAYROLL: 'Nómina',
+  SAVINGS: 'Ahorro',
+  CHECKING: 'Cheques',
+  // Legacy codes (V1 API)
+  DEBITO: 'Débito',
+  NOMINA: 'Nómina',
+  AHORRO: 'Ahorro',
+  CHEQUES: 'Cheques',
+  INVERSION: 'Inversión',
+  OTRO: 'Otro',
+}
+
+/**
+ * Format bank account type code to Spanish display text.
+ * @param type - Account type code
+ * @returns Spanish account type string
+ */
+export function formatAccountType(type: string | null | undefined): string {
+  if (!type) return '-'
+  return accountTypeLabels[type] || type
+}

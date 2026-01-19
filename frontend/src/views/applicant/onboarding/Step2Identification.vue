@@ -25,7 +25,7 @@ const getVerification = (field: string) => kycStore.getFieldVerification(field)
 const isValidatingRfc = ref(false)
 const rfcValidated = ref(false)
 const rfcIsValid = ref(false)
-const rfcRazonSocial = ref<string | null>(null)
+const rfcBusinessName = ref<string | null>(null)
 const rfcError = ref<string | null>(null)
 
 // Check if RFC is already validated and locked
@@ -41,7 +41,7 @@ const isRfcLocked = computed(() => {
 })
 
 // RFC suggestion state
-const rfcSugerido = ref<string | null>(null)
+const suggestedRfc = ref<string | null>(null)
 
 // Submit error state
 const submitError = ref('')
@@ -50,11 +50,11 @@ const form = reactive({
   id_type: 'INE' as 'INE' | 'PASSPORT',
   curp: '',
   rfc: '',
-  // Campos adicionales de INE
+  // Additional INE fields
   clave_elector: '',
   numero_ocr: '',
   folio_ine: '',
-  // Campos de Pasaporte
+  // Passport fields
   passport_number: '',
   passport_issue_date: '',
   passport_expiry_date: ''
@@ -108,7 +108,7 @@ const validateRfcWithSat = async () => {
     const result = await kycStore.validateRfc(form.rfc, personId)
     rfcValidated.value = true
     rfcIsValid.value = result.valid
-    rfcRazonSocial.value = result.razon_social || null
+    rfcBusinessName.value = result.razon_social || null
 
     if (!result.valid) {
       rfcError.value = result.error || 'RFC no registrado en SAT'
@@ -133,7 +133,7 @@ watch(() => form.rfc, (newRfc) => {
   // Reset validation state
   rfcValidated.value = false
   rfcIsValid.value = false
-  rfcRazonSocial.value = null
+  rfcBusinessName.value = null
   rfcError.value = null
 
   // Clear previous timeout
@@ -221,20 +221,20 @@ onMounted(async () => {
           kycStore.lockedData.fecha_nacimiento
         )
         // Store full RFC suggestion (13 chars with homoclave)
-        rfcSugerido.value = resultado.rfcSugerido
+        suggestedRfc.value = resultado.suggestedRfc
 
         // If RFC is NOT validated, only load first 10 characters (without homoclave)
         // This allows the user to complete/correct the homoclave
-        const rfcBase = resultado.rfcSugerido.substring(0, 10)
+        const rfcBase = resultado.suggestedRfc.substring(0, 10)
         form.rfc = rfcBase
-        log.debug('RFC auto-filled', { rfcBase: form.rfc, rfcSuggested: rfcSugerido.value })
+        log.debug('RFC auto-filled', { rfcBase: form.rfc, rfcSuggested: suggestedRfc.value })
       } catch (error) {
         log.error('Error generating RFC', { error })
-        // Si falla, usar el valor guardado
+        // If it fails, use the stored value
         form.rfc = step2.rfc
       }
     } else {
-      // Si no hay datos KYC suficientes, usar el guardado
+      // If there's not enough KYC data, use the stored value
       form.rfc = step2.rfc
     }
   } else {
@@ -252,11 +252,11 @@ onMounted(async () => {
   form.passport_expiry_date = step2.passport_expiry_date
 })
 
-// Función para usar la sugerencia de RFC
-const usarRfcSugerido = () => {
-  if (rfcSugerido.value) {
-    form.rfc = rfcSugerido.value
-    log.debug('Using suggested RFC', { rfc: rfcSugerido.value })
+// Use the RFC suggestion
+const useSuggestedRfc = () => {
+  if (suggestedRfc.value) {
+    form.rfc = suggestedRfc.value
+    log.debug('Using suggested RFC', { rfc: suggestedRfc.value })
   }
 }
 
@@ -275,7 +275,7 @@ watch(form, () => {
   })
 }, { deep: true })
 
-// Validar que la fecha de expiración sea futura
+// Validate that expiration date is in the future
 const isDateFuture = (dateStr: string): boolean => {
   if (!dateStr) return false
   const date = new Date(dateStr)
@@ -284,7 +284,7 @@ const isDateFuture = (dateStr: string): boolean => {
   return date > today
 }
 
-// Validar que la fecha de emisión sea pasada
+// Validate that issue date is in the past
 const isDatePast = (dateStr: string): boolean => {
   if (!dateStr) return false
   const date = new Date(dateStr)
@@ -515,18 +515,18 @@ const prevStep = () => router.push('/solicitud/paso-1')
 
             <div class="space-y-2">
               <!-- RFC Suggestion (if available from KYC) - only show if form.rfc differs from suggestion -->
-              <div v-if="rfcSugerido && form.rfc !== rfcSugerido" class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-2">
+              <div v-if="suggestedRfc && form.rfc !== suggestedRfc" class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-2">
                 <div class="flex items-start justify-between">
                   <div class="flex-1">
                     <p class="text-xs font-medium text-blue-800 mb-1">RFC sugerido basado en tu INE:</p>
-                    <p class="text-lg font-mono font-bold text-blue-900">{{ rfcSugerido }}</p>
+                    <p class="text-lg font-mono font-bold text-blue-900">{{ suggestedRfc }}</p>
                     <p class="text-xs text-blue-600 mt-1">
                       Calculado con el algoritmo oficial del SAT
                     </p>
                   </div>
                   <button
                     type="button"
-                    @click="usarRfcSugerido"
+                    @click="useSuggestedRfc"
                     class="ml-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors"
                   >
                     Usar
@@ -563,9 +563,9 @@ const prevStep = () => router.push('/solicitud/paso-1')
               </p>
               <!-- SAT Validation result (only if Nubarium configured) -->
               <template v-if="kycStore.hasNubarium">
-                <div v-if="rfcValidated && rfcIsValid && rfcRazonSocial" class="bg-green-50 border border-green-200 rounded-lg p-3">
+                <div v-if="rfcValidated && rfcIsValid && rfcBusinessName" class="bg-green-50 border border-green-200 rounded-lg p-3">
                   <p class="text-xs text-green-700 font-medium">RFC validado con SAT</p>
-                  <p class="text-sm text-green-800">{{ rfcRazonSocial }}</p>
+                  <p class="text-sm text-green-800">{{ rfcBusinessName }}</p>
                 </div>
                 <div v-else-if="rfcValidated && !rfcIsValid" class="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p class="text-xs text-red-700">{{ rfcError || 'RFC no encontrado en SAT' }}</p>
@@ -660,9 +660,9 @@ const prevStep = () => router.push('/solicitud/paso-1')
             </p>
             <!-- SAT Validation result (only if Nubarium configured) -->
             <template v-if="kycStore.hasNubarium">
-              <div v-if="rfcValidated && rfcIsValid && rfcRazonSocial" class="bg-green-50 border border-green-200 rounded-lg p-3">
+              <div v-if="rfcValidated && rfcIsValid && rfcBusinessName" class="bg-green-50 border border-green-200 rounded-lg p-3">
                 <p class="text-xs text-green-700 font-medium">RFC validado con SAT</p>
-                <p class="text-sm text-green-800">{{ rfcRazonSocial }}</p>
+                <p class="text-sm text-green-800">{{ rfcBusinessName }}</p>
               </div>
               <div v-else-if="rfcValidated && !rfcIsValid" class="bg-red-50 border border-red-200 rounded-lg p-3">
                 <p class="text-xs text-red-700">{{ rfcError || 'RFC no encontrado en SAT' }}</p>

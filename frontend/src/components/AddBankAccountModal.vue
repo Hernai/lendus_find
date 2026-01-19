@@ -31,11 +31,11 @@ const clabeValid = ref(false)
 const bankNameAutoDetected = ref(false)
 
 const accountTypeOptions = [
-  { value: 'DEBITO', label: 'Debito' },
-  { value: 'NOMINA', label: 'Nomina' },
+  { value: 'DEBITO', label: 'Débito' },
+  { value: 'NOMINA', label: 'Nómina' },
   { value: 'AHORRO', label: 'Ahorro' },
   { value: 'CHEQUES', label: 'Cheques' },
-  { value: 'INVERSION', label: 'Inversion' },
+  { value: 'INVERSION', label: 'Inversión' },
   { value: 'OTRO', label: 'Otro' }
 ]
 
@@ -77,7 +77,7 @@ watch(clabe, async (newValue) => {
           bankNameAutoDetected.value = true
         }
       } else {
-        clabeError.value = 'CLABE invalida'
+        clabeError.value = 'CLABE inválida'
       }
     } catch (e) {
       clabeError.value = 'Error al validar CLABE'
@@ -174,7 +174,7 @@ const handleSubmit = async () => {
                   @input="handleClabeInput"
                   inputmode="numeric"
                   autocomplete="off"
-                  placeholder="18 digitos"
+                  placeholder="18 dígitos"
                   class="w-full px-4 py-3.5 border rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 font-mono text-lg tracking-wide"
                   :class="{
                     'border-gray-300': !clabeError && !clabeValid,
@@ -193,7 +193,7 @@ const handleSubmit = async () => {
                 </div>
               </div>
               <p v-if="clabeError" class="mt-1 text-sm text-red-500">{{ clabeError }}</p>
-              <p class="mt-1 text-xs text-gray-500">{{ clabe.length }}/18 digitos</p>
+              <p class="mt-1 text-xs text-gray-500">{{ clabe.length }}/18 dígitos</p>
             </div>
 
             <!-- Bank Name -->
@@ -222,7 +222,7 @@ const handleSubmit = async () => {
                 class="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
               <p v-if="!bankNameAutoDetected" class="mt-1 text-xs text-gray-500">
-                No se detecto el banco automaticamente. Ingresa el nombre manualmente.
+                No se detectó el banco automáticamente. Ingresa el nombre manualmente.
               </p>
             </div>
 
@@ -291,7 +291,7 @@ const handleSubmit = async () => {
                   type="checkbox"
                   class="w-6 h-6 rounded border-gray-300 text-primary-600 focus:ring-primary-500 flex-shrink-0"
                 />
-                <span class="text-base text-gray-700">Esta cuenta esta a mi nombre</span>
+                <span class="text-base text-gray-700">Esta cuenta está a mi nombre</span>
               </label>
 
               <label class="flex items-center gap-3 cursor-pointer py-1 -mx-2 px-2 active:bg-gray-50 rounded-lg">
@@ -300,7 +300,7 @@ const handleSubmit = async () => {
                   type="checkbox"
                   class="w-6 h-6 rounded border-gray-300 text-primary-600 focus:ring-primary-500 flex-shrink-0"
                 />
-                <span class="text-base text-gray-700">Usar como cuenta principal para depositos</span>
+                <span class="text-base text-gray-700">Usar como cuenta principal para depósitos</span>
               </label>
             </div>
           </form>

@@ -27,6 +27,12 @@ export {
   formatContractType,
   // Gender
   formatGender,
+  // Marital Status
+  formatMaritalStatus,
+  // Housing
+  formatHousingType,
+  // Bank Account
+  formatAccountType,
   // Payment
   formatFrequency,
   // Reference

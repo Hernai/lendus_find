@@ -7,6 +7,16 @@ import BankAccountCard from '@/components/BankAccountCard.vue'
 import AddBankAccountModal from '@/components/AddBankAccountModal.vue'
 import { v2 } from '@/services/v2'
 import { logger } from '@/utils/logger'
+import {
+  formatDate,
+  formatMoney,
+  formatPhone,
+  formatGender,
+  formatMaritalStatus,
+  formatEmploymentType,
+  formatHousingType,
+  formatSeniority,
+} from '@/utils/formatters'
 
 const log = logger.child('Profile')
 const router = useRouter()
@@ -28,7 +38,6 @@ const activeApplicationId = ref<string | null>(null)
 const showPhotoViewer = ref(false)
 
 const profile = computed(() => profileStore.profile)
-const tenantName = computed(() => tenantStore.name || 'LendusFind')
 
 const userName = computed(() => {
   const pd = profile.value?.personal_data
@@ -45,70 +54,29 @@ const fullName = computed(() => {
   return pd.full_name || `${pd.first_name || ''} ${pd.last_name_1 || ''} ${pd.last_name_2 || ''}`.trim()
 })
 
-// Format helpers
-const formatDate = (dateStr: string | null | undefined) => {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('es-MX', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
-  })
-}
-
-const formatMoney = (amount: number | null | undefined) => {
-  if (!amount) return '$0'
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 0
-  }).format(amount)
-}
-
-const formatPhone = (phone: string | null | undefined) => {
-  if (!phone) return '-'
-  // Format as XX XXXX XXXX
-  const cleaned = phone.replace(/\D/g, '')
-  if (cleaned.length === 10) {
-    return `${cleaned.slice(0, 2)} ${cleaned.slice(2, 6)} ${cleaned.slice(6)}`
-  }
-  return phone
-}
-
-const formatGender = (gender: string | null | undefined) => {
+// Use tenant options for dynamic labels (fallback to centralized formatters)
+const getGenderLabel = (gender: string | null | undefined) => {
   if (!gender) return '-'
   const option = tenantStore.options.gender.find(o => o.value === gender)
-  return option?.label || gender
+  return option?.label || formatGender(gender)
 }
 
-const formatMaritalStatus = (status: string | null | undefined) => {
+const getMaritalStatusLabel = (status: string | null | undefined) => {
   if (!status) return '-'
   const option = tenantStore.options.marital_status.find(o => o.value === status)
-  return option?.label || status
+  return option?.label || formatMaritalStatus(status)
 }
 
-const formatEmploymentType = (type: string | null | undefined) => {
+const getEmploymentTypeLabel = (type: string | null | undefined) => {
   if (!type) return '-'
   const option = tenantStore.options.employment_type.find(o => o.value === type)
-  return option?.label || type
+  return option?.label || formatEmploymentType(type)
 }
 
-const formatHousingType = (type: string | null | undefined) => {
+const getHousingTypeLabel = (type: string | null | undefined) => {
   if (!type) return '-'
   const option = tenantStore.options.housing_type.find(o => o.value === type)
-  return option?.label || type
-}
-
-const formatSeniority = (months: number | null | undefined) => {
-  if (!months) return '-'
-  const years = Math.floor(months / 12)
-  const remainingMonths = months % 12
-  if (years > 0 && remainingMonths > 0) {
-    return `${years} ${years === 1 ? 'ano' : 'anos'}, ${remainingMonths} ${remainingMonths === 1 ? 'mes' : 'meses'}`
-  } else if (years > 0) {
-    return `${years} ${years === 1 ? 'ano' : 'anos'}`
-  } else {
-    return `${remainingMonths} ${remainingMonths === 1 ? 'mes' : 'meses'}`
-  }
+  return option?.label || formatHousingType(type)
 }
 
 // Load data
@@ -157,7 +125,7 @@ const openPhotoViewer = () => {
 
 const triggerPhotoUpload = () => {
   if (profilePhotoVerified.value) {
-    photoError.value = 'La foto ya esta verificada y no se puede cambiar'
+    photoError.value = 'La foto ya está verificada y no se puede cambiar'
     return
   }
   photoInputRef.value?.click()
@@ -170,13 +138,13 @@ const handlePhotoSelect = async (event: Event) => {
 
   // Check if photo is verified
   if (profilePhotoVerified.value) {
-    photoError.value = 'La foto ya esta verificada y no se puede cambiar'
+    photoError.value = 'La foto ya está verificada y no se puede cambiar'
     return
   }
 
   // Validate
   if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.type)) {
-    photoError.value = 'Solo se permiten imagenes (JPG, PNG, WebP)'
+    photoError.value = 'Solo se permiten imágenes (JPG, PNG, WebP)'
     return
   }
   if (file.size > 5 * 1024 * 1024) {
@@ -391,15 +359,15 @@ const handleLogout = async () => {
               <span class="text-gray-900 font-medium">{{ formatDate(profile?.personal_data?.birth_date) }}</span>
             </div>
             <div class="flex justify-between py-2 border-b border-gray-100">
-              <span class="text-gray-500">Genero</span>
-              <span class="text-gray-900 font-medium">{{ profile?.personal_data?.gender_label || formatGender(profile?.personal_data?.gender) }}</span>
+              <span class="text-gray-500">Género</span>
+              <span class="text-gray-900 font-medium">{{ profile?.personal_data?.gender_label || getGenderLabel(profile?.personal_data?.gender) }}</span>
             </div>
             <div class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">Estado civil</span>
-              <span class="text-gray-900 font-medium">{{ profile?.personal_data?.marital_status_label || formatMaritalStatus(profile?.personal_data?.marital_status) }}</span>
+              <span class="text-gray-900 font-medium">{{ profile?.personal_data?.marital_status_label || getMaritalStatusLabel(profile?.personal_data?.marital_status) }}</span>
             </div>
             <div class="flex justify-between py-2">
-              <span class="text-gray-500">Telefono</span>
+              <span class="text-gray-500">Teléfono</span>
               <span class="text-gray-900 font-medium">{{ formatPhone(authStore.user?.phone) }}</span>
             </div>
           </div>
@@ -414,7 +382,7 @@ const handleLogout = async () => {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 </svg>
               </div>
-              <h3 class="text-lg font-semibold text-gray-900">Direccion</h3>
+              <h3 class="text-lg font-semibold text-gray-900">Dirección</h3>
             </div>
           </div>
 
@@ -431,10 +399,10 @@ const handleLogout = async () => {
             </p>
             <div v-if="profile.address.housing_type" class="mt-3 pt-3 border-t border-gray-100">
               <span class="text-gray-500">Tipo de vivienda:</span>
-              <span class="ml-2 text-gray-900 font-medium">{{ formatHousingType(profile.address.housing_type) }}</span>
+              <span class="ml-2 text-gray-900 font-medium">{{ getHousingTypeLabel(profile.address.housing_type) }}</span>
             </div>
           </div>
-          <p v-else class="text-gray-500 text-sm">Sin direccion registrada</p>
+          <p v-else class="text-gray-500 text-sm">Sin dirección registrada</p>
         </div>
 
         <!-- Employment Section -->
@@ -453,7 +421,7 @@ const handleLogout = async () => {
           <div v-if="profile?.employment" class="space-y-3 text-sm">
             <div class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">Tipo</span>
-              <span class="text-gray-900 font-medium">{{ formatEmploymentType(profile.employment.employment_type) }}</span>
+              <span class="text-gray-900 font-medium">{{ getEmploymentTypeLabel(profile.employment.employment_type) }}</span>
             </div>
             <div v-if="profile.employment.company_name" class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">Empresa</span>
@@ -464,7 +432,7 @@ const handleLogout = async () => {
               <span class="text-gray-900 font-medium">{{ profile.employment.position }}</span>
             </div>
             <div class="flex justify-between py-2 border-b border-gray-100">
-              <span class="text-gray-500">Antiguedad</span>
+              <span class="text-gray-500">Antigüedad</span>
               <span class="text-gray-900 font-medium">{{ formatSeniority(profile.employment.seniority_months) }}</span>
             </div>
             <div class="flex justify-between py-2">
@@ -472,7 +440,7 @@ const handleLogout = async () => {
               <span class="text-gray-900 font-medium">{{ formatMoney(profile.employment.monthly_income) }}</span>
             </div>
           </div>
-          <p v-else class="text-gray-500 text-sm">Sin informacion laboral registrada</p>
+          <p v-else class="text-gray-500 text-sm">Sin información laboral registrada</p>
         </div>
 
         <!-- Bank Accounts Section -->
@@ -504,7 +472,7 @@ const handleLogout = async () => {
               </svg>
             </div>
             <p class="text-gray-500 text-sm">No tienes cuentas bancarias registradas.</p>
-            <p class="text-gray-400 text-xs mt-1">Agrega una para recibir tu credito.</p>
+            <p class="text-gray-400 text-xs mt-1">Agrega una para recibir tu crédito.</p>
           </div>
 
           <div v-else class="space-y-3">
