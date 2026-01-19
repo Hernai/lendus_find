@@ -284,10 +284,10 @@ const openEditModal = (product: Product) => {
   const termConfig: Record<string, TermConfig> = {}
 
   // If product has term_config with available_terms, use it
-  if ((product as any).term_config && Object.keys((product as any).term_config).length > 0) {
-    for (const [freq, config] of Object.entries((product as any).term_config)) {
-      if ((config as any).available_terms) {
-        termConfig[freq] = { available_terms: [...(config as any).available_terms] }
+  if (product.term_config && Object.keys(product.term_config).length > 0) {
+    for (const [freq, config] of Object.entries(product.term_config)) {
+      if (config?.available_terms) {
+        termConfig[freq] = { available_terms: [...config.available_terms] }
       } else {
         // Legacy format with min/max - generate default terms
         termConfig[freq] = { available_terms: [...(defaultTermConfig[freq]?.available_terms || [3, 6, 12, 24, 36, 48])] }

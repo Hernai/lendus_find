@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { v2 } from '@/services/v2'
 import type {
   V2Tenant,
@@ -92,6 +92,19 @@ const isSavingConfig = ref(false)
 const configActiveTab = ref<'branding' | 'apis'>('branding')
 const configSaveMessage = ref('')
 const configSaveError = ref('')
+
+// Timeout cleanup for messages
+const configMessageTimeouts: ReturnType<typeof setTimeout>[] = []
+const clearConfigMessageAfterDelay = () => {
+  const timeoutId = setTimeout(() => {
+    configSaveMessage.value = ''
+    configSaveError.value = ''
+  }, 3000)
+  configMessageTimeouts.push(timeoutId)
+}
+onBeforeUnmount(() => {
+  configMessageTimeouts.forEach(clearTimeout)
+})
 
 // Preview state
 const showPreview = ref(true)
@@ -515,7 +528,7 @@ const saveTenantBranding = async () => {
     }
     await v2.staff.tenant.updateBranding(configTenant.value.id, brandingPayload)
     configSaveMessage.value = 'Branding guardado'
-    setTimeout(() => configSaveMessage.value = '', 3000)
+    clearConfigMessageAfterDelay()
   } catch (e) {
     configSaveError.value = 'Error al guardar el branding'
   } finally {
@@ -595,7 +608,7 @@ const saveApiInConfig = async () => {
     const response = await v2.staff.tenant.getConfig(configTenant.value.id)
     configData.value = response.data!
     configSaveMessage.value = 'Integración guardada'
-    setTimeout(() => configSaveMessage.value = '', 3000)
+    clearConfigMessageAfterDelay()
   } catch (e) {
     configSaveError.value = 'Error al guardar la integración'
   } finally {
@@ -779,7 +792,7 @@ const handleLogoUpload = async (event: Event, field: string) => {
     const brandingRecord = configData.value.branding as Record<string, string | null>
     brandingRecord[field] = response.data!.url
     configSaveMessage.value = 'Logo subido correctamente'
-    setTimeout(() => configSaveMessage.value = '', 3000)
+    clearConfigMessageAfterDelay()
   } catch (e) {
     configSaveError.value = 'Error al subir el logo'
   } finally {

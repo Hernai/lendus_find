@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { v2 } from '@/services/v2'
 import type { V2TenantInfo, V2ApiConfig } from '@/services/v2/config.staff.service'
 import { AppInput, AppConfirmModal } from '@/components/common'
@@ -30,6 +30,19 @@ const availableServiceTypes = ref<Record<string, string>>({})
 const isSaving = ref(false)
 const saveMessage = ref('')
 const saveError = ref('')
+
+// Timeout cleanup
+const messageTimeouts: ReturnType<typeof setTimeout>[] = []
+const clearMessageAfterDelay = () => {
+  const timeoutId = setTimeout(() => {
+    saveMessage.value = ''
+    saveError.value = ''
+  }, 3000)
+  messageTimeouts.push(timeoutId)
+}
+onBeforeUnmount(() => {
+  messageTimeouts.forEach(clearTimeout)
+})
 
 // API Config modal
 const showApiModal = ref(false)
@@ -103,7 +116,7 @@ const saveTenant = async () => {
       website: tenant.value.website || null
     })
     saveMessage.value = 'Informacion guardada'
-    setTimeout(() => saveMessage.value = '', 3000)
+    clearMessageAfterDelay()
   } catch (e) {
     saveError.value = 'Error al guardar'
   } finally {
@@ -122,7 +135,7 @@ const saveBranding = async () => {
   try {
     await v2.staff.config.updateBranding(branding.value as Parameters<typeof v2.staff.config.updateBranding>[0])
     saveMessage.value = 'Branding guardado'
-    setTimeout(() => saveMessage.value = '', 3000)
+    clearMessageAfterDelay()
   } catch (e) {
     saveError.value = 'Error al guardar'
   } finally {
@@ -205,7 +218,7 @@ const saveApiConfig = async () => {
     await loadConfig()
     showApiModal.value = false
     saveMessage.value = 'Configuracion guardada'
-    setTimeout(() => saveMessage.value = '', 3000)
+    clearMessageAfterDelay()
   } catch (e) {
     saveError.value = 'Error al guardar configuracion'
   } finally {
@@ -246,10 +259,7 @@ const testApiConfig = async (config: ApiConfig) => {
       saveError.value = response.message || 'Error en la prueba'
     }
     await loadConfig()
-    setTimeout(() => {
-      saveMessage.value = ''
-      saveError.value = ''
-    }, 3000)
+    clearMessageAfterDelay()
   } catch (e) {
     saveError.value = 'Error al probar conexion'
   }

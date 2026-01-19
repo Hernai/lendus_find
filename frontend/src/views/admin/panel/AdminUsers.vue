@@ -423,19 +423,35 @@ const saveUser = async () => {
     formErrors.value = { name: '', email: '', phone: '', role: '', password: '', password_confirmation: '' }
     formError.value = ''
 
-    // For 422 errors, axios interceptor rejects with response.data directly
-    // For other errors, it's in e.response.data
-    const err = e as AxiosErrorResponse & { errors?: Record<string, string | string[]>; message?: string }
-    const errorData = err.errors ? err : (err.response?.data || err)
-
-    if (errorData.errors) {
-      const errors = errorData.errors
-      if (errors.email) formErrors.value.email = (Array.isArray(errors.email) ? errors.email[0] : errors.email) ?? ''
-      if (errors.name) formErrors.value.name = (Array.isArray(errors.name) ? errors.name[0] : errors.name) ?? ''
-      if (errors.phone) formErrors.value.phone = (Array.isArray(errors.phone) ? errors.phone[0] : errors.phone) ?? ''
-      if (errors.password) formErrors.value.password = (Array.isArray(errors.password) ? errors.password[0] : errors.password) ?? ''
-      if (errors.role) formErrors.value.role = (Array.isArray(errors.role) ? errors.role[0] : errors.role) ?? ''
+    // Extract error data safely - handle both direct 422 response and wrapped errors
+    interface ValidationError {
+      errors?: Record<string, string | string[]>
+      message?: string
     }
+
+    const axiosErr = e as AxiosErrorResponse
+    const errorData: ValidationError = (
+      // Check if it's a direct validation error object (422 from interceptor)
+      (e && typeof e === 'object' && 'errors' in e)
+        ? e as ValidationError
+        // Otherwise try response.data
+        : axiosErr?.response?.data ?? {}
+    )
+
+    // Process field-specific errors
+    if (errorData.errors && typeof errorData.errors === 'object') {
+      const errors = errorData.errors
+      const getFirstError = (field: string | string[] | undefined): string => {
+        if (!field) return ''
+        return Array.isArray(field) ? (field[0] ?? '') : field
+      }
+      formErrors.value.email = getFirstError(errors.email)
+      formErrors.value.name = getFirstError(errors.name)
+      formErrors.value.phone = getFirstError(errors.phone)
+      formErrors.value.password = getFirstError(errors.password)
+      formErrors.value.role = getFirstError(errors.role)
+    }
+
     // Show general error message (translate common messages to Spanish)
     if (errorData.message) {
       const messageTranslations: Record<string, string> = {
