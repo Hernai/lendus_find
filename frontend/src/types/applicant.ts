@@ -136,6 +136,8 @@ export interface EmploymentRecord {
 
 export type EmploymentType = 'EMPLOYEE' | 'SELF_EMPLOYED' | 'BUSINESS_OWNER' | 'RETIRED' | 'STUDENT' | 'HOMEMAKER' | 'UNEMPLOYED' | 'OTHER'
 
+// Legacy V1 API contract types (Spanish values from backend)
+// For new code, use V2ContractType from types/v2
 export type ContractType = 'INDEFINIDO' | 'TEMPORAL' | 'OBRA_DETERMINADA' | 'HONORARIOS' | 'COMISION'
 
 // PaymentFrequency is defined in tenant.ts
@@ -165,6 +167,8 @@ export interface BankAccount {
 
 export type BankAccountType = 'DISBURSEMENT' | 'PAYMENT' | 'BOTH'
 
+// Legacy V1 API account types (Spanish values from backend)
+// For new code, use V2BankAccountType from types/v2
 export type AccountType = 'DEBITO' | 'NOMINA' | 'AHORRO' | 'CHEQUES' | 'INVERSION' | 'OTRO'
 
 // Reference (existing structure)

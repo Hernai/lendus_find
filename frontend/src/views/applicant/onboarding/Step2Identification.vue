@@ -72,7 +72,7 @@ const errors = reactive({
   passport_expiry_date: ''
 })
 
-// Mostrar campos según tipo de ID
+// Show fields based on ID type
 const showIneFields = computed(() => form.id_type === 'INE')
 const showPassportFields = computed(() => form.id_type === 'PASSPORT')
 
@@ -153,25 +153,25 @@ watch(() => form.rfc, (newRfc) => {
   }
 })
 
-// Validar Clave de Elector: 18 caracteres alfanuméricos
+// Validate Voter ID (Clave de Elector): 18 alphanumeric characters
 const validateClaveElector = (clave: string): boolean => {
   return /^[A-Z0-9]{18}$/.test(clave.toUpperCase())
 }
 
-// Validar OCR: 13 dígitos
+// Validate OCR: 13 digits
 const validateOcr = (ocr: string): boolean => {
   return /^\d{13}$/.test(ocr)
 }
 
-// Validar Folio INE: Entre 9 y 20 dígitos
+// Validate INE Folio: Between 9 and 20 digits
 const validateFolioIne = (folio: string): boolean => {
   return /^\d{9,20}$/.test(folio)
 }
 
-// Validar número de pasaporte mexicano: G + 8 dígitos o formato antiguo
+// Validate Mexican passport number: G + 8 digits or legacy format
 const validatePassportNumber = (passport: string): boolean => {
-  // Formato nuevo: G seguido de 8 dígitos
-  // Formato antiguo: 9-10 caracteres alfanuméricos
+  // New format: G followed by 8 digits
+  // Legacy format: 9-10 alphanumeric characters
   return /^[A-Z]\d{8}$/.test(passport.toUpperCase()) || /^[A-Z0-9]{9,10}$/.test(passport.toUpperCase())
 }
 
@@ -338,7 +338,7 @@ const validate = () => {
     isValid = false
   }
 
-  // Validar campos de INE solo si el tipo es INE
+  // Validate INE fields only if ID type is INE
   if (form.id_type === 'INE') {
     if (!form.clave_elector.trim()) {
       errors.clave_elector = 'La clave de elector es requerida'
@@ -365,7 +365,7 @@ const validate = () => {
     }
   }
 
-  // Validar campos de Pasaporte
+  // Validate Passport fields
   if (form.id_type === 'PASSPORT') {
     if (!form.passport_number.trim()) {
       errors.passport_number = 'El número de pasaporte es requerido'

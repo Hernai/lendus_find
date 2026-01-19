@@ -430,7 +430,7 @@ const validate = () => {
     errors.housing_type = ''
   }
 
-  // Validar tiempo de residencia
+  // Validate residence time
   const years = form.years_at_address
   const months = form.months_at_address
 

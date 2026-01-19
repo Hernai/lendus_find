@@ -10,7 +10,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 const tenantStore = useTenantStore()
 
-// Cargar configuración del tenant al montar el layout
+// Load tenant configuration on mount
 onMounted(async () => {
   await tenantStore.loadConfig()
 })

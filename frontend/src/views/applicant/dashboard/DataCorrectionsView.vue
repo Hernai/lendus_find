@@ -472,26 +472,26 @@ const formatFileSize = (bytes: number): string => {
 
 // Format value for display
 const formatValue = (value: unknown): string => {
-  if (value === null || value === undefined) return '(vacío)'
+  if (value === null || value === undefined) return '(empty)'
   if (typeof value === 'object') {
     const obj = value as Record<string, unknown>
 
-    // Para objetos de nombre, mostrar como "Nombre ApellidoP ApellidoM"
+    // For name objects, display as "FirstName LastName1 LastName2"
     if ('first_name' in obj || 'last_name_1' in obj || 'last_name_2' in obj) {
       const parts = [obj.first_name, obj.last_name_1, obj.last_name_2]
         .filter(Boolean)
         .map(String)
-      return parts.join(' ') || '(vacío)'
+      return parts.join(' ') || '(empty)'
     }
 
-    // Para otros objetos (dirección, empleo), mostrar valores separados por coma
+    // For other objects (address, employment), display values separated by comma
     const parts: string[] = []
     for (const [, val] of Object.entries(obj)) {
       if (val) parts.push(String(val))
     }
-    return parts.join(', ') || '(vacío)'
+    return parts.join(', ') || '(empty)'
   }
-  return String(value) || '(vacío)'
+  return String(value) || '(empty)'
 }
 
 // WebSocket channel reference

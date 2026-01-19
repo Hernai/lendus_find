@@ -254,7 +254,7 @@ const validate = () => {
       errors.is_mexican = ''
     }
 
-    // Validar nacionalidad para extranjeros
+    // Validate nationality for foreigners
     if (isForeigner.value && !form.nationality) {
       errors.nationality = 'Selecciona tu nacionalidad'
       isValid = false
@@ -263,7 +263,7 @@ const validate = () => {
     }
   }
 
-  // Validar entidad de nacimiento para mexicanos (siempre requerido, incluso con KYC)
+  // Validate birth state for Mexicans (always required, even with KYC)
   if (isMexican.value && !form.birth_state) {
     errors.birth_state = 'Selecciona tu entidad de nacimiento'
     isValid = false

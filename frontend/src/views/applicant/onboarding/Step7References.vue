@@ -69,7 +69,7 @@ watch(
   { deep: true }
 )
 
-// Derivar tipo de referencia desde la relación
+// Derive reference type from relationship
 const getTypeFromRelationship = (relationship: string): 'PERSONAL' | 'WORK' => {
   return relationship === 'COWORKER' || relationship === 'BOSS' ? 'WORK' : 'PERSONAL'
 }
@@ -130,7 +130,7 @@ const validate = () => {
     isValid = false
   }
 
-  // Validar que haya al menos 1 familiar y 1 no familiar
+  // Validate at least 1 family and 1 non-family reference
   const hasFamily = references.some(r =>
     familyRelationshipOptions.value.some(opt => opt.value === r.relationship)
   )

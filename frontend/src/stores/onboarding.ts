@@ -344,7 +344,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
         case 1: {
           const s1 = data.value.step1
           if (!s1.first_name || !s1.last_name || !s1.birth_date || !s1.gender) {
-            throw new Error('Faltan campos requeridos en datos personales')
+            throw new Error('Missing required fields in personal data')
           }
           await profileStore.updatePersonalData({
             first_name: s1.first_name,
@@ -385,17 +385,17 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           const isIneAddress = s3.is_ine_address === true
 
           const missingFields: string[] = []
-          if (!s3.street) missingFields.push('calle')
-          if (!s3.neighborhood) missingFields.push('colonia')
-          if (!s3.postal_code) missingFields.push('código postal')
-          if (!s3.state) missingFields.push('estado')
-          if (!s3.housing_type) missingFields.push('tipo de vivienda')
+          if (!s3.street) missingFields.push('street')
+          if (!s3.neighborhood) missingFields.push('neighborhood')
+          if (!s3.postal_code) missingFields.push('postal_code')
+          if (!s3.state) missingFields.push('state')
+          if (!s3.housing_type) missingFields.push('housing_type')
 
           if (missingFields.length > 0) {
-            throw new Error(`Faltan campos requeridos en dirección: ${missingFields.join(', ')}`)
+            throw new Error(`Missing required address fields: ${missingFields.join(', ')}`)
           }
           if (!isIneAddress && !s3.ext_number) {
-            throw new Error('Falta el número exterior')
+            throw new Error('Missing exterior number')
           }
 
           await profileStore.updateAddress({
@@ -417,7 +417,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
         case 4: {
           const s4 = data.value.step4
           if (!s4.employment_type || s4.monthly_income < 1000) {
-            throw new Error('Faltan campos requeridos en información laboral')
+            throw new Error('Missing required fields in employment information')
           }
 
           await profileStore.updateEmployment({
@@ -457,13 +457,13 @@ export const useOnboardingStore = defineStore('onboarding', () => {
               })
             } catch (err: unknown) {
               const error = err as { message?: string }
-              if (error.message?.includes('ya fue enviada') || error.message?.includes('no fue encontrada')) {
-                throw new Error('Tu solicitud anterior ya fue enviada. Para crear una nueva solicitud, regresa al inicio.')
+              if (error.message?.includes('already submitted') || error.message?.includes('not found')) {
+                throw new Error('Your previous application has already been submitted. To create a new application, go back to the start.')
               }
               throw err
             }
           } else {
-            throw new Error('No se encontró la solicitud. Por favor, regresa al inicio y vuelve a empezar.')
+            throw new Error('Application not found. Please go back to the start and try again.')
           }
           break
         }

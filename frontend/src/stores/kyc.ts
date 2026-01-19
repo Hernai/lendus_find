@@ -7,6 +7,8 @@ import { logger } from '@/utils/logger'
 const kycLogger = logger.child('KYC')
 
 // Types for KYC data
+// Note: Property names are in Spanish because they come directly from the Nubarium API
+// (Mexican KYC provider). Changing them would require mapping at every API boundary.
 export interface KycLockedData {
   nombres: string | null
   apellido_paterno: string | null

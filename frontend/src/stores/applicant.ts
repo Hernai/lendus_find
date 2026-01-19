@@ -344,7 +344,7 @@ export const useApplicantStore = defineStore('applicant', () => {
   const isKycVerified = computed(() => applicant.value?.kyc_status === 'VERIFIED')
 
   const hasMinimumReferences = computed(() => {
-    const familyTypes = ['PADRE_MADRE', 'HERMANO', 'CONYUGE', 'HIJO', 'TIO', 'PRIMO', 'ABUELO']
+    const familyTypes = ['PARENT', 'SIBLING', 'SPOUSE', 'CHILD', 'UNCLE_AUNT', 'COUSIN', 'GRANDPARENT']
     const familyRef = references.value.some(r => familyTypes.includes(r.relationship))
     const nonFamilyRef = references.value.some(r => !familyTypes.includes(r.relationship))
     return familyRef && nonFamilyRef && references.value.length >= 2
