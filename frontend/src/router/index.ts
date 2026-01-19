@@ -3,6 +3,7 @@ import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useTenantStore } from '@/stores/tenant'
 import { detectTenantSlug } from '@/utils/tenant'
+import { storage, STORAGE_KEYS } from '@/utils/storage'
 
 // ==============================================
 // PUBLIC VIEWS (no authentication required)
@@ -466,9 +467,10 @@ router.beforeEach(async (to, from, next) => {
   // DEV MODE: Auto-authenticate for development
   // This allows navigating directly to any step without logging in
   // DISABLED for admin routes to test real login flow
+  // SECURITY: This code only runs in DEV mode (import.meta.env.DEV is compile-time constant)
   if (import.meta.env.DEV && requiresAuth && !requiresStaff) {
-    if (!localStorage.getItem('auth_token')) {
-      localStorage.setItem('auth_token', 'dev-token-' + Date.now())
+    if (!storage.get(STORAGE_KEYS.AUTH_TOKEN)) {
+      storage.set(STORAGE_KEYS.AUTH_TOKEN, 'dev-token-' + Date.now())
     }
     // Always re-check to update role based on current route context (admin vs user)
     await authStore.checkAuth(to.path)

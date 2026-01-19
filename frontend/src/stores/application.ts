@@ -14,6 +14,14 @@ import { useAsyncAction } from '@/composables'
 
 const log = logger.child('ApplicationStore')
 
+// Type-safe Axios error interface
+interface ApiError extends Error {
+  response?: {
+    status?: number
+    data?: { message?: string }
+  }
+}
+
 interface SimulatorResponse {
   simulation: {
     product_id: string
@@ -112,8 +120,8 @@ export const useApplicationStore = defineStore('application', () => {
     {
       onError: (e) => {
         log.error('Error loading application', { error: e.message })
-        const axiosError = e as unknown as { response?: { status?: number } }
-        if (axiosError.response?.status === 404) {
+        const apiError = e as ApiError
+        if (apiError.response?.status === 404) {
           log.warn('Application not found (404). Clearing localStorage reference.')
           localStorage.removeItem('current_application_id')
         }
@@ -187,17 +195,17 @@ export const useApplicationStore = defineStore('application', () => {
     {
       onError: (e) => {
         log.error('Error updating application', { error: e.message })
-        const axiosError = e as unknown as { response?: { status?: number; data?: { message?: string } } }
+        const apiError = e as ApiError
 
-        if (axiosError.response?.status === 404) {
+        if (apiError.response?.status === 404) {
           log.warn('Application not found (404). Clearing stale state...')
           currentApplication.value = null
           storage.remove(STORAGE_KEYS.CURRENT_APPLICATION_ID)
           localStorage.removeItem('current_application_id')
         }
 
-        if (axiosError.response?.status === 400) {
-          const message = axiosError.response?.data?.message || ''
+        if (apiError.response?.status === 400) {
+          const message = apiError.response?.data?.message || ''
           if (message.includes('cannot be modified') || message.includes('current status')) {
             log.warn('Application cannot be modified (400). Clearing stale state...')
             currentApplication.value = null

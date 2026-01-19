@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AppButton } from '@/components/common'
 import AdminDocumentGallery from '@/components/admin/AdminDocumentGallery.vue'
@@ -1633,6 +1633,13 @@ const handleViewTimelineDetails = (event: Application['timeline'][0]) => {
   selectedTimelineEvent.value = event
   showMetadataModal.value = true
 }
+
+// Cleanup: revoke object URLs to prevent memory leaks
+onUnmounted(() => {
+  if (selfieUrl.value) {
+    URL.revokeObjectURL(selfieUrl.value)
+  }
+})
 </script>
 
 <template>

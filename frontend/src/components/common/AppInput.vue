@@ -15,6 +15,10 @@ interface Props {
   uppercase?: boolean
   prefix?: string
   suffix?: string
+  // Accessibility
+  id?: string
+  ariaLabel?: string
+  ariaDescribedby?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -33,6 +37,11 @@ const emit = defineEmits<{
 
 const inputRef = ref<HTMLInputElement | null>(null)
 const isFocused = ref(false)
+
+// Generate unique ID for accessibility
+const inputId = computed(() => props.id || `input-${Math.random().toString(36).slice(2, 9)}`)
+const errorId = computed(() => `${inputId.value}-error`)
+const hintId = computed(() => `${inputId.value}-hint`)
 
 const inputClasses = computed(() => {
   const base = 'w-full px-4 py-3 border-2 rounded-xl transition-colors duration-200 focus:outline-none'
@@ -80,9 +89,14 @@ defineExpose({ focus })
 <template>
   <div class="w-full">
     <!-- Label -->
-    <label v-if="label" class="block text-sm font-medium text-gray-700 mb-1">
+    <label
+      v-if="label"
+      :for="inputId"
+      class="block text-sm font-medium text-gray-700 mb-1"
+    >
       {{ label }}
-      <span v-if="required" class="text-red-500">*</span>
+      <span v-if="required" class="text-red-500" aria-hidden="true">*</span>
+      <span v-if="required" class="sr-only">(required)</span>
     </label>
 
     <!-- Input wrapper -->
@@ -97,6 +111,7 @@ defineExpose({ focus })
 
       <!-- Input -->
       <input
+        :id="inputId"
         ref="inputRef"
         :type="type"
         :value="modelValue"
@@ -104,6 +119,11 @@ defineExpose({ focus })
         :disabled="disabled"
         :readonly="readonly"
         :maxlength="maxlength"
+        :required="required"
+        :aria-label="ariaLabel || undefined"
+        :aria-required="required || undefined"
+        :aria-invalid="error ? 'true' : undefined"
+        :aria-describedby="error ? errorId : hint ? hintId : ariaDescribedby || undefined"
         :class="[inputClasses, prefix ? 'pl-12' : '', suffix ? 'pr-12' : '']"
         @input="handleInput"
         @focus="handleFocus"
@@ -134,12 +154,12 @@ defineExpose({ focus })
     </div>
 
     <!-- Error message -->
-    <p v-if="error" class="mt-1 text-sm text-red-600">
+    <p v-if="error" :id="errorId" class="mt-1 text-sm text-red-600" role="alert">
       {{ error }}
     </p>
 
     <!-- Hint -->
-    <p v-else-if="hint" class="mt-1 text-sm text-gray-500">
+    <p v-else-if="hint" :id="hintId" class="mt-1 text-sm text-gray-500">
       {{ hint }}
     </p>
   </div>

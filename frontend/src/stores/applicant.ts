@@ -320,6 +320,7 @@ export const useApplicantStore = defineStore('applicant', () => {
           type: imageResponse.headers['content-type'] || 'image/jpeg'
         })
         const isVerified = selfieDoc.status === 'APPROVED'
+        // NOTE: Caller is responsible for calling URL.revokeObjectURL when done
         return { url: URL.createObjectURL(blob), isVerified }
       }
       return { url: null, isVerified: false }

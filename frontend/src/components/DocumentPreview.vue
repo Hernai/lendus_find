@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { api } from '@/services/api'
 import ImageViewer from './ImageViewer.vue'
 
@@ -121,6 +121,13 @@ const openPreview = async () => {
 const handleReplace = () => {
   emit('replace', props.document.id)
 }
+
+// Cleanup: revoke object URL to prevent memory leak
+onUnmounted(() => {
+  if (imageUrl.value) {
+    URL.revokeObjectURL(imageUrl.value)
+  }
+})
 </script>
 
 <template>

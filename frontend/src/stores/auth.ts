@@ -12,6 +12,34 @@ const authLogger = logger.child('Auth')
 // Flag to use V2 API (can be toggled for gradual migration)
 const USE_V2_API = true
 
+/**
+ * Legacy storage migration helper.
+ * Reads from new storage utility first, falls back to old localStorage key.
+ * TODO: Remove this after migration period (all users have migrated to new storage keys)
+ */
+function getWithLegacyFallback<T>(storageKey: string, legacyKey: string): T | null {
+  const value = storage.get<T>(storageKey)
+  if (value !== null) return value
+
+  // Fallback to legacy localStorage key
+  const legacyValue = localStorage.getItem(legacyKey)
+  if (legacyValue) {
+    // Migrate to new storage
+    try {
+      const parsed = JSON.parse(legacyValue) as T
+      storage.set(storageKey, parsed)
+      localStorage.removeItem(legacyKey)
+      return parsed
+    } catch {
+      // Simple string value
+      storage.set(storageKey, legacyValue as T)
+      localStorage.removeItem(legacyKey)
+      return legacyValue as T
+    }
+  }
+  return null
+}
+
 interface RequestOtpApiResponse {
   success: boolean
   message: string
@@ -95,7 +123,8 @@ interface MeApiResponse {
 export const useAuthStore = defineStore('auth', () => {
   // State
   const user = ref<User | null>(null)
-  const token = ref<string | null>(storage.get<string>(STORAGE_KEYS.AUTH_TOKEN) || localStorage.getItem('auth_token'))
+  // Use storage utility consistently - no fallback to raw localStorage
+  const token = ref<string | null>(storage.get<string>(STORAGE_KEYS.AUTH_TOKEN))
   const isLoading = ref(false)
   const otpDestination = ref<string | null>(null)
   const otpMethod = ref<OtpMethod | null>(null)
@@ -113,7 +142,8 @@ export const useAuthStore = defineStore('auth', () => {
   const permissions = ref<UserPermissions | null>(null)
 
   // Super admin tenant switching
-  const selectedTenantId = ref<string | null>(storage.get<string>(STORAGE_KEYS.CURRENT_TENANT_ID) || localStorage.getItem('selected_tenant_id'))
+  // Use storage utility consistently - no fallback to raw localStorage
+  const selectedTenantId = ref<string | null>(storage.get<string>(STORAGE_KEYS.CURRENT_TENANT_ID))
 
   // Getters
   const isAuthenticated = computed(() => !!token.value && !!user.value)
@@ -246,7 +276,7 @@ export const useAuthStore = defineStore('auth', () => {
           const apiUser = authData.user as import('@/types/v2').V2ApplicantUser
 
           // Check if user changed (different user_id)
-          const previousUserId = storage.get<string>(STORAGE_KEYS.CURRENT_USER_ID) || localStorage.getItem('current_user_id')
+          const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
           if (previousUserId && previousUserId !== apiUser.id) {
             authLogger.info('User changed, clearing onboarding cache')
             clearOnboardingCache()
@@ -305,7 +335,7 @@ export const useAuthStore = defineStore('auth', () => {
         const apiUser = response.data.user
 
         // Check if user changed (different user_id)
-        const previousUserId = storage.get<string>(STORAGE_KEYS.CURRENT_USER_ID) || localStorage.getItem('current_user_id')
+        const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
         if (previousUserId && previousUserId !== apiUser.id) {
           authLogger.info('User changed, clearing onboarding cache')
           clearOnboardingCache()
@@ -439,7 +469,7 @@ export const useAuthStore = defineStore('auth', () => {
         : mapUserType(apiUser.type, apiUser.is_admin)
 
       // Check if user changed (different user_id)
-      const previousUserId = storage.get<string>(STORAGE_KEYS.CURRENT_USER_ID) || localStorage.getItem('current_user_id')
+      const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
       if (previousUserId && previousUserId !== apiUser.id) {
         authLogger.info('User changed on checkAuth, clearing onboarding cache')
         clearOnboardingCache()
@@ -561,7 +591,7 @@ export const useAuthStore = defineStore('auth', () => {
           authLogger.debug('loginWithPin V2 user', { userId: apiUser.id })
 
           // Check if user changed (different user_id)
-          const previousUserId = storage.get<string>(STORAGE_KEYS.CURRENT_USER_ID) || localStorage.getItem('current_user_id')
+          const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
           if (previousUserId && previousUserId !== apiUser.id) {
             authLogger.info('User changed, clearing onboarding cache')
             clearOnboardingCache()
@@ -606,7 +636,7 @@ export const useAuthStore = defineStore('auth', () => {
         authLogger.debug('loginWithPin user', { userId: apiUser.id, type: apiUser.type })
 
         // Check if user changed (different user_id)
-        const previousUserId = storage.get<string>(STORAGE_KEYS.CURRENT_USER_ID) || localStorage.getItem('current_user_id')
+        const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
         if (previousUserId && previousUserId !== apiUser.id) {
           authLogger.info('User changed, clearing onboarding cache')
           clearOnboardingCache()
@@ -767,7 +797,7 @@ export const useAuthStore = defineStore('auth', () => {
           const apiUser = apiResponse.user
 
           // Check if user changed (different user_id)
-          const previousUserId = storage.get<string>(STORAGE_KEYS.CURRENT_USER_ID) || localStorage.getItem('current_user_id')
+          const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
           if (previousUserId && previousUserId !== apiUser.id) {
             authLogger.info('User changed, clearing onboarding cache')
             clearOnboardingCache()
@@ -809,7 +839,7 @@ export const useAuthStore = defineStore('auth', () => {
         const apiUser = response.data.user
 
         // Check if user changed (different user_id)
-        const previousUserId = storage.get<string>(STORAGE_KEYS.CURRENT_USER_ID) || localStorage.getItem('current_user_id')
+        const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
         if (previousUserId && previousUserId !== apiUser.id) {
           authLogger.info('User changed, clearing onboarding cache')
           clearOnboardingCache()
@@ -878,7 +908,7 @@ export const useAuthStore = defineStore('auth', () => {
         const apiUser = response.data.user
 
         // Check if user changed (different user_id)
-        const previousUserId = storage.get<string>(STORAGE_KEYS.CURRENT_USER_ID) || localStorage.getItem('current_user_id')
+        const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
         if (previousUserId && previousUserId !== apiUser.id) {
           authLogger.info('User changed, clearing onboarding cache')
           clearOnboardingCache()
