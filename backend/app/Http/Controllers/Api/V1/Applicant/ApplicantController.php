@@ -273,7 +273,7 @@ class ApplicantController extends Controller
      */
     public function updateBankAccount(Request $request): JsonResponse
     {
-        return $this->updateBankInfo($request);
+        return app(BankAccountController::class)->updatePrimary($request);
     }
 
     /**
