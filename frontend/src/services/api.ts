@@ -18,7 +18,10 @@ const getTenantSlug = (): string => {
   // This prevents login issues when the override points to a different tenant
   const authToken = storage.get<string>(STORAGE_KEYS.AUTH_TOKEN) || localStorage.getItem('auth_token')
   if (authToken) {
-    const selectedTenantId = storage.get<string>(STORAGE_KEYS.SELECTED_TENANT_ID) || localStorage.getItem('selected_tenant_id')
+    // Check both keys - CURRENT_TENANT_ID is used by auth store, SELECTED_TENANT_ID is legacy
+    const selectedTenantId = storage.get<string>(STORAGE_KEYS.CURRENT_TENANT_ID)
+      || storage.get<string>(STORAGE_KEYS.SELECTED_TENANT_ID)
+      || localStorage.getItem('selected_tenant_id')
     if (selectedTenantId) {
       return selectedTenantId
     }

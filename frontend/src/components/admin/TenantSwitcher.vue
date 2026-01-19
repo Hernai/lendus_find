@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
 import { useAuthStore, useTenantStore } from '@/stores'
 
 interface Tenant {
@@ -38,8 +38,8 @@ const loadTenants = async () => {
 
   isLoading.value = true
   try {
-    const response = await api.get<{ data: Tenant[] }>('/admin/tenants')
-    tenants.value = response.data.data.filter(t => t.is_active)
+    const response = await v2.staff.tenant.list({ is_active: true })
+    tenants.value = response.data || []
   } catch (error) {
     console.error('Failed to load tenants:', error)
   } finally {
