@@ -5,6 +5,9 @@ import { useOnboardingStore, useApplicationStore, useAuthStore } from '@/stores'
 import { AppButton, AppSignaturePad } from '@/components/common'
 import { api } from '@/services/api'
 import { type AxiosErrorResponse } from '@/types/api'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('Step8Review')
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
@@ -74,7 +77,7 @@ const handleSubmit = async () => {
     await api.post('/applicant/signature', {
       signature: signature.value
     })
-    console.log('✅ Signature saved to applicant')
+    log.debug('Signature saved to applicant')
 
     // KYC verifications are now automatically recorded by the backend
     // when CURP/INE validation succeeds - no need to call recordVerifications
@@ -104,7 +107,7 @@ const handleSubmit = async () => {
       error.value = 'Error al enviar la solicitud. Intenta de nuevo.'
     }
   } catch (e: unknown) {
-    console.error('Failed to submit application:', e)
+    log.error('Failed to submit application', { error: e })
     // Show detailed error if available
     const axiosErr = e as AxiosErrorResponse
     const errorMsg = axiosErr.response?.data?.message || axiosErr.response?.data?.errors

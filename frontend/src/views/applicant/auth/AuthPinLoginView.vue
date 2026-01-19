@@ -3,6 +3,9 @@ import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore, useTenantStore } from '@/stores'
 import { AppButton } from '@/components/common'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('AuthPinLoginView')
 
 const router = useRouter()
 const route = useRoute()
@@ -44,14 +47,11 @@ const handleDelete = () => {
 const handleSubmit = async () => {
   if (pin.value.length !== 4) return
 
-  console.log('🔐 PIN Login - Phone from query:', phone.value)
-  console.log('🔐 PIN Login - Route query:', route.query)
-  console.log('🔐 PIN Login - Current user before login:', authStore.user)
+  log.debug('PIN Login attempt', { phone: phone.value, query: route.query, userBefore: authStore.user })
 
   const result = await authStore.loginWithPin(phone.value, pin.value)
 
-  console.log('🔐 PIN Login result:', result)
-  console.log('🔐 Current user after login:', authStore.user)
+  log.debug('PIN Login result', { result, userAfter: authStore.user })
 
   if (result.success) {
     // Check auth state to see if user has completed registration

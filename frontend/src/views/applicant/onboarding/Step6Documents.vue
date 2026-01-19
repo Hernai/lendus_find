@@ -4,7 +4,10 @@ import { useRouter } from 'vue-router'
 import { useOnboardingStore, useApplicationStore, useTenantStore, useKycStore } from '@/stores'
 import { AppButton } from '@/components/common'
 import { api } from '@/services/api'
+import { logger } from '@/utils/logger'
 import type { Product } from '@/types'
+
+const log = logger.child('Step6Documents')
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
@@ -149,7 +152,7 @@ const initDocuments = () => {
 const uploadKycDocuments = async () => {
   const applicationId = applicationStore.currentApplication?.id
   if (!applicationId) {
-    console.warn('No application ID for KYC document upload')
+    log.warn('No application ID for KYC document upload')
     return
   }
 
@@ -173,7 +176,7 @@ const uploadKycDocuments = async () => {
 
     // Only upload if it's a KYC document that hasn't been uploaded yet
     if (doc.status === 'uploaded') {
-      console.log(`⏭️ Skipping ${type} - already uploaded`)
+      log.debug('Skipping already uploaded document', { type })
       continue
     }
 
@@ -231,9 +234,9 @@ const uploadKycDocuments = async () => {
 
       doc.status = 'uploaded'
       doc.fromKyc = true
-      console.log(`✅ KYC document ${type} uploaded with metadata - will be auto-approved`)
+      log.debug('KYC document uploaded with metadata - will be auto-approved', { type })
     } catch (e: unknown) {
-      console.error(`Error uploading KYC document ${type}:`, e)
+      log.error('Error uploading KYC document', { type, error: e })
       // Don't mark as error - user can still upload manually
       doc.status = 'pending'
       doc.fromKyc = false
@@ -318,7 +321,7 @@ const handleFileSelect = async (doc: DocumentUpload, event: Event) => {
     await api.post(`/applications/${applicationId}/documents`, formData)
     doc.status = 'uploaded'
   } catch (e: unknown) {
-    console.error('Error uploading document:', e)
+    log.error('Error uploading document', { error: e })
     doc.status = 'error'
     const errorObj = e as { response?: { data?: { message?: string } } }
     error.value = errorObj.response?.data?.message || 'Error al subir el archivo. Intenta de nuevo.'
@@ -350,7 +353,7 @@ const handleSubmit = async () => {
     await onboardingStore.completeStep(6)
     router.push('/solicitud/paso-7')
   } catch (e) {
-    console.error('Failed to save step 6:', e)
+    log.error('Failed to save step 6', { error: e })
     error.value = 'Error al guardar. Intenta de nuevo.'
   }
 }

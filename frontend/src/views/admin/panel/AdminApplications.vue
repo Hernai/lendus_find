@@ -7,6 +7,7 @@ import { AppButton, AppConfirmModal } from '@/components/common'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables'
 import { logger } from '@/utils/logger'
+import { formatMoney, formatMoneyShort, formatDateOnly, formatDateShort, formatTimeOnly, formatPhone } from '@/utils/formatters'
 
 const log = logger.child('AdminApplications')
 const toast = useToast()
@@ -298,55 +299,6 @@ watch([statusFilter, searchQuery, assignmentFilter, productFilter, staleFilter, 
 watch(currentPage, () => {
   fetchApplications()
 })
-
-// Formatters
-const formatMoney = (amount: number) => {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 0
-  }).format(amount)
-}
-
-const formatMoneyShort = (amount: number) => {
-  if (amount >= 1000000) {
-    return `$${(amount / 1000000).toFixed(1)}M`
-  } else if (amount >= 1000) {
-    return `$${(amount / 1000).toFixed(0)}K`
-  }
-  return `$${amount}`
-}
-
-const formatDateOnly = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('es-MX', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
-  })
-}
-
-const formatTimeOnly = (dateStr: string) => {
-  return new Date(dateStr).toLocaleTimeString('es-MX', {
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
-const formatDateShort = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('es-MX', {
-    day: 'numeric',
-    month: 'short'
-  })
-}
-
-const formatPhone = (phone: string | undefined | null): string => {
-  if (!phone) return '-'
-  const digits = phone.replace(/\D/g, '')
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
-  }
-  return phone
-}
 
 const getInactivityInfo = (app: Application) => {
   const updatedAt = new Date(app.updated_at)

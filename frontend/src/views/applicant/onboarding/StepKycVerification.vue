@@ -7,6 +7,9 @@ import { AppButton } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
 import IneCapture from '@/components/kyc/IneCapture.vue'
 import SelfieCapture from '@/components/kyc/SelfieCapture.vue'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('StepKycVerification')
 
 const router = useRouter()
 const kycStore = useKycStore()
@@ -32,12 +35,14 @@ const {
 // Debug: watch allPassed and requiresSelfie in dev mode
 if (import.meta.env.DEV) {
   watchEffect(() => {
-    console.log('[StepKYC Watch] allPassed:', allPassed.value)
-    console.log('[StepKYC Watch] isComplete:', isComplete.value)
-    console.log('[StepKYC Watch] requiresSelfie:', requiresSelfie.value)
-    console.log('[StepKYC Watch] selectedProduct:', applicationStore.selectedProduct?.name)
-    console.log('[StepKYC Watch] required_documents:', applicationStore.selectedProduct?.required_documents)
-    console.log('[StepKYC Watch] validationSteps:', validationSteps.value.map(s => `${s.key}:${s.status}`).join(', '))
+    log.debug('KYC state changed', {
+      allPassed: allPassed.value,
+      isComplete: isComplete.value,
+      requiresSelfie: requiresSelfie.value,
+      selectedProduct: applicationStore.selectedProduct?.name,
+      required_documents: applicationStore.selectedProduct?.required_documents,
+      validationSteps: validationSteps.value.map(s => `${s.key}:${s.status}`).join(', ')
+    })
   })
 }
 
@@ -53,7 +58,7 @@ onMounted(async () => {
     // Load applicant if exists (for returning users starting a new application)
     // This is needed so that KYC verifications can be properly associated with the applicant
     await applicantStore.loadApplicant()
-    console.log('[StepKYC] Applicant loaded:', applicantStore.applicant?.id || 'none')
+    log.debug('Applicant loaded', { applicantId: applicantStore.applicant?.id || 'none' })
 
     // Load tenant config to get products
     await tenantStore.loadConfig()
@@ -66,12 +71,11 @@ onMounted(async () => {
         const params = JSON.parse(pendingApp) as { product_id: string }
         const product = tenantStore.products.find(p => p.id === params.product_id)
         if (product) {
-          console.log('[StepKYC] Setting product from pending_application:', product.name)
-          console.log('[StepKYC] Product required_documents:', product.required_documents)
+          log.debug('Setting product from pending_application', { productName: product.name, required_documents: product.required_documents })
           applicationStore.setSelectedProduct(product)
         }
       } catch (e) {
-        console.error('[StepKYC] Failed to parse pending_application:', e)
+        log.error('Failed to parse pending_application', { error: e })
       }
     }
 
@@ -80,19 +84,19 @@ onMounted(async () => {
 
     if (!hasNubarium) {
       // Nubarium not configured - skip to regular flow
-      console.log('ℹ️ Nubarium not configured, skipping KYC step')
+      log.info('Nubarium not configured, skipping KYC step')
       router.replace('/solicitud/paso-1')
       return
     }
 
     // Check if already verified in this session
     if (kycStore.verified && kycStore.lockedData.curp) {
-      console.log('✅ KYC already verified, skipping to step 1')
+      log.debug('KYC already verified, skipping to step 1')
       router.replace('/solicitud/paso-1')
       return
     }
   } catch (err) {
-    console.error('Failed to check KYC services:', err)
+    log.error('Failed to check KYC services', { error: err })
     // On error, continue to regular flow
     router.replace('/solicitud/paso-1')
   } finally {
@@ -145,15 +149,13 @@ const startValidation = async () => {
 
   try {
     const success = await runValidations()
-    console.log('[StepKYC] runValidations returned:', success)
-    console.log('[StepKYC] allPassed:', allPassed.value)
-    console.log('[StepKYC] validationSteps:', validationSteps.value)
+    log.debug('runValidations returned', { success, allPassed: allPassed.value, validationSteps: validationSteps.value })
   } catch (err) {
-    console.error('[StepKYC] Validation error:', err)
+    log.error('Validation error', { error: err })
   }
 
   // Always go to result step to show what happened
-  console.log('[StepKYC] Going to result step')
+  log.debug('Going to result step')
   goToStep('result')
 }
 

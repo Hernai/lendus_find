@@ -3,6 +3,9 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApplicationStore } from '@/stores'
 import { AppButton, AppProgressBar } from '@/components/common'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('ApplicationStatusView')
 
 const route = useRoute()
 const router = useRouter()
@@ -113,7 +116,7 @@ onMounted(async () => {
   try {
     await applicationStore.loadApplication(applicationId.value)
   } catch (e) {
-    console.error('Failed to load application:', e)
+    log.error('Failed to load application', { error: e })
   } finally {
     isLoading.value = false
   }

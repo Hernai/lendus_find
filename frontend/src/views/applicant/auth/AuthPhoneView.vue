@@ -3,7 +3,10 @@ import { ref, computed, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore, useTenantStore } from '@/stores'
 import { AppButton, AppInput } from '@/components/common'
+import { logger } from '@/utils/logger'
 import type { OtpMethod } from '@/types'
+
+const log = logger.child('AuthPhoneView')
 
 const router = useRouter()
 const route = useRoute()
@@ -79,10 +82,7 @@ const handleSubmit = async () => {
           error.value = `Cuenta bloqueada. Intenta en ${userCheck.lockout_minutes} minutos o usa código OTP.`
         } else {
           // Redirect to PIN login
-          console.log('🔐 AuthPhoneView - Redirecting to PIN login')
-          console.log('🔐 AuthPhoneView - Raw phone:', phone.value)
-          console.log('🔐 AuthPhoneView - Clean phone:', cleanPhone)
-          console.log('🔐 AuthPhoneView - User check result:', userCheck)
+          log.debug('Redirecting to PIN login', { rawPhone: phone.value, cleanPhone, userCheck })
 
           if (tenantSlug) {
             router.push({

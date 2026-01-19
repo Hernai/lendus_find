@@ -1,12 +1,18 @@
 <script setup lang="ts">
 interface TimelineEvent {
   id: string
+  action: string
   description: string
   author: string
   created_at: string
   metadata?: {
     ip_address?: string
     user_agent?: string
+    location?: string
+    old_value?: string
+    new_value?: string
+    changes?: Record<string, string>
+    reason?: string
     [key: string]: unknown
   }
 }

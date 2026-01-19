@@ -1,4 +1,7 @@
 import { ref, onUnmounted } from 'vue'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('DeviceCapture')
 
 export interface CaptureOptions {
   /** Camera facing mode: 'user' for selfie, 'environment' for documents */
@@ -110,7 +113,7 @@ export function useDeviceCapture(options: CaptureOptions = {}): UseCaptureReturn
       isWebcamActive.value = true
       return true
     } catch (err) {
-      console.error('Failed to start webcam:', err)
+      log.error('Failed to start webcam:', err)
 
       if (err instanceof Error) {
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
@@ -186,7 +189,7 @@ export function useDeviceCapture(options: CaptureOptions = {}): UseCaptureReturn
       // Return just the base64 data (without data:image/jpeg;base64, prefix)
       return base64.split(',')[1] || null
     } catch (err) {
-      console.error('Failed to capture from webcam:', err)
+      log.error('Failed to capture from webcam:', err)
       error.value = 'Error al capturar la imagen'
       return null
     }
@@ -270,7 +273,7 @@ export function useDeviceCapture(options: CaptureOptions = {}): UseCaptureReturn
       const base64 = await imageToBase64(file)
       return base64
     } catch (err) {
-      console.error('Failed to process file:', err)
+      log.error('Failed to process file:', err)
       error.value = 'Error al procesar la imagen'
       return null
     } finally {

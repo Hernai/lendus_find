@@ -3,6 +3,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore, useTenantStore } from '@/stores'
 import { AppButton, AppOtpInput } from '@/components/common'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('AuthOtpView')
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -112,7 +115,7 @@ const handleOtpComplete = async (code: string) => {
       otpCode.value = ''
     }
   } catch (e) {
-    console.error('OTP verification error:', e)
+    log.error('OTP verification error', { error: e })
     error.value = 'Error al verificar el código. Intenta de nuevo.'
     otpCode.value = ''
   }

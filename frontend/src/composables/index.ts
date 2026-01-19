@@ -38,6 +38,11 @@ export { useDeviceCapture } from './useDeviceCapture'
 
 // KYC
 export { useKycValidation } from './useKycValidation'
+export { useKycBiometrics, type BiometricTokenData, type FaceMatchResult, type LivenessResult } from './useKycBiometrics'
+export { useKycCompliance, type ComplianceMatch, type ComplianceResult } from './useKycCompliance'
 
 // Toast notifications
 export { useToast, useToastState, type Toast, type ToastType, type ToastOptions } from './useToast'
+
+// Modal management
+export { useModal, useConfirmModal, type UseModalOptions, type UseModalReturn, type UseConfirmModalReturn } from './useModal'

@@ -384,6 +384,16 @@ export type V2ApplicationStatus =
   | 'CANCELLED'
   | 'SYNCED'
 
+export interface V2FieldVerification {
+  status: string
+  verified: boolean
+  method: string | null
+  rejection_reason: string | null
+  notes: string | null
+  verified_at: string | null
+  verified_by: string | null
+}
+
 export interface V2Application {
   id: string
   tenant_id: string
@@ -421,6 +431,8 @@ export interface V2Application {
   notes?: V2ApplicationNote[]
   // Pending documents for applicant view
   pending_documents?: V2PendingDocument[]
+  // Field-level verifications
+  field_verifications?: Record<string, V2FieldVerification>
 }
 
 export interface V2PendingDocument {
@@ -444,10 +456,16 @@ export interface V2CounterOffer {
 }
 
 export interface V2StatusHistoryEntry {
-  status: V2ApplicationStatus
-  reason: string | null
-  changed_by: string | null
-  timestamp: string
+  // New format from backend
+  from_status?: string | null
+  to_status?: string | null
+  notes?: string | null
+  created_at?: string
+  // Legacy format (kept for backwards compatibility)
+  status?: V2ApplicationStatus
+  reason?: string | null
+  changed_by?: string | null
+  timestamp?: string
 }
 
 export interface V2ApplicationCreatePayload {

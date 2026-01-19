@@ -175,7 +175,7 @@ const confirm = () => {
 
   emit('confirm', {
     selectValue: selectValue.value || undefined,
-    comment: comment.value || undefined
+    comment: comment.value?.trim() || undefined
   })
 }
 </script>
@@ -280,7 +280,7 @@ const confirm = () => {
               {{ cancelText }}
             </button>
             <button
-              class="flex-1 px-4 py-2 text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+              class="flex-1 px-4 py-2 text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               :class="confirmBtnClass"
               :disabled="loading || !isValid"
               @click="confirm"

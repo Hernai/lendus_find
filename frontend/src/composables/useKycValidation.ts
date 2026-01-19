@@ -3,6 +3,9 @@ import { useKycStore } from '@/stores/kyc'
 import { useApplicantStore } from '@/stores/applicant'
 import { useApplicationStore } from '@/stores/application'
 import { storeToRefs } from 'pinia'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('KYC:Validation')
 
 export type KycStep = 'ine-front' | 'ine-back' | 'selfie' | 'validating' | 'result'
 
@@ -68,7 +71,7 @@ export function useKycValidation(): UseKycValidationReturn {
     // Check if product requires selfie in required_documents or required_docs
     // Backend may send either field name depending on the endpoint
     const requiredDocs = product.required_documents || product.required_docs || []
-    console.log('[KYC] Checking requiresSelfie - requiredDocs:', requiredDocs)
+    log.debug('[KYC] Checking requiresSelfie - requiredDocs:', requiredDocs)
 
     return requiredDocs.some((doc) => {
       // Handle both string and object formats
@@ -206,7 +209,7 @@ export function useKycValidation(): UseKycValidationReturn {
    * Run all KYC validations sequentially
    */
   const runValidations = async (): Promise<boolean> => {
-    console.log('[KYC] Starting runValidations...')
+    log.debug('[KYC] Starting runValidations...')
 
     if (!ineFrontImage.value) {
       validationMessages.value.ine_ocr = 'Falta la imagen frontal del INE'
@@ -228,14 +231,14 @@ export function useKycValidation(): UseKycValidationReturn {
     try {
       // Get applicant_id for auto-recording verifications
       const applicantId = applicantStore.applicant?.id
-      console.log('[KYC] Applicant ID for auto-recording:', applicantId)
+      log.debug('[KYC] Applicant ID for auto-recording:', applicantId)
 
       // Step 1: Validate INE (OCR + Lista Nominal)
-      console.log('[KYC] Step 1: Validating INE...')
+      log.debug('[KYC] Step 1: Validating INE...')
       validationProgress.value.ine_ocr = 'in_progress'
 
       const ineValid = await kycStore.validateIne(applicantId)
-      console.log('[KYC] INE validation result:', ineValid, validations.value.ine_ocr)
+      log.debug('[KYC] INE validation result:', ineValid, validations.value.ine_ocr)
 
       if (validations.value.ine_ocr?.success) {
         validationProgress.value.ine_ocr = 'success'
@@ -247,7 +250,7 @@ export function useKycValidation(): UseKycValidationReturn {
       }
 
       // Check lista nominal result
-      console.log('[KYC] Step 1b: Checking lista nominal...')
+      log.debug('[KYC] Step 1b: Checking lista nominal...')
       validationProgress.value.ine_lista_nominal = 'in_progress'
       await new Promise(resolve => setTimeout(resolve, 500)) // Small delay for UX
 
@@ -262,12 +265,12 @@ export function useKycValidation(): UseKycValidationReturn {
       }
 
       // Step 2: Validate CURP with RENAPO
-      console.log('[KYC] Step 2: Validating CURP...', lockedData.value.curp)
+      log.debug('[KYC] Step 2: Validating CURP...', lockedData.value.curp)
       if (lockedData.value.curp) {
         validationProgress.value.curp_renapo = 'in_progress'
 
         const curpValid = await kycStore.validateCurp(undefined, applicantId)
-        console.log('[KYC] CURP validation result:', curpValid)
+        log.debug('[KYC] CURP validation result:', curpValid)
 
         if (curpValid) {
           validationProgress.value.curp_renapo = 'success'
@@ -284,11 +287,11 @@ export function useKycValidation(): UseKycValidationReturn {
       // Step 3: Face Match (if selfie is required)
       // Compares selfie with INE photo to verify identity
       if (requiresSelfie.value && selfieImage.value) {
-        console.log('[KYC] Step 3: Validating face match...')
+        log.debug('[KYC] Step 3: Validating face match...')
         validationProgress.value.face_match = 'in_progress'
 
         const faceMatchValid = await kycStore.validateFaceMatch(applicantId)
-        console.log('[KYC] Face match result:', faceMatchValid)
+        log.debug('[KYC] Face match result:', faceMatchValid)
 
         if (faceMatchValid) {
           validationProgress.value.face_match = 'success'
@@ -308,11 +311,11 @@ export function useKycValidation(): UseKycValidationReturn {
 
       // Step 4: Check PLD (Mexican blacklists - PGR, PGJ, PEPs, SAT, etc.)
       // PLD is NON-BLOCKING - shows warning for review but doesn't fail validation
-      console.log('[KYC] Step 4: Checking PLD blacklists...')
+      log.debug('[KYC] Step 4: Checking PLD blacklists...')
       validationProgress.value.pld = 'in_progress'
 
       const pldClear = await kycStore.checkPldBlacklists()
-      console.log('[KYC] PLD check result:', pldClear)
+      log.debug('[KYC] PLD check result:', pldClear)
 
       if (pldClear) {
         validationProgress.value.pld = 'success'
@@ -325,11 +328,11 @@ export function useKycValidation(): UseKycValidationReturn {
 
       // Step 5: Check OFAC (International sanctions - US OFAC, UN)
       // OFAC is NON-BLOCKING - shows warning for review but doesn't fail validation
-      console.log('[KYC] Step 5: Checking OFAC...')
+      log.debug('[KYC] Step 5: Checking OFAC...')
       validationProgress.value.ofac = 'in_progress'
 
       const ofacClear = await kycStore.checkOfac()
-      console.log('[KYC] OFAC check result:', ofacClear)
+      log.debug('[KYC] OFAC check result:', ofacClear)
 
       if (ofacClear) {
         validationProgress.value.ofac = 'success'
@@ -349,16 +352,16 @@ export function useKycValidation(): UseKycValidationReturn {
         validationProgress.value.curp_renapo === 'success' &&
         faceMatchPassed
 
-      console.log('[KYC] Critical passed:', criticalPassed, 'ine_ocr:', validationProgress.value.ine_ocr, 'curp:', validationProgress.value.curp_renapo, 'face_match:', validationProgress.value.face_match)
+      log.debug('[KYC] Critical passed:', criticalPassed, 'ine_ocr:', validationProgress.value.ine_ocr, 'curp:', validationProgress.value.curp_renapo, 'face_match:', validationProgress.value.face_match)
 
       if (criticalPassed) {
         kycStore.markVerified()
       }
 
-      console.log('[KYC] Final validation progress:', JSON.stringify(validationProgress.value))
+      log.debug('[KYC] Final validation progress:', JSON.stringify(validationProgress.value))
       return criticalPassed
     } catch (err) {
-      console.error('[KYC] Validation error:', err)
+      log.error('[KYC] Validation error:', err)
       return false
     }
   }

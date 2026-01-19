@@ -5,6 +5,9 @@ import { useOnboardingStore, useApplicationStore, useTenantStore } from '@/store
 import { AppButton, AppInput, AppSelect } from '@/components/common'
 import { api } from '@/services/api'
 import { getErrorMessage } from '@/types/api'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('Step7References')
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
@@ -197,7 +200,7 @@ const handleSubmit = async () => {
 
     router.push('/solicitud/paso-8')
   } catch (e: unknown) {
-    console.error('Failed to save step 7:', e)
+    log.error('Failed to save step 7', { error: e })
     errors['general'] = getErrorMessage(e, 'Error al guardar las referencias')
   } finally {
     isSaving.value = false

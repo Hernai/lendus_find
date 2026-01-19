@@ -14,6 +14,7 @@ import TenantBrandingEditor, { type Branding } from '@/components/admin/TenantBr
 import { useToast } from '@/composables'
 import { getErrorMessage } from '@/types/api'
 import { logger } from '@/utils/logger'
+import { formatDate } from '@/utils/formatters'
 
 const log = logger.child('AdminTenants')
 const toast = useToast()
@@ -455,16 +456,6 @@ const deleteTenant = async () => {
   } finally {
     isDeleting.value = false
   }
-}
-
-// Helpers
-const formatDate = (dateStr: string | null | undefined) => {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('es-MX', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
 }
 
 // Adjust color brightness (positive = lighter, negative = darker)

@@ -5,6 +5,7 @@ import { v2 } from '@/services/v2'
 import type { V2BoardData, V2BoardItem, V2BoardColumn } from '@/services/v2/application.staff.service'
 import type { V2ApplicationStatistics } from '@/types/v2'
 import { logger } from '@/utils/logger'
+import { formatMoney, formatTimeAgo } from '@/utils/formatters'
 
 const log = logger.child('AdminDashboard')
 const router = useRouter()
@@ -56,28 +57,6 @@ onMounted(() => {
 // Get column config
 const getColumnConfig = (status: string) => {
   return columnColors[status] || { color: 'gray', title: status }
-}
-
-const formatMoney = (amount: number) => {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 0
-  }).format(amount)
-}
-
-const formatTimeAgo = (dateStr: string | null) => {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-
-  if (diffMins < 60) return `Hace ${diffMins} min`
-  if (diffHours < 24) return `Hace ${diffHours}h`
-  return `Hace ${diffDays}d`
 }
 
 const getColumnColor = (color: string) => {

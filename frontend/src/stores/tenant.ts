@@ -2,7 +2,10 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/services/api'
 import { detectTenantSlug } from '@/utils/tenant'
+import { logger } from '@/utils/logger'
 import type { Tenant, Product } from '@/types'
+
+const log = logger.child('TenantStore')
 
 /** Option for select/dropdown components */
 interface Option {
@@ -174,13 +177,13 @@ export const useTenantStore = defineStore('tenant', () => {
 
     // If tenant changed, reset first
     if (isLoaded.value && tenantSlug && tenant.value?.slug !== tenantSlug) {
-      console.log('[TenantStore] URL tenant changed from', tenant.value?.slug, 'to', tenantSlug, '- reloading')
+      log.debug(' URL tenant changed from', tenant.value?.slug, 'to', tenantSlug, '- reloading')
       reset()
     }
 
     // No tenant in URL - fail gracefully (user should go to /find)
     if (!tenantSlug) {
-      console.log('[TenantStore] No tenant detected')
+      log.debug(' No tenant detected')
       loadFailed.value = true
       isLoaded.value = true
       return
@@ -191,14 +194,14 @@ export const useTenantStore = defineStore('tenant', () => {
     loadFailed.value = false
 
     try {
-      console.log('[TenantStore] Loading config for tenant:', tenantSlug)
+      log.debug(' Loading config for tenant:', tenantSlug)
       const response = await api.get<TenantConfigResponse>('/config')
       tenant.value = response.data.tenant
       products.value = response.data.products
       options.value = response.data.options ?? defaultOptions
       isLoaded.value = true
       loadFailed.value = false
-      console.log('[TenantStore] Config loaded:', {
+      log.debug(' Config loaded:', {
         tenantName: tenant.value?.name,
         primaryColor: tenant.value?.branding?.primary_color,
         optionsLoaded: Object.keys(response.data.options ?? {}).length
@@ -207,7 +210,7 @@ export const useTenantStore = defineStore('tenant', () => {
       error.value = 'Error al cargar la configuración'
       loadFailed.value = true
       isLoaded.value = true
-      console.error('[TenantStore] Failed to load tenant config:', e)
+      log.error(' Failed to load tenant config:', e)
     } finally {
       isLoading.value = false
     }
@@ -216,28 +219,28 @@ export const useTenantStore = defineStore('tenant', () => {
   const applyTheme = (isAdminRoute = false) => {
     const root = document.documentElement
 
-    console.log('[TenantStore] applyTheme called:', { isAdminRoute, hasBranding: !!branding.value })
+    log.debug(' applyTheme called:', { isAdminRoute, hasBranding: !!branding.value })
 
     // Admin routes always use default theme
     if (isAdminRoute) {
-      console.log('[TenantStore] Admin route - using default theme')
+      log.debug(' Admin route - using default theme')
       resetTheme()
       return
     }
 
     // If no branding, keep defaults
     if (!branding.value) {
-      console.log('[TenantStore] No branding configured - keeping defaults')
+      log.debug(' No branding configured - keeping defaults')
       return
     }
 
     const b = branding.value
-    console.log('[TenantStore] Applying branding:', { primary: b.primary_color, secondary: b.secondary_color })
+    log.debug(' Applying branding:', { primary: b.primary_color, secondary: b.secondary_color })
 
     // Generate color palette from primary color (RGB triplets for Tailwind)
     if (b.primary_color) {
       const palette = generateColorPalette(b.primary_color)
-      console.log('[TenantStore] Generated palette (RGB):', palette)
+      log.debug(' Generated palette (RGB):', palette)
       for (const [shade, rgbTriplet] of Object.entries(palette)) {
         root.style.setProperty(`--primary-${shade}-rgb`, rgbTriplet)
       }
@@ -246,13 +249,13 @@ export const useTenantStore = defineStore('tenant', () => {
       // Generate dark tinted color for footer/dark sections
       const darkTinted = generateDarkTinted(b.primary_color)
       root.style.setProperty('--tenant-dark-rgb', darkTinted)
-      console.log('[TenantStore] Dark tinted color:', darkTinted)
+      log.debug(' Dark tinted color:', darkTinted)
     }
 
     // Generate color palette from secondary color (RGB triplets for Tailwind)
     if (b.secondary_color) {
       const secondaryPalette = generateColorPalette(b.secondary_color)
-      console.log('[TenantStore] Generated secondary palette (RGB):', secondaryPalette)
+      log.debug(' Generated secondary palette (RGB):', secondaryPalette)
       for (const [shade, rgbTriplet] of Object.entries(secondaryPalette)) {
         root.style.setProperty(`--secondary-${shade}-rgb`, rgbTriplet)
       }

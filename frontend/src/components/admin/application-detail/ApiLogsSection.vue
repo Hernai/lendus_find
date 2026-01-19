@@ -7,10 +7,13 @@ interface ApiLog {
   response_status: number
   duration_ms: number
   created_at: string
-  endpoint?: string
-  method?: string
+  endpoint: string
+  method: string
+  request_method: string
+  request_url: string
   error_message?: string
   request_payload?: Record<string, unknown>
+  response_payload?: Record<string, unknown>
   response_body?: Record<string, unknown>
 }
 

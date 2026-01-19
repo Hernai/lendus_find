@@ -1,5 +1,8 @@
 import { onUnmounted, watch, type Ref, isRef, toValue, type ComputedRef } from 'vue'
 import { getEcho } from '@/plugins/echo'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('WebSocket')
 import type {
   ApplicationStatusChangedEvent,
   DocumentStatusChangedEvent,
@@ -53,12 +56,12 @@ export function useWebSocket(options: UseWebSocketOptions) {
     const userId = toValue(options.userId)
 
     if (!echo) {
-      console.warn('⚠️ Echo not initialized yet. WebSocket will connect after authentication.')
+      log.warn(' Echo not initialized yet. WebSocket will connect after authentication.')
       return
     }
 
     if (!tenantId) {
-      console.warn('⚠️ Tenant ID not available yet. WebSocket will connect when tenant loads.')
+      log.warn(' Tenant ID not available yet. WebSocket will connect when tenant loads.')
       return
     }
 
@@ -69,17 +72,17 @@ export function useWebSocket(options: UseWebSocketOptions) {
 
     // Para modo aplicante, esperar a que applicantId esté disponible
     if (isApplicantMode && !applicantId) {
-      console.warn('⚠️ Applicant ID not available yet. WebSocket will connect when applicant loads.')
+      log.warn(' Applicant ID not available yet. WebSocket will connect when applicant loads.')
       return
     }
 
     // Para modo aplicación, esperar a que applicationId esté disponible
     if (isApplicationMode && !applicationId) {
-      console.warn('⚠️ Application ID not available yet. WebSocket will connect when application loads.')
+      log.warn(' Application ID not available yet. WebSocket will connect when application loads.')
       return
     }
 
-    console.log('🔌 Connecting to WebSocket channels...', {
+    log.debug(' Connecting to WebSocket channels...', {
       tenantId,
       applicationId,
       applicantId,
@@ -174,7 +177,7 @@ export function useWebSocket(options: UseWebSocketOptions) {
       channels.push(userChannel)
     }
 
-    console.log(`✅ Connected to ${channels.length} WebSocket channel(s)`)
+    log.debug(`Connected to ${channels.length} WebSocket channel(s)`)
   }
 
   const disconnect = () => {
@@ -188,7 +191,7 @@ export function useWebSocket(options: UseWebSocketOptions) {
       echo.leave(channel.name)
     })
     channels.length = 0
-    console.log('🔌 Disconnected from WebSocket channels')
+    log.debug(' Disconnected from WebSocket channels')
   }
 
   // Auto-conectar
@@ -200,7 +203,7 @@ export function useWebSocket(options: UseWebSocketOptions) {
       () => toValue(options.tenantId),
       (newTenantId) => {
         if (newTenantId && channels.length === 0) {
-          console.log('🔄 Tenant loaded, attempting to connect WebSocket...')
+          log.debug(' Tenant loaded, attempting to connect WebSocket...')
           connect()
         }
       },
@@ -214,7 +217,7 @@ export function useWebSocket(options: UseWebSocketOptions) {
       () => toValue(options.applicantId),
       (newApplicantId) => {
         if (newApplicantId && channels.length === 0) {
-          console.log('🔄 Applicant loaded, attempting to connect WebSocket...')
+          log.debug(' Applicant loaded, attempting to connect WebSocket...')
           connect()
         }
       },
@@ -228,7 +231,7 @@ export function useWebSocket(options: UseWebSocketOptions) {
       () => toValue(options.applicationId),
       (newApplicationId) => {
         if (newApplicationId && channels.length === 0) {
-          console.log('🔄 Application loaded, attempting to connect WebSocket...')
+          log.debug(' Application loaded, attempting to connect WebSocket...')
           connect()
         }
       },

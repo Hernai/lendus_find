@@ -7,6 +7,10 @@
  * Para validación oficial, use el validador del SAT o el servicio de Nubarium.
  */
 
+import { logger } from '@/utils/logger'
+
+const log = logger.child('RFC')
+
 export interface PersonaFisicaData {
   nombre: string
   primerApellido: string
@@ -173,7 +177,7 @@ function formatearFecha(dia: number, mes: number, anio: number): string {
  */
 function corregirPalabraInconveniente(letras: string): string {
   if (PALABRAS_INCONVENIENTES.includes(letras)) {
-    console.log(`[RFC] Palabra inconveniente detectada: ${letras}, corrigiendo a ${letras.slice(0, 3)}X`)
+    log.debug(`Palabra inconveniente detectada: ${letras}, corrigiendo a ${letras.slice(0, 3)}X`)
     return letras.slice(0, 3) + 'X'
   }
   return letras
@@ -244,7 +248,7 @@ function calcularHomoclave(data: PersonaFisicaData): string {
   // El '0' tiene valor '00' en la tabla
   nombreCompleto = '0' + nombreCompleto
 
-  console.log('[RFC] Nombre completo para homoclave:', `"${nombreCompleto}"`)
+  log.debug('Nombre completo para homoclave:', { nombreCompleto })
 
   // Paso 1: Convertir cada carácter a su valor de 2 dígitos
   let valores = ''
@@ -253,7 +257,7 @@ function calcularHomoclave(data: PersonaFisicaData): string {
     valores += valor
   }
 
-  console.log('[RFC] Valores numéricos:', valores, 'longitud:', valores.length)
+  log.debug('Valores numéricos:', { valores, length: valores.length })
 
   // Paso 2: Calcular la suma de productos
   // Para cada posición i, multiplicar el número de 2 dígitos (posiciones i, i+1)
@@ -268,11 +272,11 @@ function calcularHomoclave(data: PersonaFisicaData): string {
     suma += producto
   }
 
-  console.log('[RFC] Suma de productos:', suma)
+  log.debug('Suma de productos:', { suma })
 
   // Paso 3: Obtener los últimos 3 dígitos de la suma
   const ultimos3 = suma % 1000
-  console.log('[RFC] Últimos 3 dígitos:', ultimos3)
+  log.debug('Últimos 3 dígitos:', { ultimos3 })
 
   // Paso 4: Calcular los 2 caracteres de la homoclave
   // Primer carácter: cociente de dividir entre 34
@@ -283,8 +287,7 @@ function calcularHomoclave(data: PersonaFisicaData): string {
   const primerCaracter = TABLA_DIGITO[cociente] || '1'
   const segundoCaracter = TABLA_DIGITO[residuo] || '1'
 
-  console.log('[RFC] Cociente:', cociente, '-> Primer carácter:', primerCaracter)
-  console.log('[RFC] Residuo:', residuo, '-> Segundo carácter:', segundoCaracter)
+  log.debug('Homoclave cálculo:', { cociente, primerCaracter, residuo, segundoCaracter })
 
   return primerCaracter + segundoCaracter
 }
@@ -345,14 +348,14 @@ export function calcularRFCBase(data: PersonaFisicaData): string {
 
   // Extraer las 4 letras iniciales
   const cuatroLetras = extraerCuatroLetras(data)
-  console.log('[RFC] Cuatro letras extraídas:', cuatroLetras)
+  log.debug('Cuatro letras extraídas:', { cuatroLetras })
 
   // Corregir palabras inconvenientes
   const letrasCorregidas = corregirPalabraInconveniente(cuatroLetras)
 
   // Formatear fecha
   const fecha = formatearFecha(data.dia, data.mes, data.anio)
-  console.log('[RFC] Fecha formateada:', fecha)
+  log.debug('Fecha formateada:', { fecha })
 
   // RFC base (10 caracteres)
   return letrasCorregidas + fecha
@@ -367,12 +370,12 @@ export function generarRFCSugerido(data: PersonaFisicaData): RfcResult {
 
   // Calcular homoclave (2 caracteres)
   const homoclave = calcularHomoclave(data)
-  console.log('[RFC] Homoclave calculada:', homoclave)
+  log.debug('Homoclave calculada:', { homoclave })
 
   // Calcular dígito verificador
   const rfcSinDigito = rfcBase + homoclave
   const digitoVerificador = calcularDigitoVerificador(rfcSinDigito)
-  console.log('[RFC] Dígito verificador:', digitoVerificador)
+  log.debug('Dígito verificador:', { digitoVerificador })
 
   const rfcSugerido = rfcBase + homoclave + digitoVerificador
 

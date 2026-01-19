@@ -125,7 +125,7 @@ const loadApplication = async () => {
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } } }
     error.value = err.response?.data?.message || 'Error al cargar la solicitud'
-    console.error('Failed to load application:', e)
+    log.error('Failed to load application', { error: e })
   } finally {
     isLoading.value = false
   }
@@ -224,7 +224,7 @@ const confirmDelete = async () => {
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } } }
     error.value = err.response?.data?.message || 'Error al eliminar el documento'
-    console.error('Failed to delete document:', e)
+    log.error('Failed to delete document', { error: e })
   } finally {
     isDeleting.value = false
     cancelDelete()

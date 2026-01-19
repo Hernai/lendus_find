@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V2\Staff;
 
 use App\Http\Controllers\Controller;
+use App\Models\ApplicationStatusHistory;
 use App\Models\ApplicationV2;
 use App\Models\StaffAccount;
 use App\Services\ApplicationV2Service;
@@ -873,6 +874,24 @@ class ApplicationController extends Controller
         $application->notes = $notes;
         $application->save();
 
+        // Record history
+        $truncatedContent = strlen($validated['content']) > 50
+            ? substr($validated['content'], 0, 50) . '...'
+            : $validated['content'];
+        ApplicationStatusHistory::create([
+            'application_id' => $application->id,
+            'from_status' => 'NOTE_ADDED',
+            'to_status' => 'NOTE_ADDED',
+            'changed_by' => $staff->id,
+            'changed_by_type' => StaffAccount::class,
+            'notes' => "Nota agregada: \"{$truncatedContent}\"",
+            'metadata' => [
+                'action' => 'note_added',
+                'note_id' => $newNote['id'],
+                'content_preview' => $truncatedContent,
+            ],
+        ]);
+
         return response()->json([
             'data' => $newNote,
             'message' => 'Nota agregada exitosamente.',
@@ -980,10 +999,28 @@ class ApplicationController extends Controller
             return response()->json(['error' => 'NOT_FOUND', 'message' => 'Documento no encontrado.'], 404);
         }
 
+        $oldStatus = $document->status;
         $document->status = 'APPROVED';
         $document->reviewed_at = now();
         $document->reviewed_by = $staff->id;
         $document->save();
+
+        // Record history
+        ApplicationStatusHistory::create([
+            'application_id' => $application->id,
+            'from_status' => 'DOCUMENT_REVIEW',
+            'to_status' => 'DOCUMENT_REVIEW',
+            'changed_by' => $staff->id,
+            'changed_by_type' => StaffAccount::class,
+            'notes' => "Documento '{$document->type}' aprobado",
+            'metadata' => [
+                'action' => 'document_approved',
+                'document_id' => $document->id,
+                'document_type' => $document->type,
+                'old_status' => $oldStatus,
+                'new_status' => 'APPROVED',
+            ],
+        ]);
 
         return response()->json([
             'data' => null,
@@ -1020,11 +1057,31 @@ class ApplicationController extends Controller
             return response()->json(['error' => 'NOT_FOUND', 'message' => 'Documento no encontrado.'], 404);
         }
 
+        $oldStatus = $document->status;
         $document->status = 'REJECTED';
         $document->rejection_reason = $validated['reason'];
         $document->reviewed_at = now();
         $document->reviewed_by = $staff->id;
         $document->save();
+
+        // Record history
+        ApplicationStatusHistory::create([
+            'application_id' => $application->id,
+            'from_status' => 'DOCUMENT_REVIEW',
+            'to_status' => 'DOCUMENT_REVIEW',
+            'changed_by' => $staff->id,
+            'changed_by_type' => StaffAccount::class,
+            'notes' => "Documento '{$document->type}' rechazado: {$validated['reason']}",
+            'metadata' => [
+                'action' => 'document_rejected',
+                'document_id' => $document->id,
+                'document_type' => $document->type,
+                'old_status' => $oldStatus,
+                'new_status' => 'REJECTED',
+                'reason' => $validated['reason'],
+                'comment' => $validated['comment'] ?? null,
+            ],
+        ]);
 
         return response()->json([
             'data' => null,
@@ -1056,11 +1113,29 @@ class ApplicationController extends Controller
             return response()->json(['error' => 'NOT_FOUND', 'message' => 'Documento no encontrado.'], 404);
         }
 
+        $oldStatus = $document->status;
         $document->status = 'PENDING';
         $document->rejection_reason = null;
         $document->reviewed_at = null;
         $document->reviewed_by = null;
         $document->save();
+
+        // Record history
+        ApplicationStatusHistory::create([
+            'application_id' => $application->id,
+            'from_status' => 'DOCUMENT_REVIEW',
+            'to_status' => 'DOCUMENT_REVIEW',
+            'changed_by' => $staff->id,
+            'changed_by_type' => StaffAccount::class,
+            'notes' => "Documento '{$document->type}' regresado a pendiente",
+            'metadata' => [
+                'action' => 'document_unapproved',
+                'document_id' => $document->id,
+                'document_type' => $document->type,
+                'old_status' => $oldStatus,
+                'new_status' => 'PENDING',
+            ],
+        ]);
 
         return response()->json([
             'data' => null,
@@ -1108,11 +1183,36 @@ class ApplicationController extends Controller
             'NO_ANSWER' => 'UNREACHABLE',
         ];
 
+        $oldStatus = $reference->status ?? 'PENDING';
         $reference->status = $statusMap[$validated['result']];
         $reference->verification_notes = $validated['notes'] ?? null;
         $reference->verified_at = now();
         $reference->verified_by = $staff->id;
         $reference->save();
+
+        // Record history
+        $resultLabels = [
+            'VERIFIED' => 'verificada',
+            'NOT_VERIFIED' => 'no verificada',
+            'NO_ANSWER' => 'sin respuesta',
+        ];
+        ApplicationStatusHistory::create([
+            'application_id' => $application->id,
+            'from_status' => 'REFERENCE_VERIFICATION',
+            'to_status' => 'REFERENCE_VERIFICATION',
+            'changed_by' => $staff->id,
+            'changed_by_type' => StaffAccount::class,
+            'notes' => "Referencia '{$reference->full_name}' {$resultLabels[$validated['result']]}" . ($validated['notes'] ? ": {$validated['notes']}" : ''),
+            'metadata' => [
+                'action' => 'reference_verified',
+                'reference_id' => $reference->id,
+                'reference_name' => $reference->full_name,
+                'old_status' => $oldStatus,
+                'new_status' => $statusMap[$validated['result']],
+                'result' => $validated['result'],
+                'notes' => $validated['notes'] ?? null,
+            ],
+        ]);
 
         return response()->json([
             'data' => null,
@@ -1149,10 +1249,27 @@ class ApplicationController extends Controller
             return response()->json(['error' => 'NOT_FOUND', 'message' => 'Cuenta bancaria no encontrada.'], 404);
         }
 
+        $wasVerified = $bankAccount->is_verified;
         $bankAccount->is_verified = true;
         $bankAccount->verified_at = now();
         $bankAccount->verified_by = $staff->id;
         $bankAccount->save();
+
+        // Record history
+        ApplicationStatusHistory::create([
+            'application_id' => $application->id,
+            'from_status' => 'BANK_ACCOUNT_VERIFICATION',
+            'to_status' => 'BANK_ACCOUNT_VERIFICATION',
+            'changed_by' => $staff->id,
+            'changed_by_type' => StaffAccount::class,
+            'notes' => "Cuenta bancaria '{$bankAccount->bank_name}' verificada (CLABE: ***{$this->maskClabe($bankAccount->clabe)})",
+            'metadata' => [
+                'action' => 'bank_account_verified',
+                'bank_account_id' => $bankAccount->id,
+                'bank_name' => $bankAccount->bank_name,
+                'was_verified' => $wasVerified,
+            ],
+        ]);
 
         return response()->json([
             'data' => null,
@@ -1185,15 +1302,43 @@ class ApplicationController extends Controller
             return response()->json(['error' => 'NOT_FOUND', 'message' => 'Cuenta bancaria no encontrada.'], 404);
         }
 
+        $wasVerified = $bankAccount->is_verified;
         $bankAccount->is_verified = false;
         $bankAccount->verified_at = null;
         $bankAccount->verified_by = null;
         $bankAccount->save();
 
+        // Record history
+        ApplicationStatusHistory::create([
+            'application_id' => $application->id,
+            'from_status' => 'BANK_ACCOUNT_VERIFICATION',
+            'to_status' => 'BANK_ACCOUNT_VERIFICATION',
+            'changed_by' => $staff->id,
+            'changed_by_type' => StaffAccount::class,
+            'notes' => "Verificación de cuenta bancaria '{$bankAccount->bank_name}' removida",
+            'metadata' => [
+                'action' => 'bank_account_unverified',
+                'bank_account_id' => $bankAccount->id,
+                'bank_name' => $bankAccount->bank_name,
+                'was_verified' => $wasVerified,
+            ],
+        ]);
+
         return response()->json([
             'data' => null,
             'message' => 'Verificación de cuenta bancaria removida.',
         ]);
+    }
+
+    /**
+     * Mask CLABE for display (show only last 4 digits).
+     */
+    private function maskClabe(?string $clabe): string
+    {
+        if (!$clabe || strlen($clabe) < 4) {
+            return '****';
+        }
+        return substr($clabe, -4);
     }
 
     // =========================================================================
@@ -1227,12 +1372,15 @@ class ApplicationController extends Controller
         }
 
         $checklist = $application->verification_checklist ?? [];
+        $newStatus = match ($validated['action']) {
+            'verify' => 'verified',
+            'reject' => 'rejected',
+            'unverify' => 'pending',
+        };
+        $oldStatus = $checklist[$validated['field']]['status'] ?? 'pending';
+
         $checklist[$validated['field']] = [
-            'status' => match ($validated['action']) {
-                'verify' => 'verified',
-                'reject' => 'rejected',
-                'unverify' => 'pending',
-            },
+            'status' => $newStatus,
             'method' => $validated['method'] ?? null,
             'rejection_reason' => $validated['rejection_reason'] ?? null,
             'notes' => $validated['notes'] ?? null,
@@ -1242,6 +1390,30 @@ class ApplicationController extends Controller
 
         $application->verification_checklist = $checklist;
         $application->save();
+
+        // Record history entry for verification change
+        ApplicationStatusHistory::create([
+            'application_id' => $application->id,
+            'from_status' => 'DATA_VERIFICATION',
+            'to_status' => 'DATA_VERIFICATION',
+            'changed_by' => $staff->id,
+            'changed_by_type' => StaffAccount::class,
+            'notes' => match ($validated['action']) {
+                'verify' => "Campo '{$validated['field']}' verificado",
+                'reject' => "Campo '{$validated['field']}' rechazado: " . ($validated['rejection_reason'] ?? ''),
+                'unverify' => "Verificación removida del campo '{$validated['field']}'" . ($validated['notes'] ? ": {$validated['notes']}" : ''),
+            },
+            'metadata' => [
+                'action' => 'data_verification',
+                'field' => $validated['field'],
+                'verification_action' => $validated['action'],
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus,
+                'method' => $validated['method'] ?? null,
+                'rejection_reason' => $validated['rejection_reason'] ?? null,
+                'notes' => $validated['notes'] ?? null,
+            ],
+        ]);
 
         return response()->json([
             'data' => null,

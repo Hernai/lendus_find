@@ -503,10 +503,31 @@ class ApplicationV2 extends Model
      */
     public function assignTo(string $staffId, string $assignedById): void
     {
+        $previousAssignee = $this->assigned_to;
+
         $this->update([
             'assigned_to' => $staffId,
             'assigned_at' => now(),
             'assigned_by' => $assignedById,
+        ]);
+
+        // Get assignee name for history
+        $assignee = StaffAccount::find($staffId);
+        $assigneeName = $assignee?->name ?? 'Usuario desconocido';
+
+        ApplicationStatusHistory::create([
+            'application_id' => $this->id,
+            'from_status' => 'ASSIGNMENT',
+            'to_status' => 'ASSIGNMENT',
+            'changed_by' => $assignedById,
+            'changed_by_type' => StaffAccount::class,
+            'notes' => "Solicitud asignada a {$assigneeName}",
+            'metadata' => [
+                'action' => 'assigned',
+                'assignee_id' => $staffId,
+                'assignee_name' => $assigneeName,
+                'previous_assignee' => $previousAssignee,
+            ],
         ]);
     }
 
@@ -572,6 +593,25 @@ class ApplicationV2 extends Model
                 'reason' => $reason,
                 'offered_at' => now()->toIso8601String(),
             ]),
+        ]);
+
+        // Record history
+        $formattedAmount = number_format($offer['amount'], 2);
+        ApplicationStatusHistory::create([
+            'application_id' => $this->id,
+            'from_status' => 'COUNTER_OFFER',
+            'to_status' => 'COUNTER_OFFER',
+            'changed_by' => $staffId,
+            'changed_by_type' => StaffAccount::class,
+            'notes' => "Contraoferta enviada: \${$formattedAmount} a {$offer['term_months']} meses" . ($reason ? " - {$reason}" : ''),
+            'metadata' => [
+                'action' => 'counter_offer_sent',
+                'amount' => $offer['amount'],
+                'term_months' => $offer['term_months'],
+                'interest_rate' => $offer['interest_rate'] ?? null,
+                'monthly_payment' => $offer['monthly_payment'] ?? null,
+                'reason' => $reason,
+            ],
         ]);
     }
 

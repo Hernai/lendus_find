@@ -3,7 +3,10 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApplicationStore, useTenantStore, useAuthStore, useOnboardingStore } from '@/stores'
 import { AppProgressBar } from '@/components/common'
+import { logger } from '@/utils/logger'
 import type { PaymentFrequency, Application } from '@/types'
+
+const log = logger.child('OnboardingLayout')
 
 const route = useRoute()
 const router = useRouter()
@@ -45,12 +48,12 @@ onMounted(async () => {
 
     // Clean up invalid saved IDs
     if (savedAppId === 'null' || savedAppId === 'undefined' || savedAppId === '') {
-      console.log('🧹 Cleaning up invalid savedAppId:', savedAppId)
+      log.debug('Cleaning up invalid savedAppId', { savedAppId })
       localStorage.removeItem('current_application_id')
       savedAppId = null
     }
 
-    console.log('🔧 OnboardingLayout init:', {
+    log.debug('Initializing', {
       pendingApp: pendingApp ? JSON.parse(pendingApp) : null,
       savedAppId,
       hasCurrentApp: !!applicationStore.currentApplication,
@@ -66,12 +69,12 @@ onMounted(async () => {
         payment_frequency: PaymentFrequency
       }
 
-      console.log('📝 Pending application detected:', params)
-      console.log('⏳ Application will be created after completing personal data (step 1)')
+      log.debug('Pending application detected', params)
+      log.debug('Application will be created after completing personal data (step 1)')
 
       // Find and set the product
       const product = tenantStore.products.find(p => p.id === params.product_id)
-      console.log('🏷️ Found product:', product?.id || 'NOT FOUND')
+      log.debug('Found product', { productId: product?.id || 'NOT FOUND' })
 
       if (product) {
         applicationStore.setSelectedProduct(product)
@@ -85,20 +88,20 @@ onMounted(async () => {
           term_months: params.term_months,
           payment_frequency: params.payment_frequency
         })
-        console.log('✅ Simulation ready for step 5')
+        log.debug('Simulation ready for step 5')
       } catch (simError) {
-        console.error('❌ Failed to run simulation:', simError)
+        log.error('Failed to run simulation', { error: simError })
       }
 
       // NOTE: Application creation will happen in Step1PersonalData.vue after applicant is created
       // pending_application will be cleared by Step1 after successful creation
     } else if (!applicationStore.currentApplication) {
       // No pending app and no current application in store
-      console.log('🔍 No pending app, looking for existing...')
+      log.debug('No pending app, looking for existing...')
 
       // First try to load from saved application ID
       if (savedAppId) {
-        console.log('📂 Loading from saved ID:', savedAppId)
+        log.debug('Loading from saved ID', { savedAppId })
         try {
           await applicationStore.loadApplication(savedAppId)
 
@@ -107,36 +110,36 @@ onMounted(async () => {
           const terminalStatuses = ['CANCELLED', 'REJECTED', 'APPROVED', 'SYNCED', 'SUBMITTED']
 
           if (loadedApp && terminalStatuses.includes(loadedApp.status)) {
-            console.log('⚠️ Loaded application is in terminal status:', loadedApp.status)
-            console.log('🧹 Clearing reference to allow creating a new application')
+            log.debug('Loaded application is in terminal status', { status: loadedApp.status })
+            log.debug('Clearing reference to allow creating a new application')
             // Clear the reference - this application cannot be modified
             applicationStore.reset()
             localStorage.removeItem('current_application_id')
           } else {
             applicationStore.restoreProgress()
-            console.log('✅ Loaded from saved ID')
+            log.debug('Loaded from saved ID')
 
             // Set the selected product from the loaded application
             if (loadedApp?.product_id) {
               const product = tenantStore.products.find(p => p.id === loadedApp.product_id)
               if (product) {
-                console.log('🏷️ Setting product from loaded application:', product.name)
+                log.debug('Setting product from loaded application', { productName: product.name })
                 applicationStore.setSelectedProduct(product)
               }
             }
           }
         } catch (e) {
           // Application might have been submitted or deleted
-          console.warn('❌ Could not load saved application:', e)
+          log.warn('Could not load saved application', { error: e })
           localStorage.removeItem('current_application_id')
         }
       }
 
       // If still no application, try to find a draft from backend
       if (!applicationStore.currentApplication) {
-        console.log('🔍 Searching for draft applications...')
+        log.debug('Searching for draft applications...')
         const applications = await applicationStore.loadApplications()
-        console.log('📋 Found applications:', applications.map(a => ({ id: a.id, status: a.status })))
+        log.debug('Found applications', { apps: applications.map(a => ({ id: a.id, status: a.status })) })
 
         // Find draft with valid ID
         const draftApp = applications.find(app =>
@@ -144,7 +147,7 @@ onMounted(async () => {
         )
 
         if (draftApp) {
-          console.log('📂 Loading draft:', draftApp.id)
+          log.debug('Loading draft', { draftId: draftApp.id })
           // Load the full application details
           await applicationStore.loadApplication(draftApp.id)
           // Save for future recovery
@@ -157,13 +160,13 @@ onMounted(async () => {
           if (loadedDraft?.product_id) {
             const product = tenantStore.products.find(p => p.id === loadedDraft.product_id)
             if (product) {
-              console.log('🏷️ Setting product from draft application:', product.name)
+              log.debug('Setting product from draft application', { productName: product.name })
               applicationStore.setSelectedProduct(product)
             }
           }
-          console.log('✅ Loaded draft application')
+          log.debug('Loaded draft application')
         } else {
-          console.log('⚠️ No draft applications found')
+          log.debug('No draft applications found')
         }
       }
     }
@@ -171,17 +174,17 @@ onMounted(async () => {
     // NOTE: Application creation is deferred to Step1PersonalData.vue
     // It will be created AFTER the applicant record exists (after step 1 completes)
     if (!applicationStore.currentApplication) {
-      console.log('ℹ️ No current application - will be created after completing step 1')
+      log.info('No current application - will be created after completing step 1')
     }
 
-    console.log('🏁 Final state:', {
+    log.debug('Final state', {
       currentApplication: applicationStore.currentApplication?.id || null,
       status: applicationStore.currentApplication?.status || null,
       selectedProduct: applicationStore.selectedProduct?.name || null,
       required_documents: applicationStore.selectedProduct?.required_documents || []
     })
   } catch (error) {
-    console.error('❌ Failed to initialize application:', error)
+    log.error('Failed to initialize application', { error })
   } finally {
     isInitializing.value = false
   }

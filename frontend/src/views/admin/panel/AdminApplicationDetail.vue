@@ -4,12 +4,20 @@ import { useRoute, useRouter } from 'vue-router'
 import { AppButton } from '@/components/common'
 import AdminDocumentGallery from '@/components/admin/AdminDocumentGallery.vue'
 import ConfirmModal from '@/components/admin/ConfirmModal.vue'
-import { ReferencesSection, BankAccountsSection } from '@/components/admin/application-detail'
+import {
+  ReferencesSection,
+  BankAccountsSection,
+  NotesSection,
+  TimelineSection,
+  ApiLogsSection,
+  ApplicantDataSection,
+} from '@/components/admin/application-detail'
 import { v2, type V2ApiLogEntry } from '@/services/v2'
 import { useWebSocket, useToast } from '@/composables'
 import { useTenantStore } from '@/stores/tenant'
 import { useAuthStore } from '@/stores/auth'
 import { logger } from '@/utils/logger'
+import { formatMoney, formatDate, formatDateTime, formatPhone } from '@/utils/formatters'
 import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent, DocumentDeletedEvent, DocumentUploadedEvent, ReferenceVerifiedEvent, BankAccountVerifiedEvent } from '@/types/realtime'
 
 const log = logger.child('AdminApplicationDetail')
@@ -179,12 +187,12 @@ interface Application {
   }
   field_verifications?: Record<string, {
     verified: boolean
-    method: string
+    method: string | null
     method_label?: string
-    verified_at?: string
-    verified_by?: string
-    notes?: string
-    rejection_reason?: string
+    verified_at?: string | null
+    verified_by?: string | null
+    notes?: string | null
+    rejection_reason?: string | null
     status?: string
     is_locked?: boolean
   }>
@@ -274,7 +282,6 @@ const isUnapprovingSelfie = ref(false)
 const isUnrejectingSelfie = ref(false)
 
 // Add note state
-const newNoteText = ref('')
 const isAddingNote = ref(false)
 
 // Bank account verification state
@@ -444,7 +451,7 @@ const fetchApplication = async () => {
       status: data.status,
       created_at: data.created_at,
       updated_at: data.updated_at,
-      assigned_to: data.assigned_to?.name ?? undefined,
+      assigned_to: data.assigned_agent?.name ?? undefined,
       required_documents: requiredDocTypes,
       completeness: {
         personal_data: !!person,
@@ -583,13 +590,40 @@ const fetchApplication = async () => {
         author: n.author?.name || 'Sistema',
         created_at: n.created_at
       })),
-      timeline: data.status_history?.map((h, idx) => ({
-        id: String(idx),
-        action: 'STATUS_CHANGE',
-        description: `Estado cambiado${h.from_status ? ` de ${h.from_status}` : ''} a ${h.to_status || h.status}${h.notes || h.reason ? `: ${h.notes || h.reason}` : ''}`,
-        author: h.changed_by || 'Sistema',
-        created_at: h.created_at || h.timestamp
-      })) || [],
+      timeline: data.status_history?.map((h, idx) => {
+        // Map special action types
+        const actionTypes = [
+          'DATA_VERIFICATION',
+          'DOCUMENT_REVIEW',
+          'REFERENCE_VERIFICATION',
+          'BANK_ACCOUNT_VERIFICATION',
+          'NOTE_ADDED',
+          'ASSIGNMENT',
+          'COUNTER_OFFER'
+        ]
+
+        // Handle special action entries (non-status changes)
+        if (h.from_status && actionTypes.includes(h.from_status)) {
+          return {
+            id: String(idx),
+            action: h.from_status,
+            description: h.notes || h.from_status,
+            author: h.changed_by || 'Sistema',
+            created_at: h.created_at || h.timestamp || new Date().toISOString()
+          }
+        }
+
+        // Handle regular status changes
+        return {
+          id: String(idx),
+          action: 'STATUS_CHANGE',
+          description: h.to_status
+            ? `Estado cambiado de ${h.from_status || 'N/A'} a ${h.to_status}${h.notes ? `: ${h.notes}` : ''}`
+            : `Estado cambiado a ${h.status}${h.reason ? `: ${h.reason}` : ''}`,
+          author: h.changed_by || 'Sistema',
+          created_at: h.created_at || h.timestamp || new Date().toISOString()
+        }
+      }) || [],
       signature: {
         has_signed: false,
         signature_base64: undefined,
@@ -636,18 +670,6 @@ const loadApiLogs = async () => {
 const viewApiLogDetail = (log: V2ApiLogEntry) => {
   selectedApiLog.value = log
   showApiLogDetailModal.value = true
-}
-
-const getProviderColor = (provider: string): string => {
-  const colors: Record<string, string> = {
-    'NUBARIUM': 'bg-purple-100 text-purple-800',
-    'TWILIO': 'bg-red-100 text-red-800',
-    'RENAPO': 'bg-blue-100 text-blue-800',
-    'SAT': 'bg-green-100 text-green-800',
-    'INE': 'bg-yellow-100 text-yellow-800',
-    'SEPOMEX': 'bg-indigo-100 text-indigo-800'
-  }
-  return colors[provider] || 'bg-gray-100 text-gray-800'
 }
 
 // Switch tab and load data if needed
@@ -977,44 +999,6 @@ onMounted(async () => {
   await fetchApplication()
   await loadSelfie()
 })
-
-// Formatters
-const formatMoney = (amount: number) => {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 0
-  }).format(amount)
-}
-
-const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('es-MX', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
-}
-
-const formatDateTime = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('es-MX', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
-// Format Mexican phone number: 5512345678 -> (55) 1234-5678
-const formatPhone = (phone: string | null | undefined): string => {
-  if (!phone) return '—'
-  const digits = phone.replace(/\D/g, '')
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
-  }
-  // If not 10 digits, return as-is with basic formatting
-  return phone
-}
 
 // Parse user agent to friendly name
 const parseUserAgent = (ua: string): string => {
@@ -1535,7 +1519,16 @@ const openRejectDataModal = (field: VerifiableField) => {
 
 // Confirm data rejection (receives data from ConfirmModal)
 const confirmRejectData = async (data: { selectValue?: string; comment?: string }) => {
-  if (!rejectDataField.value || !data.comment?.trim()) {
+  log.debug('confirmRejectData called', { data, rejectDataField: rejectDataField.value })
+
+  if (!rejectDataField.value) {
+    log.warn('No rejectDataField set')
+    return
+  }
+
+  if (!data.comment?.trim()) {
+    log.warn('No comment provided for rejection')
+    toast.error('Debes proporcionar un motivo de rechazo')
     return
   }
 
@@ -1551,7 +1544,16 @@ const openUnverifyModal = (field: VerifiableField) => {
 
 // Confirm unverify (receives data from ConfirmModal)
 const confirmUnverify = async (data: { selectValue?: string; comment?: string }) => {
-  if (!unverifyField.value || !data.comment?.trim()) {
+  log.debug('confirmUnverify called', { data, unverifyField: unverifyField.value })
+
+  if (!unverifyField.value) {
+    log.warn('No unverifyField set')
+    return
+  }
+
+  if (!data.comment?.trim()) {
+    log.warn('No comment provided for unverify')
+    toast.error('Debes proporcionar un motivo')
     return
   }
 
@@ -1598,14 +1600,15 @@ const submitCounterOffer = async () => {
   }
 }
 
-const addNote = async () => {
-  if (!application.value || !newNoteText.value.trim()) return
+// Handler for NotesSection component
+const handleAddNote = async (text: string) => {
+  if (!application.value || !text.trim()) return
 
   isAddingNote.value = true
 
   try {
     const response = await v2.staff.application.addNote(application.value.id, {
-      content: newNoteText.value.trim()
+      content: text.trim()
     })
 
     const noteData = response.data!
@@ -1616,7 +1619,6 @@ const addNote = async () => {
       created_at: noteData.created_at
     })
 
-    newNoteText.value = ''
     toast.success('Nota agregada')
   } catch (e) {
     log.error('Error al agregar nota', { error: e })
@@ -1624,6 +1626,12 @@ const addNote = async () => {
   } finally {
     isAddingNote.value = false
   }
+}
+
+// Handler for TimelineSection component
+const handleViewTimelineDetails = (event: Application['timeline'][0]) => {
+  selectedTimelineEvent.value = event
+  showMetadataModal.value = true
 }
 </script>
 
@@ -2686,45 +2694,11 @@ const addNote = async () => {
             </div>
 
             <!-- Notes -->
-            <div class="border border-gray-200 rounded-lg">
-              <div class="bg-gray-50 px-3 py-2 border-b border-gray-200">
-                <h3 class="text-sm font-semibold text-gray-900">Notas</h3>
-              </div>
-              <div class="p-3">
-                <!-- Add Note Form -->
-                <div class="flex gap-2 mb-3">
-                  <textarea
-                    v-model="newNoteText"
-                    rows="1"
-                    class="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-primary-500 focus:border-transparent resize-none"
-                    placeholder="Agregar nota..."
-                    @keydown.ctrl.enter="addNote"
-                  />
-                  <AppButton
-                    variant="primary"
-                    size="sm"
-                    :loading="isAddingNote"
-                    :disabled="!newNoteText.trim()"
-                    @click="addNote"
-                  >
-                    Agregar
-                  </AppButton>
-                </div>
-
-                <!-- Notes List -->
-                <div v-if="application.notes.length > 0" class="space-y-2">
-                  <div
-                    v-for="note in application.notes"
-                    :key="note.id"
-                    class="bg-gray-50 rounded p-2 text-sm"
-                  >
-                    <p class="text-gray-800">{{ note.text }}</p>
-                    <p class="text-xs text-gray-500 mt-1">{{ note.author }} · {{ formatDateTime(note.created_at) }}</p>
-                  </div>
-                </div>
-                <div v-else class="text-gray-500 text-sm">No hay notas</div>
-              </div>
-            </div>
+            <NotesSection
+              :notes="application.notes"
+              :is-adding="isAddingNote"
+              @add="handleAddNote"
+            />
           </div>
 
           <!-- Documents Tab - Gallery View -->
@@ -2759,119 +2733,19 @@ const addNote = async () => {
 
           <!-- Timeline Tab -->
           <div v-if="activeTab === 'timeline'">
-            <div class="flow-root">
-              <ul class="-mb-8">
-                <li v-for="(event, index) in application.timeline" :key="event.id">
-                  <div class="relative pb-8">
-                    <span
-                      v-if="index !== application.timeline.length - 1"
-                      class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"
-                    />
-                    <div class="relative flex space-x-3">
-                      <div>
-                        <span class="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center ring-8 ring-white">
-                          <svg class="h-4 w-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </span>
-                      </div>
-                      <div class="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
-                        <div class="flex-1">
-                          <p class="text-sm text-gray-800">
-                            {{ event.description }}
-                          </p>
-                          <p class="text-xs text-gray-500 mt-1">
-                            Por {{ event.author }}
-                          </p>
-                        </div>
-                        <div class="text-right text-sm whitespace-nowrap text-gray-500 flex flex-col items-end gap-1">
-                          <span>{{ formatDateTime(event.created_at) }}</span>
-                          <button
-                            v-if="event.metadata?.ip_address || event.metadata?.user_agent"
-                            class="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-1"
-                            @click="selectedTimelineEvent = event; showMetadataModal = true"
-                          >
-                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            Ver detalles
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </li>
-              </ul>
-            </div>
+            <TimelineSection
+              :events="application.timeline"
+              @view-details="handleViewTimelineDetails"
+            />
           </div>
 
           <!-- API Logs Tab -->
           <div v-if="activeTab === 'api_logs'">
-            <div v-if="loadingApiLogs" class="flex justify-center py-8">
-              <div class="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full" />
-            </div>
-
-            <div v-else-if="apiLogs.length === 0" class="text-center py-8">
-              <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p class="text-gray-500">No hay logs de API para este solicitante</p>
-            </div>
-
-            <div v-else class="overflow-x-auto">
-              <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                  <tr>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Proveedor</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Servicio</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">HTTP</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duración</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                  <tr v-for="log in apiLogs" :key="log.id" class="hover:bg-gray-50">
-                    <td class="px-4 py-3 whitespace-nowrap">
-                      <span :class="['px-2 py-1 text-xs font-medium rounded-full', getProviderColor(log.provider)]">
-                        {{ log.provider }}
-                      </span>
-                    </td>
-                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                      {{ log.service }}
-                    </td>
-                    <td class="px-4 py-3 whitespace-nowrap">
-                      <span
-                        :class="[
-                          'px-2 py-1 text-xs font-medium rounded-full',
-                          log.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        ]"
-                      >
-                        {{ log.success ? 'OK' : 'Error' }}
-                      </span>
-                    </td>
-                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                      {{ log.response_status }}
-                    </td>
-                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                      {{ log.duration_ms }}ms
-                    </td>
-                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                      {{ formatDateTime(log.created_at) }}
-                    </td>
-                    <td class="px-4 py-3 whitespace-nowrap">
-                      <button
-                        class="text-primary-600 hover:text-primary-800 text-sm font-medium"
-                        @click="viewApiLogDetail(log)"
-                      >
-                        Ver detalle
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <ApiLogsSection
+              :logs="apiLogs"
+              :is-loading="loadingApiLogs"
+              @view-detail="viewApiLogDetail"
+            />
           </div>
         </div>
       </div>

@@ -1,12 +1,17 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { detectTenantSlug } from '@/utils/tenant'
 import { storage, STORAGE_KEYS } from '@/utils/storage'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('API')
 
 // Environment flags
 const isDev = import.meta.env.DEV
 
-// API base URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+// API base URL - VITE_API_URL is required in production
+const API_BASE_URL = import.meta.env.VITE_API_URL || (isDev ? 'http://localhost:8000/api' : (() => {
+  throw new Error('VITE_API_URL environment variable is required in production')
+})())
 
 // Base URL without /api for CSRF cookie
 const BASE_URL = API_BASE_URL.replace('/api', '')
@@ -71,7 +76,7 @@ export const initCsrf = async (): Promise<void> => {
       })
       csrfInitialized = true
     } catch (error) {
-      console.warn('Failed to initialize CSRF cookie:', error)
+      log.warn('Failed to initialize CSRF cookie', { error })
     } finally {
       csrfInitializing = null
     }
@@ -85,9 +90,7 @@ apiClient.interceptors.request.use(
   async (config) => {
     // Add tenant header dynamically (evaluated per request for hybrid detection)
     const tenantSlug = getTenantSlug()
-    if (isDev) {
-      console.log('[API] Request to:', config.url, '| Tenant:', tenantSlug)
-    }
+    log.debug('Request', { url: config.url, tenant: tenantSlug })
     if (config.headers) {
       config.headers['X-Tenant-ID'] = tenantSlug
     }
@@ -139,7 +142,7 @@ apiClient.interceptors.response.use(
 
       // Handle 403 Forbidden
       if (status === 403) {
-        console.error('Access denied')
+        log.warn('Access denied', { url: requestUrl })
       }
 
       // Handle validation errors

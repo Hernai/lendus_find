@@ -4,7 +4,10 @@ import { useRouter } from 'vue-router'
 import { useOnboardingStore, useApplicationStore, useTenantStore, useKycStore, useApplicantStore } from '@/stores'
 import { AppButton, AppInput, AppRadioGroup, AppSelect, AppDatePicker } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
+import { logger } from '@/utils/logger'
 import type { PaymentFrequency } from '@/types'
+
+const log = logger.child('Step1PersonalData')
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
@@ -49,25 +52,28 @@ onMounted(async () => {
 
   // Load KYC verifications if applicant exists (to restore KYC state)
   const applicantId = applicantStore.applicant?.id
-  console.log('[Step1] Applicant ID:', applicantId)
+  log.debug('Applicant ID', { applicantId })
 
   if (applicantId) {
     await kycStore.loadVerifications(applicantId)
-    console.log('[Step1] After loadVerifications:')
-    console.log('[Step1] - verified:', kycStore.verified)
-    console.log('[Step1] - lockedData.curp:', kycStore.lockedData.curp)
-    console.log('[Step1] - isKycVerified computed:', isKycVerified.value)
+    log.debug('After loadVerifications', {
+      verified: kycStore.verified,
+      lockedDataCurp: kycStore.lockedData.curp,
+      isKycVerified: isKycVerified.value
+    })
   }
 
   const step1 = onboardingStore.data.step1
 
   // If KYC is verified, use locked data from KYC store
-  console.log('[Step1] Evaluating isKycVerified:', isKycVerified.value)
-  console.log('[Step1] kycStore.verified:', kycStore.verified)
-  console.log('[Step1] kycStore.lockedData.curp:', kycStore.lockedData.curp)
+  log.debug('Evaluating KYC state', {
+    isKycVerified: isKycVerified.value,
+    kycStoreVerified: kycStore.verified,
+    lockedDataCurp: kycStore.lockedData.curp
+  })
 
   if (isKycVerified.value) {
-    console.log('[Step1] Using KYC locked data for form')
+    log.debug('Using KYC locked data for form')
     form.first_name = kycStore.lockedData.nombres || step1.first_name
     form.last_name = kycStore.lockedData.apellido_paterno || step1.last_name
     form.second_last_name = kycStore.lockedData.apellido_materno || step1.second_last_name
@@ -86,7 +92,7 @@ onMounted(async () => {
     form.birth_state = kycStore.lockedData.entidad_nacimiento || step1.birth_state
     form.nationality = 'MX'
   } else {
-    console.log('[Step1] No KYC data, using step1 data')
+    log.debug('No KYC data, using step1 data')
     form.first_name = step1.first_name
     form.last_name = step1.last_name
     form.second_last_name = step1.second_last_name
@@ -300,7 +306,7 @@ const handleSubmit = async () => {
   try {
     // Save step 1 explicitly - this creates the applicant record
     await onboardingStore.completeStep(1)
-    console.log('✅ Step 1 completed - applicant record created')
+    log.debug('Step 1 completed - applicant record created')
 
     // Reload the applicant to get the ID (if it was just created)
     await applicantStore.loadApplicant()
@@ -309,13 +315,13 @@ const handleSubmit = async () => {
     // If KYC was done but verifications weren't recorded (because applicant didn't exist),
     // record them now. This handles the case of new users doing KYC before Step 1.
     if (newApplicantId && kycStore.lockedData.curp && !kycStore.verifiedFields.curp) {
-      console.log('📝 Recording pending KYC verifications for new applicant:', newApplicantId)
+      log.debug('Recording pending KYC verifications for new applicant', { newApplicantId })
       await kycStore.recordVerifications(newApplicantId)
     }
 
     // ALWAYS create application if it doesn't exist (now that applicant exists)
     if (!applicationStore.currentApplication) {
-      console.log('📝 No current application, creating one...')
+      log.debug('No current application, creating one...')
 
       // Check if there's a pending application from the simulator
       const pendingApp = localStorage.getItem('pending_application')
@@ -328,15 +334,15 @@ const handleSubmit = async () => {
 
       if (pendingApp) {
         // Use pending application params
-        console.log('📝 Using pending application params')
+        log.debug('Using pending application params')
         params = JSON.parse(pendingApp)
       } else {
         // Use default params with first active product
-        console.log('📝 Using default params')
+        log.debug('Using default params')
         const product = applicationStore.selectedProduct || tenantStore.activeProducts[0]
 
         if (!product) {
-          console.error('❌ No products available to create application')
+          log.error('No products available to create application')
           router.push('/solicitud/paso-2')
           return
         }
@@ -369,7 +375,7 @@ const handleSubmit = async () => {
           payment_frequency: params.payment_frequency
         })
 
-        console.log('✅ Application created after step 1:', newApp?.id)
+        log.debug('Application created after step 1', { appId: newApp?.id })
 
         // KYC verifications are now automatically recorded by the backend
         // when CURP/INE validation succeeds - no need to call recordVerifications
@@ -379,7 +385,7 @@ const handleSubmit = async () => {
           localStorage.removeItem('pending_application')
         }
       } catch (createError) {
-        console.error('❌ Failed to create application after step 1:', createError)
+        log.error('Failed to create application after step 1', { error: createError })
         submitError.value = 'No se pudo crear la solicitud. Por favor intenta de nuevo.'
         return
       }
@@ -387,7 +393,7 @@ const handleSubmit = async () => {
 
     router.push('/solicitud/paso-2')
   } catch (e) {
-    console.error('Failed to save step 1:', e)
+    log.error('Failed to save step 1', { error: e })
     submitError.value = getErrorMessage(e)
   }
 }

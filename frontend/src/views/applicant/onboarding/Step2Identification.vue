@@ -5,6 +5,9 @@ import { useOnboardingStore, useKycStore, useAuthStore, useApplicantStore } from
 import { AppButton, AppInput, AppRadioGroup } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
 import { generarRFCDesdeKyc } from '@/services/rfc.service'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('Step2Identification')
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
@@ -140,11 +143,11 @@ watch(() => form.rfc, (newRfc) => {
 
   // Auto-validate if format is valid and Nubarium is configured (with debounce)
   const canValidate = kycStore.hasNubarium && newRfc.length >= 12 && validateRfcFormat(newRfc)
-  console.log('[RFC Watch] RFC changed:', newRfc, 'length:', newRfc.length, 'hasNubarium:', kycStore.hasNubarium, 'formatValid:', validateRfcFormat(newRfc), 'canValidate:', canValidate)
+  log.debug('RFC changed', { rfc: newRfc, length: newRfc.length, hasNubarium: kycStore.hasNubarium, formatValid: validateRfcFormat(newRfc), canValidate })
 
   if (canValidate) {
     rfcValidationTimeout = setTimeout(() => {
-      console.log('[RFC Watch] Triggering SAT validation for:', newRfc)
+      log.debug('Triggering SAT validation', { rfc: newRfc })
       validateRfcWithSat()
     }, 500) // 500ms debounce
   }
@@ -202,7 +205,7 @@ onMounted(async () => {
       form.rfc = rfcVerified.value
       rfcValidated.value = true
       rfcIsValid.value = true
-      console.log('[RFC] Using verified RFC from KYC:', form.rfc)
+      log.debug('Using verified RFC from KYC', { rfc: form.rfc })
     } else if (
       // Generate RFC from INE data only if not already verified
       kycStore.lockedData.nombres &&
@@ -210,7 +213,7 @@ onMounted(async () => {
       kycStore.lockedData.fecha_nacimiento
     ) {
       try {
-        console.log('[RFC] Generando RFC desde KYC...')
+        log.debug('Generating RFC from KYC data')
         const resultado = generarRFCDesdeKyc(
           kycStore.lockedData.nombres,
           kycStore.lockedData.apellido_paterno,
@@ -224,10 +227,9 @@ onMounted(async () => {
         // This allows the user to complete/correct the homoclave
         const rfcBase = resultado.rfcSugerido.substring(0, 10)
         form.rfc = rfcBase
-        console.log('[RFC] RFC base auto-rellenado (sin homoclave):', form.rfc)
-        console.log('[RFC] RFC sugerido completo:', rfcSugerido.value)
+        log.debug('RFC auto-filled', { rfcBase: form.rfc, rfcSuggested: rfcSugerido.value })
       } catch (error) {
-        console.error('[RFC] Error al generar RFC:', error)
+        log.error('Error generating RFC', { error })
         // Si falla, usar el valor guardado
         form.rfc = step2.rfc
       }
@@ -254,7 +256,7 @@ onMounted(async () => {
 const usarRfcSugerido = () => {
   if (rfcSugerido.value) {
     form.rfc = rfcSugerido.value
-    console.log('[RFC] Usando RFC sugerido:', rfcSugerido.value)
+    log.debug('Using suggested RFC', { rfc: rfcSugerido.value })
   }
 }
 
@@ -440,7 +442,7 @@ const handleSubmit = async () => {
     await onboardingStore.completeStep(2)
     router.push('/solicitud/paso-3')
   } catch (e) {
-    console.error('Failed to save step 2:', e)
+    log.error('Failed to save step 2', { error: e })
     submitError.value = getErrorMessage(e)
   }
 }

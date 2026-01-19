@@ -3,6 +3,7 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { v2 } from '@/services/v2'
 import type { V2ApiLog, V2ApiLogStats } from '@/services/v2/apilog.staff.service'
 import { logger } from '@/utils/logger'
+import { formatDateTime } from '@/utils/formatters'
 
 const componentLog = logger.child('AdminApiLogs')
 
@@ -106,18 +107,8 @@ const loadLogDetail = async (apiLog: ApiLog) => {
   }
 }
 
-// Format date
-const formatDate = (dateString: string): string => {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('es-MX', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
-}
+// Use centralized formatter (alias for template compatibility)
+const formatDate = formatDateTime
 
 // Format duration
 const formatDuration = (ms: number | null): string => {

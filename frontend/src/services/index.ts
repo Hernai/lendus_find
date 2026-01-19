@@ -23,6 +23,25 @@ export {
 } from './v2'
 
 // =====================================================
+// KYC Service
+// =====================================================
+
+export * as kycService from './kyc.service'
+export type {
+  KycServicesResponse,
+  IneOcrData,
+  IneValidationResponse,
+  CurpValidationResponse,
+  RfcValidationResponse,
+  BiometricTokenResponse,
+  FaceMatchResponse,
+  LivenessResponse,
+  ComplianceCheckResponse,
+  VerifiedField as KycVerifiedField,
+  LoadVerificationsResponse,
+} from './kyc.service'
+
+// =====================================================
 // V2 Types
 // =====================================================
 

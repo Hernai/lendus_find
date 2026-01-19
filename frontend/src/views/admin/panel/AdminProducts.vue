@@ -6,6 +6,7 @@ import { AppButton } from '@/components/common'
 import { useToast } from '@/composables'
 import { useAuthStore } from '@/stores/auth'
 import { logger } from '@/utils/logger'
+import { formatMoney } from '@/utils/formatters'
 
 const log = logger.child('AdminProducts')
 const toast = useToast()
@@ -492,14 +493,8 @@ const deleteProduct = async () => {
   }
 }
 
-// Format currency
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 0
-  }).format(value)
-}
+// Alias for template compatibility
+const formatCurrency = formatMoney
 
 // Cleanup modal state on unmount to prevent stale UI
 onBeforeUnmount(() => {

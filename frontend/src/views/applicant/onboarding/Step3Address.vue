@@ -4,6 +4,9 @@ import { useRouter } from 'vue-router'
 import { useOnboardingStore, useKycStore, useTenantStore, useApplicantStore } from '@/stores'
 import { AppButton, AppInput, AppSelect } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('Step3Address')
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
@@ -189,13 +192,13 @@ onMounted(async () => {
 // This helps them get started without re-typing everything
 watch(() => addressIsDifferent.value, (newValue, oldValue) => {
   if (newValue === 'different' && oldValue !== 'different') {
-    console.log('[Step3] User selected different address, pre-filling CP from INE if available')
+    log.debug('User selected different address, pre-filling CP from INE if available')
     const ineAddr = parsedIneAddress.value
 
     // Pre-fill postal code from INE if available (to help lookup state/municipality)
     if (ineAddr.cp && !form.postal_code) {
       form.postal_code = ineAddr.cp
-      console.log('[Step3] Pre-filled CP from INE:', ineAddr.cp)
+      log.debug('Pre-filled CP from INE', { cp: ineAddr.cp })
     }
 
     // Clear other fields so user enters fresh address data
@@ -447,7 +450,7 @@ const validate = () => {
 const handleSubmit = async () => {
   if (!validate()) return
 
-  console.log('[Step3] handleSubmit - form data:', {
+  log.debug('handleSubmit - form data', {
     housing_type: form.housing_type,
     street: form.street,
     ext_number: form.ext_number,
@@ -471,7 +474,7 @@ const handleSubmit = async () => {
 
       // If missing state or colonia, do postal code lookup
       if (addr.cp && (!finalState || !finalColonia)) {
-        console.log('[Step3] INE address missing state/colonia, looking up CP:', addr.cp)
+        log.debug('INE address missing state/colonia, looking up CP', { cp: addr.cp })
         // Do inline lookup from mock data
         const mockData: Record<string, { state: string; municipality: string; neighborhoods: string[] }> = {
           '29049': { state: 'CHIAPAS', municipality: 'TUXTLA GUTIERREZ', neighborhoods: ['LAS GRANJAS'] },
@@ -485,7 +488,7 @@ const handleSubmit = async () => {
           finalState = finalState || cpData.state
           finalMunicipio = finalMunicipio || cpData.municipality
           finalColonia = finalColonia || (cpData.neighborhoods[0] || '')
-          console.log('[Step3] Found CP data:', { finalState, finalMunicipio, finalColonia })
+          log.debug('Found CP data', { finalState, finalMunicipio, finalColonia })
         }
       }
 
@@ -525,7 +528,7 @@ const handleSubmit = async () => {
     await onboardingStore.completeStep(3)
     router.push('/solicitud/paso-4')
   } catch (e: unknown) {
-    console.error('Failed to save step 3:', e)
+    log.error('Failed to save step 3', { error: e })
     // Show error to user
     const errorObj = e as Error
     const errorMsg = errorObj?.message || 'Error al guardar la dirección'

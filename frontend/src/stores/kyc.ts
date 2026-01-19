@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/services/api'
+import { kycService } from '@/services'
 import { logger } from '@/utils/logger'
 
 const kycLogger = logger.child('KYC')
@@ -61,71 +62,13 @@ export interface KycValidations {
   } | null
 }
 
-export interface KycServicesResponse {
-  data: {
-    nubarium: {
-      configured: boolean
-      services: string[]
-    }
-  }
-  birth_states: Record<string, string>
-}
-
-export interface IneValidationResponse {
-  message: string
-  ocr_data?: {
-    // Note: Nubarium returns 'nombres' (plural) not 'nombre'
-    nombres: string
-    apellido_paterno: string
-    apellido_materno: string
-    curp: string
-    fecha_nacimiento: string
-    sexo: string
-    calle: string
-    colonia: string
-    cp?: string
-    localidad?: string
-    ciudad?: string
-    municipio?: string
-    estado?: string
-    clave_elector: string
-    vigencia: string
-    // Additional fields from Nubarium OCR
-    ocr?: string // Número OCR (13 dígitos)
-    cic?: string
-    identificador_ciudadano?: string
-    subtipo?: string
-  }
-  list_validation?: {
-    valid: boolean
-    code: string
-    message: string
-  }
-  is_valid?: boolean
-  validation_code?: string
-}
-
-export interface BiometricTokenResponse {
-  message: string
-  data: {
-    token: string
-    expires_in: number
-    transaction_id: string
-  }
-}
-
-export interface RfcValidationResponse {
-  message: string
-  valid: boolean // Valid flag at root level
-  data: {
-    rfc: string
-    mensaje?: string
-    informacion_adicional?: string
-    razon_social?: string
-    tipo_persona: 'M' | 'F' // M = Moral, F = Física
-    tipo_persona_label: string
-  }
-}
+// Re-export types from service for backward compatibility
+export type {
+  KycServicesResponse,
+  IneValidationResponse,
+  RfcValidationResponse,
+  BiometricTokenResponse,
+} from '@/services/kyc.service'
 
 // Verified field information
 export interface VerifiedField {
@@ -308,10 +251,10 @@ export const useKycStore = defineStore('kyc', () => {
     error.value = null
 
     try {
-      const response = await api.get<KycServicesResponse>('/kyc/services')
-      isConfigured.value = response.data.data.nubarium?.configured || false
-      availableServices.value = response.data.data.nubarium?.services || []
-      birthStates.value = response.data.birth_states || {}
+      const result = await kycService.checkServices()
+      isConfigured.value = result.configured
+      availableServices.value = result.services
+      birthStates.value = result.birthStates
       return isConfigured.value
     } catch (err) {
       kycLogger.error('Failed to check KYC services', err)
@@ -331,20 +274,17 @@ export const useKycStore = defineStore('kyc', () => {
     error.value = null
 
     try {
-      const response = await api.post<{ success: boolean; message: string; configured: boolean }>('/kyc/test-connection')
-      return {
-        success: response.data.success,
-        message: response.data.message
+      const result = await kycService.testConnection()
+      if (!result.success) {
+        error.value = result.message
       }
+      return result
     } catch (err: unknown) {
       kycLogger.error('Failed to test KYC connection', err)
       const errorResponse = err as { response?: { data?: { message?: string } } }
       const message = errorResponse.response?.data?.message || 'Error al probar conexión'
       error.value = message
-      return {
-        success: false,
-        message
-      }
+      return { success: false, message }
     } finally {
       isLoading.value = false
     }
@@ -359,20 +299,17 @@ export const useKycStore = defineStore('kyc', () => {
     error.value = null
 
     try {
-      const response = await api.post<{ success: boolean; message: string }>('/kyc/refresh-token')
-      return {
-        success: response.data.success,
-        message: response.data.message
+      const result = await kycService.refreshToken()
+      if (!result.success) {
+        error.value = result.message
       }
+      return result
     } catch (err: unknown) {
       kycLogger.error('Failed to refresh KYC token', err)
       const errorResponse = err as { response?: { data?: { message?: string } } }
       const message = errorResponse.response?.data?.message || 'Error al renovar token'
       error.value = message
-      return {
-        success: false,
-        message
-      }
+      return { success: false, message }
     } finally {
       isLoading.value = false
     }
@@ -401,30 +338,24 @@ export const useKycStore = defineStore('kyc', () => {
     error.value = null
 
     try {
-      const response = await api.post<IneValidationResponse>('/kyc/ine/validate', {
-        front_image: ineFrontImage.value,
-        back_image: ineBackImage.value,
-        validate_list: true
-      })
+      const response = await kycService.validateIne(ineFrontImage.value, ineBackImage.value)
 
       // Store OCR data
-      if (response.data.ocr_data) {
-        const ocr = response.data.ocr_data
+      if (response.ocr_data) {
+        const ocr = response.ocr_data
         kycLogger.debug('OCR data received:', ocr)
 
         // Clean CURP - remove spaces if present
         const cleanCurp = ocr.curp ? ocr.curp.replace(/\s+/g, '') : null
 
         // Extract entidad de nacimiento from CURP (positions 12-13, 0-indexed: 11-12)
-        // CURP format: AAAA YYMMDD SEXO EE XXX C
-        // EE = Estado de nacimiento (2 chars at position 11-12)
         let entidadNacimiento: string | null = null
         if (cleanCurp && cleanCurp.length >= 13) {
           entidadNacimiento = cleanCurp.substring(11, 13).toUpperCase()
         }
 
         lockedData.value = {
-          nombres: ocr.nombres || null, // Nubarium returns 'nombres' (plural)
+          nombres: ocr.nombres || null,
           apellido_paterno: ocr.apellido_paterno || null,
           apellido_materno: ocr.apellido_materno || null,
           fecha_nacimiento: ocr.fecha_nacimiento || null,
@@ -433,7 +364,6 @@ export const useKycStore = defineStore('kyc', () => {
           clave_elector: ocr.clave_elector || null,
           vigencia: ocr.vigencia || null,
           entidad_nacimiento: entidadNacimiento,
-          // INE additional fields
           ocr: ocr.ocr || null,
           cic: ocr.cic || null,
           identificador_ciudadano: ocr.identificador_ciudadano || null,
@@ -452,21 +382,18 @@ export const useKycStore = defineStore('kyc', () => {
 
         validations.value.ine_ocr = {
           success: true,
-          data: response.data.ocr_data as unknown as Record<string, unknown>
+          data: response.ocr_data as unknown as Record<string, unknown>
         }
 
-        // NOTE: Verifications are now handled automatically by the backend
-        // when calling /kyc/ine/validate - no need to call recordSingleVerification here
         kycLogger.debug('INE validated - backend handles verification records automatically')
       }
 
       // Store list validation
-      if (response.data.list_validation) {
-        validations.value.ine_lista_nominal = response.data.list_validation
-        // NOTE: Backend handles this verification automatically
+      if (response.list_validation) {
+        validations.value.ine_lista_nominal = response.list_validation
       }
 
-      return response.data.is_valid === true
+      return response.is_valid === true
     } catch (err: unknown) {
       kycLogger.error('Failed to validate INE', err)
       const errorResponse = err as { response?: { data?: { message?: string } } }
@@ -493,77 +420,47 @@ export const useKycStore = defineStore('kyc', () => {
     error.value = null
 
     try {
-      const response = await api.post<{ valid: boolean; data?: Record<string, unknown> }>('/kyc/curp/validate', {
-        curp: curpToValidate
-      })
+      const response = await kycService.validateCurp(curpToValidate)
 
       validations.value.curp_renapo = {
-        valid: response.data.valid,
-        data: response.data.data
+        valid: response.valid,
+        data: response.data as Record<string, unknown> | undefined
       }
 
-      // IMPORTANT: Use RENAPO data as source of truth for names
-      // RENAPO is the official government registry and has accurate data
-      // OCR from INE can have errors (e.g., "HERNAJ" instead of correct name)
-      if (response.data.valid && response.data.data) {
-        const renapoData = response.data.data as {
-          nombres?: string
-          apellido_paterno?: string
-          apellido_materno?: string
-          fecha_nacimiento?: string
-          sexo?: string
-        }
-
+      // Use RENAPO data as source of truth for names (official government source)
+      if (response.valid && response.data) {
+        const renapoData = response.data
         kycLogger.debug('RENAPO data received:', renapoData)
-        kycLogger.debug('Previous OCR data:', {
-          nombres: lockedData.value.nombres,
-          apellido_paterno: lockedData.value.apellido_paterno,
-          apellido_materno: lockedData.value.apellido_materno
-        })
 
-        // Override OCR data with RENAPO data (official government source)
+        // Override OCR data with RENAPO data
         if (renapoData.nombres) {
           lockedData.value.nombres = renapoData.nombres
-          kycLogger.debug('Updated nombres from RENAPO:', renapoData.nombres)
         }
         if (renapoData.apellido_paterno) {
           lockedData.value.apellido_paterno = renapoData.apellido_paterno
-          kycLogger.debug('Updated apellido_paterno from RENAPO:', renapoData.apellido_paterno)
         }
         if (renapoData.apellido_materno) {
           lockedData.value.apellido_materno = renapoData.apellido_materno
-          kycLogger.debug('Updated apellido_materno from RENAPO:', renapoData.apellido_materno)
         }
         if (renapoData.fecha_nacimiento) {
           lockedData.value.fecha_nacimiento = renapoData.fecha_nacimiento
-          kycLogger.debug('Updated fecha_nacimiento from RENAPO:', renapoData.fecha_nacimiento)
         }
         if (renapoData.sexo) {
           // RENAPO returns 'HOMBRE'/'MUJER', convert to 'H'/'M'
           const sexoNormalized = renapoData.sexo.toUpperCase().startsWith('H') ? 'H' : 'M'
           lockedData.value.sexo = sexoNormalized as 'H' | 'M'
-          kycLogger.debug('Updated sexo from RENAPO:', sexoNormalized)
         }
 
-        kycLogger.debug('Updated lockedData with RENAPO (official) data:', {
-          nombres: lockedData.value.nombres,
-          apellido_paterno: lockedData.value.apellido_paterno,
-          apellido_materno: lockedData.value.apellido_materno
-        })
+        kycLogger.debug('Updated lockedData with RENAPO data')
       }
 
-      // NOTE: Verifications are now handled automatically by the backend
-      // when calling /kyc/curp/validate - no need to call recordSingleVerification here
       kycLogger.debug('CURP validated - backend handles verification records automatically')
-
-      return response.data.valid
+      return response.valid
     } catch (err: unknown) {
       kycLogger.error('Failed to validate CURP', err)
       const errorResponse = err as { response?: { data?: { message?: string } } }
       error.value = errorResponse.response?.data?.message || 'Error al validar CURP'
-      validations.value.curp_renapo = {
-        valid: false
-      }
+      validations.value.curp_renapo = { valid: false }
       return false
     } finally {
       isValidating.value = false
@@ -580,43 +477,27 @@ export const useKycStore = defineStore('kyc', () => {
     error.value = null
 
     try {
-      const response = await api.post<RfcValidationResponse>('/kyc/rfc/validate', {
-        rfc: rfc.toUpperCase()
-      })
+      const response = await kycService.validateRfc(rfc.toUpperCase(), _applicantId)
 
-      // valid is at root level, razon_social might be in data or use mensaje as fallback
-      const isValid = response.data.valid
-      const razonSocial = response.data.data.razon_social || response.data.data.mensaje || response.data.data.informacion_adicional
+      const razonSocial = response.data.razon_social || response.data.mensaje || response.data.informacion_adicional
 
       const result = {
-        valid: isValid,
-        rfc: response.data.data.rfc,
+        valid: response.valid,
+        rfc: response.data.rfc,
         razon_social: razonSocial,
-        tipo_persona: response.data.data.tipo_persona_label
+        tipo_persona: response.data.tipo_persona_label
       }
 
       rfcValidation.value = result
-
-      // NOTE: Verifications are now handled automatically by the backend
-      // when calling /kyc/rfc/validate - no need to call recordSingleVerification here
       kycLogger.debug('RFC validated - backend handles verification records automatically')
 
-      return {
-        valid: result.valid,
-        razon_social: result.razon_social
-      }
+      return { valid: result.valid, razon_social: result.razon_social }
     } catch (err: unknown) {
       kycLogger.error('Failed to validate RFC', err)
       const errorResponse = err as { response?: { data?: { message?: string } } }
       const errorMsg = errorResponse.response?.data?.message || 'Error al validar RFC'
       error.value = errorMsg
-
-      rfcValidation.value = {
-        valid: false,
-        rfc: rfc,
-        error: errorMsg
-      }
-
+      rfcValidation.value = { valid: false, rfc: rfc, error: errorMsg }
       return { valid: false, error: errorMsg }
     } finally {
       isValidating.value = false
@@ -724,16 +605,13 @@ export const useKycStore = defineStore('kyc', () => {
     }
   }
 
-  const getBiometricToken = async (applicationId?: string) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const getBiometricToken = async (_applicationId?: string) => {
     isLoading.value = true
     error.value = null
 
     try {
-      const response = await api.post<BiometricTokenResponse>('/kyc/biometric/token', {
-        application_id: applicationId
-      })
-
-      return response.data.data
+      return await kycService.getBiometricToken()
     } catch (err: unknown) {
       kycLogger.error('Failed to get biometric token', err)
       const errorResponse = err as { response?: { data?: { message?: string } } }
@@ -746,7 +624,6 @@ export const useKycStore = defineStore('kyc', () => {
 
   /**
    * Validate face match between selfie and INE photo.
-   * Compares the captured selfie with the face on the INE to verify identity.
    */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const validateFaceMatch = async (_applicantId?: string): Promise<boolean> => {
@@ -756,7 +633,6 @@ export const useKycStore = defineStore('kyc', () => {
       error.value = 'Se requiere la imagen de selfie'
       return false
     }
-
     if (!ineFrontImage.value) {
       error.value = 'Se requiere la imagen frontal del INE'
       return false
@@ -766,32 +642,13 @@ export const useKycStore = defineStore('kyc', () => {
     error.value = null
 
     try {
-      kycLogger.debug('Calling /kyc/biometric/face-match API...')
-      const response = await api.post<{
-        message: string
-        match: boolean
-        score: number
-        threshold: number
-        validation_code?: string
-      }>('/kyc/biometric/face-match', {
-        selfie_image: selfieImage.value,
-        ine_image: ineFrontImage.value,
-        threshold: 80 // 80% similarity threshold
-      })
+      const result = await kycService.performFaceMatch(ineFrontImage.value, selfieImage.value)
+      kycLogger.debug('Face match response:', result)
 
-      kycLogger.debug('Face match response:', response.data)
+      validations.value.face_match = { score: result.score, match: result.match }
+      kycLogger.debug('Face match validated - backend handles verification records automatically')
 
-      const match = response.data.match
-      const score = response.data.score
-
-      // Store the result
-      validations.value.face_match = { score, match }
-
-      // NOTE: Verifications and document approval are now handled automatically by the backend
-      // when calling /kyc/biometric/face-match - no need to call recordSingleVerification here
-      kycLogger.debug('Face match validated - backend handles verification records and document approval automatically')
-
-      return match
+      return result.match
     } catch (err: unknown) {
       kycLogger.error('Failed to validate face match', err)
       const errorResponse = err as { response?: { data?: { message?: string } } }
@@ -805,7 +662,6 @@ export const useKycStore = defineStore('kyc', () => {
 
   /**
    * Validate liveness detection from selfie image.
-   * Verifies that the captured face belongs to a real, present person (anti-spoofing).
    */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const validateLiveness = async (_applicantId?: string): Promise<boolean> => {
@@ -820,29 +676,13 @@ export const useKycStore = defineStore('kyc', () => {
     error.value = null
 
     try {
-      kycLogger.debug('Calling /kyc/biometric/liveness API...')
-      const response = await api.post<{
-        message: string
-        passed: boolean
-        score: number
-        validation_code?: string
-      }>('/kyc/biometric/liveness', {
-        face_image: selfieImage.value
-      })
+      const result = await kycService.performLivenessCheck(selfieImage.value)
+      kycLogger.debug('Liveness response:', result)
 
-      kycLogger.debug('Liveness response:', response.data)
-
-      const passed = response.data.passed
-      const score = response.data.score
-
-      // Store the result
-      validations.value.liveness = { passed, score }
-
-      // NOTE: Verifications are now handled automatically by the backend
-      // when calling /kyc/biometric/liveness - no need to call recordSingleVerification here
+      validations.value.liveness = { passed: result.passed, score: result.score }
       kycLogger.debug('Liveness validated - backend handles verification records automatically')
 
-      return passed
+      return result.passed
     } catch (err: unknown) {
       kycLogger.error('Failed to validate liveness', err)
       const errorResponse = err as { response?: { data?: { message?: string } } }
@@ -1201,10 +1041,9 @@ export const useKycStore = defineStore('kyc', () => {
 
   /**
    * Load verified fields from backend for an applicant.
-   * This also reconstructs lockedData from the verified fields so that
-   * the KYC state is properly restored when returning to onboarding.
+   * Reconstructs lockedData from the verified fields for KYC state restoration.
    */
-  const loadVerifications = async (applicantId: string): Promise<boolean> => {
+  const loadVerificationsFromBackend = async (applicantId: string): Promise<boolean> => {
     if (!applicantId) {
       kycLogger.warn('No applicant ID for loading verifications')
       return false
@@ -1212,94 +1051,48 @@ export const useKycStore = defineStore('kyc', () => {
 
     try {
       kycLogger.debug('Loading verifications for applicant:', applicantId)
-      const response = await api.get<VerificationsResponse>(`/kyc/verifications/${applicantId}`)
-      kycLogger.debug('API response:', response.data)
+      const response = await kycService.loadVerifications(applicantId)
 
-      verifiedFields.value = response.data.data.verified_fields || {}
-      verificationsSummary.value = response.data.data.summary || {
+      // Cast types since service uses compatible structure
+      verifiedFields.value = (response.verified_fields || {}) as Record<string, VerifiedField>
+      verificationsSummary.value = (response.summary || {
         personal_data: {},
         contact: {},
         address: {},
         kyc: {}
-      }
+      }) as typeof verificationsSummary.value
 
       // Reconstruct lockedData from verified fields
-      // This is important when returning to onboarding after KYC was already done
       const fields = verifiedFields.value
-      kycLogger.debug('verified_fields from API:', fields)
-
-      // Check if we have KYC data (CURP is the key indicator)
       const hasCurp = !!fields.curp?.value
-      kycLogger.debug('hasCurp check', { hasCurp, value: fields.curp?.value })
 
-      if (fields.curp?.value) {
-        lockedData.value.curp = fields.curp.value
-      }
-      if (fields.first_name?.value) {
-        lockedData.value.nombres = fields.first_name.value
-      }
-      if (fields.last_name_1?.value) {
-        lockedData.value.apellido_paterno = fields.last_name_1.value
-      }
-      if (fields.last_name_2?.value) {
-        lockedData.value.apellido_materno = fields.last_name_2.value
-      }
-      if (fields.birth_date?.value) {
-        lockedData.value.fecha_nacimiento = fields.birth_date.value
-      }
+      if (fields.curp?.value) lockedData.value.curp = fields.curp.value
+      if (fields.first_name?.value) lockedData.value.nombres = fields.first_name.value
+      if (fields.last_name_1?.value) lockedData.value.apellido_paterno = fields.last_name_1.value
+      if (fields.last_name_2?.value) lockedData.value.apellido_materno = fields.last_name_2.value
+      if (fields.birth_date?.value) lockedData.value.fecha_nacimiento = fields.birth_date.value
       if (fields.gender?.value) {
-        // Convert M/F to H/M format used internally
         const genderValue = fields.gender.value.toUpperCase()
         lockedData.value.sexo = (genderValue === 'H' || genderValue === 'M') ? genderValue as 'H' | 'M' : null
       }
-      if (fields.birth_state?.value) {
-        lockedData.value.entidad_nacimiento = fields.birth_state.value
-      }
-      if (fields.ine_clave?.value) {
-        lockedData.value.clave_elector = fields.ine_clave.value
-      }
-      if (fields.ine_ocr?.value) {
-        lockedData.value.ocr = fields.ine_ocr.value
-      }
+      if (fields.birth_state?.value) lockedData.value.entidad_nacimiento = fields.birth_state.value
+      if (fields.ine_clave?.value) lockedData.value.clave_elector = fields.ine_clave.value
+      if (fields.ine_ocr?.value) lockedData.value.ocr = fields.ine_ocr.value
       if (fields.ine_folio?.value || fields.ine_cic?.value) {
         lockedData.value.cic = fields.ine_folio?.value || fields.ine_cic?.value || null
       }
 
-      // Reconstruct direccion_ine from address fields
-      if (fields.address_street?.value) {
-        lockedData.value.direccion_ine.calle = fields.address_street.value
-      }
-      if (fields.address_neighborhood?.value) {
-        lockedData.value.direccion_ine.colonia = fields.address_neighborhood.value
-      }
-      if (fields.address_postal_code?.value) {
-        lockedData.value.direccion_ine.cp = fields.address_postal_code.value
-      }
-      if (fields.address_city?.value) {
-        lockedData.value.direccion_ine.municipio = fields.address_city.value
-      }
-      if (fields.address_state?.value) {
-        lockedData.value.direccion_ine.estado = fields.address_state.value
-      }
+      // Reconstruct direccion_ine
+      if (fields.address_street?.value) lockedData.value.direccion_ine.calle = fields.address_street.value
+      if (fields.address_neighborhood?.value) lockedData.value.direccion_ine.colonia = fields.address_neighborhood.value
+      if (fields.address_postal_code?.value) lockedData.value.direccion_ine.cp = fields.address_postal_code.value
+      if (fields.address_city?.value) lockedData.value.direccion_ine.municipio = fields.address_city.value
+      if (fields.address_state?.value) lockedData.value.direccion_ine.estado = fields.address_state.value
 
-      // Set verified based on backend flag OR if we have CURP data (from backend or existing in memory)
-      // This ensures KYC state is restored even if kyc_verified flag is not set
-      // Also preserve verified state if lockedData already has a CURP from current session
       const hasExistingCurp = !!lockedData.value.curp
-      verified.value = response.data.data.kyc_verified || hasCurp || hasExistingCurp
+      verified.value = response.kyc_verified || hasCurp || hasExistingCurp
 
       kycLogger.debug('Loaded verifications:', Object.keys(verifiedFields.value).length)
-      kycLogger.debug('hasCurp from API', { hasCurp, hasExistingCurp })
-      kycLogger.debug('Reconstructed lockedData:', {
-        curp: lockedData.value.curp,
-        nombres: lockedData.value.nombres,
-        clave_elector: lockedData.value.clave_elector,
-        sexo: lockedData.value.sexo,
-        entidad_nacimiento: lockedData.value.entidad_nacimiento,
-        direccion_ine: lockedData.value.direccion_ine
-      })
-      kycLogger.debug('verified flag:', verified.value)
-
       return true
     } catch (err) {
       kycLogger.error('Failed to load verifications', err)
@@ -1548,7 +1341,7 @@ export const useKycStore = defineStore('kyc', () => {
     markVerified,
     recordVerifications,
     recordSingleVerification,
-    loadVerifications,
+    loadVerifications: loadVerificationsFromBackend,
     isFieldVerified,
     isFieldLocked,
     getFieldVerification,

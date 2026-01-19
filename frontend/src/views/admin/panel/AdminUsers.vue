@@ -6,6 +6,7 @@ import { AppButton } from '@/components/common'
 import { useToast } from '@/composables'
 import { getErrorMessage, type AxiosErrorResponse } from '@/types/api'
 import { logger } from '@/utils/logger'
+import { formatDateOnly, formatTimeOnly, formatPhone, formatPhoneInput } from '@/utils/formatters'
 
 const log = logger.child('AdminUsers')
 const toast = useToast()
@@ -191,27 +192,6 @@ watch(currentPage, () => {
   fetchUsers()
 })
 
-// Formatters
-const formatDateOnly = (dateStr?: string | null) => {
-  if (!dateStr) return 'Nunca'
-  const date = new Date(dateStr)
-  if (isNaN(date.getTime())) return 'Nunca'
-  return date.toLocaleDateString('es-MX', {
-    day: 'numeric',
-    month: 'short'
-  })
-}
-
-const formatTimeOnly = (dateStr?: string | null) => {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  if (isNaN(date.getTime())) return ''
-  return date.toLocaleTimeString('es-MX', {
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
 const getRoleBadge = (type: string) => {
   const badges: Record<string, { bg: string; text: string }> = {
     SUPER_ADMIN: { bg: 'bg-purple-100', text: 'text-purple-800' },
@@ -241,22 +221,12 @@ const openCreateModal = () => {
   showUserModal.value = true
 }
 
-// Format phone number for display
-const formatPhoneForDisplay = (phone: string | undefined | null): string => {
-  if (!phone) return ''
-  const digits = phone.replace(/\D/g, '')
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
-  }
-  return phone
-}
-
 const openEditModal = (user: User) => {
   editingUser.value = user
   form.value = {
     name: user.name,
     email: user.email,
-    phone: formatPhoneForDisplay(user.phone),
+    phone: formatPhone(user.phone),
     role: user.role,
     password: '',
     password_confirmation: '',
@@ -342,24 +312,12 @@ const handlePhoneKeydown = (event: KeyboardEvent) => {
   }
 }
 
-// Format phone number as user types
-const formatPhone = (event: Event) => {
+// Handle phone input formatting
+const handlePhoneInput = (event: Event) => {
   const input = event.target as HTMLInputElement
-  // Remove non-digits
-  let value = input.value.replace(/\D/g, '')
-  // Limit to 10 digits
-  value = value.slice(0, 10)
-  // Format as (XX) XXXX-XXXX
-  if (value.length > 6) {
-    value = `(${value.slice(0, 2)}) ${value.slice(2, 6)}-${value.slice(6)}`
-  } else if (value.length > 2) {
-    value = `(${value.slice(0, 2)}) ${value.slice(2)}`
-  } else if (value.length > 0) {
-    value = `(${value}`
-  }
-  form.value.phone = value
-  // Force input value update to prevent extra characters
-  input.value = value
+  const formatted = formatPhoneInput(input.value)
+  form.value.phone = formatted
+  input.value = formatted
 }
 
 const saveUser = async () => {
@@ -855,7 +813,7 @@ const paginationRange = computed(() => {
               :class="formErrors.phone ? 'border-red-300' : 'border-gray-300'"
               placeholder="(55) 1234-5678"
               @keydown="handlePhoneKeydown"
-              @input="formatPhone"
+              @input="handlePhoneInput"
             />
             <p class="text-xs text-gray-500 mt-1">10 dígitos</p>
             <p v-if="formErrors.phone" class="text-sm text-red-600 mt-1">{{ formErrors.phone }}</p>
