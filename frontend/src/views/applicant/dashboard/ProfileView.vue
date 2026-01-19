@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore, useTenantStore, useApplicantStore } from '@/stores'
+import { useAuthStore, useTenantStore, useProfileStore, useApplicantStore } from '@/stores'
 import type { BankAccount } from '@/types/applicant'
 import BankAccountCard from '@/components/BankAccountCard.vue'
 import AddBankAccountModal from '@/components/AddBankAccountModal.vue'
@@ -12,6 +12,8 @@ const log = logger.child('Profile')
 const router = useRouter()
 const authStore = useAuthStore()
 const tenantStore = useTenantStore()
+const profileStore = useProfileStore()
+// Keep applicantStore for bank accounts and photo operations (not yet in V2 profile)
 const applicantStore = useApplicantStore()
 
 const isLoading = ref(true)
@@ -25,22 +27,22 @@ const photoInputRef = ref<HTMLInputElement | null>(null)
 const activeApplicationId = ref<string | null>(null)
 const showPhotoViewer = ref(false)
 
-const applicant = computed(() => applicantStore.applicant)
+const profile = computed(() => profileStore.profile)
 const tenantName = computed(() => tenantStore.name || 'LendusFind')
 
 const userName = computed(() => {
-  const app = applicant.value
-  if (app?.first_name) {
-    const name = app.first_name.toLowerCase()
+  const pd = profile.value?.personal_data
+  if (pd?.first_name) {
+    const name = pd.first_name.toLowerCase()
     return name.charAt(0).toUpperCase() + name.slice(1)
   }
   return authStore.user?.email?.split('@')[0] || 'Usuario'
 })
 
 const fullName = computed(() => {
-  const app = applicant.value
-  if (!app) return ''
-  return app.full_name || `${app.first_name || ''} ${app.last_name_1 || ''} ${app.last_name_2 || ''}`.trim()
+  const pd = profile.value?.personal_data
+  if (!pd) return ''
+  return pd.full_name || `${pd.first_name || ''} ${pd.last_name_1 || ''} ${pd.last_name_2 || ''}`.trim()
 })
 
 // Format helpers
@@ -90,6 +92,12 @@ const formatEmploymentType = (type: string | null | undefined) => {
   return option?.label || type
 }
 
+const formatHousingType = (type: string | null | undefined) => {
+  if (!type) return '-'
+  const option = tenantStore.options.housing_type.find(o => o.value === type)
+  return option?.label || type
+}
+
 const formatSeniority = (months: number | null | undefined) => {
   if (!months) return '-'
   const years = Math.floor(months / 12)
@@ -132,7 +140,7 @@ const loadApplicationAndPhoto = async () => {
 
 onMounted(async () => {
   await tenantStore.loadConfig()
-  await applicantStore.loadApplicant()
+  await profileStore.loadProfile()
   await Promise.all([
     loadBankAccounts(),
     loadApplicationAndPhoto()
@@ -352,7 +360,7 @@ const handleLogout = async () => {
 
             <!-- Name & CURP -->
             <h2 class="text-xl font-bold text-gray-900 text-center">{{ fullName || 'Sin nombre' }}</h2>
-            <p v-if="applicant?.curp" class="text-gray-500 text-sm mt-1">CURP: {{ applicant.curp }}</p>
+            <p v-if="profile?.identifications?.curp" class="text-gray-500 text-sm mt-1">CURP: {{ profile.identifications.curp }}</p>
           </div>
         </div>
 
@@ -376,23 +384,23 @@ const handleLogout = async () => {
             </div>
             <div class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">RFC</span>
-              <span class="text-gray-900 font-medium">{{ applicant?.rfc || '-' }}</span>
+              <span class="text-gray-900 font-medium">{{ profile?.identifications?.rfc || '-' }}</span>
             </div>
             <div class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">Fecha de nacimiento</span>
-              <span class="text-gray-900 font-medium">{{ formatDate(applicant?.birth_date) }}</span>
+              <span class="text-gray-900 font-medium">{{ formatDate(profile?.personal_data?.birth_date) }}</span>
             </div>
             <div class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">Genero</span>
-              <span class="text-gray-900 font-medium">{{ formatGender(applicant?.gender) }}</span>
+              <span class="text-gray-900 font-medium">{{ profile?.personal_data?.gender_label || formatGender(profile?.personal_data?.gender) }}</span>
             </div>
             <div class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">Estado civil</span>
-              <span class="text-gray-900 font-medium">{{ formatMaritalStatus(applicant?.marital_status) }}</span>
+              <span class="text-gray-900 font-medium">{{ profile?.personal_data?.marital_status_label || formatMaritalStatus(profile?.personal_data?.marital_status) }}</span>
             </div>
             <div class="flex justify-between py-2">
               <span class="text-gray-500">Telefono</span>
-              <span class="text-gray-900 font-medium">{{ formatPhone(applicant?.phone) }}</span>
+              <span class="text-gray-900 font-medium">{{ formatPhone(authStore.user?.phone) }}</span>
             </div>
           </div>
         </div>
@@ -410,20 +418,20 @@ const handleLogout = async () => {
             </div>
           </div>
 
-          <div v-if="applicant?.primary_address" class="text-sm text-gray-700">
+          <div v-if="profile?.address" class="text-sm text-gray-700">
             <p class="font-medium">
-              {{ applicant.primary_address.street }} {{ applicant.primary_address.ext_number }}
-              <span v-if="applicant.primary_address.int_number">, Int {{ applicant.primary_address.int_number }}</span>
+              {{ profile.address.street }} {{ profile.address.ext_number }}
+              <span v-if="profile.address.int_number">, Int {{ profile.address.int_number }}</span>
             </p>
             <p class="text-gray-500 mt-1">
-              Col. {{ applicant.primary_address.neighborhood }}, CP {{ applicant.primary_address.postal_code }}
+              Col. {{ profile.address.neighborhood }}, CP {{ profile.address.postal_code }}
             </p>
             <p class="text-gray-500">
-              {{ applicant.primary_address.municipality || applicant.primary_address.city }}, {{ applicant.primary_address.state }}
+              {{ profile.address.municipality || profile.address.city }}, {{ profile.address.state }}
             </p>
-            <div v-if="applicant.primary_address.housing_type_label" class="mt-3 pt-3 border-t border-gray-100">
+            <div v-if="profile.address.housing_type" class="mt-3 pt-3 border-t border-gray-100">
               <span class="text-gray-500">Tipo de vivienda:</span>
-              <span class="ml-2 text-gray-900 font-medium">{{ applicant.primary_address.housing_type_label }}</span>
+              <span class="ml-2 text-gray-900 font-medium">{{ formatHousingType(profile.address.housing_type) }}</span>
             </div>
           </div>
           <p v-else class="text-gray-500 text-sm">Sin direccion registrada</p>
@@ -442,26 +450,26 @@ const handleLogout = async () => {
             </div>
           </div>
 
-          <div v-if="applicant?.current_employment" class="space-y-3 text-sm">
+          <div v-if="profile?.employment" class="space-y-3 text-sm">
             <div class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">Tipo</span>
-              <span class="text-gray-900 font-medium">{{ formatEmploymentType(applicant.current_employment.employment_type) }}</span>
+              <span class="text-gray-900 font-medium">{{ formatEmploymentType(profile.employment.employment_type) }}</span>
             </div>
-            <div v-if="applicant.current_employment.company_name" class="flex justify-between py-2 border-b border-gray-100">
+            <div v-if="profile.employment.company_name" class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">Empresa</span>
-              <span class="text-gray-900 font-medium text-right">{{ applicant.current_employment.company_name }}</span>
+              <span class="text-gray-900 font-medium text-right">{{ profile.employment.company_name }}</span>
             </div>
-            <div v-if="applicant.current_employment.position" class="flex justify-between py-2 border-b border-gray-100">
+            <div v-if="profile.employment.position" class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">Puesto</span>
-              <span class="text-gray-900 font-medium">{{ applicant.current_employment.position }}</span>
+              <span class="text-gray-900 font-medium">{{ profile.employment.position }}</span>
             </div>
             <div class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">Antiguedad</span>
-              <span class="text-gray-900 font-medium">{{ formatSeniority(applicant.current_employment.seniority_months) }}</span>
+              <span class="text-gray-900 font-medium">{{ formatSeniority(profile.employment.seniority_months) }}</span>
             </div>
             <div class="flex justify-between py-2">
               <span class="text-gray-500">Ingreso mensual</span>
-              <span class="text-gray-900 font-medium">{{ formatMoney(applicant.current_employment.monthly_income) }}</span>
+              <span class="text-gray-900 font-medium">{{ formatMoney(profile.employment.monthly_income) }}</span>
             </div>
           </div>
           <p v-else class="text-gray-500 text-sm">Sin informacion laboral registrada</p>

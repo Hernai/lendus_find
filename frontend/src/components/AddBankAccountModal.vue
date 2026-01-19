@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useApplicantStore } from '@/stores'
+import { useApplicantStore, useProfileStore } from '@/stores'
 
 const emit = defineEmits<{
   close: []
   saved: []
 }>()
 
+// Use profileStore for CLABE validation (V2 API)
+const profileStore = useProfileStore()
+// Keep applicantStore for creating bank accounts (V1 API handles multiple accounts)
 const applicantStore = useApplicantStore()
 
 const isSubmitting = ref(false)
@@ -66,15 +69,15 @@ watch(clabe, async (newValue) => {
     bankNameAutoDetected.value = false
 
     try {
-      const result = await applicantStore.validateClabe(newValue)
-      if (result.valid) {
+      const result = await profileStore.validateClabe(newValue)
+      if (result?.is_valid) {
         clabeValid.value = true
         if (result.bank_name) {
           bankName.value = result.bank_name
           bankNameAutoDetected.value = true
         }
       } else {
-        clabeError.value = result.error || 'CLABE invalida'
+        clabeError.value = 'CLABE invalida'
       }
     } catch (e) {
       clabeError.value = 'Error al validar CLABE'

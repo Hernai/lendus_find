@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore, useTenantStore, useApplicantStore, useApplicationStore, useOnboardingStore } from '@/stores'
+import { useAuthStore, useTenantStore, useProfileStore, useApplicationStore, useOnboardingStore } from '@/stores'
 import { AppButton } from '@/components/common'
 import { v2, type V2Application } from '@/services/v2'
 import { useWebSocket } from '@/composables/useWebSocket'
@@ -12,7 +12,7 @@ const log = logger.child('Dashboard')
 const router = useRouter()
 const authStore = useAuthStore()
 const tenantStore = useTenantStore()
-const applicantStore = useApplicantStore()
+const profileStore = useProfileStore()
 const applicationStore = useApplicationStore()
 const onboardingStore = useOnboardingStore()
 
@@ -54,9 +54,9 @@ const cancelledCount = computed(() => {
   return applications.value.filter(app => app.status === 'CANCELLED').length
 })
 
-// Computed refs for WebSocket (to allow reactive reconnection when tenant/applicant loads)
+// Computed refs for WebSocket (to allow reactive reconnection when tenant/profile loads)
 const tenantIdRef = computed(() => tenantStore.tenant?.id)
-const applicantIdRef = computed(() => applicantStore.applicant?.id)
+const applicantIdRef = computed(() => profileStore.profile?.id)
 
 // WebSocket connection for real-time updates
 useWebSocket({
@@ -98,8 +98,8 @@ const loadApplications = async () => {
 onMounted(async () => {
   await tenantStore.loadConfig()
 
-  // Load applicant data to get the user's name
-  await applicantStore.loadApplicant()
+  // Load profile data to get the user's name
+  await profileStore.loadProfile()
 
   // Load applications
   await loadApplications()
@@ -131,11 +131,11 @@ const getNextAction = (status: string): string | undefined => {
 }
 
 const userName = computed(() => {
-  // First try applicant's first name
-  const applicant = applicantStore.applicant
-  if (applicant?.first_name) {
+  // First try profile's first name
+  const profile = profileStore.profile
+  if (profile?.personal_data?.first_name) {
     // Capitalize first letter, rest lowercase
-    const name = applicant.first_name.toLowerCase()
+    const name = profile.personal_data.first_name.toLowerCase()
     return name.charAt(0).toUpperCase() + name.slice(1)
   }
   // Fallback to email

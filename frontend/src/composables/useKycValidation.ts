@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { useKycStore } from '@/stores/kyc'
-import { useApplicantStore } from '@/stores/applicant'
+import { useProfileStore } from '@/stores/profile'
 import { useApplicationStore } from '@/stores/application'
 import { storeToRefs } from 'pinia'
 import { logger } from '@/utils/logger'
@@ -49,7 +49,7 @@ export interface UseKycValidationReturn {
  */
 export function useKycValidation(): UseKycValidationReturn {
   const kycStore = useKycStore()
-  const applicantStore = useApplicantStore()
+  const profileStore = useProfileStore()
   const applicationStore = useApplicationStore()
   const {
     validations,
@@ -229,9 +229,9 @@ export function useKycValidation(): UseKycValidationReturn {
     validationMessages.value = {}
 
     try {
-      // Get applicant_id for auto-recording verifications
-      const applicantId = applicantStore.applicant?.id
-      log.debug('[KYC] Applicant ID for auto-recording:', applicantId)
+      // Get person_id for auto-recording verifications
+      const applicantId = profileStore.profile?.id
+      log.debug('[KYC] Person ID for auto-recording', { applicantId })
 
       // Step 1: Validate INE (OCR + Lista Nominal)
       log.debug('[KYC] Step 1: Validating INE...')
@@ -384,8 +384,8 @@ export function useKycValidation(): UseKycValidationReturn {
       return true
     }
 
-    // Get applicant_id for auto-recording verifications
-    const applicantId = applicantStore.applicant?.id
+    // Get person_id for auto-recording verifications
+    const applicantId = profileStore.profile?.id
 
     for (const step of failedSteps) {
       validationProgress.value[step] = 'in_progress'

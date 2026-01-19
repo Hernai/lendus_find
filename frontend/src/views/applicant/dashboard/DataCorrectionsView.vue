@@ -5,7 +5,7 @@ import { AppButton } from '@/components/common'
 import { api } from '@/services/api'
 import { v2 } from '@/services/v2'
 import { useTenantStore } from '@/stores/tenant'
-import { useApplicantStore } from '@/stores/applicant'
+import { useProfileStore } from '@/stores/profile'
 import { getEcho, type EchoInstance } from '@/plugins/echo'
 import type { DataCorrectionSubmittedEvent } from '@/types/realtime'
 import { logger } from '@/utils/logger'
@@ -13,7 +13,7 @@ import { logger } from '@/utils/logger'
 const log = logger.child('DataCorrections')
 const router = useRouter()
 const tenantStore = useTenantStore()
-const applicantStore = useApplicantStore()
+const profileStore = useProfileStore()
 
 interface RejectedField {
   id: string
@@ -504,7 +504,7 @@ const setupWebSocket = () => {
   if (!echo) return
 
   const tenantId = tenantStore.tenant?.id
-  const applicantId = applicantStore.applicant?.id
+  const applicantId = profileStore.profile?.id
 
   if (!tenantId || !applicantId) {
     log.warn('Cannot setup WebSocket: missing tenant or applicant ID')
@@ -528,7 +528,7 @@ onUnmounted(() => {
     const echo = getEcho()
     if (echo) {
       const tenantId = tenantStore.tenant?.id
-      const applicantId = applicantStore.applicant?.id
+      const applicantId = profileStore.profile?.id
       if (tenantId && applicantId) {
         echo.leave(`tenant.${tenantId}.applicant.${applicantId}`)
       }
