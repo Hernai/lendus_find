@@ -2,7 +2,25 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { AppButton } from '@/components/common'
-import applicationService, { type Application, type PendingDocument, type ApplicationDocument } from '@/services/application.service'
+import { v2, type V2Application, type V2Document } from '@/services/v2'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('DocumentsUpload')
+
+interface PendingDocument {
+  type: string
+  label: string
+  description: string
+  required: boolean
+}
+
+interface Application {
+  id: string
+  folio: string
+  status: string
+  pending_documents?: PendingDocument[]
+  documents?: V2Document[]
+}
 
 const router = useRouter()
 const route = useRoute()
@@ -16,7 +34,7 @@ interface DocumentItem {
   required: boolean
   uploaded: boolean
   file?: File
-  existingDoc?: ApplicationDocument
+  existingDoc?: V2Document
   isUploading?: boolean
   uploadError?: string
 }
@@ -57,8 +75,19 @@ const loadApplication = async () => {
   error.value = null
 
   try {
-    const data = await applicationService.get(applicationId)
-    application.value = data
+    const response = await v2.applicant.application.get(applicationId)
+    const data = response.data
+    if (!data) {
+      throw new Error('No se encontró la solicitud')
+    }
+
+    application.value = {
+      id: data.id,
+      folio: data.folio,
+      status: data.status,
+      pending_documents: data.pending_documents,
+      documents: data.documents,
+    }
 
     // Build document list from pending documents and existing uploads
     const items: DocumentItem[] = []
@@ -135,16 +164,19 @@ const uploadDocument = async (doc: DocumentItem) => {
   doc.uploadError = undefined
 
   try {
-    const uploaded = await applicationService.uploadDocument(applicationId, doc.type, doc.file)
+    const response = await v2.applicant.document.upload(doc.file, doc.type, {
+      documentable_type: 'Application',
+      documentable_id: applicationId,
+    })
     doc.uploaded = true
-    doc.existingDoc = uploaded
+    doc.existingDoc = response.data
     // Mantener el label original (tipo de documento), no sobrescribir con el nombre del archivo
     doc.description = 'Documento cargado'
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } } }
     doc.uploadError = err.response?.data?.message || 'Error al subir el documento'
     doc.file = undefined
-    console.error('Failed to upload document:', e)
+    log.error('Failed to upload document:', e)
   } finally {
     doc.isUploading = false
   }
@@ -183,7 +215,7 @@ const confirmDelete = async () => {
   isDeleting.value = true
 
   try {
-    await applicationService.deleteDocument(applicationId, documentToDelete.value.existingDoc.id)
+    await v2.applicant.document.remove(documentToDelete.value.existingDoc.id)
     documentToDelete.value.uploaded = false
     documentToDelete.value.file = undefined
     documentToDelete.value.existingDoc = undefined
@@ -235,13 +267,13 @@ const handleSubmit = async () => {
   try {
     // If all documents are uploaded and we're in DOCS_PENDING status, submit
     if (application.value?.status === 'DOCS_PENDING') {
-      await applicationService.submit(applicationId)
+      await v2.applicant.application.submit(applicationId)
     }
     router.push('/dashboard')
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } } }
     error.value = err.response?.data?.message || 'Error al enviar los documentos'
-    console.error('Failed to submit:', e)
+    log.error('Failed to submit:', e)
   } finally {
     isSaving.value = false
   }
@@ -409,9 +441,9 @@ const goBack = () => {
                     </svg>
                   </div>
                   <div>
-                    <p class="text-sm font-medium text-gray-900">{{ doc.existingDoc.name }}</p>
-                    <p v-if="doc.existingDoc.size" class="text-xs text-gray-500">
-                      {{ (doc.existingDoc.size / 1024 / 1024).toFixed(2) }} MB
+                    <p class="text-sm font-medium text-gray-900">{{ doc.existingDoc.file_name }}</p>
+                    <p v-if="doc.existingDoc.file_size" class="text-xs text-gray-500">
+                      {{ (doc.existingDoc.file_size / 1024 / 1024).toFixed(2) }} MB
                     </p>
                   </div>
                 </div>

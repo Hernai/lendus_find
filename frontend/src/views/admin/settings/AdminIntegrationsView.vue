@@ -196,7 +196,7 @@
                   Editar
                 </button>
                 <button
-                  @click="deleteIntegration(integration)"
+                  @click="confirmDeleteIntegration(integration)"
                   class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                   title="Eliminar"
                 >
@@ -441,17 +441,71 @@
         </div>
 
         <form @submit.prevent="runTest" class="p-6 space-y-4">
-          <!-- Info Alert - Same for all integrations -->
-          <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <div class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-              </svg>
-              <p class="text-sm text-blue-800">
-                Se verificará la conexión con el servicio para confirmar que las credenciales son correctas.
+          <!-- SMS/WhatsApp: Require phone number -->
+          <template v-if="testingIntegration && ['sms', 'whatsapp'].includes(testingIntegration.service_type)">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                Número de teléfono de prueba *
+              </label>
+              <input
+                v-model="testForm.test_phone"
+                type="tel"
+                required
+                placeholder="+521234567890"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+              <p class="mt-1 text-xs text-gray-500">
+                Se enviará un mensaje de prueba a este número (formato E.164)
               </p>
             </div>
-          </div>
+          </template>
+
+          <!-- KYC: Just credential verification, no input needed -->
+          <template v-else-if="testingIntegration?.service_type === 'kyc'">
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div class="flex items-start gap-2">
+                <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                </svg>
+                <p class="text-sm text-blue-800">
+                  Se verificará la conexión con el servicio para confirmar que las credenciales son correctas.
+                </p>
+              </div>
+            </div>
+          </template>
+
+          <!-- Email: Require email address -->
+          <template v-else-if="testingIntegration?.service_type === 'email'">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                Email de prueba *
+              </label>
+              <input
+                v-model="testForm.test_email"
+                type="email"
+                required
+                placeholder="tu@email.com"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+              <p class="mt-1 text-xs text-gray-500">
+                Se enviará un mensaje de prueba a este email
+              </p>
+            </div>
+          </template>
+
+          <!-- Generic fallback -->
+          <template v-else>
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div class="flex items-start gap-2">
+                <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                </svg>
+                <p class="text-sm text-blue-800">
+                  Se verificará la conexión con el servicio para confirmar que las credenciales son correctas.
+                </p>
+              </div>
+            </div>
+          </template>
 
           <!-- Test Result -->
           <div v-if="testResult" class="p-4 rounded-lg animate-fade-in" :class="testResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'">
@@ -515,36 +569,34 @@
         </form>
       </div>
     </div>
+
+    <!-- Delete Integration Confirmation Modal -->
+    <AppConfirmModal
+      :show="showDeleteModal"
+      title="Eliminar Integración"
+      :message="`¿Estás seguro de eliminar la integración de ${integrationToDelete?.provider_label} (${integrationToDelete?.service_type_label})? Esta acción no se puede deshacer.`"
+      confirm-text="Eliminar"
+      variant="danger"
+      icon="danger"
+      @confirm="deleteIntegration"
+      @update:show="showDeleteModal = $event"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
+import type { V2Integration } from '@/services/v2/integration.staff.service'
 import { getErrorMessage } from '@/types/api'
+import { AppConfirmModal } from '@/components/common'
+import { useToast } from '@/composables'
+import { logger } from '@/utils/logger'
 
-interface Integration {
-  id: string
-  provider: string
-  provider_label: string
-  service_type: string
-  service_type_label: string
-  from_number?: string
-  from_email?: string
-  domain?: string
-  is_active: boolean
-  is_sandbox: boolean
-  has_credentials: boolean
-  masked_credentials: {
-    account_sid?: string
-    auth_token?: string
-    api_key?: string
-    api_secret?: string
-  }
-  last_tested_at?: string
-  last_test_success?: boolean
-  last_test_error?: string
-}
+const log = logger.child('AdminIntegrationsView')
+const toast = useToast()
+
+type Integration = V2Integration
 
 const integrations = ref<Integration[]>([])
 const providers = ref<Record<string, string>>({})
@@ -588,11 +640,11 @@ const loadIntegrations = async () => {
   try {
     isLoading.value = true
     error.value = null
-    const response = await api.get<{ data: Integration[] }>('/admin/integrations')
-    integrations.value = response.data.data
+    const response = await v2.staff.integration.list()
+    integrations.value = response.data ?? []
   } catch (err: unknown) {
     error.value = getErrorMessage(err, 'Error al cargar integraciones')
-    console.error('Error loading integrations:', err)
+    log.error('Error al cargar integraciones', { error: err })
   } finally {
     isLoading.value = false
   }
@@ -601,11 +653,11 @@ const loadIntegrations = async () => {
 // Load options
 const loadOptions = async () => {
   try {
-    const response = await api.get<{ providers: Record<string, string>; service_types: Record<string, string> }>('/admin/integrations/options')
-    providers.value = response.data.providers
-    serviceTypes.value = response.data.service_types
+    const response = await v2.staff.integration.getOptions()
+    providers.value = response.providers
+    serviceTypes.value = response.service_types
   } catch (err) {
-    console.error('Error loading options:', err)
+    log.error('Error al cargar opciones', { error: err })
   }
 }
 
@@ -657,12 +709,13 @@ const closeEditModal = () => {
 const saveIntegration = async () => {
   try {
     isSaving.value = true
-    await api.post('/admin/integrations', form.value)
+    await v2.staff.integration.save(form.value)
     await loadIntegrations()
     closeEditModal()
+    toast.success('Integración guardada')
   } catch (err: unknown) {
-    alert(getErrorMessage(err, 'Error al guardar integración'))
-    console.error('Error saving integration:', err)
+    log.error('Error al guardar integración', { error: err })
+    toast.error(getErrorMessage(err, 'Error al guardar integración'))
   } finally {
     isSaving.value = false
   }
@@ -693,11 +746,8 @@ const runTest = async () => {
   try {
     isTesting.value = true
     testResult.value = null
-    const response = await api.post<{ success: boolean; message: string; error?: string }>(
-      `/admin/integrations/${testingIntegration.value.id}/test`,
-      testForm.value
-    )
-    testResult.value = response.data
+    const result = await v2.staff.integration.test(testingIntegration.value.id, testForm.value)
+    testResult.value = result
     await loadIntegrations() // Reload to show updated test status
   } catch (err: unknown) {
     testResult.value = {
@@ -705,7 +755,7 @@ const runTest = async () => {
       message: 'Error en la prueba',
       error: getErrorMessage(err, 'Error desconocido'),
     }
-    console.error('Error testing integration:', err)
+    log.error('Error al probar integración', { error: err })
   } finally {
     isTesting.value = false
   }
@@ -722,29 +772,39 @@ const isCredentialError = (error?: string): boolean => {
 const toggleIntegrationStatus = async (integration: Integration) => {
   try {
     isTogglingStatus.value = integration.id
-    await api.patch(`/admin/integrations/${integration.id}/toggle`)
+    await v2.staff.integration.toggle(integration.id)
     await loadIntegrations()
+    toast.success(integration.is_active ? 'Integración pausada' : 'Integración activada')
   } catch (err: unknown) {
-    alert(getErrorMessage(err, 'Error al cambiar el estado de la integración'))
-    console.error('Error toggling integration status:', err)
+    log.error('Error al cambiar estado de integración', { error: err })
+    toast.error(getErrorMessage(err, 'Error al cambiar el estado de la integración'))
   } finally {
     isTogglingStatus.value = null
   }
 }
 
-// Delete integration
-const deleteIntegration = async (integration: Integration) => {
-  if (!confirm(`¿Estás seguro de eliminar la integración de ${integration.provider_label} (${integration.service_type_label})?`)) {
-    return
-  }
+// Delete integration confirmation
+const showDeleteModal = ref(false)
+const integrationToDelete = ref<Integration | null>(null)
+
+const confirmDeleteIntegration = (integration: Integration) => {
+  integrationToDelete.value = integration
+  showDeleteModal.value = true
+}
+
+const deleteIntegration = async () => {
+  if (!integrationToDelete.value) return
 
   try {
-    await api.delete(`/admin/integrations/${integration.id}`)
+    await v2.staff.integration.destroy(integrationToDelete.value.id)
+    showDeleteModal.value = false
     await loadIntegrations()
+    toast.success('Integración eliminada')
   } catch (err: unknown) {
-    alert(getErrorMessage(err, 'Error al eliminar integración'))
-    console.error('Error deleting integration:', err)
+    log.error('Error al eliminar integración', { error: err })
+    toast.error(getErrorMessage(err, 'Error al eliminar integración'))
   }
+  integrationToDelete.value = null
 }
 
 onMounted(() => {

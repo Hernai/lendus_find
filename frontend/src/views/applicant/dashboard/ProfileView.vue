@@ -5,8 +5,10 @@ import { useAuthStore, useTenantStore, useApplicantStore } from '@/stores'
 import type { BankAccount } from '@/types/applicant'
 import BankAccountCard from '@/components/BankAccountCard.vue'
 import AddBankAccountModal from '@/components/AddBankAccountModal.vue'
-import applicationService from '@/services/application.service'
+import { v2 } from '@/services/v2'
+import { logger } from '@/utils/logger'
 
+const log = logger.child('Profile')
 const router = useRouter()
 const authStore = useAuthStore()
 const tenantStore = useTenantStore()
@@ -106,15 +108,15 @@ const loadBankAccounts = async () => {
   try {
     bankAccounts.value = await applicantStore.loadBankAccounts()
   } catch (e) {
-    console.error('Failed to load bank accounts:', e)
+    log.error('Failed to load bank accounts:', e)
     bankAccounts.value = []
   }
 }
 
 const loadApplicationAndPhoto = async () => {
   try {
-    const { data: applications } = await applicationService.list()
-    const firstApp = applications[0]
+    const response = await v2.applicant.application.list()
+    const firstApp = response.data[0]
     if (firstApp) {
       // Get the most recent application
       activeApplicationId.value = firstApp.id
@@ -124,7 +126,7 @@ const loadApplicationAndPhoto = async () => {
       profilePhotoVerified.value = result.isVerified
     }
   } catch (e) {
-    console.error('Failed to load application/photo:', e)
+    log.error('Failed to load application/photo:', e)
   }
 }
 
@@ -196,7 +198,7 @@ const handlePhotoSelect = async (event: Event) => {
     profilePhotoUrl.value = result.url
     profilePhotoVerified.value = result.isVerified
   } catch (e: unknown) {
-    console.error('Failed to upload photo:', e)
+    log.error('Failed to upload photo:', e)
     // Check if the error is from the server about verified document
     const errorMessage = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
     if (errorMessage?.includes('verificado')) {
@@ -221,7 +223,7 @@ const setPrimaryAccount = async (accountId: string) => {
     await applicantStore.setPrimaryBankAccount(accountId)
     await loadBankAccounts()
   } catch (e) {
-    console.error('Failed to set primary:', e)
+    log.error('Failed to set primary:', e)
   }
 }
 
@@ -230,7 +232,7 @@ const deleteAccount = async (accountId: string) => {
     await applicantStore.deleteBankAccount(accountId)
     await loadBankAccounts()
   } catch (e) {
-    console.error('Failed to delete account:', e)
+    log.error('Failed to delete account:', e)
   }
 }
 

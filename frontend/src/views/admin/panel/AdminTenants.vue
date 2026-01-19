@@ -1,10 +1,24 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
+import type {
+  V2Tenant,
+  V2TenantDetailed,
+  V2TenantConfig,
+  V2TenantApiConfig,
+  V2TenantFilters,
+  V2TenantApiConfigPayload,
+} from '@/services/v2/tenant.staff.service'
 import { AppInput, AppConfirmModal } from '@/components/common'
 import TenantBrandingEditor, { type Branding } from '@/components/admin/TenantBrandingEditor.vue'
+import { useToast } from '@/composables'
 import { getErrorMessage } from '@/types/api'
+import { logger } from '@/utils/logger'
 
+const log = logger.child('AdminTenants')
+const toast = useToast()
+
+// Extend the V2 types for local form handling with more complete branding
 interface Tenant {
   id: string
   name: string
@@ -66,44 +80,9 @@ const showDeleteModal = ref(false)
 const tenantToDelete = ref<Tenant | null>(null)
 const isDeleting = ref(false)
 
-// Config modal state
-interface ApiConfig {
-  id: string
-  provider: string
-  provider_label: string
-  service_type: string
-  service_type_label: string
-  from_number: string | null
-  from_email: string | null
-  domain: string | null
-  is_active: boolean
-  is_sandbox: boolean
-  has_credentials: boolean
-  last_tested_at: string | null
-  last_test_success: boolean | null
-}
-
-interface TenantConfig {
-  branding: {
-    primary_color: string
-    secondary_color: string
-    accent_color: string
-    background_color: string
-    text_color: string
-    logo_url: string | null
-    logo_dark_url: string | null
-    favicon_url: string | null
-    login_background_url: string | null
-    font_family: string
-    heading_font_family: string | null
-    border_radius: string
-    button_style: string
-    custom_css: string | null
-  }
-  api_configs: ApiConfig[]
-  available_providers: Record<string, string>
-  available_service_types: Record<string, string>
-}
+// Config modal state - use V2 types
+type ApiConfig = V2TenantApiConfig
+type TenantConfig = V2TenantConfig
 
 const showConfigModal = ref(false)
 const configTenant = ref<Tenant | null>(null)
@@ -261,28 +240,25 @@ const fetchTenants = async () => {
   error.value = ''
 
   try {
-    const params: Record<string, unknown> = {
+    const filters: V2TenantFilters = {
       page: currentPage.value,
       per_page: 20,
       search: searchQuery.value || undefined
     }
 
     if (activeFilter.value === 'active') {
-      params.active = true
+      filters.active = true
     } else if (activeFilter.value === 'inactive') {
-      params.active = false
+      filters.active = false
     }
 
-    const response = await api.get<{
-      data: Tenant[]
-      meta: { current_page: number; last_page: number; total: number }
-    }>('/admin/tenants', { params })
+    const response = await v2.staff.tenant.list(filters)
 
-    tenants.value = response.data.data
-    totalPages.value = response.data.meta.last_page
-    totalItems.value = response.data.meta.total
+    tenants.value = response.data as Tenant[]
+    totalPages.value = response.meta.last_page
+    totalItems.value = response.meta.total
   } catch (e) {
-    console.error('Failed to fetch tenants:', e)
+    log.error('Error al cargar tenants', { error: e })
     error.value = 'Error al cargar los tenants'
   } finally {
     isLoading.value = false
@@ -416,9 +392,9 @@ const saveTenant = async () => {
     }
 
     if (editingTenant.value) {
-      await api.put(`/admin/tenants/${editingTenant.value.id}`, payload)
+      await v2.staff.tenant.update(editingTenant.value.id, payload)
     } else {
-      await api.post('/admin/tenants', payload)
+      await v2.staff.tenant.create(payload)
     }
 
     showTenantModal.value = false
@@ -448,14 +424,15 @@ const deleteTenant = async () => {
 
   isDeleting.value = true
   try {
-    await api.delete(`/admin/tenants/${tenantToDelete.value.id}`)
+    await v2.staff.tenant.destroy(tenantToDelete.value.id)
     showDeleteModal.value = false
     tenantToDelete.value = null
     await fetchTenants()
   } catch (e: unknown) {
-    const err = e as { message?: string; error?: string }
-    formError.value = err.message || 'Error al eliminar el tenant'
-    if (err.error === 'HAS_RELATED_DATA') {
+    const err = e as { response?: { data?: { message?: string; error?: string } } }
+    const data = err.response?.data
+    formError.value = data?.message || 'Error al eliminar el tenant'
+    if (data?.error === 'HAS_RELATED_DATA') {
       formError.value = 'No se puede eliminar porque tiene usuarios o solicitudes'
     }
   } finally {
@@ -512,10 +489,10 @@ const openTenantConfig = async (tenant: Tenant) => {
   isLoadingConfig.value = true
 
   try {
-    const response = await api.get<{ data: TenantConfig }>(`/admin/tenants/${tenant.id}/config`)
-    configData.value = response.data.data
+    const response = await v2.staff.tenant.getConfig(tenant.id)
+    configData.value = response.data!
   } catch (e) {
-    console.error('Failed to load tenant config:', e)
+    log.error('Error al cargar configuración del tenant', { error: e })
     configSaveError.value = 'Error al cargar la configuración'
   } finally {
     isLoadingConfig.value = false
@@ -531,7 +508,12 @@ const saveTenantBranding = async () => {
   configSaveError.value = ''
 
   try {
-    await api.put(`/admin/tenants/${configTenant.value.id}/branding`, configData.value.branding)
+    // Cast button_style to the correct type
+    const brandingPayload = {
+      ...configData.value.branding,
+      button_style: configData.value.branding.button_style as 'rounded' | 'pill' | 'square' | undefined
+    }
+    await v2.staff.tenant.updateBranding(configTenant.value.id, brandingPayload)
     configSaveMessage.value = 'Branding guardado'
     setTimeout(() => configSaveMessage.value = '', 3000)
   } catch (e) {
@@ -591,7 +573,7 @@ const saveApiInConfig = async () => {
   configSaveError.value = ''
 
   try {
-    const payload: Record<string, unknown> = {
+    const payload: V2TenantApiConfigPayload = {
       provider: apiFormConfig.value.provider,
       service_type: apiFormConfig.value.service_type,
       from_number: apiFormConfig.value.from_number || null,
@@ -606,12 +588,12 @@ const saveApiInConfig = async () => {
     if (apiFormConfig.value.account_sid) payload.account_sid = apiFormConfig.value.account_sid
     if (apiFormConfig.value.auth_token) payload.auth_token = apiFormConfig.value.auth_token
 
-    await api.post(`/admin/tenants/${configTenant.value.id}/api-configs`, payload)
+    await v2.staff.tenant.saveApiConfig(configTenant.value.id, payload)
     showApiFormInConfig.value = false
 
     // Reload config
-    const response = await api.get<{ data: TenantConfig }>(`/admin/tenants/${configTenant.value.id}/config`)
-    configData.value = response.data.data
+    const response = await v2.staff.tenant.getConfig(configTenant.value.id)
+    configData.value = response.data!
     configSaveMessage.value = 'Integración guardada'
     setTimeout(() => configSaveMessage.value = '', 3000)
   } catch (e) {
@@ -621,17 +603,30 @@ const saveApiInConfig = async () => {
   }
 }
 
-const deleteApiInConfig = async (config: ApiConfig) => {
-  if (!configTenant.value || !confirm(`¿Eliminar ${config.provider_label}?`)) return
+// State for delete API confirmation modal
+const showDeleteApiModal = ref(false)
+const apiToDelete = ref<ApiConfig | null>(null)
+
+const confirmDeleteApiInConfig = (config: ApiConfig) => {
+  apiToDelete.value = config
+  showDeleteApiModal.value = true
+}
+
+const deleteApiInConfig = async () => {
+  if (!configTenant.value || !apiToDelete.value) return
 
   try {
-    await api.delete(`/admin/tenants/${configTenant.value.id}/api-configs/${config.id}`)
+    await v2.staff.tenant.deleteApiConfig(configTenant.value.id, apiToDelete.value.id)
+    showDeleteApiModal.value = false
     // Reload config
-    const response = await api.get<{ data: TenantConfig }>(`/admin/tenants/${configTenant.value.id}/config`)
-    configData.value = response.data.data
+    const response = await v2.staff.tenant.getConfig(configTenant.value.id)
+    configData.value = response.data!
+    toast.success('Integración eliminada')
   } catch (e) {
-    alert('Error al eliminar')
+    log.error('Error al eliminar integración', { error: e })
+    toast.error('Error al eliminar la integración')
   }
+  apiToDelete.value = null
 }
 
 const testApiInConfig = (config: ApiConfig) => {
@@ -665,14 +660,19 @@ const runTest = async () => {
       payload.test_email = testForm.value.test_email
     }
 
-    const response = await api.post<{ success: boolean; message: string; error?: string }>(
-      `/admin/tenants/${configTenant.value.id}/api-configs/${testingIntegration.value.id}/test`,
+    const response = await v2.staff.tenant.testApiConfig(
+      configTenant.value.id,
+      testingIntegration.value.id,
       payload
     )
-    testResult.value = response.data
+    testResult.value = {
+      success: (response as unknown as { success: boolean }).success,
+      message: (response as unknown as { message: string }).message,
+      error: (response as unknown as { error?: string }).error
+    }
     // Reload config
-    const reloadResponse = await api.get<{ data: TenantConfig }>(`/admin/tenants/${configTenant.value.id}/config`)
-    configData.value = reloadResponse.data.data
+    const reloadResponse = await v2.staff.tenant.getConfig(configTenant.value.id)
+    configData.value = reloadResponse.data!
   } catch (err: unknown) {
     testResult.value = {
       success: false,
@@ -769,18 +769,15 @@ const handleLogoUpload = async (event: Event, field: string) => {
   configSaveError.value = ''
 
   try {
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('field', field)
-
-    const response = await api.post<{ url: string }>(
-      `/admin/tenants/${configTenant.value.id}/upload-logo`,
-      formData
+    const response = await v2.staff.tenant.uploadLogo(
+      configTenant.value.id,
+      file,
+      field as 'logo_url' | 'logo_dark_url' | 'favicon_url' | 'login_background_url'
     )
 
     // Update the branding field with the new URL
     const brandingRecord = configData.value.branding as Record<string, string | null>
-    brandingRecord[field] = response.data.url
+    brandingRecord[field] = response.data!.url
     configSaveMessage.value = 'Logo subido correctamente'
     setTimeout(() => configSaveMessage.value = '', 3000)
   } catch (e) {
@@ -1377,7 +1374,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                         </svg>
                       </button>
                       <button
-                        @click="deleteApiInConfig(config)"
+                        @click="confirmDeleteApiInConfig(config)"
                         class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
                         title="Eliminar"
                       >
@@ -1857,5 +1854,17 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
         </div>
       </div>
     </Teleport>
+
+    <!-- Delete API Integration Confirmation Modal -->
+    <AppConfirmModal
+      :show="showDeleteApiModal"
+      title="Eliminar Integración"
+      :message="`¿Estás seguro de eliminar la integración ${apiToDelete?.provider_label}? Esta acción no se puede deshacer.`"
+      confirm-text="Eliminar"
+      variant="danger"
+      icon="danger"
+      @confirm="deleteApiInConfig"
+      @update:show="showDeleteApiModal = $event"
+    />
   </div>
 </template>

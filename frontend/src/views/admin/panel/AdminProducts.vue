@@ -1,34 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
+import type { V2Product, V2TermConfig } from '@/services/v2/product.staff.service'
 import { AppButton } from '@/components/common'
+import { useToast } from '@/composables'
+import { logger } from '@/utils/logger'
 
-interface TermConfig {
-  available_terms: number[]
-}
+const log = logger.child('AdminProducts')
+const toast = useToast()
 
-interface Product {
-  id: string
-  name: string
-  code: string
-  type: string
-  description?: string
-  min_amount: number
-  max_amount: number
-  min_term_months: number
-  max_term_months: number
-  interest_rate: number
-  opening_commission: number
-  late_fee_rate: number
-  payment_frequencies: string[]
-  term_config?: Record<string, TermConfig>
-  required_documents: string[]
-  eligibility_rules: Record<string, unknown>
-  is_active: boolean
-  applications_count: number
-  created_at: string
-  updated_at: string
-}
+// Use V2 Product type
+type Product = V2Product
+type TermConfig = V2TermConfig
 
 // Type labels
 const typeLabels: Record<string, string> = {
@@ -112,10 +95,6 @@ const productToDelete = ref<Product | null>(null)
 const isDeleting = ref(false)
 
 // Term config per frequency - lista de plazos disponibles
-interface TermConfig {
-  available_terms: number[]
-}
-
 const defaultTermConfig: Record<string, TermConfig> = {
   WEEKLY: { available_terms: [4, 8, 12, 26, 52] },
   BIWEEKLY: { available_terms: [2, 4, 6, 12, 24] },
@@ -175,11 +154,14 @@ const isTermInRange = (freq: string, term: number): boolean => {
   return Math.round(termInMonths) >= minMonths && Math.round(termInMonths) <= maxMonths
 }
 
+// Product type union
+type ProductType = 'PERSONAL' | 'AUTO' | 'HIPOTECARIO' | 'PYME' | 'NOMINA' | 'ARRENDAMIENTO'
+
 // Form state
 const form = ref({
   name: '',
   code: '',
-  type: 'PERSONAL',
+  type: 'PERSONAL' as ProductType,
   description: '',
   min_amount: 5000,
   max_amount: 100000,
@@ -231,15 +213,25 @@ const fetchProducts = async () => {
   error.value = ''
 
   try {
-    const params = new URLSearchParams()
-    if (searchQuery.value) params.append('search', searchQuery.value)
-    if (activeFilter.value) params.append('active', activeFilter.value)
+    const filters: {
+      search?: string
+      active?: boolean
+    } = {}
 
-    const response = await api.get<{ data: Product[] }>(`/admin/products?${params}`)
-    products.value = response.data.data
+    if (searchQuery.value) {
+      filters.search = searchQuery.value
+    }
+    if (activeFilter.value === 'true') {
+      filters.active = true
+    } else if (activeFilter.value === 'false') {
+      filters.active = false
+    }
+
+    const response = await v2.staff.product.list(filters)
+    products.value = response.data
   } catch (e: unknown) {
     error.value = 'Error al cargar los productos'
-    console.error('Error fetching products:', e)
+    log.error('Error al cargar productos', { error: e })
   } finally {
     isLoading.value = false
   }
@@ -399,9 +391,9 @@ const submitForm = async () => {
     }
 
     if (editingProduct.value) {
-      await api.put(`/admin/products/${editingProduct.value.id}`, payload)
+      await v2.staff.product.update(editingProduct.value.id, payload)
     } else {
-      await api.post('/admin/products', payload)
+      await v2.staff.product.create(payload)
     }
 
     showProductModal.value = false
@@ -424,12 +416,13 @@ const submitForm = async () => {
 // Toggle active status
 const toggleActive = async (product: Product) => {
   try {
-    await api.put(`/admin/products/${product.id}`, {
+    await v2.staff.product.update(product.id, {
       is_active: !product.is_active
     })
     product.is_active = !product.is_active
   } catch (e) {
-    console.error('Error toggling product status:', e)
+    log.error('Error al cambiar estado del producto', { error: e })
+    toast.error('Error al cambiar el estado del producto')
   }
 }
 
@@ -445,12 +438,13 @@ const deleteProduct = async () => {
 
   isDeleting.value = true
   try {
-    await api.delete(`/admin/products/${productToDelete.value.id}`)
+    await v2.staff.product.remove(productToDelete.value.id)
     showDeleteModal.value = false
     await fetchProducts()
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } } }
-    alert(err.response?.data?.message || 'Error al eliminar el producto')
+    log.error('Error al eliminar producto', { error: e })
+    toast.error(err.response?.data?.message || 'Error al eliminar el producto')
   } finally {
     isDeleting.value = false
   }

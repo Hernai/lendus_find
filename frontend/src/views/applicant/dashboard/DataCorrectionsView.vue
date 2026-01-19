@@ -2,13 +2,15 @@
 import { ref, computed, onMounted, onUnmounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { AppButton } from '@/components/common'
-import api from '@/services/api'
-import applicationService from '@/services/application.service'
+import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
 import { useTenantStore } from '@/stores/tenant'
 import { useApplicantStore } from '@/stores/applicant'
 import { getEcho, type EchoInstance } from '@/plugins/echo'
 import type { DataCorrectionSubmittedEvent } from '@/types/realtime'
+import { logger } from '@/utils/logger'
 
+const log = logger.child('DataCorrections')
 const router = useRouter()
 const tenantStore = useTenantStore()
 const applicantStore = useApplicantStore()
@@ -205,7 +207,7 @@ const loadCorrections = async () => {
   error.value = null
 
   try {
-    const response = await api.get('/corrections')
+    const response = await api.get<{ data: CorrectionsData }>('/corrections')
     correctionsData.value = response.data.data
 
     // Initialize form data with current values
@@ -215,7 +217,7 @@ const loadCorrections = async () => {
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } } }
     error.value = err.response?.data?.message || 'Error al cargar las correcciones'
-    console.error('Failed to load corrections:', e)
+    log.error('Failed to load corrections:', e)
   } finally {
     isLoading.value = false
   }
@@ -379,7 +381,7 @@ const submitSectionCorrection = async (sectionId: string) => {
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } } }
     error.value = err.response?.data?.message || 'Error al enviar la corrección'
-    console.error('Failed to submit correction:', e)
+    log.error('Failed to submit correction:', e)
   } finally {
     isSaving.value = false
   }
@@ -441,7 +443,10 @@ const handleDocumentUpload = async (doc: RejectedDocument, event: Event) => {
   doc.uploadError = undefined
 
   try {
-    await applicationService.uploadDocument(doc.application_id, doc.type, file)
+    await v2.applicant.document.upload(file, doc.type, {
+      documentable_type: 'Application',
+      documentable_id: doc.application_id,
+    })
     doc.uploadSuccess = true
     successMessage.value = `${doc.type_label} subido correctamente`
 
@@ -452,7 +457,7 @@ const handleDocumentUpload = async (doc: RejectedDocument, event: Event) => {
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } } }
     doc.uploadError = err.response?.data?.message || 'Error al subir el documento'
-    console.error('Failed to upload document:', e)
+    log.error('Failed to upload document:', e)
   } finally {
     doc.isUploading = false
   }
@@ -502,16 +507,16 @@ const setupWebSocket = () => {
   const applicantId = applicantStore.applicant?.id
 
   if (!tenantId || !applicantId) {
-    console.warn('⚠️ Cannot setup WebSocket: missing tenant or applicant ID')
+    log.warn('Cannot setup WebSocket: missing tenant or applicant ID')
     return
   }
 
   const channelName = `tenant.${tenantId}.applicant.${applicantId}`
-  console.log('📡 Connecting to corrections channel:', channelName)
+  log.debug('Connecting to corrections channel:', channelName)
 
   echoChannel = echo.private(channelName)
   echoChannel.listen('.data.correction.submitted', (event: DataCorrectionSubmittedEvent) => {
-    console.log('📡 Correction submitted via WebSocket:', event)
+    log.debug('Correction submitted via WebSocket:', event)
     // Reload corrections to get the latest data
     loadCorrections()
   })

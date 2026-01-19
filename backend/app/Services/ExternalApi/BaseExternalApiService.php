@@ -229,8 +229,8 @@ abstract class BaseExternalApiService
                 'metadata' => [
                     'sandbox' => $this->config?->is_sandbox ?? false,
                 ],
-                'ip_address' => request()->ip(),
-                'user_agent' => request()->userAgent(),
+                'ip_address' => $this->getSafeRequestIp(),
+                'user_agent' => $this->getSafeUserAgent(),
             ]);
 
             // Clear context
@@ -317,5 +317,33 @@ abstract class BaseExternalApiService
     public function getServiceType(): string
     {
         return $this->serviceType;
+    }
+
+    // =====================================================
+    // Request Context Helpers
+    // =====================================================
+
+    /**
+     * Get request IP safely (works in Jobs/CLI context).
+     */
+    protected function getSafeRequestIp(): ?string
+    {
+        try {
+            return request()?->ip();
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Get user agent safely (works in Jobs/CLI context).
+     */
+    protected function getSafeUserAgent(): ?string
+    {
+        try {
+            return request()?->userAgent();
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 }

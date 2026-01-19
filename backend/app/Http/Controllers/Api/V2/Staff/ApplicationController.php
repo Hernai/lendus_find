@@ -28,11 +28,20 @@ class ApplicationController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        // Normalize status to always be an array (supports both ?status=X and ?status[]=X)
+        $statusInput = $request->input('status');
+        if (is_string($statusInput)) {
+            $request->merge(['status' => [$statusInput]]);
+        }
+
+        $validStatuses = implode(',', array_keys(ApplicationV2::statuses()));
         $validated = $request->validate([
-            'status' => 'nullable|string',
+            'status' => 'nullable|array',
+            'status.*' => "string|in:{$validStatuses}",
             'applicant_type' => 'nullable|string|in:individual,company',
             'assigned_to' => 'nullable|uuid',
             'unassigned' => 'nullable|boolean',
+            'assignment' => 'nullable|string|in:all,assigned,unassigned',
             'risk_level' => 'nullable|string',
             'product_id' => 'nullable|uuid',
             'date_from' => 'nullable|date',
@@ -40,7 +49,7 @@ class ApplicationController extends Controller
             'search' => 'nullable|string|max:100',
             'sort_by' => 'nullable|string|in:created_at,submitted_at,requested_amount,status',
             'sort_dir' => 'nullable|string|in:asc,desc',
-            'per_page' => 'nullable|integer|min:5|max:100',
+            'per_page' => 'nullable|integer|min:5|max:200',
         ]);
 
         /** @var StaffAccount $staff */
@@ -59,14 +68,65 @@ class ApplicationController extends Controller
         );
 
         return response()->json([
-            'applications' => $applications->map(fn($app) => $this->formatApplication($app)),
+            'data' => $applications->map(fn($app) => $this->formatApplication($app)),
             'meta' => [
                 'current_page' => $applications->currentPage(),
+                'from' => $applications->firstItem(),
                 'last_page' => $applications->lastPage(),
                 'per_page' => $applications->perPage(),
+                'to' => $applications->lastItem(),
                 'total' => $applications->total(),
             ],
         ]);
+    }
+
+    /**
+     * Get Kanban board data with applications grouped by status.
+     *
+     * GET /v2/staff/applications/board
+     */
+    public function board(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'columns' => 'nullable|array',
+            'columns.*' => 'string|in:' . implode(',', array_keys(ApplicationV2::statuses())),
+            'limit_per_column' => 'nullable|integer|min:5|max:50',
+            'assigned_to' => 'nullable|uuid',
+            'sort_by' => 'nullable|string|in:created_at,submitted_at,requested_amount',
+            'sort_dir' => 'nullable|string|in:asc,desc',
+        ]);
+
+        /** @var StaffAccount $staff */
+        $staff = $request->user();
+
+        // Default columns for Kanban (active workflow statuses)
+        $columns = $validated['columns'] ?? [
+            ApplicationV2::STATUS_SUBMITTED,
+            ApplicationV2::STATUS_IN_REVIEW,
+            ApplicationV2::STATUS_DOCS_PENDING,
+            ApplicationV2::STATUS_APPROVED,
+        ];
+
+        $limitPerColumn = $validated['limit_per_column'] ?? 15;
+
+        // ANALYST can only see applications assigned to them
+        $assignedTo = null;
+        if (!$staff->canViewAllApplications()) {
+            $assignedTo = $staff->id;
+        } elseif (!empty($validated['assigned_to'])) {
+            $assignedTo = $validated['assigned_to'];
+        }
+
+        $boardData = $this->service->getBoardData(
+            $staff->tenant,
+            $columns,
+            $limitPerColumn,
+            $assignedTo,
+            $validated['sort_by'] ?? 'created_at',
+            $validated['sort_dir'] ?? 'desc'
+        );
+
+        return response()->json(['data' => $boardData]);
     }
 
     /**
@@ -90,7 +150,7 @@ class ApplicationController extends Controller
             $validated['date_to'] ?? null
         );
 
-        return response()->json($stats);
+        return response()->json(['data' => $stats]);
     }
 
     /**

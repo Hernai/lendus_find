@@ -470,12 +470,97 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
 // =============================================
 use App\Http\Controllers\Api\V2\Staff\ApplicationController as StaffAppController;
 use App\Http\Controllers\Api\V2\Staff\DocumentController as StaffDocController;
+use App\Http\Controllers\Api\V2\Staff\UserController as StaffUserController;
+use App\Http\Controllers\Api\V2\Staff\ProductController as StaffProductController;
+use App\Http\Controllers\Api\V2\Staff\ConfigController as StaffConfigController;
+use App\Http\Controllers\Api\V2\Staff\ApiLogController as StaffApiLogController;
+use App\Http\Controllers\Api\V2\Staff\TenantController as StaffTenantController;
+use App\Http\Controllers\Api\V2\Staff\IntegrationController as StaffIntegrationController;
 
 Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff'])
     ->prefix('v2/staff')
     ->group(function () {
+        // =============================================
+        // Users Management - Admin only
+        // =============================================
+        Route::middleware('permission:canManageUsers')->group(function () {
+            Route::get('/users', [StaffUserController::class, 'index']);
+            Route::post('/users', [StaffUserController::class, 'store']);
+            Route::get('/users/{id}', [StaffUserController::class, 'show']);
+            Route::put('/users/{id}', [StaffUserController::class, 'update']);
+            Route::patch('/users/{id}', [StaffUserController::class, 'update']);
+            Route::delete('/users/{id}', [StaffUserController::class, 'destroy']);
+        });
+
+        // =============================================
+        // Products Management - Admin only
+        // =============================================
+        Route::middleware('permission:canManageProducts')->group(function () {
+            Route::get('/products', [StaffProductController::class, 'index']);
+            Route::post('/products', [StaffProductController::class, 'store']);
+            Route::get('/products/{id}', [StaffProductController::class, 'show']);
+            Route::put('/products/{id}', [StaffProductController::class, 'update']);
+            Route::patch('/products/{id}', [StaffProductController::class, 'update']);
+            Route::delete('/products/{id}', [StaffProductController::class, 'destroy']);
+        });
+
+        // =============================================
+        // Tenant Configuration - Admin only
+        // =============================================
+        Route::middleware('permission:canManageProducts')->prefix('config')->group(function () {
+            Route::get('/', [StaffConfigController::class, 'show']);
+            Route::put('/tenant', [StaffConfigController::class, 'updateTenant']);
+            Route::put('/branding', [StaffConfigController::class, 'updateBranding']);
+            Route::get('/api-configs', [StaffConfigController::class, 'listApiConfigs']);
+            Route::post('/api-configs', [StaffConfigController::class, 'saveApiConfig']);
+            Route::delete('/api-configs/{id}', [StaffConfigController::class, 'deleteApiConfig']);
+            Route::post('/api-configs/{id}/test', [StaffConfigController::class, 'testApiConfig']);
+        });
+
+        // =============================================
+        // Integrations Management - Super Admin only
+        // =============================================
+        Route::middleware('permission:canConfigureTenant')->prefix('integrations')->group(function () {
+            Route::get('/', [StaffIntegrationController::class, 'index']);
+            Route::get('/options', [StaffIntegrationController::class, 'options']);
+            Route::post('/', [StaffIntegrationController::class, 'store']);
+            Route::post('/{id}/test', [StaffIntegrationController::class, 'test']);
+            Route::patch('/{id}/toggle', [StaffIntegrationController::class, 'toggle']);
+            Route::delete('/{id}', [StaffIntegrationController::class, 'destroy']);
+        });
+
+        // =============================================
+        // API Logs - Admin only
+        // =============================================
+        Route::middleware('permission:canManageProducts')->prefix('api-logs')->group(function () {
+            Route::get('/', [StaffApiLogController::class, 'index']);
+            Route::get('/stats', [StaffApiLogController::class, 'stats']);
+            Route::get('/providers', [StaffApiLogController::class, 'providers']);
+            Route::get('/{id}', [StaffApiLogController::class, 'show']);
+        });
+
+        // =============================================
+        // Tenants Management - Super Admin only
+        // =============================================
+        Route::middleware('permission:canConfigureTenant')->prefix('tenants')->group(function () {
+            Route::get('/', [StaffTenantController::class, 'index']);
+            Route::post('/', [StaffTenantController::class, 'store']);
+            Route::get('/{id}', [StaffTenantController::class, 'show']);
+            Route::put('/{id}', [StaffTenantController::class, 'update']);
+            Route::delete('/{id}', [StaffTenantController::class, 'destroy']);
+            Route::get('/{id}/stats', [StaffTenantController::class, 'stats']);
+            Route::get('/{id}/config', [StaffTenantController::class, 'getConfig']);
+            Route::put('/{id}/branding', [StaffTenantController::class, 'updateBranding']);
+            Route::post('/{id}/upload-logo', [StaffTenantController::class, 'uploadLogo']);
+            Route::get('/{id}/api-configs', [StaffTenantController::class, 'listApiConfigs']);
+            Route::post('/{id}/api-configs', [StaffTenantController::class, 'saveApiConfig']);
+            Route::delete('/{id}/api-configs/{configId}', [StaffTenantController::class, 'deleteApiConfig']);
+            Route::post('/{id}/api-configs/{configId}/test', [StaffTenantController::class, 'testApiConfig']);
+        });
+
         // Applications - Read (any staff)
         Route::get('/applications', [StaffAppController::class, 'index']);
+        Route::get('/applications/board', [StaffAppController::class, 'board']);
         Route::get('/applications/statistics', [StaffAppController::class, 'statistics']);
         Route::get('/applications/unassigned', [StaffAppController::class, 'unassigned']);
         Route::get('/applications/my-queue', [StaffAppController::class, 'myQueue']);

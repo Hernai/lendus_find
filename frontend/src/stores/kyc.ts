@@ -1360,8 +1360,12 @@ export const useKycStore = defineStore('kyc', () => {
         const frontBlob = await fetch(ineFrontImage.value).then(r => r.blob())
         const frontFile = new File([frontBlob], 'ine_front.jpg', { type: 'image/jpeg' })
 
-        const applicationService = (await import('@/services/application.service')).default
-        await applicationService.uploadDocument(applicationId, 'INE_FRONT', frontFile, kycMetadata)
+        const { v2 } = await import('@/services/v2')
+        await v2.applicant.document.upload(frontFile, 'INE_FRONT', {
+          documentable_type: 'Application',
+          documentable_id: applicationId,
+          metadata: kycMetadata
+        })
         result.front = true
         kycLogger.debug('INE_FRONT uploaded with KYC metadata')
       }
@@ -1373,8 +1377,12 @@ export const useKycStore = defineStore('kyc', () => {
         const backBlob = await fetch(ineBackImage.value).then(r => r.blob())
         const backFile = new File([backBlob], 'ine_back.jpg', { type: 'image/jpeg' })
 
-        const applicationService = (await import('@/services/application.service')).default
-        await applicationService.uploadDocument(applicationId, 'INE_BACK', backFile, kycMetadata)
+        const { v2 } = await import('@/services/v2')
+        await v2.applicant.document.upload(backFile, 'INE_BACK', {
+          documentable_type: 'Application',
+          documentable_id: applicationId,
+          metadata: kycMetadata
+        })
         result.back = true
         kycLogger.debug('INE_BACK uploaded with KYC metadata')
       }
@@ -1426,8 +1434,12 @@ export const useKycStore = defineStore('kyc', () => {
       const selfieBlob = await fetch(base64Data).then(r => r.blob())
       const selfieFile = new File([selfieBlob], 'selfie.jpg', { type: 'image/jpeg' })
 
-      const applicationService = (await import('@/services/application.service')).default
-      await applicationService.uploadDocument(applicationId, 'SELFIE', selfieFile, selfieMetadata)
+      const { v2 } = await import('@/services/v2')
+      await v2.applicant.document.upload(selfieFile, 'SELFIE', {
+        documentable_type: 'Application',
+        documentable_id: applicationId,
+        metadata: selfieMetadata
+      })
 
       kycLogger.debug('SELFIE uploaded with face match metadata')
       return true

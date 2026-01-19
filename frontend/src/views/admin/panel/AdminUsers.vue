@@ -1,29 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
+import type { V2StaffUser } from '@/services/v2/user.staff.service'
 import { AppButton } from '@/components/common'
+import { useToast } from '@/composables'
 import { getErrorMessage, type AxiosErrorResponse } from '@/types/api'
+import { logger } from '@/utils/logger'
 
-interface User {
-  id: string
-  name: string
-  email: string
-  phone?: string
-  role: string
-  is_active: boolean
-  last_login_at?: string
-  created_at: string
-}
+const log = logger.child('AdminUsers')
+const toast = useToast()
 
-interface ApiResponse {
-  data: User[]
-  meta: {
-    current_page: number
-    last_page: number
-    per_page: number
-    total: number
-  }
-}
+// Use V2 StaffUser type
+type User = V2StaffUser
 
 // Role labels in Spanish
 const roleLabels: Record<string, string> = {
@@ -151,32 +139,38 @@ const fetchUsers = async () => {
   error.value = ''
 
   try {
-    const params: Record<string, unknown> = {
+    const filters: {
+      page?: number
+      per_page?: number
+      role?: string
+      search?: string
+      active?: boolean
+    } = {
       page: currentPage.value,
       per_page: itemsPerPage.value
     }
 
     if (roleFilter.value) {
-      params.role = roleFilter.value
+      filters.role = roleFilter.value
     }
 
     if (searchQuery.value) {
-      params.search = searchQuery.value
+      filters.search = searchQuery.value
     }
 
     if (activeFilter.value === 'active') {
-      params.active = true
+      filters.active = true
     } else if (activeFilter.value === 'inactive') {
-      params.active = false
+      filters.active = false
     }
 
-    const response = await api.get<ApiResponse>('/admin/users', { params })
+    const response = await v2.staff.user.list(filters)
 
-    users.value = response.data.data
-    totalItems.value = response.data.meta.total
-    totalPages.value = response.data.meta.last_page
+    users.value = response.data
+    totalItems.value = response.meta.total
+    totalPages.value = response.meta.last_page
   } catch (e) {
-    console.error('Failed to fetch users:', e)
+    log.error('Error al cargar usuarios', { error: e })
     error.value = 'Error al cargar los usuarios'
   } finally {
     isLoading.value = false
@@ -198,7 +192,7 @@ watch(currentPage, () => {
 })
 
 // Formatters
-const formatDateOnly = (dateStr?: string) => {
+const formatDateOnly = (dateStr?: string | null) => {
   if (!dateStr) return 'Nunca'
   return new Date(dateStr).toLocaleDateString('es-MX', {
     day: 'numeric',
@@ -206,7 +200,7 @@ const formatDateOnly = (dateStr?: string) => {
   })
 }
 
-const formatTimeOnly = (dateStr?: string) => {
+const formatTimeOnly = (dateStr?: string | null) => {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleTimeString('es-MX', {
     hour: '2-digit',
@@ -372,32 +366,59 @@ const saveUser = async () => {
 
   try {
     // Clean phone to digits only before sending
-    const cleanPhone = form.value.phone ? form.value.phone.replace(/\D/g, '') : null
-
-    const payload: Record<string, unknown> = {
-      name: form.value.name,
-      email: form.value.email,
-      phone: cleanPhone || null,
-      role: form.value.role,
-      is_active: form.value.is_active
-    }
-
-    // Only include password for new users or when changing password
-    const shouldSendPassword = !editingUser.value || (showChangePassword.value && form.value.password)
-    if (shouldSendPassword && form.value.password) {
-      payload.password = form.value.password
-    }
+    const cleanPhone = form.value.phone ? form.value.phone.replace(/\D/g, '') : undefined
 
     if (editingUser.value) {
-      await api.put(`/admin/users/${editingUser.value.id}`, payload)
+      // Update existing user
+      const updatePayload: {
+        email?: string
+        first_name?: string
+        last_name?: string
+        phone?: string
+        role?: 'ANALYST' | 'SUPERVISOR' | 'ADMIN' | 'SUPER_ADMIN'
+        password?: string
+        is_active?: boolean
+      } = {
+        email: form.value.email,
+        is_active: form.value.is_active
+      }
+
+      // Parse name into first_name and last_name
+      const nameParts = form.value.name.trim().split(' ')
+      updatePayload.first_name = nameParts[0] || ''
+      updatePayload.last_name = nameParts.slice(1).join(' ') || ''
+
+      if (cleanPhone) {
+        updatePayload.phone = cleanPhone
+      }
+
+      updatePayload.role = form.value.role as 'ANALYST' | 'SUPERVISOR' | 'ADMIN' | 'SUPER_ADMIN'
+
+      // Only include password when changing password
+      if (showChangePassword.value && form.value.password) {
+        updatePayload.password = form.value.password
+      }
+
+      await v2.staff.user.update(editingUser.value.id, updatePayload)
     } else {
-      await api.post('/admin/users', payload)
+      // Create new user
+      const nameParts = form.value.name.trim().split(' ')
+      const createPayload = {
+        email: form.value.email,
+        first_name: nameParts[0] || '',
+        last_name: nameParts.slice(1).join(' ') || nameParts[0] || '',
+        phone: cleanPhone,
+        role: form.value.role as 'ANALYST' | 'SUPERVISOR' | 'ADMIN' | 'SUPER_ADMIN',
+        password: form.value.password || undefined
+      }
+
+      await v2.staff.user.create(createPayload)
     }
 
     showUserModal.value = false
     await fetchUsers()
   } catch (e: unknown) {
-    console.error('Failed to save user:', e)
+    log.error('Error al guardar usuario', { error: e })
     // Clear previous errors first
     formErrors.value = { name: '', email: '', phone: '', role: '', password: '', password_confirmation: '' }
     formError.value = ''
@@ -445,13 +466,13 @@ const confirmDelete = async () => {
   isDeleting.value = true
 
   try {
-    await api.delete(`/admin/users/${userToDelete.value.id}`)
+    await v2.staff.user.remove(userToDelete.value.id)
     showDeleteModal.value = false
     userToDelete.value = null
     await fetchUsers()
   } catch (e: unknown) {
-    console.error('Failed to delete user:', e)
-    alert(getErrorMessage(e, 'Error al eliminar el usuario'))
+    log.error('Error al eliminar usuario', { error: e })
+    toast.error(getErrorMessage(e, 'Error al eliminar el usuario'))
   } finally {
     isDeleting.value = false
   }
@@ -460,13 +481,13 @@ const confirmDelete = async () => {
 // Toggle active status
 const toggleActiveStatus = async (user: User) => {
   try {
-    await api.put(`/admin/users/${user.id}`, {
+    await v2.staff.user.update(user.id, {
       is_active: !user.is_active
     })
     await fetchUsers()
   } catch (e: unknown) {
-    console.error('Failed to toggle user status:', e)
-    alert(getErrorMessage(e, 'Error al cambiar el estado del usuario'))
+    log.error('Error al cambiar estado del usuario', { error: e })
+    toast.error(getErrorMessage(e, 'Error al cambiar el estado del usuario'))
   }
 }
 

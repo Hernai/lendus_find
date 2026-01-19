@@ -1,4 +1,7 @@
 import { ref, type Ref } from 'vue'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('AsyncAction')
 
 /**
  * Options for useAsyncAction.
@@ -10,14 +13,16 @@ export interface AsyncActionOptions<T> {
   onError?: (error: Error) => void
   /** Initial loading state */
   initialLoading?: boolean
+  /** Whether to rethrow errors after handling */
+  rethrow?: boolean
 }
 
 /**
- * Return type for useAsyncAction.
+ * Return type for useAsyncAction with parameters.
  */
-export interface AsyncActionResult<T> {
-  /** Execute the async action */
-  execute: () => Promise<T | null>
+export interface AsyncActionResult<TArgs extends unknown[], TResult> {
+  /** Execute the async action with arguments */
+  execute: (...args: TArgs) => Promise<TResult | null>
   /** Current loading state */
   isLoading: Ref<boolean>
   /** Current error message */
@@ -32,59 +37,68 @@ export interface AsyncActionResult<T> {
  * Composable for wrapping async actions with standardized error handling.
  *
  * Eliminates the repetitive try-catch-finally pattern found throughout stores.
+ * Supports functions with parameters.
  *
  * @example
  * ```typescript
- * const { execute: loadUser, isLoading, error } = useAsyncAction(
- *   () => api.get('/user').then(r => r.data),
- *   {
- *     onSuccess: (user) => console.log('Loaded:', user),
- *     onError: (e) => console.error('Failed:', e)
- *   }
+ * // Without parameters
+ * const { execute: loadUsers, isLoading, error } = useAsyncAction(
+ *   () => api.get('/users').then(r => r.data)
  * )
+ * await loadUsers()
  *
- * // In component
- * await loadUser()
+ * // With parameters
+ * const { execute: loadUser, isLoading, error } = useAsyncAction(
+ *   (id: string) => api.get(`/users/${id}`).then(r => r.data),
+ *   { onSuccess: (user) => log.info('Loaded:', user) }
+ * )
+ * await loadUser('123')
+ *
+ * // With rethrow for custom error handling
+ * const { execute: submitForm, error } = useAsyncAction(
+ *   (data: FormData) => api.post('/submit', data),
+ *   { rethrow: true }
+ * )
+ * try {
+ *   await submitForm(formData)
+ * } catch (e) {
+ *   // Handle specific error cases
+ * }
  * ```
  */
-export function useAsyncAction<T>(
-  action: () => Promise<T>,
-  options?: AsyncActionOptions<T>
-): AsyncActionResult<T> {
+export function useAsyncAction<TArgs extends unknown[], TResult>(
+  action: (...args: TArgs) => Promise<TResult>,
+  options?: AsyncActionOptions<TResult>
+): AsyncActionResult<TArgs, TResult> {
   const isLoading: Ref<boolean> = ref(options?.initialLoading ?? false)
   const error: Ref<string | null> = ref(null)
 
-  /**
-   * Clear the current error.
-   */
   const clearError = (): void => {
     error.value = null
   }
 
-  /**
-   * Reset to initial state.
-   */
   const reset = (): void => {
     isLoading.value = false
     error.value = null
   }
 
-  /**
-   * Execute the async action with error handling.
-   */
-  const execute = async (): Promise<T | null> => {
+  const execute = async (...args: TArgs): Promise<TResult | null> => {
     isLoading.value = true
     error.value = null
 
     try {
-      const result = await action()
+      const result = await action(...args)
       options?.onSuccess?.(result)
       return result
     } catch (e) {
       const errorObj = e instanceof Error ? e : new Error(String(e))
       error.value = errorObj.message
       options?.onError?.(errorObj)
-      console.error('[useAsyncAction] Error:', errorObj.message)
+      log.error('Action failed', { error: errorObj.message })
+
+      if (options?.rethrow) {
+        throw errorObj
+      }
       return null
     } finally {
       isLoading.value = false

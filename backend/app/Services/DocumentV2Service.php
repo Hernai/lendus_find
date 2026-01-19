@@ -14,6 +14,10 @@ use Illuminate\Support\Str;
 
 class DocumentV2Service
 {
+    // =====================================================
+    // Constants
+    // =====================================================
+
     /**
      * Allowed file extensions for security.
      */
@@ -30,6 +34,10 @@ class DocumentV2Service
         'application/msword' => ['doc'],
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => ['docx'],
     ];
+
+    // =====================================================
+    // Document Upload & Storage
+    // =====================================================
 
     /**
      * Upload a document and attach to any documentable entity.
@@ -153,6 +161,10 @@ class DocumentV2Service
         });
     }
 
+    // =====================================================
+    // Document Review & Approval
+    // =====================================================
+
     /**
      * Auto-approve a document (e.g., from KYC validation).
      */
@@ -198,6 +210,10 @@ class DocumentV2Service
         return $document->fresh();
     }
 
+    // =====================================================
+    // OCR Processing
+    // =====================================================
+
     /**
      * Set OCR data for a document.
      */
@@ -208,6 +224,10 @@ class DocumentV2Service
         return $document->fresh();
     }
 
+    // =====================================================
+    // URL Generation
+    // =====================================================
+
     /**
      * Get a signed URL for accessing the document.
      */
@@ -215,6 +235,10 @@ class DocumentV2Service
     {
         return $document->getSignedUrl($expirationMinutes);
     }
+
+    // =====================================================
+    // Document Deletion
+    // =====================================================
 
     /**
      * Delete a document (soft delete).
@@ -257,6 +281,10 @@ class DocumentV2Service
             return $deleted;
         });
     }
+
+    // =====================================================
+    // Query Methods
+    // =====================================================
 
     /**
      * Get documents for a documentable entity.
@@ -367,6 +395,10 @@ class DocumentV2Service
             ->get();
     }
 
+    // =====================================================
+    // Document Copy & Transfer
+    // =====================================================
+
     /**
      * Copy documents from one entity to another (e.g., for application snapshots).
      *
@@ -464,6 +496,10 @@ class DocumentV2Service
             }
         });
     }
+
+    // =====================================================
+    // Utility Methods
+    // =====================================================
 
     /**
      * Check if a document type is sensitive.

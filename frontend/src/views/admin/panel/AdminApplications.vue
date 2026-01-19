@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
+import type { V2ApplicationFilters } from '@/types/v2'
 import { AppButton, AppConfirmModal } from '@/components/common'
 import { useAuthStore } from '@/stores/auth'
+import { useToast } from '@/composables'
+import { logger } from '@/utils/logger'
+
+const log = logger.child('AdminApplications')
+const toast = useToast()
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -12,15 +18,16 @@ const authStore = useAuthStore()
 const canAssign = computed(() => authStore.permissions?.canAssignApplications ?? false)
 const canApproveReject = computed(() => authStore.permissions?.canApproveRejectApplications ?? false)
 
+/**
+ * Application type for admin list view.
+ * Mapped from V2 API response to match the local display needs.
+ */
 interface Application {
   id: string
   folio: string
-  applicant: {
-    id: string
-    name: string
-    phone: string
-    email: string
-  } | null
+  applicant_name: string | null
+  applicant_phone: string | null
+  applicant_email: string | null
   product: {
     id: string
     name: string
@@ -30,22 +37,13 @@ interface Application {
   approved_amount: number | null
   term_months: number
   payment_frequency: string
-  monthly_payment: number
+  monthly_payment: number | null
   status: string
+  status_label: string
   created_at: string
   updated_at: string
   assigned_to: string | null
   risk_level: string | null
-}
-
-interface ApiResponse {
-  data: Application[]
-  meta: {
-    current_page: number
-    last_page: number
-    per_page: number
-    total: number
-  }
 }
 
 interface Product {
@@ -139,38 +137,61 @@ const fetchApplications = async () => {
   error.value = ''
 
   try {
-    const params: Record<string, unknown> = {
+    const filters: V2ApplicationFilters = {
       page: currentPage.value,
       per_page: viewMode.value === 'board' ? 200 : itemsPerPage.value
     }
 
     if (statusFilter.value) {
-      params.status = statusFilter.value
+      filters.status = statusFilter.value as V2ApplicationFilters['status']
     }
 
     if (searchQuery.value) {
-      params.search = searchQuery.value
+      filters.search = searchQuery.value
     }
 
     if (assignmentFilter.value) {
-      params.assignment = assignmentFilter.value
+      filters.assignment = assignmentFilter.value as 'assigned' | 'unassigned'
     }
 
     if (productFilter.value) {
-      params.product_id = productFilter.value
+      filters.product_id = productFilter.value
     }
 
     if (staleFilter.value) {
-      params.stale = true
+      filters.stale = true
     }
 
-    const response = await api.get<ApiResponse>('/admin/applications', { params })
+    const response = await v2.staff.application.list(filters)
 
-    applications.value = response.data.data
-    totalItems.value = response.data.meta.total
-    totalPages.value = response.data.meta.last_page
+    // Map V2 response to local Application type
+    applications.value = response.data.map((app) => ({
+      id: app.id,
+      folio: app.folio,
+      applicant_name: app.applicant?.full_name ?? null,
+      applicant_phone: app.applicant?.phone ?? null,
+      applicant_email: app.applicant?.email ?? null,
+      product: app.product ? {
+        id: app.product.id,
+        name: app.product.name,
+        type: app.product.type
+      } : null,
+      requested_amount: app.requested_amount,
+      approved_amount: app.approved_amount,
+      term_months: app.term_months,
+      payment_frequency: app.payment_frequency,
+      monthly_payment: app.monthly_payment,
+      status: app.status,
+      status_label: app.status_reason ?? app.status,
+      created_at: app.created_at,
+      updated_at: app.updated_at,
+      assigned_to: app.assigned_to_id,
+      risk_level: app.risk_score ? (app.risk_score > 70 ? 'HIGH' : app.risk_score > 40 ? 'MEDIUM' : 'LOW') : null
+    }))
+    totalItems.value = response.meta.total
+    totalPages.value = response.meta.last_page
   } catch (e) {
-    console.error('Failed to fetch applications:', e)
+    log.error('Error al cargar solicitudes', { error: e })
     error.value = 'Error al cargar las solicitudes'
   } finally {
     isLoading.value = false
@@ -224,10 +245,14 @@ const applyQuickFilter = (filterId: string) => {
 // Fetch products for filter dropdown
 const fetchProducts = async () => {
   try {
-    const response = await api.get<{ products: Product[] }>('/simulator/products')
-    products.value = response.data.products
+    const response = await v2.staff.product.list({ active: true })
+    products.value = response.data.map((p) => ({
+      id: p.id,
+      name: p.name,
+      type: p.type
+    }))
   } catch (e) {
-    console.error('Failed to fetch products:', e)
+    log.error('Error al cargar productos', { error: e })
   }
 }
 
@@ -364,9 +389,9 @@ const exportToCSV = () => {
   const headers = ['Folio', 'Solicitante', 'Email', 'Teléfono', 'Monto', 'Plazo', 'Producto', 'Estado', 'Fecha']
   const rows = applications.value.map(app => [
     app.folio,
-    app.applicant?.name || 'N/A',
-    app.applicant?.email || 'N/A',
-    app.applicant?.phone || 'N/A',
+    app.applicant_name || 'N/A',
+    app.applicant_email || 'N/A',
+    app.applicant_phone || 'N/A',
     app.requested_amount,
     `${app.term_months} meses`,
     app.product?.name || 'N/A',
@@ -436,12 +461,15 @@ const openBulkAssignModal = async () => {
   isLoadingAnalysts.value = true
 
   try {
-    const response = await api.get<{ data: Analyst[] }>('/admin/users', {
-      params: { active: true, role: 'ANALYST' }
-    })
-    analysts.value = response.data.data
+    const response = await v2.staff.user.list({ active: true, role: 'ANALYST' })
+    analysts.value = response.data.map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role
+    }))
   } catch (e) {
-    console.error('Failed to load analysts:', e)
+    log.error('Error al cargar analistas', { error: e })
     analysts.value = []
   } finally {
     isLoadingAnalysts.value = false
@@ -460,7 +488,7 @@ const confirmBulkAssign = async () => {
 
   try {
     for (const appId of selectedIds.value) {
-      await api.put(`/admin/applications/${appId}/assign`, {
+      await v2.staff.application.assign(appId, {
         user_id: selectedAgentId.value
       })
     }
@@ -468,9 +496,10 @@ const confirmBulkAssign = async () => {
     await fetchApplications()
     clearSelection()
     closeBulkAssignModal()
+    toast.success('Solicitudes asignadas correctamente')
   } catch (e) {
-    console.error('Failed to assign applications:', e)
-    error.value = 'Error al asignar las solicitudes'
+    log.error('Error al asignar solicitudes', { error: e })
+    toast.error('Error al asignar las solicitudes')
   } finally {
     isAssigning.value = false
   }
@@ -509,18 +538,18 @@ const confirmBulkReject = async () => {
 
   try {
     for (const appId of selectedIds.value) {
-      await api.put(`/admin/applications/${appId}/status`, {
-        status: 'REJECTED',
-        rejection_reason: bulkRejectReason.value
+      await v2.staff.application.reject(appId, {
+        reason: bulkRejectReason.value
       })
     }
 
     await fetchApplications()
     clearSelection()
     closeBulkRejectModal()
+    toast.success('Solicitudes rechazadas')
   } catch (e) {
-    console.error('Failed to reject applications:', e)
-    error.value = 'Error al rechazar las solicitudes'
+    log.error('Error al rechazar solicitudes', { error: e })
+    toast.error('Error al rechazar las solicitudes')
   } finally {
     isRejecting.value = false
   }
@@ -724,7 +753,7 @@ const confirmBulkReject = async () => {
 
             <!-- Applicant Name -->
             <p class="font-medium text-gray-900 text-sm truncate mb-1">
-              {{ app.applicant?.name || 'Sin nombre' }}
+              {{ app.applicant_name || 'Sin nombre' }}
             </p>
 
             <!-- Amount & Term -->
@@ -853,8 +882,8 @@ const confirmBulkReject = async () => {
               </td>
               <td class="px-3 py-2 whitespace-nowrap">
                 <div>
-                  <div class="text-sm font-medium text-gray-900">{{ app.applicant?.name || 'Sin nombre' }}</div>
-                  <div class="text-xs text-gray-500">{{ formatPhone(app.applicant?.phone) }}</div>
+                  <div class="text-sm font-medium text-gray-900">{{ app.applicant_name || 'Sin nombre' }}</div>
+                  <div class="text-xs text-gray-500">{{ formatPhone(app.applicant_phone) }}</div>
                 </div>
               </td>
               <td class="px-3 py-2 whitespace-nowrap">

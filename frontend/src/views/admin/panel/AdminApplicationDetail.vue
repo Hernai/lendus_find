@@ -5,11 +5,15 @@ import { AppButton } from '@/components/common'
 import AdminDocumentGallery from '@/components/admin/AdminDocumentGallery.vue'
 import ConfirmModal from '@/components/admin/ConfirmModal.vue'
 import { ReferencesSection, BankAccountsSection } from '@/components/admin/application-detail'
-import { api } from '@/services/api'
-import { useWebSocket } from '@/composables/useWebSocket'
+import { v2, type V2ApiLogEntry } from '@/services/v2'
+import { useWebSocket, useToast } from '@/composables'
 import { useTenantStore } from '@/stores/tenant'
 import { useAuthStore } from '@/stores/auth'
+import { logger } from '@/utils/logger'
 import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent, DocumentDeletedEvent, DocumentUploadedEvent, ReferenceVerifiedEvent, BankAccountVerifiedEvent } from '@/types/realtime'
+
+const log = logger.child('AdminApplicationDetail')
+const toast = useToast()
 
 const route = useRoute()
 const router = useRouter()
@@ -216,25 +220,11 @@ const isRejectingDoc = ref(false)
 const showMetadataModal = ref(false)
 const selectedTimelineEvent = ref<Application['timeline'][0] | null>(null)
 
-// API Logs state
-interface ApiLogEntry {
-  id: string
-  provider: string
-  service: string
-  endpoint: string
-  method: string
-  response_status: number
-  success: boolean
-  error_message?: string
-  duration_ms: number
-  created_at: string
-  request_payload?: Record<string, unknown>
-  response_body?: Record<string, unknown>
-}
-const apiLogs = ref<ApiLogEntry[]>([])
+// API Logs state (using V2ApiLogEntry from services)
+const apiLogs = ref<V2ApiLogEntry[]>([])
 const loadingApiLogs = ref(false)
 const showApiLogDetailModal = ref(false)
-const selectedApiLog = ref<ApiLogEntry | null>(null)
+const selectedApiLog = ref<V2ApiLogEntry | null>(null)
 
 const docRejectReasons = [
   { value: 'ILLEGIBLE', label: 'Documento ilegible' },
@@ -391,28 +381,28 @@ useWebSocket({
   tenantId: tenantIdRef,
   applicationId: route.params.id as string,
   onApplicationStatusChanged: (event: ApplicationStatusChangedEvent) => {
-    console.log('📡 Status changed:', event.previous_status, '→', event.new_status)
-    fetchApplication() // Recargar aplicación
+    log.debug('Status changed', { from: event.previous_status, to: event.new_status })
+    fetchApplication()
   },
   onDocumentStatusChanged: (event: DocumentStatusChangedEvent) => {
-    console.log('📄 Document updated:', event.type, event.new_status)
-    fetchApplication() // Recargar aplicación
+    log.debug('Document updated', { type: event.type, status: event.new_status })
+    fetchApplication()
   },
   onDocumentDeleted: (event: DocumentDeletedEvent) => {
-    console.log('🗑️ Document deleted:', event.type, 'by', event.deleted_by?.name)
-    fetchApplication() // Recargar aplicación
+    log.debug('Document deleted', { type: event.type, by: event.deleted_by?.name })
+    fetchApplication()
   },
   onDocumentUploaded: (event: DocumentUploadedEvent) => {
-    console.log('📤 Document uploaded:', event.type, 'by', event.uploaded_by?.name)
-    fetchApplication() // Recargar aplicación
+    log.debug('Document uploaded', { type: event.type, by: event.uploaded_by?.name })
+    fetchApplication()
   },
   onReferenceVerified: (event: ReferenceVerifiedEvent) => {
-    console.log('✅ Reference verified:', event.full_name, event.result)
-    fetchApplication() // Recargar aplicación
+    log.debug('Reference verified', { name: event.full_name, result: event.result })
+    fetchApplication()
   },
   onBankAccountVerified: (event: BankAccountVerifiedEvent) => {
-    console.log('🏦 Bank account verification changed:', event.bank_name, event.is_verified ? 'verified' : 'unverified')
-    fetchApplication() // Recargar aplicación para actualizar timeline
+    log.debug('Bank account verification changed', { bank: event.bank_name, verified: event.is_verified })
+    fetchApplication()
   },
 })
 
@@ -423,13 +413,30 @@ const fetchApplication = async () => {
 
   try {
     const appId = route.params.id as string
-    const response = await api.get<{ data: Application; allowed_statuses: { value: string; label: string }[] }>(`/admin/applications/${appId}`)
+    const response = await v2.staff.application.get(appId)
+
+    // V2 response structure - data is directly in response.data
+    const data = response.data!
 
     // Store allowed statuses from backend (based on user permissions)
-    allowedStatuses.value = response.data.allowed_statuses || []
+    // Note: V2 API may include allowed_statuses differently - using defaults for now
+    allowedStatuses.value = (response as { allowed_statuses?: { value: string; label: string }[] }).allowed_statuses || allStatusOptions.map(s => ({ value: s.value, label: s.label }))
 
-    // Map API response to our interface
-    const data = response.data.data
+    // Map V2 application data to local interface
+    const person = data.applicant
+    const product = data.product
+    const personAddress = person?.current_home_address
+    const personEmployment = person?.current_employment
+    const personReferences = person?.references || []
+    const personBankAccounts = person?.bank_accounts || []
+    const docs = data.documents || []
+
+    // Calculate approved documents that are in the required list
+    const requiredDocTypes = product?.required_documents || []
+    const requiredTypes = new Set(requiredDocTypes)
+    const approvedRequiredCount = docs.filter(d =>
+      d.status === 'APPROVED' && requiredTypes.has(d.type)
+    ).length
 
     application.value = {
       id: data.id,
@@ -437,32 +444,37 @@ const fetchApplication = async () => {
       status: data.status,
       created_at: data.created_at,
       updated_at: data.updated_at,
-      assigned_to: data.assigned_to,
-      required_documents: data.required_documents || [],
-      completeness: (() => {
-        // Calculate approved documents that are in the required list
-        const requiredTypes = new Set(data.required_documents || [])
-        const approvedRequiredCount = data.documents?.filter((d: Document) =>
-          d.status === 'APPROVED' && requiredTypes.has(d.type)
-        ).length || 0
-
-        return data.completeness || {
-          personal_data: !!data.applicant,
-          address: !!data.address,
-          employment: !!data.employment,
-          documents: {
-            uploaded: data.documents?.length || 0,
-            required: data.required_documents?.length || 0,
-            approved: approvedRequiredCount
-          },
-          references: {
-            count: data.references?.length || 0,
-            verified: data.references?.filter((r: Reference) => r.verified).length || 0
-          },
-          signature: data.signature?.has_signed ?? false
-        }
-      })(),
-      applicant: data.applicant || {
+      assigned_to: data.assigned_agent?.name ?? undefined,
+      required_documents: requiredDocTypes,
+      completeness: {
+        personal_data: !!person,
+        address: !!personAddress,
+        employment: !!personEmployment,
+        documents: {
+          uploaded: docs.length,
+          required: requiredDocTypes.length,
+          approved: approvedRequiredCount
+        },
+        references: {
+          count: personReferences.length,
+          verified: personReferences.filter(r => r.verification_status === 'VERIFIED').length
+        },
+        signature: false // TODO: add signature support to V2
+      },
+      applicant: person ? {
+        id: person.id,
+        full_name: person.full_name,
+        first_name: person.first_name,
+        last_name_1: person.last_name_1,
+        last_name_2: person.last_name_2 || '',
+        email: person.email || '',
+        phone: person.phone || '',
+        curp: person.curp || '',
+        rfc: person.rfc || '',
+        birth_date: person.birth_date || '',
+        nationality: person.nationality || '',
+        gender: person.gender || ''
+      } : {
         id: '',
         full_name: '',
         first_name: '',
@@ -476,7 +488,18 @@ const fetchApplication = async () => {
         nationality: '',
         gender: ''
       },
-      address: data.address || {
+      address: personAddress ? {
+        street: personAddress.street,
+        ext_number: personAddress.exterior_number,
+        int_number: personAddress.interior_number || undefined,
+        neighborhood: personAddress.neighborhood,
+        postal_code: personAddress.postal_code,
+        municipality: personAddress.municipality,
+        state: personAddress.state,
+        housing_type: personAddress.housing_type || '',
+        years_at_address: personAddress.years_at_address || undefined,
+        months_at_address: personAddress.months_at_address || undefined
+      } : {
         street: '',
         ext_number: '',
         neighborhood: '',
@@ -484,86 +507,109 @@ const fetchApplication = async () => {
         municipality: '',
         state: '',
         housing_type: '',
-        years_living: 0,
-        months_living: 0
+        years_at_address: 0,
+        months_at_address: 0
       },
-      employment: data.employment || {
+      employment: personEmployment ? {
+        employment_type: personEmployment.employment_type,
+        company_name: personEmployment.company_name,
+        position: personEmployment.position || '',
+        monthly_income: personEmployment.monthly_income,
+        seniority_months: personEmployment.start_date
+          ? Math.floor((Date.now() - new Date(personEmployment.start_date).getTime()) / (1000 * 60 * 60 * 24 * 30))
+          : 0
+      } : {
         employment_type: '',
         company_name: '',
         position: '',
         monthly_income: 0,
         seniority_months: 0
       },
-      loan: data.loan || {
-        product_name: '',
-        requested_amount: 0,
-        term_months: 0,
-        payment_frequency: '',
-        interest_rate: 0,
-        monthly_payment: 0,
-        total_to_pay: 0,
-        purpose: ''
+      loan: {
+        product_name: product?.name || '',
+        requested_amount: data.requested_amount,
+        approved_amount: data.approved_amount || undefined,
+        term_months: data.term_months,
+        payment_frequency: data.payment_frequency,
+        interest_rate: data.interest_rate || 0,
+        monthly_payment: data.monthly_payment || 0,
+        total_to_pay: (data.monthly_payment || 0) * data.term_months,
+        purpose: '' // TODO: add purpose to V2 application
       },
-      documents: (data.documents || []).map((d: { id: string; type: string; name?: string; status: string; rejection_reason?: string; rejection_comment?: string; uploaded_at?: string; reviewed_at?: string; mime_type?: string; metadata?: Record<string, unknown>; is_kyc_locked?: boolean }) => ({
+      documents: docs.map(d => ({
         id: d.id,
         type: d.type,
-        name: d.name || getDocTypeName(d.type),
+        name: getDocTypeName(d.type),
         status: d.status as 'PENDING' | 'APPROVED' | 'REJECTED',
-        rejection_reason: d.rejection_reason,
-        rejection_comment: d.rejection_comment,
-        uploaded_at: d.uploaded_at,
-        reviewed_at: d.reviewed_at,
+        rejection_reason: d.rejection_reason || undefined,
+        rejection_comment: undefined, // V2 uses rejection_reason only
+        uploaded_at: d.created_at,
+        reviewed_at: d.reviewed_at || undefined,
         mime_type: d.mime_type,
-        metadata: d.metadata,
-        is_kyc_locked: d.is_kyc_locked
+        metadata: d.ocr_data ?? undefined,
+        is_kyc_locked: false // TODO: add kyc lock to V2
       })),
-      references: (data.references || []).map((r: { id: string; full_name: string; relationship: string; phone: string; verified: boolean; verification_result?: string; verification_notes?: string; verified_at?: string }) => ({
+      references: personReferences.map(r => ({
         id: r.id,
         full_name: r.full_name,
         relationship: r.relationship,
         phone: r.phone,
-        verified: r.verified,
-        verification_result: r.verification_result as 'VERIFIED' | 'NOT_VERIFIED' | 'NO_ANSWER' | undefined,
-        verification_notes: r.verification_notes,
-        verified_at: r.verified_at
+        verified: r.verification_status === 'VERIFIED',
+        verification_result: r.verification_status === 'VERIFIED' ? 'VERIFIED' as const
+          : r.verification_status === 'REJECTED' ? 'NOT_VERIFIED' as const
+          : r.verification_status === 'UNREACHABLE' ? 'NO_ANSWER' as const
+          : undefined,
+        verification_notes: r.notes || undefined,
+        verified_at: r.verified_at || undefined
       })),
-      bank_accounts: (data.bank_accounts || []).map((ba: BankAccount) => ({
+      bank_accounts: personBankAccounts.map(ba => ({
         id: ba.id,
-        type: ba.type,
+        type: ba.account_type,
         bank_name: ba.bank_name,
         bank_code: ba.bank_code,
         clabe: ba.clabe,
         account_type: ba.account_type,
-        account_type_label: ba.account_type_label,
-        holder_name: ba.holder_name,
-        holder_rfc: ba.holder_rfc,
+        account_type_label: ba.account_type,
+        holder_name: ba.account_holder_name,
+        holder_rfc: undefined,
         is_primary: ba.is_primary,
-        is_own_account: ba.is_own_account,
+        is_own_account: true, // TODO: add is_own_account to V2
         is_verified: ba.is_verified,
         created_at: ba.created_at
       })),
-      notes: data.notes || [],
-      timeline: data.timeline || [],
-      signature: data.signature || {
+      notes: (data.notes || []).map(n => ({
+        id: n.id,
+        text: n.content,
+        author: n.author?.name || 'Sistema',
+        created_at: n.created_at
+      })),
+      timeline: data.status_history?.map((h, idx) => ({
+        id: String(idx),
+        action: 'STATUS_CHANGE',
+        description: `Estado cambiado a ${h.status}${h.reason ? `: ${h.reason}` : ''}`,
+        author: h.changed_by || 'Sistema',
+        created_at: h.timestamp
+      })) || [],
+      signature: {
         has_signed: false,
         signature_base64: undefined,
         signature_date: undefined,
         signature_ip: undefined
       },
-      verification: data.verification || {
+      verification: {
         phone_verified: false,
         phone_verified_at: undefined,
         email_verified: false,
         email_verified_at: undefined,
-        identity_verified: false,
-        identity_verified_at: undefined,
-        address_verified: false,
-        employment_verified: false
+        identity_verified: person?.kyc_status === 'VERIFIED',
+        identity_verified_at: person?.kyc_verified_at || undefined,
+        address_verified: personAddress?.verification_status === 'VERIFIED',
+        employment_verified: personEmployment?.verification_status === 'VERIFIED'
       },
-      field_verifications: data.field_verifications || {}
+      field_verifications: {}
     }
   } catch (e) {
-    console.error('Failed to fetch application:', e)
+    log.error('Error al cargar solicitud', { error: e })
     error.value = 'Error al cargar la solicitud'
   } finally {
     loading.value = false
@@ -577,17 +623,17 @@ const loadApiLogs = async () => {
   loadingApiLogs.value = true
   try {
     const appId = route.params.id as string
-    const response = await api.get<{ data: ApiLogEntry[] }>(`/admin/applications/${appId}/api-logs`)
-    apiLogs.value = response.data.data || []
+    const response = await v2.staff.application.getApiLogs(appId)
+    apiLogs.value = response.data || []
   } catch (e) {
-    console.error('Failed to load API logs:', e)
+    log.error('Error al cargar logs de API', { error: e })
     apiLogs.value = []
   } finally {
     loadingApiLogs.value = false
   }
 }
 
-const viewApiLogDetail = (log: ApiLogEntry) => {
+const viewApiLogDetail = (log: V2ApiLogEntry) => {
   selectedApiLog.value = log
   showApiLogDetailModal.value = true
 }
@@ -636,23 +682,6 @@ const loadSelfie = async () => {
   const fieldVerifications = application.value?.field_verifications || {}
   const selfieVerification = fieldVerifications['SELFIE'] || fieldVerifications['selfie'] || fieldVerifications['face_match']
   const livenessVerification = fieldVerifications['liveness']
-
-  // Debug: Log all relevant data
-  console.log('[AdminApplicationDetail] Selfie document found:', {
-    id: selfieDoc.id,
-    status: selfieDoc.status,
-    metadata: metadata,
-    metadataKeys: Object.keys(metadata),
-    face_match_passed: metadata.face_match_passed,
-    validation_method: metadata.validation_method,
-    kyc_validated: metadata.kyc_validated,
-    face_match: metadata.face_match,
-    source: metadata.source,
-    nubarium_validated: metadata.nubarium_validated,
-    selfieVerification: selfieVerification,
-    livenessVerification: livenessVerification,
-    allFieldVerifications: Object.keys(fieldVerifications)
-  })
 
   // Check various metadata fields that indicate KYC face match verification
   // The metadata can come from different sources with slightly different field names
@@ -729,25 +758,14 @@ const loadSelfie = async () => {
 
   selfieFaceMatchScore.value = faceMatchScore
 
-  console.log('[AdminApplicationDetail] selfieIsKycVerified:', selfieIsKycVerified.value, {
-    hasMetadataVerification,
-    hasFieldVerification,
-    hasFaceMatchVerification,
-    faceMatchScore
-  })
-
   isLoadingSelfie.value = true
 
   try {
-    // Fetch the image as blob with auth headers
-    const response = await api.get(
-      `/admin/applications/${application.value.id}/documents/${selfieDoc.id}/download`,
-      { responseType: 'blob' }
-    )
-    const blob = new Blob([response.data as BlobPart], { type: selfieDoc.mime_type || 'image/jpeg' })
-    selfieUrl.value = URL.createObjectURL(blob)
+    const blob = await v2.staff.application.downloadDocument(application.value.id, selfieDoc.id)
+    const typedBlob = new Blob([blob], { type: selfieDoc.mime_type || 'image/jpeg' })
+    selfieUrl.value = URL.createObjectURL(typedBlob)
   } catch (e) {
-    console.error('Failed to load selfie:', e)
+    log.error('Error al cargar selfie', { error: e })
     selfieUrl.value = null
   } finally {
     isLoadingSelfie.value = false
@@ -761,18 +779,18 @@ const approveSelfie = async () => {
   isApprovingSelfie.value = true
 
   try {
-    await api.put(`/admin/applications/${application.value.id}/documents/${selfieDocId.value}/approve`)
+    await v2.staff.application.approveDocument(application.value.id, selfieDocId.value)
     selfieStatus.value = 'APPROVED'
 
-    // Update in documents array too
     const doc = application.value.documents.find(d => d.id === selfieDocId.value)
     if (doc) doc.status = 'APPROVED'
 
     showSelfieApproveModal.value = false
     await fetchApplication()
+    toast.success('Selfie aprobada correctamente')
   } catch (e) {
-    console.error('Failed to approve selfie:', e)
-    alert('Error al aprobar la selfie')
+    log.error('Error al aprobar selfie', { error: e })
+    toast.error('Error al aprobar la selfie')
   } finally {
     isApprovingSelfie.value = false
   }
@@ -785,9 +803,9 @@ const rejectSelfie = async (data: { selectValue?: string; comment?: string }) =>
   isRejectingSelfie.value = true
 
   try {
-    await api.put(`/admin/applications/${application.value.id}/documents/${selfieDocId.value}/reject`, {
+    await v2.staff.application.rejectDocument(application.value.id, selfieDocId.value, {
       reason: data.selectValue,
-      comment: data.comment || null
+      comment: data.comment || undefined
     })
     selfieStatus.value = 'REJECTED'
 
@@ -801,9 +819,10 @@ const rejectSelfie = async (data: { selectValue?: string; comment?: string }) =>
 
     showSelfieRejectModal.value = false
     await fetchApplication()
+    toast.success('Selfie rechazada')
   } catch (e) {
-    console.error('Failed to reject selfie:', e)
-    alert('Error al rechazar la selfie')
+    log.error('Error al rechazar selfie', { error: e })
+    toast.error('Error al rechazar la selfie')
   } finally {
     isRejectingSelfie.value = false
   }
@@ -816,10 +835,9 @@ const unapproveSelfie = async () => {
   isUnapprovingSelfie.value = true
 
   try {
-    await api.put(`/admin/applications/${application.value.id}/documents/${selfieDocId.value}/unapprove`)
+    await v2.staff.application.unapproveDocument(application.value.id, selfieDocId.value)
     selfieStatus.value = 'PENDING'
 
-    // Update in documents array too
     const doc = application.value.documents.find(d => d.id === selfieDocId.value)
     if (doc) {
       doc.status = 'PENDING'
@@ -829,9 +847,10 @@ const unapproveSelfie = async () => {
 
     showSelfieUnapproveModal.value = false
     await fetchApplication()
+    toast.success('Aprobación de selfie revertida')
   } catch (e) {
-    console.error('Failed to unapprove selfie:', e)
-    alert('Error al desaprobar la selfie')
+    log.error('Error al revertir aprobación de selfie', { error: e })
+    toast.error('Error al revertir aprobación de selfie')
   } finally {
     isUnapprovingSelfie.value = false
   }
@@ -844,10 +863,9 @@ const unrejectSelfie = async () => {
   isUnrejectingSelfie.value = true
 
   try {
-    await api.put(`/admin/applications/${application.value.id}/documents/${selfieDocId.value}/unapprove`)
+    await v2.staff.application.unapproveDocument(application.value.id, selfieDocId.value)
     selfieStatus.value = 'PENDING'
 
-    // Update in documents array too
     const doc = application.value.documents.find(d => d.id === selfieDocId.value)
     if (doc) {
       doc.status = 'PENDING'
@@ -857,9 +875,10 @@ const unrejectSelfie = async () => {
 
     showSelfieUnrejectModal.value = false
     await fetchApplication()
+    toast.success('Rechazo de selfie revertido')
   } catch (e) {
-    console.error('Failed to unreject selfie:', e)
-    alert('Error al desrechazar la selfie')
+    log.error('Error al revertir rechazo de selfie', { error: e })
+    toast.error('Error al revertir rechazo de selfie')
   } finally {
     isUnrejectingSelfie.value = false
   }
@@ -884,7 +903,7 @@ const verifyBankAccount = async () => {
   isVerifyingBankAccount.value = true
 
   try {
-    await api.put(`/admin/applications/${application.value.id}/bank-accounts/${selectedBankAccount.value.id}/verify`)
+    await v2.staff.application.verifyBankAccount(application.value.id, selectedBankAccount.value.id)
 
     // Update in bank_accounts array
     const account = application.value.bank_accounts.find(ba => ba.id === selectedBankAccount.value?.id)
@@ -895,9 +914,10 @@ const verifyBankAccount = async () => {
     showBankAccountVerifyModal.value = false
     selectedBankAccount.value = null
     await fetchApplication()
+    toast.success('Cuenta bancaria verificada')
   } catch (e) {
-    console.error('Failed to verify bank account:', e)
-    alert('Error al verificar la cuenta bancaria')
+    log.error('Error al verificar cuenta bancaria', { error: e })
+    toast.error('Error al verificar la cuenta bancaria')
   } finally {
     isVerifyingBankAccount.value = false
   }
@@ -910,9 +930,8 @@ const unverifyBankAccount = async () => {
   isUnverifyingBankAccount.value = true
 
   try {
-    await api.put(`/admin/applications/${application.value.id}/bank-accounts/${selectedBankAccount.value.id}/unverify`)
+    await v2.staff.application.unverifyBankAccount(application.value.id, selectedBankAccount.value.id)
 
-    // Update in bank_accounts array
     const account = application.value.bank_accounts.find(ba => ba.id === selectedBankAccount.value?.id)
     if (account) {
       account.is_verified = false
@@ -921,9 +940,10 @@ const unverifyBankAccount = async () => {
     showBankAccountUnverifyModal.value = false
     selectedBankAccount.value = null
     await fetchApplication()
+    toast.success('Verificación de cuenta bancaria revertida')
   } catch (e) {
-    console.error('Failed to unverify bank account:', e)
-    alert('Error al desverificar la cuenta bancaria')
+    log.error('Error al revertir verificación de cuenta bancaria', { error: e })
+    toast.error('Error al revertir verificación de cuenta bancaria')
   } finally {
     isUnverifyingBankAccount.value = false
   }
@@ -1205,19 +1225,18 @@ const updateStatus = async () => {
 
   try {
     // Make actual API call to update status
-    await api.put(`/admin/applications/${application.value.id}/status`, {
-      status: newStatus.value,
+    await v2.staff.application.changeStatus(application.value.id, {
+      status: newStatus.value as import('@/types/v2').V2ApplicationStatus,
       reason: statusNote.value || undefined
     })
 
-    // Reload application data to get updated timeline and notes from backend
     await fetchApplication()
-
     showStatusModal.value = false
+    toast.success('Estado actualizado correctamente')
   } catch (error: unknown) {
-    console.error('Failed to update status:', error)
+    log.error('Error al actualizar estado', { error })
     const axiosError = error as { response?: { data?: { message?: string } } }
-    alert(axiosError.response?.data?.message || 'Error al cambiar el estado')
+    toast.error(axiosError.response?.data?.message || 'Error al cambiar el estado')
   } finally {
     isUpdatingStatus.value = false
   }
@@ -1230,13 +1249,15 @@ const openAssignModal = async () => {
   selectedUserId.value = ''
 
   try {
-    // Only fetch analysts for application assignment
-    const response = await api.get<{ data: StaffUser[] }>('/admin/users', {
-      params: { active: true, role: 'ANALYST' }
-    })
-    staffUsers.value = response.data.data
+    const response = await v2.staff.user.list({ active: true, role: 'ANALYST' })
+    staffUsers.value = response.data.map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role
+    }))
   } catch (error) {
-    console.error('Failed to load analysts:', error)
+    log.error('Error al cargar analistas', { error })
   } finally {
     isLoadingUsers.value = false
   }
@@ -1248,16 +1269,17 @@ const assignApplication = async () => {
   isAssigning.value = true
 
   try {
-    await api.put(`/admin/applications/${application.value.id}/assign`, {
+    await v2.staff.application.assign(application.value.id, {
       user_id: selectedUserId.value
     })
 
     await fetchApplication()
     showAssignModal.value = false
+    toast.success('Solicitud asignada correctamente')
   } catch (error: unknown) {
-    console.error('Failed to assign application:', error)
+    log.error('Error al asignar solicitud', { error })
     const axiosError = error as { response?: { data?: { message?: string } } }
-    alert(axiosError.response?.data?.message || 'Error al asignar la solicitud')
+    toast.error(axiosError.response?.data?.message || 'Error al asignar la solicitud')
   } finally {
     isAssigning.value = false
   }
@@ -1276,23 +1298,20 @@ const viewDocument = async (doc: Document) => {
   docViewerName.value = doc.name
 
   try {
-    const response = await api.get<{ url: string; mime_type: string; original_name: string }>(
-      `/admin/applications/${application.value.id}/documents/${doc.id}/url`
-    )
+    const response = await v2.staff.application.getDocumentUrl(application.value.id, doc.id)
+    const data = response.data!
 
-    docViewerUrl.value = response.data.url
-    docViewerMimeType.value = response.data.mime_type || doc.mime_type || ''
+    docViewerUrl.value = data.url
+    docViewerMimeType.value = data.mime_type || doc.mime_type || ''
 
-    // For PDFs, open in new tab for better viewing experience
     if (docViewerMimeType.value === 'application/pdf') {
       window.open(docViewerUrl.value, '_blank')
     } else {
-      // For images, show in modal
       showDocViewerModal.value = true
     }
   } catch (e) {
-    console.error('Failed to get document URL:', e)
-    alert('Error al cargar el documento')
+    log.error('Error al obtener URL del documento', { error: e })
+    toast.error('Error al cargar el documento')
   } finally {
     isLoadingDocViewer.value = false
   }
@@ -1304,18 +1323,14 @@ const confirmApproveDocument = async (_data?: { selectValue?: string; comment?: 
   isApprovingDoc.value = true
 
   try {
-    await api.put(`/admin/applications/${application.value.id}/documents/${docToApprove.value.id}/approve`)
-
-    // Update local state
+    await v2.staff.application.approveDocument(application.value.id, docToApprove.value.id)
     docToApprove.value.status = 'APPROVED'
-
-    // Refresh data to get updated timeline
     await fetchApplication()
-
     showDocApproveModal.value = false
+    toast.success('Documento aprobado correctamente')
   } catch (e) {
-    console.error('Failed to approve document:', e)
-    alert('Error al aprobar el documento')
+    log.error('Error al aprobar documento', { error: e })
+    toast.error('Error al aprobar el documento')
   } finally {
     isApprovingDoc.value = false
   }
@@ -1334,23 +1349,21 @@ const confirmRejectDocument = async () => {
   isRejectingDoc.value = true
 
   try {
-    await api.put(`/admin/applications/${application.value.id}/documents/${selectedDocument.value.id}/reject`, {
+    await v2.staff.application.rejectDocument(application.value.id, selectedDocument.value.id, {
       reason: docRejectReason.value,
-      comment: docRejectComment.value || null
+      comment: docRejectComment.value || undefined
     })
 
-    // Update local state
     selectedDocument.value.status = 'REJECTED'
     selectedDocument.value.rejection_reason = docRejectReason.value
     selectedDocument.value.rejection_comment = docRejectComment.value
 
-    // Refresh data to get updated timeline
     await fetchApplication()
-
     showDocRejectModal.value = false
+    toast.success('Documento rechazado')
   } catch (e) {
-    console.error('Failed to reject document:', e)
-    alert('Error al rechazar el documento')
+    log.error('Error al rechazar documento', { error: e })
+    toast.error('Error al rechazar el documento')
   } finally {
     isRejectingDoc.value = false
   }
@@ -1370,23 +1383,21 @@ const confirmVerifyReference = async () => {
   isVerifyingRef.value = true
 
   try {
-    await api.put(`/admin/applications/${application.value.id}/references/${selectedReference.value.id}/verify`, {
+    await v2.staff.application.verifyReference(application.value.id, selectedReference.value.id, {
       result: refVerifyResult.value,
-      notes: refVerifyNotes.value || null
+      notes: refVerifyNotes.value || undefined
     })
 
-    // Update local state
     selectedReference.value.verified = refVerifyResult.value === 'VERIFIED'
     selectedReference.value.verification_result = refVerifyResult.value
     selectedReference.value.verification_notes = refVerifyNotes.value
 
-    // Refresh data to get updated timeline
     await fetchApplication()
-
     showVerifyRefModal.value = false
+    toast.success('Referencia verificada correctamente')
   } catch (e) {
-    console.error('Failed to verify reference:', e)
-    alert('Error al verificar la referencia')
+    log.error('Error al verificar referencia', { error: e })
+    toast.error('Error al verificar la referencia')
   } finally {
     isVerifyingRef.value = false
   }
@@ -1457,12 +1468,12 @@ const verifyData = async (field: VerifiableField, action: 'verify' | 'reject' | 
   isVerifyingData.value = true
 
   try {
-    await api.put(`/admin/applications/${application.value.id}/verify-data`, {
+    await v2.staff.application.verifyData(application.value.id, {
       field,
       action,
       method: 'MANUAL',
-      rejection_reason: action === 'reject' ? reason || null : null,
-      notes: action === 'unverify' ? reason || null : null
+      rejection_reason: action === 'reject' ? reason || undefined : undefined,
+      notes: action === 'unverify' ? reason || undefined : undefined
     })
 
     // Update local state for field_verifications
@@ -1506,11 +1517,11 @@ const verifyData = async (field: VerifiableField, action: 'verify' | 'reject' | 
       }
     }
 
-    // Refresh to get updated timeline
     await fetchApplication()
+    toast.success(action === 'verify' ? 'Dato verificado' : action === 'reject' ? 'Dato rechazado' : 'Verificación removida')
   } catch (e) {
-    console.error('Failed to verify data:', e)
-    alert('Error al verificar los datos')
+    log.error('Error al verificar datos', { error: e })
+    toast.error('Error al verificar los datos')
   } finally {
     isVerifyingData.value = false
   }
@@ -1567,34 +1578,24 @@ const submitCounterOffer = async () => {
 
   isSubmittingCounterOffer.value = true
 
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 1000))
-
-  // Update application with counter-offer
-  application.value.status = 'COUNTER_OFFERED'
-  application.value.loan.approved_amount = counterOffer.value.amount
-
-  // Add to timeline
-  application.value.timeline.push({
-    id: String(Date.now()),
-    action: 'COUNTER_OFFER',
-    description: `Contraoferta enviada: ${formatMoney(counterOffer.value.amount)} a ${counterOffer.value.term_months} meses`,
-    author: 'Admin',
-    created_at: new Date().toISOString()
-  })
-
-  // Add note if reason provided
-  if (counterOffer.value.reason) {
-    application.value.notes.push({
-      id: String(Date.now()),
-      text: `Contraoferta: ${counterOffer.value.reason}`,
-      author: 'Admin',
-      created_at: new Date().toISOString()
+  try {
+    await v2.staff.application.createCounterOffer(application.value.id, {
+      amount: counterOffer.value.amount,
+      term_months: counterOffer.value.term_months,
+      interest_rate: counterOffer.value.interest_rate,
+      payment_frequency: counterOffer.value.payment_frequency as import('@/types/v2').V2PaymentFrequency,
+      reason: counterOffer.value.reason
     })
-  }
 
-  isSubmittingCounterOffer.value = false
-  showCounterOfferModal.value = false
+    await fetchApplication()
+    showCounterOfferModal.value = false
+    toast.success('Contraoferta enviada correctamente')
+  } catch (e) {
+    log.error('Error al enviar contraoferta', { error: e })
+    toast.error('Error al enviar la contraoferta')
+  } finally {
+    isSubmittingCounterOffer.value = false
+  }
 }
 
 const addNote = async () => {
@@ -1603,23 +1604,23 @@ const addNote = async () => {
   isAddingNote.value = true
 
   try {
-    const response = await api.post<{ data: { id: string; content: string; author: string; created_at: string } }>(
-      `/admin/applications/${application.value.id}/notes`,
-      { content: newNoteText.value.trim() }
-    )
+    const response = await v2.staff.application.addNote(application.value.id, {
+      content: newNoteText.value.trim()
+    })
 
-    // Add note to the beginning of the list
+    const noteData = response.data!
     application.value.notes.unshift({
-      id: response.data.data.id,
-      text: response.data.data.content,
-      author: response.data.data.author,
-      created_at: response.data.data.created_at
+      id: noteData.id,
+      text: noteData.content,
+      author: noteData.author?.name || 'Sistema',
+      created_at: noteData.created_at
     })
 
     newNoteText.value = ''
+    toast.success('Nota agregada')
   } catch (e) {
-    console.error('Failed to add note:', e)
-    alert('Error al agregar la nota')
+    log.error('Error al agregar nota', { error: e })
+    toast.error('Error al agregar la nota')
   } finally {
     isAddingNote.value = false
   }

@@ -42,4 +42,14 @@ class KycServiceFactory
     {
         return $this->create($this->currentTenant);
     }
+
+    /**
+     * Create a KYC service for a specific tenant.
+     *
+     * Alias for create() to provide a cleaner API.
+     */
+    public function forTenant(Tenant $tenant): NubariumService
+    {
+        return $this->create($tenant);
+    }
 }

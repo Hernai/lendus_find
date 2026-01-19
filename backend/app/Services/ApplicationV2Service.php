@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\ApplicantAccount;
-use App\Models\ApplicationStatusHistory;
 use App\Models\ApplicationV2;
 use App\Models\Company;
 use App\Models\Person;
@@ -16,10 +15,18 @@ use Illuminate\Support\Facades\DB;
 
 class ApplicationV2Service
 {
+    // =====================================================
+    // Constructor
+    // =====================================================
+
     public function __construct(
         protected LoanCalculationService $loanCalculator,
         protected DocumentV2Service $documentService
     ) {}
+
+    // =====================================================
+    // Application Creation
+    // =====================================================
 
     /**
      * Create a new application for an individual (Person).
@@ -109,6 +116,10 @@ class ApplicationV2Service
         ]);
     }
 
+    // =====================================================
+    // Application Updates
+    // =====================================================
+
     /**
      * Update loan terms for a draft application.
      */
@@ -144,6 +155,10 @@ class ApplicationV2Service
 
         return $application->fresh();
     }
+
+    // =====================================================
+    // Submission & Validation
+    // =====================================================
 
     /**
      * Submit an application for review.
@@ -237,7 +252,7 @@ class ApplicationV2Service
                 'rfc' => $person->rfc,
                 'birth_date' => $person->birth_date?->format('Y-m-d'),
                 'nationality' => $person->nationality,
-                'current_address' => $person->currentAddress()?->toArray(),
+                'current_address' => $person->currentHomeAddress?->toArray(),
                 'current_employment' => $person->currentEmployment()?->toArray(),
             ];
         }
@@ -253,6 +268,10 @@ class ApplicationV2Service
             'legal_representative' => $company->legalRepresentative()?->person?->full_name,
         ];
     }
+
+    // =====================================================
+    // Staff Actions
+    // =====================================================
 
     /**
      * Assign application to a staff member.
@@ -311,6 +330,10 @@ class ApplicationV2Service
         return $application->fresh();
     }
 
+    // =====================================================
+    // Counter Offers
+    // =====================================================
+
     /**
      * Send counter offer.
      */
@@ -363,6 +386,10 @@ class ApplicationV2Service
         return $application->fresh();
     }
 
+    // =====================================================
+    // Application Cancellation & Sync
+    // =====================================================
+
     /**
      * Cancel application.
      */
@@ -395,6 +422,10 @@ class ApplicationV2Service
         return $application->fresh();
     }
 
+    // =====================================================
+    // Verification & Risk
+    // =====================================================
+
     /**
      * Update verification checklist.
      */
@@ -417,6 +448,10 @@ class ApplicationV2Service
 
         return $application->fresh();
     }
+
+    // =====================================================
+    // Query Methods
+    // =====================================================
 
     /**
      * Find an application by ID for a specific tenant.
@@ -520,6 +555,105 @@ class ApplicationV2Service
         return $query->get();
     }
 
+    // =====================================================
+    // Listing & Filtering
+    // =====================================================
+
+    /**
+     * Get Kanban board data with applications grouped by status.
+     *
+     * Returns applications organized by column/status with a limit per column.
+     * More efficient than fetching all applications for Kanban views.
+     */
+    public function getBoardData(
+        Tenant $tenant,
+        array $columns,
+        int $limitPerColumn = 15,
+        ?string $assignedTo = null,
+        string $sortBy = 'created_at',
+        string $sortDir = 'desc'
+    ): array {
+        $statusLabels = ApplicationV2::statuses();
+        $result = [
+            'columns' => [],
+            'totals' => [
+                'all' => 0,
+                'by_status' => [],
+            ],
+        ];
+
+        // Get counts for all requested columns in one query
+        $countsQuery = ApplicationV2::where('tenant_id', $tenant->id)
+            ->whereIn('status', $columns);
+
+        if ($assignedTo) {
+            $countsQuery->where('assigned_to', $assignedTo);
+        }
+
+        $counts = (clone $countsQuery)
+            ->selectRaw('status, COUNT(*) as count')
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->toArray();
+
+        $result['totals']['all'] = array_sum($counts);
+        $result['totals']['by_status'] = $counts;
+
+        // Fetch limited items per column
+        foreach ($columns as $status) {
+            $query = ApplicationV2::where('tenant_id', $tenant->id)
+                ->where('status', $status)
+                ->with(['person', 'company', 'product', 'assignedTo']);
+
+            if ($assignedTo) {
+                $query->where('assigned_to', $assignedTo);
+            }
+
+            $items = $query
+                ->orderBy($sortBy, $sortDir)
+                ->limit($limitPerColumn)
+                ->get()
+                ->map(fn($app) => $this->formatBoardItem($app));
+
+            $result['columns'][] = [
+                'status' => $status,
+                'status_label' => $statusLabels[$status] ?? $status,
+                'count' => $counts[$status] ?? 0,
+                'items' => $items,
+                'has_more' => ($counts[$status] ?? 0) > $limitPerColumn,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Format application for board/Kanban view (minimal data).
+     */
+    protected function formatBoardItem(ApplicationV2 $app): array
+    {
+        return [
+            'id' => $app->id,
+            'folio' => $app->folio,
+            'status' => $app->status,
+            'applicant_type' => $app->applicant_type,
+            'applicant_name' => $app->is_individual
+                ? $app->person?->full_name
+                : $app->company?->legal_name,
+            'product' => $app->product ? [
+                'id' => $app->product->id,
+                'name' => $app->product->name,
+            ] : null,
+            'requested_amount' => $app->requested_amount,
+            'assigned_to' => $app->assignedTo ? [
+                'id' => $app->assignedTo->id,
+                'name' => $app->assignedTo->profile?->full_name ?? $app->assignedTo->email,
+            ] : null,
+            'created_at' => $app->created_at?->toIso8601String(),
+            'submitted_at' => $app->submitted_at?->toIso8601String(),
+        ];
+    }
+
     /**
      * Get applications list with filters and pagination.
      */
@@ -533,7 +667,8 @@ class ApplicationV2Service
 
         // Apply filters
         if (!empty($filters['status'])) {
-            $query->status($filters['status']);
+            $statuses = is_array($filters['status']) ? $filters['status'] : [$filters['status']];
+            $query->whereIn('status', $statuses);
         }
 
         if (!empty($filters['applicant_type'])) {
@@ -550,6 +685,16 @@ class ApplicationV2Service
 
         if (!empty($filters['unassigned'])) {
             $query->unassigned();
+        }
+
+        // Handle assignment filter (all, assigned, unassigned)
+        if (!empty($filters['assignment'])) {
+            if ($filters['assignment'] === 'assigned') {
+                $query->whereNotNull('assigned_to');
+            } elseif ($filters['assignment'] === 'unassigned') {
+                $query->unassigned();
+            }
+            // 'all' doesn't need any filter
         }
 
         if (!empty($filters['risk_level'])) {
@@ -573,10 +718,16 @@ class ApplicationV2Service
             $search = str_replace(['%', '_'], ['\\%', '\\_'], $filters['search']);
             $search = mb_substr($search, 0, 100);
             $query->where(function ($q) use ($search) {
+                // Search in persons table (name fields)
                 $q->whereHas('person', function ($pq) use ($search) {
                     $pq->where('first_name', 'ILIKE', "%{$search}%")
-                        ->orWhere('last_name', 'ILIKE', "%{$search}%")
-                        ->orWhere('curp', 'ILIKE', "%{$search}%");
+                        ->orWhere('last_name_1', 'ILIKE', "%{$search}%")
+                        ->orWhere('last_name_2', 'ILIKE', "%{$search}%")
+                        // Also search in person_identifications for CURP/RFC
+                        ->orWhereHas('identifications', function ($iq) use ($search) {
+                            $iq->where('identifier_value', 'ILIKE', "%{$search}%")
+                                ->where('is_current', true);
+                        });
                 })->orWhereHas('company', function ($cq) use ($search) {
                     $cq->where('legal_name', 'ILIKE', "%{$search}%")
                         ->orWhere('trade_name', 'ILIKE', "%{$search}%")
@@ -601,6 +752,10 @@ class ApplicationV2Service
         return $query->paginate($perPage);
     }
 
+    // =====================================================
+    // Statistics & History
+    // =====================================================
+
     /**
      * Get application statistics for dashboard.
      */
@@ -616,37 +771,55 @@ class ApplicationV2Service
         }
 
         $total = (clone $query)->count();
-        $draft = (clone $query)->draft()->count();
-        $submitted = (clone $query)->submitted()->count();
-        $inReview = (clone $query)->inReview()->count();
-        $approved = (clone $query)->approved()->count();
-        $rejected = (clone $query)->rejected()->count();
 
-        $totalAmount = (clone $query)->sum('requested_amount');
-        $approvedAmount = (clone $query)->approved()->sum('approved_amount');
+        // Count by each status (lowercase keys for consistency)
+        $byStatus = [];
+        foreach (array_keys(ApplicationV2::statuses()) as $status) {
+            $byStatus[strtolower($status)] = (clone $query)->where('status', $status)->count();
+        }
 
-        $byRisk = (clone $query)
-            ->whereNotNull('risk_level')
-            ->selectRaw('risk_level, count(*) as count')
-            ->groupBy('risk_level')
-            ->pluck('count', 'risk_level')
-            ->toArray();
+        // Pending review = submitted
+        $pendingReview = $byStatus['submitted'] ?? 0;
+
+        // Pending documents = docs_pending
+        $pendingDocuments = $byStatus['docs_pending'] ?? 0;
+
+        // Approved/rejected today
+        $today = now()->startOfDay();
+        $approvedToday = (clone $query)
+            ->where('status', ApplicationV2::STATUS_APPROVED)
+            ->where('status_changed_at', '>=', $today)
+            ->count();
+        $rejectedToday = (clone $query)
+            ->where('status', ApplicationV2::STATUS_REJECTED)
+            ->where('status_changed_at', '>=', $today)
+            ->count();
+
+        // Average processing time (from SUBMITTED to APPROVED/REJECTED)
+        $avgProcessingTime = 0;
+        $processedApps = (clone $query)
+            ->whereIn('status', [ApplicationV2::STATUS_APPROVED, ApplicationV2::STATUS_REJECTED])
+            ->whereNotNull('submitted_at')
+            ->whereNotNull('status_changed_at')
+            ->get(['submitted_at', 'status_changed_at']);
+
+        if ($processedApps->count() > 0) {
+            $totalHours = $processedApps->sum(function ($app) {
+                $submitted = \Carbon\Carbon::parse($app->submitted_at);
+                $changed = \Carbon\Carbon::parse($app->status_changed_at);
+                return $changed->diffInHours($submitted);
+            });
+            $avgProcessingTime = $totalHours / $processedApps->count();
+        }
 
         return [
             'total' => $total,
-            'by_status' => [
-                'draft' => $draft,
-                'submitted' => $submitted,
-                'in_review' => $inReview,
-                'approved' => $approved,
-                'rejected' => $rejected,
-            ],
-            'amounts' => [
-                'total_requested' => $totalAmount,
-                'total_approved' => $approvedAmount,
-            ],
-            'by_risk' => $byRisk,
-            'conversion_rate' => $total > 0 ? round(($approved / $total) * 100, 2) : 0,
+            'by_status' => $byStatus,
+            'pending_review' => $pendingReview,
+            'pending_documents' => $pendingDocuments,
+            'approved_today' => $approvedToday,
+            'rejected_today' => $rejectedToday,
+            'average_processing_time_hours' => round((float) $avgProcessingTime, 2),
         ];
     }
 

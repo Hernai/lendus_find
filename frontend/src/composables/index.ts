@@ -38,3 +38,6 @@ export { useDeviceCapture } from './useDeviceCapture'
 
 // KYC
 export { useKycValidation } from './useKycValidation'
+
+// Toast notifications
+export { useToast, useToastState, type Toast, type ToastType, type ToastOptions } from './useToast'

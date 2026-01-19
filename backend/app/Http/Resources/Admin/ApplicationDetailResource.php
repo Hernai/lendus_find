@@ -3,7 +3,6 @@
 namespace App\Http\Resources\Admin;
 
 use App\Models\Application;
-use App\Models\DataVerification;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -354,9 +353,12 @@ class ApplicationDetailResource extends JsonResource
             ($docType === 'SELFIE' && isset($metadata['face_match_score']) && $metadata['face_match_score'] > 0)
         );
 
+        // Usar la relación ya cargada en lugar de queries adicionales (evita N+1)
+        $verifications = $applicant?->dataVerifications;
+
         // Check data_verifications for selfie/face_match
-        if (!$isKycLocked && $docType === 'SELFIE' && $applicant) {
-            $selfieVerification = DataVerification::where('applicant_id', $applicant->id)
+        if (!$isKycLocked && $docType === 'SELFIE' && $verifications) {
+            $selfieVerification = $verifications
                 ->whereIn('field_name', ['selfie_document', 'face_match'])
                 ->where('is_verified', true)
                 ->where('is_locked', true)
@@ -373,9 +375,9 @@ class ApplicationDetailResource extends JsonResource
         }
 
         // Check data_verifications for INE documents
-        if (!$isKycLocked && in_array($docType, ['INE_FRONT', 'INE_BACK']) && $applicant) {
+        if (!$isKycLocked && in_array($docType, ['INE_FRONT', 'INE_BACK']) && $verifications) {
             $fieldName = $docType === 'INE_FRONT' ? 'ine_document_front' : 'ine_document_back';
-            $ineVerification = DataVerification::where('applicant_id', $applicant->id)
+            $ineVerification = $verifications
                 ->where('field_name', $fieldName)
                 ->where('is_verified', true)
                 ->where('is_locked', true)
@@ -416,8 +418,12 @@ class ApplicationDetailResource extends JsonResource
         $history = collect($application->status_history ?? []);
 
         $userIds = $history->pluck('user_id')->filter()->unique()->values()->toArray();
+        // Filtrar por tenant para seguridad
         $users = !empty($userIds)
-            ? User::whereIn('id', $userIds)->get()->keyBy('id')
+            ? User::where('tenant_id', $application->tenant_id)
+                ->whereIn('id', $userIds)
+                ->get()
+                ->keyBy('id')
             : collect();
 
         return $history

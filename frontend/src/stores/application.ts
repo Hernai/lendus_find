@@ -10,8 +10,9 @@ import type {
 } from '@/types'
 import { logger } from '@/utils/logger'
 import { storage, STORAGE_KEYS } from '@/utils/storage'
+import { useAsyncAction } from '@/composables'
 
-const appLogger = logger.child('Application')
+const log = logger.child('ApplicationStore')
 
 interface SimulatorResponse {
   simulation: {
@@ -47,8 +48,209 @@ export const useApplicationStore = defineStore('application', () => {
   const selectedProduct = ref<Product | null>(null)
   const currentStep = ref(1)
   const totalSteps = ref(8)
-  const isLoading = ref(false)
-  const isSaving = ref(false)
+
+  // Async actions with shared loading states
+  const { execute: executeSimulation, isLoading: isSimulating } = useAsyncAction(
+    async (params: SimulationParams) => {
+      const response = await api.post<SimulatorResponse>('/simulator/calculate', {
+        product_id: params.product_id,
+        amount: params.amount,
+        term_months: params.term_months,
+        payment_frequency: params.payment_frequency
+      })
+
+      const data = response.data.simulation
+
+      simulation.value = {
+        requested_amount: data.requested_amount,
+        term_months: data.term_months,
+        payment_frequency: data.payment_frequency as 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY',
+        total_periods: data.total_periods,
+        annual_rate: data.annual_rate,
+        periodic_rate: data.annual_rate / (data.payment_frequency === 'WEEKLY' ? 52 : data.payment_frequency === 'BIWEEKLY' ? 26 : 12),
+        opening_commission: data.opening_commission,
+        periodic_payment: data.payment_amount,
+        total_interest: data.total_interest,
+        total_amount: data.total_to_pay,
+        cat: data.cat,
+        amortization_table: []
+      }
+
+      return simulation.value
+    },
+    { rethrow: true }
+  )
+
+  const { execute: executeLoadApplications, isLoading: isLoadingList } = useAsyncAction(
+    async () => {
+      const response = await api.get<ApplicationListResponse>('/applications')
+      return response.data.data
+    },
+    {
+      onError: (e) => log.error('Error loading applications', { error: e.message })
+    }
+  )
+
+  const { execute: executeLoadApplication, isLoading: isLoadingOne } = useAsyncAction(
+    async (id: string) => {
+      if (!id || id === 'null' || id === 'undefined') {
+        log.error('loadApplication: Invalid ID', { id })
+        return null
+      }
+
+      const response = await api.get<ApplicationResponse>(`/applications/${id}`)
+      const app = response.data.data
+
+      if (!app?.id || app.id === 'null') {
+        log.error('loadApplication: API returned invalid application ID')
+        return null
+      }
+
+      currentApplication.value = app
+      return app
+    },
+    {
+      onError: (e) => {
+        log.error('Error loading application', { error: e.message })
+        const axiosError = e as unknown as { response?: { status?: number } }
+        if (axiosError.response?.status === 404) {
+          log.warn('Application not found (404). Clearing localStorage reference.')
+          localStorage.removeItem('current_application_id')
+        }
+      }
+    }
+  )
+
+  const { execute: executeCreateApplication, isLoading: isCreating } = useAsyncAction(
+    async (params: CreateApplicationParams) => {
+      log.debug('POST /applications', { productId: params.product_id })
+      const response = await api.post<ApplicationResponse>('/applications', {
+        product_id: params.product_id,
+        requested_amount: params.requested_amount,
+        term_months: params.term_months,
+        payment_frequency: params.payment_frequency,
+        simulation_data: simulation.value
+      })
+
+      log.debug('Response received', { status: response.status, appId: response.data.data?.id })
+
+      currentApplication.value = response.data.data
+
+      if (currentApplication.value?.id) {
+        storage.set(STORAGE_KEYS.CURRENT_APPLICATION_ID, currentApplication.value.id)
+        log.debug('Saved application ID to storage', { appId: currentApplication.value.id })
+      }
+
+      currentStep.value = 1
+      return currentApplication.value
+    },
+    { rethrow: true }
+  )
+
+  const { execute: executeUpdateApplication, isLoading: isSaving } = useAsyncAction(
+    async (data: Partial<Application>) => {
+      log.debug('updateApplication called', { appId: currentApplication.value?.id || 'NULL' })
+
+      if (!currentApplication.value) {
+        log.warn('updateApplication: No currentApplication')
+        throw new Error('No current application')
+      }
+
+      const appId = currentApplication.value.id
+      if (!appId || appId === 'null' || appId === 'undefined') {
+        log.error('updateApplication: currentApplication has invalid ID', { appId })
+
+        const savedId = storage.get<string>(STORAGE_KEYS.CURRENT_APPLICATION_ID) || localStorage.getItem('current_application_id')
+        if (savedId && savedId !== 'null' && savedId !== 'undefined') {
+          log.debug('Attempting to reload application from saved ID', { savedId })
+          const loaded = await executeLoadApplication(savedId)
+          if (!loaded?.id) {
+            storage.remove(STORAGE_KEYS.CURRENT_APPLICATION_ID)
+            localStorage.removeItem('current_application_id')
+            throw new Error('Application ID is missing and recovery failed')
+          }
+        } else {
+          throw new Error('Application ID is missing')
+        }
+      }
+
+      log.debug('PUT /applications/' + currentApplication.value!.id)
+      const response = await api.put<ApplicationResponse>(
+        `/applications/${currentApplication.value!.id}`,
+        data
+      )
+
+      currentApplication.value = response.data.data
+      log.debug('Application updated', { appId: currentApplication.value?.id })
+      return currentApplication.value
+    },
+    {
+      onError: (e) => {
+        log.error('Error updating application', { error: e.message })
+        const axiosError = e as unknown as { response?: { status?: number; data?: { message?: string } } }
+
+        if (axiosError.response?.status === 404) {
+          log.warn('Application not found (404). Clearing stale state...')
+          currentApplication.value = null
+          storage.remove(STORAGE_KEYS.CURRENT_APPLICATION_ID)
+          localStorage.removeItem('current_application_id')
+        }
+
+        if (axiosError.response?.status === 400) {
+          const message = axiosError.response?.data?.message || ''
+          if (message.includes('cannot be modified') || message.includes('current status')) {
+            log.warn('Application cannot be modified (400). Clearing stale state...')
+            currentApplication.value = null
+            storage.remove(STORAGE_KEYS.CURRENT_APPLICATION_ID)
+            localStorage.removeItem('current_application_id')
+          }
+        }
+      },
+      rethrow: true
+    }
+  )
+
+  const { execute: executeSubmitApplication, isLoading: isSubmitting } = useAsyncAction(
+    async () => {
+      if (!currentApplication.value || !canSubmit.value) {
+        throw new Error('Cannot submit application')
+      }
+
+      const response = await api.post<ApplicationResponse>(
+        `/applications/${currentApplication.value.id}/submit`
+      )
+
+      currentApplication.value = response.data.data
+      return currentApplication.value
+    },
+    { rethrow: true }
+  )
+
+  const { execute: executeCancelApplication, isLoading: isCanceling } = useAsyncAction(
+    async () => {
+      if (!currentApplication.value) {
+        throw new Error('No application to cancel')
+      }
+
+      const response = await api.post<ApplicationResponse>(
+        `/applications/${currentApplication.value.id}/cancel`
+      )
+
+      currentApplication.value = response.data.data
+      return currentApplication.value
+    },
+    { rethrow: true }
+  )
+
+  // Combined loading state for backwards compatibility
+  const isLoading = computed(() =>
+    isSimulating.value ||
+    isLoadingList.value ||
+    isLoadingOne.value ||
+    isCreating.value ||
+    isSubmitting.value ||
+    isCanceling.value
+  )
 
   // Getters
   const progress = computed(() => Math.round((currentStep.value / totalSteps.value) * 100))
@@ -78,205 +280,31 @@ export const useApplicationStore = defineStore('application', () => {
   }
 
   const runSimulation = async (params: SimulationParams): Promise<SimulationResult> => {
-    isLoading.value = true
-
-    try {
-      const response = await api.post<SimulatorResponse>('/simulator/calculate', {
-        product_id: params.product_id,
-        amount: params.amount,
-        term_months: params.term_months,
-        payment_frequency: params.payment_frequency
-      })
-
-      const data = response.data.simulation
-
-      // Map API response to frontend SimulationResult format
-      simulation.value = {
-        requested_amount: data.requested_amount,
-        term_months: data.term_months,
-        payment_frequency: data.payment_frequency as 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY',
-        total_periods: data.total_periods,
-        annual_rate: data.annual_rate,
-        periodic_rate: data.annual_rate / (data.payment_frequency === 'WEEKLY' ? 52 : data.payment_frequency === 'BIWEEKLY' ? 26 : 12),
-        opening_commission: data.opening_commission,
-        periodic_payment: data.payment_amount,
-        total_interest: data.total_interest,
-        total_amount: data.total_to_pay,
-        cat: data.cat,
-        amortization_table: [] // Can be loaded separately if needed
-      }
-
-      return simulation.value
-    } catch (error) {
-      appLogger.error('Error running simulation', error)
-      throw error
-    } finally {
-      isLoading.value = false
-    }
+    const result = await executeSimulation(params)
+    if (!result) throw new Error('Simulation failed')
+    return result
   }
 
   const loadApplications = async (): Promise<Application[]> => {
-    isLoading.value = true
-    try {
-      const response = await api.get<ApplicationListResponse>('/applications')
-      return response.data.data
-    } catch (error) {
-      appLogger.error('Error loading applications', error)
-      return []
-    } finally {
-      isLoading.value = false
-    }
+    const result = await executeLoadApplications()
+    return result ?? []
   }
 
   const loadApplication = async (id: string): Promise<Application | null> => {
-    // Validate ID before making API call
-    if (!id || id === 'null' || id === 'undefined') {
-      appLogger.error('loadApplication: Invalid ID', { id })
-      return null
-    }
-
-    isLoading.value = true
-    try {
-      const response = await api.get<ApplicationResponse>(`/applications/${id}`)
-      const app = response.data.data
-
-      // Validate the response has a valid ID
-      if (!app?.id || app.id === 'null') {
-        appLogger.error('loadApplication: API returned invalid application ID')
-        return null
-      }
-
-      currentApplication.value = app
-      return currentApplication.value
-    } catch (error: unknown) {
-      appLogger.error('Error loading application', error)
-
-      // Handle 404 - clear stale references
-      const axiosError = error as { response?: { status?: number } }
-      if (axiosError.response?.status === 404) {
-        appLogger.warn('Application not found (404). Clearing localStorage reference.')
-        localStorage.removeItem('current_application_id')
-      }
-
-      return null
-    } finally {
-      isLoading.value = false
-    }
+    return executeLoadApplication(id)
   }
 
   const createApplication = async (params: CreateApplicationParams): Promise<Application> => {
-    isLoading.value = true
-
-    try {
-      appLogger.debug('POST /applications', { productId: params.product_id })
-      const response = await api.post<ApplicationResponse>('/applications', {
-        product_id: params.product_id,
-        requested_amount: params.requested_amount,
-        term_months: params.term_months,
-        payment_frequency: params.payment_frequency,
-        simulation_data: simulation.value
-      })
-
-      appLogger.debug('Response received', { status: response.status, appId: response.data.data?.id })
-
-      currentApplication.value = response.data.data
-
-      // Save to storage for persistence
-      if (currentApplication.value?.id) {
-        storage.set(STORAGE_KEYS.CURRENT_APPLICATION_ID, currentApplication.value.id)
-        appLogger.debug('Saved application ID to storage', { appId: currentApplication.value.id })
-      }
-
-      // Reset step to 1
-      currentStep.value = 1
-
-      return currentApplication.value
-    } catch (error) {
-      appLogger.error('Error creating application', error)
-      throw error
-    } finally {
-      isLoading.value = false
-    }
+    const result = await executeCreateApplication(params)
+    if (!result) throw new Error('Failed to create application')
+    return result
   }
 
   const updateApplication = async (data: Partial<Application>) => {
-    appLogger.debug('updateApplication called', { appId: currentApplication.value?.id || 'NULL' })
-
-    if (!currentApplication.value) {
-      appLogger.warn('updateApplication: No currentApplication')
-      return
-    }
-
-    // Validate ID is not null, undefined, or the string "null"
-    const appId = currentApplication.value.id
-    if (!appId || appId === 'null' || appId === 'undefined') {
-      appLogger.error('updateApplication: currentApplication has invalid ID', { appId })
-
-      // Try to recover from storage
-      const savedId = storage.get<string>(STORAGE_KEYS.CURRENT_APPLICATION_ID) || localStorage.getItem('current_application_id')
-      if (savedId && savedId !== 'null' && savedId !== 'undefined') {
-        appLogger.debug('Attempting to reload application from saved ID', { savedId })
-        const loaded = await loadApplication(savedId)
-        if (!loaded?.id) {
-          storage.remove(STORAGE_KEYS.CURRENT_APPLICATION_ID)
-          localStorage.removeItem('current_application_id')
-          throw new Error('Application ID is missing and recovery failed')
-        }
-        // Now currentApplication should have a valid ID, retry
-      } else {
-        throw new Error('Application ID is missing')
-      }
-    }
-
-    isSaving.value = true
-
-    try {
-      appLogger.debug('PUT /applications/' + currentApplication.value!.id)
-      const response = await api.put<ApplicationResponse>(
-        `/applications/${currentApplication.value!.id}`,
-        data
-      )
-
-      currentApplication.value = response.data.data
-      appLogger.debug('Application updated', { appId: currentApplication.value?.id })
-    } catch (error: unknown) {
-      appLogger.error('Error updating application', error)
-
-      const axiosError = error as { response?: { status?: number; data?: { message?: string } } }
-
-      // Handle 404 - application no longer exists (possibly changed tenant or deleted)
-      if (axiosError.response?.status === 404) {
-        appLogger.warn('Application not found (404). Clearing stale state...')
-        // Clear the stale application reference
-        currentApplication.value = null
-        storage.remove(STORAGE_KEYS.CURRENT_APPLICATION_ID)
-        localStorage.removeItem('current_application_id')
-        // Throw a user-friendly error
-        throw new Error('La solicitud no fue encontrada. Es posible que haya expirado o ya no exista. Por favor, inicia una nueva solicitud.')
-      }
-
-      // Handle 400 - application cannot be modified (already submitted, approved, etc.)
-      if (axiosError.response?.status === 400) {
-        const message = axiosError.response?.data?.message || ''
-        if (message.includes('cannot be modified') || message.includes('current status')) {
-          appLogger.warn('Application cannot be modified (400). Clearing stale state...')
-          // Clear the stale application reference
-          currentApplication.value = null
-          storage.remove(STORAGE_KEYS.CURRENT_APPLICATION_ID)
-          localStorage.removeItem('current_application_id')
-          // Throw a user-friendly error
-          throw new Error('La solicitud anterior ya fue enviada. Se creará una nueva solicitud.')
-        }
-      }
-
-      throw error
-    } finally {
-      isSaving.value = false
-    }
+    await executeUpdateApplication(data)
   }
 
   const saveStepData = async (stepData: Record<string, unknown>) => {
-    // Create application if it doesn't exist
     if (!currentApplication.value) {
       await createApplication({
         product_id: selectedProduct.value?.id || 'default-product',
@@ -295,16 +323,14 @@ export const useApplicationStore = defineStore('application', () => {
       })
     } catch (error: unknown) {
       const err = error as { message?: string }
-      // If the application was submitted/closed, create a new one
       if (err.message?.includes('ya fue enviada') || err.message?.includes('no fue encontrada')) {
-        appLogger.info('Creating new application after previous one was closed...')
+        log.info('Creating new application after previous one was closed...')
         await createApplication({
           product_id: selectedProduct.value?.id || 'default-product',
           requested_amount: simulation.value?.requested_amount || 10000,
           term_months: simulation.value?.term_months || 12,
           payment_frequency: simulation.value?.payment_frequency || 'MONTHLY'
         })
-        // Retry saving the step data with the new application
         await updateApplication({
           dynamic_data: {
             ...currentApplication.value?.dynamic_data,
@@ -318,45 +344,11 @@ export const useApplicationStore = defineStore('application', () => {
   }
 
   const submitApplication = async (): Promise<Application | null> => {
-    if (!currentApplication.value || !canSubmit.value) return null
-
-    isLoading.value = true
-
-    try {
-      const response = await api.post<ApplicationResponse>(
-        `/applications/${currentApplication.value.id}/submit`
-      )
-
-      currentApplication.value = response.data.data
-
-      return currentApplication.value
-    } catch (error) {
-      appLogger.error('Error submitting application', error)
-      throw error
-    } finally {
-      isLoading.value = false
-    }
+    return executeSubmitApplication()
   }
 
   const cancelApplication = async (): Promise<Application | null> => {
-    if (!currentApplication.value) return null
-
-    isLoading.value = true
-
-    try {
-      const response = await api.post<ApplicationResponse>(
-        `/applications/${currentApplication.value.id}/cancel`
-      )
-
-      currentApplication.value = response.data.data
-
-      return currentApplication.value
-    } catch (error) {
-      appLogger.error('Error canceling application', error)
-      throw error
-    } finally {
-      isLoading.value = false
-    }
+    return executeCancelApplication()
   }
 
   const nextStep = () => {
@@ -401,8 +393,6 @@ export const useApplicationStore = defineStore('application', () => {
     currentApplication.value = null
     simulation.value = null
     currentStep.value = 1
-    isLoading.value = false
-    isSaving.value = false
   }
 
   return {

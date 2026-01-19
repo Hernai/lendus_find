@@ -1,40 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
+import type { V2ApiLog, V2ApiLogStats } from '@/services/v2/apilog.staff.service'
+import { logger } from '@/utils/logger'
 
-interface ApiLog {
-  id: string
-  provider: string
-  service: string
-  endpoint: string
-  method: string
-  request_payload: Record<string, unknown>
-  response_status: number | null
-  response_body: Record<string, unknown>
-  success: boolean
-  error_code: string | null
-  error_message: string | null
-  duration_ms: number | null
-  cost: number | null
-  created_at: string
-  applicant_id: string | null
-}
+const componentLog = logger.child('AdminApiLogs')
 
-interface Stats {
-  today: {
-    total: number
-    successful: number
-    failed: number
-  }
-  by_provider: Array<{
-    provider: string
-    total: number
-    successful: number
-    failed: number
-  }>
-  avg_duration_ms: number
-  total_cost_this_month: number
-}
+// Use V2 types
+type ApiLog = V2ApiLog
+type Stats = V2ApiLogStats
 
 // State
 const logs = ref<ApiLog[]>([])
@@ -69,77 +43,64 @@ const successRate = computed(() => {
   return Math.round((stats.value.today.successful / stats.value.today.total) * 100)
 })
 
-// Load logs
+// Load logs using V2 API
 const loadLogs = async () => {
   isLoading.value = true
   try {
-    const params = new URLSearchParams()
-    params.append('page', currentPage.value.toString())
-    params.append('per_page', perPage.toString())
+    const response = await v2.staff.apiLog.list({
+      page: currentPage.value,
+      per_page: perPage,
+      provider: filters.value.provider !== 'all' ? filters.value.provider : undefined,
+      success: filters.value.success !== 'all' ? filters.value.success as 'true' | 'false' : undefined,
+      service: filters.value.service || undefined,
+      from_date: filters.value.from_date || undefined,
+      to_date: filters.value.to_date || undefined,
+    })
 
-    if (filters.value.provider !== 'all') {
-      params.append('provider', filters.value.provider)
-    }
-    if (filters.value.success !== 'all') {
-      params.append('success', filters.value.success)
-    }
-    if (filters.value.service) {
-      params.append('service', filters.value.service)
-    }
-    if (filters.value.from_date) {
-      params.append('from_date', filters.value.from_date)
-    }
-    if (filters.value.to_date) {
-      params.append('to_date', filters.value.to_date)
-    }
-
-    const response = await api.get<{ data: ApiLog[], meta: { current_page: number, last_page: number, total: number } }>(
-      `/admin/api-logs?${params.toString()}`
-    )
-    logs.value = response.data.data
-    currentPage.value = response.data.meta.current_page
-    lastPage.value = response.data.meta.last_page
-    total.value = response.data.meta.total
+    logs.value = response.data
+    currentPage.value = response.meta.current_page
+    lastPage.value = response.meta.last_page
+    total.value = response.meta.total
   } catch (e) {
-    console.error('Failed to load API logs:', e)
+    componentLog.error('Error al cargar logs de API', { error: e })
   } finally {
     isLoading.value = false
   }
 }
 
-// Load stats
+// Load stats using V2 API
 const loadStats = async () => {
   isLoadingStats.value = true
   try {
-    const response = await api.get<{ data: Stats }>('/admin/api-logs/stats')
-    stats.value = response.data.data
+    const response = await v2.staff.apiLog.getStats()
+    stats.value = response.data ?? null
   } catch (e) {
-    console.error('Failed to load stats:', e)
+    componentLog.error('Error al cargar estadísticas', { error: e })
   } finally {
     isLoadingStats.value = false
   }
 }
 
-// Load providers
+// Load providers using V2 API
 const loadProviders = async () => {
   try {
-    const response = await api.get<{ data: string[] }>('/admin/api-logs/providers')
-    providers.value = response.data.data
+    const response = await v2.staff.apiLog.getProviders()
+    providers.value = response.data ?? []
   } catch (e) {
-    console.error('Failed to load providers:', e)
+    componentLog.error('Error al cargar proveedores', { error: e })
   }
 }
 
-// Load log detail
-const loadLogDetail = async (log: ApiLog) => {
-  selectedLog.value = log
+// Load log detail using V2 API
+const loadLogDetail = async (apiLog: ApiLog) => {
+  selectedLog.value = apiLog
   showDetailModal.value = true
   isLoadingDetail.value = true
   try {
-    const response = await api.get<{ data: ApiLog }>(`/admin/api-logs/${log.id}`)
-    selectedLog.value = response.data.data
+    const response = await v2.staff.apiLog.get(apiLog.id)
+    selectedLog.value = response.data ?? null
   } catch (e) {
-    console.error('Failed to load log detail:', e)
+    componentLog.error('Error al cargar detalle del log', { error: e })
   } finally {
     isLoadingDetail.value = false
   }

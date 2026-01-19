@@ -57,8 +57,13 @@ class TwilioService implements SmsServiceInterface
         return $this;
     }
 
-    public function __construct(?string $tenantId = null)
+    public function __construct(?string $tenantId = null, bool $skipInit = false)
     {
+        if ($skipInit) {
+            // Skip initialization (used by createFromConfig)
+            return;
+        }
+
         $this->tenantId = $tenantId;
 
         if ($tenantId) {
@@ -70,18 +75,23 @@ class TwilioService implements SmsServiceInterface
     }
 
     /**
-     * Load Twilio configuration from tenant
+     * Load Twilio configuration from tenant (with cache).
      */
     protected function loadTenantConfig(string $tenantId): void
     {
-        // Try to get SMS config first
-        $this->config = TenantApiConfig::where('tenant_id', $tenantId)
-            ->where('provider', 'twilio')
-            ->where('service_type', 'sms')
-            ->where('is_active', true)
-            ->first();
+        // Cache SMS config for 1 hour (invalidate on config update)
+        $cacheKey = "tenant:{$tenantId}:api_config:twilio:sms";
+        $this->config = cache()->remember($cacheKey, 3600, function () use ($tenantId) {
+            return TenantApiConfig::where('tenant_id', $tenantId)
+                ->where('provider', 'twilio')
+                ->where('service_type', 'sms')
+                ->where('is_active', true)
+                ->first();
+        });
 
         if (!$this->config || !$this->config->hasCredentials()) {
+            // Clear cache if config is invalid
+            cache()->forget($cacheKey);
             Log::warning('Twilio not configured for tenant', ['tenant_id' => $tenantId]);
             throw new \RuntimeException('Twilio not configured for this tenant');
         }
@@ -101,12 +111,15 @@ class TwilioService implements SmsServiceInterface
 
         $this->fromNumber = $this->config->from_number;
 
-        // Check for WhatsApp config
-        $whatsappConfig = TenantApiConfig::where('tenant_id', $tenantId)
-            ->where('provider', 'twilio')
-            ->where('service_type', 'whatsapp')
-            ->where('is_active', true)
-            ->first();
+        // Cache WhatsApp config separately
+        $whatsappCacheKey = "tenant:{$tenantId}:api_config:twilio:whatsapp";
+        $whatsappConfig = cache()->remember($whatsappCacheKey, 3600, function () use ($tenantId) {
+            return TenantApiConfig::where('tenant_id', $tenantId)
+                ->where('provider', 'twilio')
+                ->where('service_type', 'whatsapp')
+                ->where('is_active', true)
+                ->first();
+        });
 
         $this->whatsappFrom = $whatsappConfig?->from_number ?? $this->config->extra_config['whatsapp_from'] ?? null;
 
@@ -661,6 +674,40 @@ class TwilioService implements SmsServiceInterface
         } catch (\Exception $e) {
             return null;
         }
+    }
+
+    /**
+     * Create service instance from a specific TenantApiConfig.
+     *
+     * This allows testing integrations that may be inactive.
+     */
+    public static function createFromConfig(TenantApiConfig $config): self
+    {
+        $instance = new self(null, true); // Skip normal initialization
+        $instance->tenantId = $config->tenant_id;
+        $instance->config = $config;
+
+        $accountSid = $config->account_sid;
+        $authToken = $config->auth_token;
+
+        if (!$accountSid || !$authToken) {
+            throw new \RuntimeException('Twilio credentials not configured');
+        }
+
+        $instance->client = new Client($accountSid, $authToken);
+        $instance->fromNumber = $config->from_number;
+
+        // Get WhatsApp number from extra_config if available
+        $instance->whatsappFrom = $config->extra_config['whatsapp_from'] ?? null;
+
+        Log::info('TwilioService created from specific config', [
+            'tenant_id' => $config->tenant_id,
+            'config_id' => $config->id,
+            'from_number' => $instance->fromNumber,
+            'is_active' => $config->is_active,
+        ]);
+
+        return $instance;
     }
 
     /**

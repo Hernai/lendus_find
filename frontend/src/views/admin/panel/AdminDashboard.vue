@@ -1,74 +1,48 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
+import type { V2BoardData, V2BoardItem, V2BoardColumn } from '@/services/v2/application.staff.service'
+import type { V2ApplicationStatistics } from '@/types/v2'
+import { logger } from '@/utils/logger'
 
+const log = logger.child('AdminDashboard')
 const router = useRouter()
 
-interface Application {
-  id: string
-  folio: string
-  applicant: {
-    id: string
-    name: string
-    phone: string
-    email: string
-  } | null
-  product: {
-    id: string
-    name: string
-    type: string
-  } | null
-  requested_amount: number
-  approved_amount: number | null
-  status: string
-  created_at: string
-  updated_at: string
-  term_months: number
-  payment_frequency: string
-  monthly_payment: number
-  assigned_to: string | null
-  risk_level: string | null
-}
-
-interface ApiResponse {
-  data: Application[]
-  meta: {
-    current_page: number
-    last_page: number
-    per_page: number
-    total: number
-  }
-}
-
-const applications = ref<Application[]>([])
+// Board data from optimized endpoint
+const boardData = ref<V2BoardData | null>(null)
+const statistics = ref<V2ApplicationStatistics | null>(null)
 const isLoading = ref(true)
 const error = ref('')
 
-const columns = [
-  { id: 'SUBMITTED', title: 'Nuevas', color: 'blue' },
-  { id: 'IN_REVIEW', title: 'En Revisión', color: 'yellow' },
-  { id: 'DOCS_PENDING', title: 'Docs Pendientes', color: 'orange' },
-  { id: 'APPROVED', title: 'Aprobadas', color: 'green' }
-]
+// Column configuration with colors
+const columnColors: Record<string, { color: string; title: string }> = {
+  SUBMITTED: { color: 'blue', title: 'Nuevas' },
+  IN_REVIEW: { color: 'yellow', title: 'En Revisión' },
+  DOCS_PENDING: { color: 'orange', title: 'Docs Pendientes' },
+  APPROVED: { color: 'green', title: 'Aprobadas' }
+}
 
-const fetchApplications = async () => {
+const fetchBoardData = async () => {
   isLoading.value = true
   error.value = ''
 
   try {
-    // Fetch all active statuses (not DRAFT, REJECTED, CANCELLED, DISBURSED, SYNCED)
-    const response = await api.get<ApiResponse>('/admin/applications', {
-      params: {
-        per_page: 100
-      }
-    })
+    // Fetch board data and statistics in parallel using optimized endpoints
+    const [boardResponse, statsResponse] = await Promise.all([
+      v2.staff.application.getBoard({
+        columns: ['SUBMITTED', 'IN_REVIEW', 'DOCS_PENDING', 'APPROVED'],
+        limit_per_column: 20,
+        sort_by: 'created_at',
+        sort_dir: 'desc'
+      }),
+      v2.staff.application.getStatistics()
+    ])
 
-    applications.value = response.data.data.filter(app =>
-      ['SUBMITTED', 'IN_REVIEW', 'DOCS_PENDING', 'APPROVED'].includes(app.status)
-    )
+    boardData.value = boardResponse.data ?? null
+    statistics.value = statsResponse.data ?? null
   } catch (e) {
-    console.error('Failed to fetch applications:', e)
+    log.error('Error al cargar solicitudes', { error: e })
     error.value = 'Error al cargar las solicitudes'
   } finally {
     isLoading.value = false
@@ -76,11 +50,12 @@ const fetchApplications = async () => {
 }
 
 onMounted(() => {
-  fetchApplications()
+  fetchBoardData()
 })
 
-const getColumnApps = (status: string) => {
-  return applications.value.filter(app => app.status === status)
+// Get column config
+const getColumnConfig = (status: string) => {
+  return columnColors[status] || { color: 'gray', title: status }
 }
 
 const formatMoney = (amount: number) => {
@@ -91,7 +66,8 @@ const formatMoney = (amount: number) => {
   }).format(amount)
 }
 
-const formatTimeAgo = (dateStr: string) => {
+const formatTimeAgo = (dateStr: string | null) => {
+  if (!dateStr) return ''
   const date = new Date(dateStr)
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
@@ -124,19 +100,42 @@ const getColumnBg = (color: string) => {
   return colors[color] || 'bg-gray-50'
 }
 
-const viewApplication = (app: Application) => {
+const viewApplication = (app: V2BoardItem) => {
   router.push(`/admin/solicitudes/${app.id}`)
 }
 
-// Stats
-const stats = computed(() => ({
-  total: applications.value.length,
-  nuevas: applications.value.filter(a => a.status === 'SUBMITTED').length,
-  enRevision: applications.value.filter(a => a.status === 'IN_REVIEW').length,
-  pendientes: applications.value.filter(a => a.status === 'DOCS_PENDING').length,
-  aprobadas: applications.value.filter(a => a.status === 'APPROVED').length,
-  montoTotal: applications.value.reduce((sum, a) => sum + a.requested_amount, 0)
-}))
+// Stats computed from board data and statistics
+const stats = computed(() => {
+  const byStatus = boardData.value?.totals.by_status || {}
+  const statsData = statistics.value
+
+  if (statsData) {
+    // Use statistics endpoint for accurate totals
+    const statsByStatus = statsData.by_status || {}
+    return {
+      total: statsData.total,
+      nuevas: statsByStatus.submitted || byStatus.SUBMITTED || 0,
+      enRevision: statsByStatus.in_review || byStatus.IN_REVIEW || 0,
+      pendientes: statsByStatus.docs_pending || byStatus.DOCS_PENDING || 0,
+      aprobadas: statsByStatus.approved || byStatus.APPROVED || 0,
+      montoTotal: 0 // Calculate from board items if needed
+    }
+  }
+
+  return {
+    total: boardData.value?.totals.all || 0,
+    nuevas: byStatus.SUBMITTED || 0,
+    enRevision: byStatus.IN_REVIEW || 0,
+    pendientes: byStatus.DOCS_PENDING || 0,
+    aprobadas: byStatus.APPROVED || 0,
+    montoTotal: 0
+  }
+})
+
+// Check if board has any items
+const hasApplications = computed(() => {
+  return boardData.value?.columns.some(col => col.items.length > 0) || false
+})
 </script>
 
 <template>
@@ -148,7 +147,7 @@ const stats = computed(() => ({
         <p class="text-gray-500">Resumen de solicitudes de crédito</p>
       </div>
       <button
-        @click="fetchApplications"
+        @click="fetchBoardData"
         class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
         :disabled="isLoading"
       >
@@ -166,7 +165,7 @@ const stats = computed(() => ({
     </div>
 
     <!-- Loading State -->
-    <div v-if="isLoading && applications.length === 0" class="flex items-center justify-center py-12">
+    <div v-if="isLoading && !boardData" class="flex items-center justify-center py-12">
       <div class="animate-spin w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full"></div>
     </div>
 
@@ -177,14 +176,14 @@ const stats = computed(() => ({
       </svg>
       <p class="text-red-600">{{ error }}</p>
       <button
-        @click="fetchApplications"
+        @click="fetchBoardData"
         class="mt-4 px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700"
       >
         Reintentar
       </button>
     </div>
 
-    <template v-else>
+    <template v-else-if="boardData">
       <!-- Stats Cards -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div class="bg-white rounded-xl p-4 shadow-sm">
@@ -232,12 +231,12 @@ const stats = computed(() => ({
         <div class="bg-white rounded-xl p-4 shadow-sm">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm text-gray-500">Monto Total</p>
-              <p class="text-2xl font-bold text-green-600">{{ formatMoney(stats.montoTotal) }}</p>
+              <p class="text-sm text-gray-500">Aprobadas</p>
+              <p class="text-2xl font-bold text-green-600">{{ stats.aprobadas }}</p>
             </div>
             <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
               <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
           </div>
@@ -245,7 +244,7 @@ const stats = computed(() => ({
       </div>
 
       <!-- Empty State -->
-      <div v-if="applications.length === 0" class="bg-white rounded-xl p-12 text-center">
+      <div v-if="!hasApplications" class="bg-white rounded-xl p-12 text-center">
         <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
@@ -257,19 +256,19 @@ const stats = computed(() => ({
       <div v-else class="overflow-x-auto pb-4">
         <div class="flex gap-4 min-w-max">
           <div
-            v-for="column in columns"
-            :key="column.id"
+            v-for="column in boardData.columns"
+            :key="column.status"
             class="w-72 flex-shrink-0 border border-gray-200 rounded-xl overflow-hidden shadow-sm"
           >
             <!-- Column Header -->
-            <div :class="['p-3', getColumnBg(column.color)]">
+            <div :class="['p-3', getColumnBg(getColumnConfig(column.status).color)]">
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                  <div :class="['w-3 h-3 rounded-full', getColumnColor(column.color)]" />
-                  <h3 class="font-semibold text-gray-900">{{ column.title }}</h3>
+                  <div :class="['w-3 h-3 rounded-full', getColumnColor(getColumnConfig(column.status).color)]" />
+                  <h3 class="font-semibold text-gray-900">{{ getColumnConfig(column.status).title }}</h3>
                 </div>
                 <span class="bg-white px-2 py-0.5 rounded-full text-sm font-medium text-gray-600">
-                  {{ getColumnApps(column.id).length }}
+                  {{ column.count }}
                 </span>
               </div>
             </div>
@@ -277,7 +276,7 @@ const stats = computed(() => ({
             <!-- Column Content -->
             <div class="bg-gray-50 p-2 min-h-[500px] space-y-2">
               <div
-                v-for="app in getColumnApps(column.id)"
+                v-for="app in column.items"
                 :key="app.id"
                 class="bg-white rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
                 @click="viewApplication(app)"
@@ -290,7 +289,7 @@ const stats = computed(() => ({
 
                 <!-- Applicant Name -->
                 <p class="font-medium text-gray-900 mb-1 truncate">
-                  {{ app.applicant?.name || 'Sin nombre' }}
+                  {{ app.applicant_name || 'Sin nombre' }}
                 </p>
 
                 <!-- Product -->
@@ -305,9 +304,22 @@ const stats = computed(() => ({
                 </div>
               </div>
 
+              <!-- Has More Indicator -->
+              <div
+                v-if="column.has_more"
+                class="text-center py-2 text-sm text-gray-500"
+              >
+                <router-link
+                  :to="{ path: '/admin/solicitudes', query: { status: column.status } }"
+                  class="text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  Ver todas ({{ column.count }})
+                </router-link>
+              </div>
+
               <!-- Empty State -->
               <div
-                v-if="getColumnApps(column.id).length === 0"
+                v-if="column.items.length === 0"
                 class="flex flex-col items-center justify-center py-12 text-gray-400"
               >
                 <svg class="w-10 h-10 mb-2 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">

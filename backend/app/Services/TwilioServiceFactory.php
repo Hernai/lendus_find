@@ -41,4 +41,14 @@ class TwilioServiceFactory
     {
         return $this->create($this->currentTenantId);
     }
+
+    /**
+     * Create a TwilioService for a specific tenant.
+     *
+     * Alias for create() to provide a cleaner API.
+     */
+    public function forTenant(Tenant $tenant): TwilioService
+    {
+        return $this->create($tenant->id);
+    }
 }

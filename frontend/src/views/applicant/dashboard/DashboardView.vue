@@ -3,10 +3,12 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore, useTenantStore, useApplicantStore, useApplicationStore, useOnboardingStore } from '@/stores'
 import { AppButton } from '@/components/common'
-import applicationService, { type Application as ApiApplication } from '@/services/application.service'
+import { v2, type V2Application } from '@/services/v2'
 import { useWebSocket } from '@/composables/useWebSocket'
 import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent } from '@/types/realtime'
+import { logger } from '@/utils/logger'
 
+const log = logger.child('Dashboard')
 const router = useRouter()
 const authStore = useAuthStore()
 const tenantStore = useTenantStore()
@@ -61,11 +63,11 @@ useWebSocket({
   tenantId: tenantIdRef,
   applicantId: applicantIdRef,
   onApplicationStatusChanged: (event: ApplicationStatusChangedEvent) => {
-    console.log('📡 Tu solicitud cambió a:', event.new_status)
+    log.info('Solicitud cambió a:', event.new_status)
     loadApplications() // Recargar lista de aplicaciones
   },
   onDocumentStatusChanged: (event: DocumentStatusChangedEvent) => {
-    console.log('📄 Documento actualizado:', event.type, event.new_status)
+    log.info('Documento actualizado:', { type: event.type, status: event.new_status })
     loadApplications() // Recargar lista
   },
 })
@@ -73,8 +75,8 @@ useWebSocket({
 // Load applications from API
 const loadApplications = async () => {
   try {
-    const response = await applicationService.list()
-    applications.value = response.data.map((app: ApiApplication) => ({
+    const response = await v2.applicant.application.list()
+    applications.value = response.data.map((app: V2Application) => ({
       id: app.id,
       folio: app.folio,
       status: app.status,
@@ -87,7 +89,7 @@ const loadApplications = async () => {
       pending_documents: app.pending_documents
     }))
   } catch (e) {
-    console.error('Failed to load applications:', e)
+    log.error('Failed to load applications:', e)
     applications.value = []
   }
 }
@@ -270,7 +272,7 @@ const viewApplication = (app: Application) => {
 
 const startNewApplication = () => {
   // Clear any previous application state before starting a new one
-  console.log('🆕 Starting new application - clearing previous state')
+  log.info('Starting new application - clearing previous state')
 
   // Reset application store state
   applicationStore.reset()
@@ -296,21 +298,21 @@ const correctData = () => {
 
 const acceptCounterOffer = async (app: Application) => {
   try {
-    await applicationService.acceptCounterOffer(app.id)
+    await v2.applicant.application.respondToCounterOffer(app.id, { accept: true })
     // Reload applications
     await loadApplications()
   } catch (e) {
-    console.error('Failed to accept counter offer:', e)
+    log.error('Failed to accept counter offer:', e)
   }
 }
 
 const rejectCounterOffer = async (app: Application) => {
   try {
-    await applicationService.rejectCounterOffer(app.id, 'Rechazado por el solicitante')
+    await v2.applicant.application.respondToCounterOffer(app.id, { accept: false, reason: 'Rechazado por el solicitante' })
     // Reload applications
     await loadApplications()
   } catch (e) {
-    console.error('Failed to reject counter offer:', e)
+    log.error('Failed to reject counter offer:', e)
   }
 }
 
@@ -329,7 +331,7 @@ const handleCancelApplication = async () => {
   isCanceling.value = true
 
   try {
-    await applicationService.cancel(applicationToCancel.value.id, 'Cancelado por el solicitante')
+    await v2.applicant.application.cancel(applicationToCancel.value.id, 'Cancelado por el solicitante')
     // Update status in the list
     const app = applications.value.find(a => a.id === applicationToCancel.value?.id)
     if (app) {
@@ -340,7 +342,7 @@ const handleCancelApplication = async () => {
     showCancelConfirm.value = false
     applicationToCancel.value = null
   } catch (e) {
-    console.error('Failed to cancel application:', e)
+    log.error('Failed to cancel application:', e)
   } finally {
     isCanceling.value = false
   }

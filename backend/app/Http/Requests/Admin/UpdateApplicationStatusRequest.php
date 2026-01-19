@@ -22,14 +22,26 @@ class UpdateApplicationStatusRequest extends FormRequest
     public function authorize(): bool
     {
         $user = $this->user();
+        $application = $this->route('application');
+        $tenant = $this->attributes->get('tenant');
         $newStatus = $this->input('status');
 
-        // Check if user can change status at all
+        // Validar que la aplicación pertenezca al tenant actual
+        if ($application && $tenant && $application->tenant_id !== $tenant->id) {
+            return false;
+        }
+
+        // Validar que el usuario puede cambiar estados
         if (!$user->canChangeApplicationStatus()) {
             return false;
         }
 
-        // Check if user can approve/reject (requires special permission)
+        // Validar acceso específico: analysts solo pueden modificar aplicaciones asignadas
+        if (!$user->canViewAllApplications() && $application->assigned_to !== $user->id) {
+            return false;
+        }
+
+        // Validar permisos de aprobación/rechazo
         $approvalStatuses = [
             ApplicationStatus::APPROVED->value,
             ApplicationStatus::REJECTED->value,

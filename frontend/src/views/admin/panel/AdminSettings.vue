@@ -1,37 +1,18 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { api } from '@/services/api'
-import { AppInput } from '@/components/common'
+import { v2 } from '@/services/v2'
+import type { V2TenantInfo, V2ApiConfig } from '@/services/v2/config.staff.service'
+import { AppInput, AppConfirmModal } from '@/components/common'
 import TenantBrandingEditor, { type Branding, type TenantPreviewInfo } from '@/components/admin/TenantBrandingEditor.vue'
+import { useToast } from '@/composables'
+import { logger } from '@/utils/logger'
 
-interface TenantInfo {
-  id: string
-  name: string
-  slug: string
-  legal_name: string | null
-  rfc: string | null
-  email: string | null
-  phone: string | null
-  website: string | null
-}
+const log = logger.child('AdminSettings')
+const toast = useToast()
 
-interface ApiConfig {
-  id: string
-  provider: string
-  provider_label: string
-  service_type: string
-  service_type_label: string
-  from_number: string | null
-  from_email: string | null
-  domain: string | null
-  is_active: boolean
-  is_sandbox: boolean
-  has_credentials: boolean
-  masked_credentials: Record<string, string | null>
-  last_tested_at: string | null
-  last_test_success: boolean | null
-  last_test_error: string | null
-}
+// Use V2 types
+type TenantInfo = V2TenantInfo
+type ApiConfig = V2ApiConfig
 
 // State
 const isLoading = ref(true)
@@ -74,27 +55,20 @@ const showApiSecret = ref(false)
 // Computed tenant info for preview
 const tenantPreviewInfo = ref<TenantPreviewInfo>({ name: '', slug: '' })
 
-// Load data
+// Load data using V2 API
 const loadConfig = async () => {
   isLoading.value = true
   error.value = ''
 
   try {
-    const response = await api.get<{
-      data: {
-        tenant: TenantInfo
-        branding: Branding
-        api_configs: ApiConfig[]
-        available_providers: Record<string, string>
-        available_service_types: Record<string, string>
-      }
-    }>('/admin/config')
+    const response = await v2.staff.config.getConfig()
+    const data = response.data!
 
-    tenant.value = response.data.data.tenant
-    branding.value = response.data.data.branding
-    apiConfigs.value = response.data.data.api_configs
-    availableProviders.value = response.data.data.available_providers
-    availableServiceTypes.value = response.data.data.available_service_types
+    tenant.value = data.tenant
+    branding.value = data.branding as Branding
+    apiConfigs.value = data.api_configs
+    availableProviders.value = data.available_providers
+    availableServiceTypes.value = data.available_service_types
 
     // Update preview info
     tenantPreviewInfo.value = {
@@ -102,7 +76,7 @@ const loadConfig = async () => {
       slug: tenant.value.slug
     }
   } catch (e) {
-    console.error('Failed to load config:', e)
+    log.error('Error al cargar configuración', { error: e })
     error.value = 'Error al cargar la configuracion'
   } finally {
     isLoading.value = false
@@ -111,7 +85,7 @@ const loadConfig = async () => {
 
 onMounted(loadConfig)
 
-// Save tenant info
+// Save tenant info using V2 API
 const saveTenant = async () => {
   if (!tenant.value) return
 
@@ -120,7 +94,7 @@ const saveTenant = async () => {
   saveError.value = ''
 
   try {
-    await api.put('/admin/config/tenant', {
+    await v2.staff.config.updateTenant({
       name: tenant.value.name,
       legal_name: tenant.value.legal_name || null,
       rfc: tenant.value.rfc || null,
@@ -137,7 +111,7 @@ const saveTenant = async () => {
   }
 }
 
-// Save branding
+// Save branding using V2 API
 const saveBranding = async () => {
   if (!branding.value) return
 
@@ -146,7 +120,7 @@ const saveBranding = async () => {
   saveError.value = ''
 
   try {
-    await api.put('/admin/config/branding', branding.value)
+    await v2.staff.config.updateBranding(branding.value as Parameters<typeof v2.staff.config.updateBranding>[0])
     saveMessage.value = 'Branding guardado'
     setTimeout(() => saveMessage.value = '', 3000)
   } catch (e) {
@@ -160,7 +134,7 @@ const saveBranding = async () => {
 const handleLogoUpload = (field: string, file: File) => {
   // In a full implementation, this would upload to S3
   // For now the component handles base64 conversion internally
-  console.log('Logo upload requested:', field, file.name)
+  log.debug('Logo upload requested', { field, fileName: file.name })
 }
 
 // API Config methods
@@ -211,12 +185,12 @@ const saveApiConfig = async () => {
   saveError.value = ''
 
   try {
-    const payload: Record<string, unknown> = {
+    const payload: Parameters<typeof v2.staff.config.saveApiConfig>[0] = {
       provider: apiForm.value.provider,
       service_type: apiForm.value.service_type,
-      from_number: apiForm.value.from_number || null,
-      from_email: apiForm.value.from_email || null,
-      domain: apiForm.value.domain || null,
+      from_number: apiForm.value.from_number || undefined,
+      from_email: apiForm.value.from_email || undefined,
+      domain: apiForm.value.domain || undefined,
       is_active: apiForm.value.is_active,
       is_sandbox: apiForm.value.is_sandbox
     }
@@ -227,7 +201,7 @@ const saveApiConfig = async () => {
     if (apiForm.value.account_sid) payload.account_sid = apiForm.value.account_sid
     if (apiForm.value.auth_token) payload.auth_token = apiForm.value.auth_token
 
-    await api.post('/admin/config/api-configs', payload)
+    await v2.staff.config.saveApiConfig(payload)
     await loadConfig()
     showApiModal.value = false
     saveMessage.value = 'Configuracion guardada'
@@ -239,26 +213,37 @@ const saveApiConfig = async () => {
   }
 }
 
-const deleteApiConfig = async (config: ApiConfig) => {
-  if (!confirm('¿Eliminar esta configuracion?')) return
+// Delete API config confirmation
+const showDeleteApiModal = ref(false)
+const apiToDelete = ref<ApiConfig | null>(null)
+
+const confirmDeleteApiConfig = (config: ApiConfig) => {
+  apiToDelete.value = config
+  showDeleteApiModal.value = true
+}
+
+const deleteApiConfig = async () => {
+  if (!apiToDelete.value) return
 
   try {
-    await api.delete(`/admin/config/api-configs/${config.id}`)
+    await v2.staff.config.deleteApiConfig(apiToDelete.value.id)
+    showDeleteApiModal.value = false
     await loadConfig()
-    saveMessage.value = 'Configuracion eliminada'
-    setTimeout(() => saveMessage.value = '', 3000)
+    toast.success('Configuración eliminada')
   } catch (e) {
-    saveError.value = 'Error al eliminar'
+    log.error('Error al eliminar configuración', { error: e })
+    toast.error('Error al eliminar la configuración')
   }
+  apiToDelete.value = null
 }
 
 const testApiConfig = async (config: ApiConfig) => {
   try {
-    const response = await api.post<{ success: boolean; message: string }>(`/admin/config/api-configs/${config.id}/test`)
-    if (response.data.success) {
+    const response = await v2.staff.config.testApiConfig(config.id)
+    if (response.success) {
       saveMessage.value = 'Conexion exitosa'
     } else {
-      saveError.value = response.data.message || 'Error en la prueba'
+      saveError.value = response.message || 'Error en la prueba'
     }
     await loadConfig()
     setTimeout(() => {
@@ -585,7 +570,7 @@ const getProviderHelpText = (provider: string) => {
                     </svg>
                   </button>
                   <button
-                    @click="deleteApiConfig(config)"
+                    @click="confirmDeleteApiConfig(config)"
                     class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                     title="Eliminar"
                   >
@@ -819,5 +804,17 @@ const getProviderHelpText = (provider: string) => {
         </div>
       </div>
     </Teleport>
+
+    <!-- Delete API Config Confirmation Modal -->
+    <AppConfirmModal
+      :show="showDeleteApiModal"
+      title="Eliminar Configuración"
+      :message="`¿Estás seguro de eliminar esta configuración de API? Esta acción no se puede deshacer.`"
+      confirm-text="Eliminar"
+      variant="danger"
+      icon="danger"
+      @confirm="deleteApiConfig"
+      @update:show="showDeleteApiModal = $event"
+    />
   </div>
 </template>

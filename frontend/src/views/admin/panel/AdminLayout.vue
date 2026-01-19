@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore, useTenantStore } from '@/stores'
 import TenantSwitcher from '@/components/admin/TenantSwitcher.vue'
+import { ToastContainer } from '@/components/common'
 
 const router = useRouter()
 const route = useRoute()
@@ -244,5 +245,8 @@ const handleLogout = async () => {
     <main class="max-w-7xl mx-auto px-4 py-6">
       <router-view />
     </main>
+
+    <!-- Toast Notifications -->
+    <ToastContainer />
   </div>
 </template>

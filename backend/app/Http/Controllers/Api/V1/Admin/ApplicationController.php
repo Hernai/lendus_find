@@ -194,12 +194,19 @@ class ApplicationController extends Controller
             return response()->json(['message' => 'Solicitud no encontrada'], 404);
         }
 
+        // Validar que el usuario asignado pertenezca al tenant
+        $assignedTo = User::where('tenant_id', $tenant->id)
+            ->find($request->user_id);
+
+        if (!$assignedTo) {
+            return response()->json(['message' => 'Usuario no encontrado en este tenant'], 404);
+        }
+
         $application->assigned_to = $request->user_id;
         $application->assigned_at = now();
         $application->save();
 
         // Broadcast assignment
-        $assignedTo = User::find($request->user_id);
         event(new \App\Events\ApplicationAssigned(
             $application,
             $assignedTo,
@@ -279,6 +286,7 @@ class ApplicationController extends Controller
         }
 
         $logs = \App\Models\ApiLog::where('applicant_id', $applicant->id)
+            ->where('tenant_id', $tenant->id)
             ->orderBy('created_at', 'desc')
             ->limit(50)
             ->get();

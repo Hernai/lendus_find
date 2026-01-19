@@ -1,39 +1,67 @@
-// Export all services
-export { default as api } from './api'
-export { default as authService } from './auth.service'
-export { default as applicantService } from './applicant.service'
-export { default as applicationService } from './application.service'
-export { default as simulatorService } from './simulator.service'
-export { default as adminService } from './admin.service'
+// =====================================================
+// Core API
+// =====================================================
 
-// Export types
-export type { RequestOtpPayload, VerifyOtpPayload, AuthResponse, UserProfile } from './auth.service'
+export { default as api, api as apiInstance } from './api'
+
+// =====================================================
+// V2 Services (Primary Architecture)
+// =====================================================
+
+export { v2, v2 as default } from './v2'
+
+// Re-export individual V2 services for granular imports
+export {
+  applicantAuth as v2ApplicantAuth,
+  staffAuth as v2StaffAuth,
+  applicantApplication as v2ApplicantApplication,
+  staffApplication as v2StaffApplication,
+  applicantDocument as v2ApplicantDocument,
+  staffDocument as v2StaffDocument,
+  person as v2Person,
+  company as v2Company,
+} from './v2'
+
+// =====================================================
+// V2 Types
+// =====================================================
+
 export type {
-  ApplicantResponse,
-  ApplicantUpdateResponse,
-  PersonalDataPayload,
-  AddressPayload,
-  EmploymentPayload,
-  BankAccountPayload,
-} from './applicant.service'
-export type {
-  Application,
-  ApplicationDocument,
-  ApplicationReference,
-  CreateApplicationPayload,
-  CreateReferencePayload,
-} from './application.service'
-export type {
-  Product,
-  CalculatePayload,
-  LoanCalculation,
-  AmortizationRow,
-  AmortizationPayload,
-} from './simulator.service'
-export type {
-  DashboardData,
-  AdminApplication,
-  AdminApplicationDetail,
-  ApplicationFilters,
-  CounterOfferPayload,
-} from './admin.service'
+  // Common types
+  V2ApiResponse,
+  V2PaginatedResponse,
+
+  // Auth types
+  V2OtpRequestPayload,
+  V2OtpVerifyPayload,
+  V2CheckUserPayload,
+  V2CheckUserResponse,
+  V2PinLoginPayload,
+  V2AuthResponse,
+  V2ApplicantUser,
+  V2StaffUser,
+
+  // Person types
+  V2Person,
+  V2PersonCreatePayload,
+  V2Identification,
+  V2Address,
+  V2Employment,
+  V2Reference,
+  V2BankAccount,
+
+  // Application types
+  V2Application,
+  V2ApplicationStatus,
+  V2ApplicationCreatePayload,
+  V2ApplicationFilters,
+  V2ApplicationStatistics,
+
+  // Document types
+  V2Document,
+  V2DocumentType,
+
+  // Company types
+  V2Company,
+  V2CompanyMember,
+} from './v2'

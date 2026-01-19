@@ -11,6 +11,10 @@ use Illuminate\Support\Facades\Auth;
  * Trait to automatically populate audit fields (created_by, updated_by, deleted_by)
  * based on the currently authenticated user.
  *
+ * Note: Audit fields reference the `users` table. When a StaffAccount is authenticated
+ * (via sanctum guard), we skip setting these fields since StaffAccount IDs are not
+ * in the users table.
+ *
  * Usage: Add this trait to any model that has audit fields.
  *
  * Example:
@@ -24,29 +28,53 @@ use Illuminate\Support\Facades\Auth;
 trait HasAuditFields
 {
     /**
+     * Check if the authenticated user is from the users table.
+     * Staff accounts use a different table so we cannot use their IDs.
+     */
+    protected static function getAuditUserId(): ?string
+    {
+        if (!Auth::check()) {
+            return null;
+        }
+
+        $user = Auth::user();
+
+        // Only set audit fields if user is from the User model
+        // StaffAccount, ApplicantAccount are different tables
+        if ($user instanceof User) {
+            return $user->id;
+        }
+
+        return null;
+    }
+
+    /**
      * Boot the trait.
      */
     protected static function bootHasAuditFields(): void
     {
         // Automatically set created_by when creating a new record
         static::creating(function (Model $model): void {
-            if (Auth::check() && $model->created_by === null) {
-                $model->created_by = Auth::id();
+            $userId = static::getAuditUserId();
+            if ($userId !== null && $model->created_by === null) {
+                $model->created_by = $userId;
             }
         });
 
         // Automatically set updated_by when updating a record
         static::updating(function (Model $model): void {
-            if (Auth::check()) {
-                $model->updated_by = Auth::id();
+            $userId = static::getAuditUserId();
+            if ($userId !== null) {
+                $model->updated_by = $userId;
             }
         });
 
         // Automatically set deleted_by when soft deleting a record
         if (in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive(static::class))) {
             static::deleting(function (Model $model): void {
-                if (Auth::check() && $model->deleted_by === null && !$model->isForceDeleting()) {
-                    $model->deleted_by = Auth::id();
+                $userId = static::getAuditUserId();
+                if ($userId !== null && $model->deleted_by === null && !$model->isForceDeleting()) {
+                    $model->deleted_by = $userId;
                     $model->saveQuietly();
                 }
             });
