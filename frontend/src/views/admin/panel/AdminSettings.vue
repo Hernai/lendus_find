@@ -95,7 +95,7 @@ const loadConfig = async () => {
     }
   } catch (e) {
     log.error('Error al cargar configuración', { error: e })
-    error.value = 'Error al cargar la configuracion'
+    error.value = 'Error al cargar la configuración'
   } finally {
     isLoading.value = false
   }
@@ -120,7 +120,7 @@ const saveTenant = async () => {
       phone: tenant.value.phone || null,
       website: tenant.value.website || null
     })
-    saveMessage.value = 'Informacion guardada'
+    saveMessage.value = 'Información guardada'
     clearMessageAfterDelay()
   } catch (e) {
     saveError.value = 'Error al guardar'
@@ -222,10 +222,10 @@ const saveApiConfig = async () => {
     await v2.staff.config.saveApiConfig(payload)
     await loadConfig()
     showApiModal.value = false
-    saveMessage.value = 'Configuracion guardada'
+    saveMessage.value = 'Configuración guardada'
     clearMessageAfterDelay()
   } catch (e) {
-    saveError.value = 'Error al guardar configuracion'
+    saveError.value = 'Error al guardar configuración'
   } finally {
     isSaving.value = false
   }
@@ -408,7 +408,7 @@ const getProviderHelpText = (provider: string) => {
       <!-- General Tab -->
       <div v-show="activeTab === 'general'" class="p-6">
         <div class="bg-white rounded-xl border border-gray-200 p-6 max-w-2xl">
-          <h2 class="text-lg font-semibold text-gray-900 mb-4">Informacion de la Empresa</h2>
+          <h2 class="text-lg font-semibold text-gray-900 mb-4">Información de la Empresa</h2>
 
           <div class="space-y-4">
             <div class="grid grid-cols-2 gap-4">
@@ -428,7 +428,7 @@ const getProviderHelpText = (provider: string) => {
 
             <AppInput
               v-model="tenant.legal_name"
-              label="Razon social"
+              label="Razón social"
               placeholder="Mi Empresa S.A. de C.V."
             />
 

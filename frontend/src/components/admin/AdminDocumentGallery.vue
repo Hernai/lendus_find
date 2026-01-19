@@ -186,8 +186,11 @@ const isImageType = (doc: Document) => isImage(doc.mime_type) || ['SELFIE', 'SIG
 
 // Load thumbnail for a document (fetch as blob with auth headers)
 const loadThumbnail = async (doc: Document) => {
-  if (documentThumbnails.value[doc.id] || loadingThumbnails.value[doc.id]) return
+  if (loadingThumbnails.value[doc.id]) return
   if (!isImageType(doc)) return
+
+  // Skip if already loaded
+  if (documentThumbnails.value[doc.id]) return
 
   loadingThumbnails.value[doc.id] = true
 
@@ -198,6 +201,13 @@ const loadThumbnail = async (doc: Document) => {
       { responseType: 'blob' }
     )
     const blob = new Blob([response.data as BlobPart], { type: doc.mime_type || 'image/jpeg' })
+
+    // Revoke old URL if exists to prevent memory leak
+    const oldUrl = documentThumbnails.value[doc.id]
+    if (oldUrl) {
+      URL.revokeObjectURL(oldUrl)
+    }
+
     documentThumbnails.value[doc.id] = URL.createObjectURL(blob)
   } catch (e) {
     log.error('Failed to load thumbnail', { error: e })
@@ -795,9 +805,10 @@ const formatHistoryDate = (dateString: string | null): string => {
               class="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center transition-colors z-10"
               :class="{ 'opacity-30 cursor-not-allowed': !canGoPrev }"
               :disabled="!canGoPrev"
+              aria-label="Documento anterior"
               @click="prevDocument"
             >
-              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
               </svg>
             </button>
@@ -815,9 +826,10 @@ const formatHistoryDate = (dateString: string | null): string => {
               class="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center transition-colors z-10"
               :class="{ 'opacity-30 cursor-not-allowed': !canGoNext }"
               :disabled="!canGoNext"
+              aria-label="Documento siguiente"
               @click="nextDocument"
             >
-              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
               </svg>
             </button>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { v2 } from '@/services/v2'
 import type { V2Product, V2TermConfig } from '@/services/v2/product.staff.service'
 import { AppButton } from '@/components/common'
@@ -500,6 +500,14 @@ const formatCurrency = (value: number) => {
     minimumFractionDigits: 0
   }).format(value)
 }
+
+// Cleanup modal state on unmount to prevent stale UI
+onBeforeUnmount(() => {
+  showProductModal.value = false
+  showDeleteModal.value = false
+  editingProduct.value = null
+  productToDelete.value = null
+})
 
 // Toggle frequency
 const toggleFrequency = (freq: string) => {

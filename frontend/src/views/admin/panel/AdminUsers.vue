@@ -194,7 +194,9 @@ watch(currentPage, () => {
 // Formatters
 const formatDateOnly = (dateStr?: string | null) => {
   if (!dateStr) return 'Nunca'
-  return new Date(dateStr).toLocaleDateString('es-MX', {
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return 'Nunca'
+  return date.toLocaleDateString('es-MX', {
     day: 'numeric',
     month: 'short'
   })
@@ -202,7 +204,9 @@ const formatDateOnly = (dateStr?: string | null) => {
 
 const formatTimeOnly = (dateStr?: string | null) => {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleTimeString('es-MX', {
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return ''
+  return date.toLocaleTimeString('es-MX', {
     hour: '2-digit',
     minute: '2-digit'
   })
