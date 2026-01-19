@@ -436,15 +436,55 @@ require __DIR__ . '/api/person.php';
 require __DIR__ . '/api/company.php';
 
 // =============================================
-// V2: APPLICANT APPLICATIONS & DOCUMENTS
+// V2: APPLICANT APPLICATIONS, DOCUMENTS & PROFILE
 // =============================================
 use App\Http\Controllers\Api\V2\Applicant\ApplicationController as ApplicantAppController;
 use App\Http\Controllers\Api\V2\Applicant\DocumentController as ApplicantDocController;
+use App\Http\Controllers\Api\V2\Applicant\ProfileController as ApplicantProfileController;
 
 Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
     ->prefix('v2/applicant')
     ->group(function () {
+        // =============================================
+        // Profile Management
+        // =============================================
+        Route::prefix('profile')->group(function () {
+            // Profile overview
+            Route::get('/', [ApplicantProfileController::class, 'show']);
+            Route::get('/summary', [ApplicantProfileController::class, 'summary']);
+
+            // Personal data
+            Route::patch('/personal-data', [ApplicantProfileController::class, 'updatePersonalData']);
+
+            // Identifications
+            Route::patch('/identifications', [ApplicantProfileController::class, 'updateIdentifications']);
+
+            // Address
+            Route::get('/address', [ApplicantProfileController::class, 'getAddress']);
+            Route::put('/address', [ApplicantProfileController::class, 'updateAddress']);
+
+            // Employment
+            Route::get('/employment', [ApplicantProfileController::class, 'getEmployment']);
+            Route::put('/employment', [ApplicantProfileController::class, 'updateEmployment']);
+
+            // Bank account
+            Route::get('/bank-account', [ApplicantProfileController::class, 'getBankAccount']);
+            Route::put('/bank-account', [ApplicantProfileController::class, 'updateBankAccount']);
+            Route::post('/validate-clabe', [ApplicantProfileController::class, 'validateClabe']);
+
+            // References
+            Route::get('/references', [ApplicantProfileController::class, 'listReferences']);
+            Route::post('/references', [ApplicantProfileController::class, 'storeReference']);
+            Route::put('/references/{reference}', [ApplicantProfileController::class, 'updateReference']);
+            Route::delete('/references/{reference}', [ApplicantProfileController::class, 'deleteReference']);
+
+            // Signature
+            Route::post('/signature', [ApplicantProfileController::class, 'saveSignature']);
+        });
+
+        // =============================================
         // Applications
+        // =============================================
         Route::get('/applications', [ApplicantAppController::class, 'index']);
         Route::post('/applications', [ApplicantAppController::class, 'store']);
         Route::get('/applications/{id}', [ApplicantAppController::class, 'show']);
@@ -454,7 +494,9 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
         Route::post('/applications/{id}/counter-offer/respond', [ApplicantAppController::class, 'respondToCounterOffer']);
         Route::get('/applications/{id}/history', [ApplicantAppController::class, 'history']);
 
+        // =============================================
         // Documents
+        // =============================================
         Route::get('/documents', [ApplicantDocController::class, 'index']);
         Route::post('/documents', [ApplicantDocController::class, 'store']);
         Route::get('/documents/types', [ApplicantDocController::class, 'types']);
