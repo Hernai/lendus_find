@@ -177,7 +177,7 @@ export const useTenantStore = defineStore('tenant', () => {
 
     // If tenant changed, reset first
     if (isLoaded.value && tenantSlug && tenant.value?.slug !== tenantSlug) {
-      log.debug(' URL tenant changed from', tenant.value?.slug, 'to', tenantSlug, '- reloading')
+      log.debug('URL tenant changed', { from: tenant.value?.slug, to: tenantSlug })
       reset()
     }
 

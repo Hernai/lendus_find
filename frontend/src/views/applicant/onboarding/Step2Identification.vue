@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, computed, watch, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore, useKycStore, useAuthStore, useApplicantStore } from '@/stores'
+import { useOnboardingStore, useKycStore, useAuthStore, useProfileStore } from '@/stores'
 import { AppButton, AppInput, AppRadioGroup } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
 import { generarRFCDesdeKyc } from '@/services/rfc.service'
@@ -13,7 +13,7 @@ const router = useRouter()
 const onboardingStore = useOnboardingStore()
 const kycStore = useKycStore()
 const authStore = useAuthStore()
-const applicantStore = useApplicantStore()
+const profileStore = useProfileStore()
 
 // Check if KYC data is available (from INE OCR)
 const hasKycData = computed(() => kycStore.verified && !!kycStore.lockedData.curp)
@@ -103,9 +103,9 @@ const validateRfcWithSat = async () => {
   rfcError.value = null
 
   try {
-    // Pass applicant_id if available for auto-recording
-    const applicantId = applicantStore.applicant?.id
-    const result = await kycStore.validateRfc(form.rfc, applicantId)
+    // Pass person_id if available for auto-recording
+    const personId = profileStore.profile?.id
+    const result = await kycStore.validateRfc(form.rfc, personId)
     rfcValidated.value = true
     rfcIsValid.value = result.valid
     rfcRazonSocial.value = result.razon_social || null
@@ -182,10 +182,10 @@ onMounted(async () => {
   // Ensure KYC services are checked (needed for RFC auto-validation)
   await kycStore.checkServices()
 
-  // Load KYC verifications if applicant exists
-  const applicantId = applicantStore.applicant?.id
-  if (applicantId) {
-    await kycStore.loadVerifications(applicantId)
+  // Load KYC verifications if profile exists
+  const personId = profileStore.profile?.id
+  if (personId) {
+    await kycStore.loadVerifications(personId)
   }
 
   const step2 = onboardingStore.data.step2

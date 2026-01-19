@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, watch, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore, useKycStore, useTenantStore, useApplicantStore } from '@/stores'
+import { useOnboardingStore, useKycStore, useTenantStore, useProfileStore } from '@/stores'
 import { AppButton, AppInput, AppSelect } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
 import { logger } from '@/utils/logger'
@@ -12,7 +12,7 @@ const router = useRouter()
 const onboardingStore = useOnboardingStore()
 const kycStore = useKycStore()
 const tenantStore = useTenantStore()
-const applicantStore = useApplicantStore()
+const profileStore = useProfileStore()
 
 // Get housing type options from backend
 const housingTypeOptions = computed(() => tenantStore.options.housing_type)
@@ -163,9 +163,9 @@ onMounted(async () => {
   await onboardingStore.init()
 
   // Load KYC verifications to restore direccion_ine if available
-  const applicantId = applicantStore.applicant?.id
-  if (applicantId) {
-    await kycStore.loadVerifications(applicantId)
+  const personId = profileStore.profile?.id
+  if (personId) {
+    await kycStore.loadVerifications(personId)
   }
 
   const step3 = onboardingStore.data.step3

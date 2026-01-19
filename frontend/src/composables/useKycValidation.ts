@@ -238,7 +238,7 @@ export function useKycValidation(): UseKycValidationReturn {
       validationProgress.value.ine_ocr = 'in_progress'
 
       const ineValid = await kycStore.validateIne(applicantId)
-      log.debug('[KYC] INE validation result:', ineValid, validations.value.ine_ocr)
+      log.debug('[KYC] INE validation result', { ineValid, ine_ocr: validations.value.ine_ocr })
 
       if (validations.value.ine_ocr?.success) {
         validationProgress.value.ine_ocr = 'success'
@@ -352,7 +352,12 @@ export function useKycValidation(): UseKycValidationReturn {
         validationProgress.value.curp_renapo === 'success' &&
         faceMatchPassed
 
-      log.debug('[KYC] Critical passed:', criticalPassed, 'ine_ocr:', validationProgress.value.ine_ocr, 'curp:', validationProgress.value.curp_renapo, 'face_match:', validationProgress.value.face_match)
+      log.debug('[KYC] Critical passed', {
+        criticalPassed,
+        ine_ocr: validationProgress.value.ine_ocr,
+        curp: validationProgress.value.curp_renapo,
+        face_match: validationProgress.value.face_match
+      })
 
       if (criticalPassed) {
         kycStore.markVerified()

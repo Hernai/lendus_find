@@ -12,10 +12,10 @@ import type {
   V2ProfileSummary,
   V2PersonalData,
   V2Identifications,
-  V2Address,
-  V2Employment,
-  V2BankAccount,
-  V2Reference,
+  V2ProfileAddress,
+  V2ProfileEmployment,
+  V2ProfileBankAccount,
+  V2ProfileReference,
   V2ClabeValidation,
 } from '@/types/v2'
 
@@ -126,8 +126,8 @@ export interface UpdateAddressPayload {
 /**
  * Get current home address.
  */
-export async function getAddress(): Promise<V2ApiResponse<V2Address | null>> {
-  const response = await api.get<V2ApiResponse<V2Address | null>>(`${BASE_PATH}/address`)
+export async function getAddress(): Promise<V2ApiResponse<V2ProfileAddress | null>> {
+  const response = await api.get<V2ApiResponse<V2ProfileAddress | null>>(`${BASE_PATH}/address`)
   return response.data
 }
 
@@ -136,8 +136,8 @@ export async function getAddress(): Promise<V2ApiResponse<V2Address | null>> {
  */
 export async function updateAddress(
   payload: UpdateAddressPayload
-): Promise<V2ApiResponse<{ address: V2Address; profile_completeness: number }>> {
-  const response = await api.put<V2ApiResponse<{ address: V2Address; profile_completeness: number }>>(
+): Promise<V2ApiResponse<{ address: V2ProfileAddress; profile_completeness: number }>> {
+  const response = await api.put<V2ApiResponse<{ address: V2ProfileAddress; profile_completeness: number }>>(
     `${BASE_PATH}/address`,
     payload
   )
@@ -167,8 +167,8 @@ export interface UpdateEmploymentPayload {
 /**
  * Get current employment.
  */
-export async function getEmployment(): Promise<V2ApiResponse<V2Employment | null>> {
-  const response = await api.get<V2ApiResponse<V2Employment | null>>(`${BASE_PATH}/employment`)
+export async function getEmployment(): Promise<V2ApiResponse<V2ProfileEmployment | null>> {
+  const response = await api.get<V2ApiResponse<V2ProfileEmployment | null>>(`${BASE_PATH}/employment`)
   return response.data
 }
 
@@ -177,8 +177,8 @@ export async function getEmployment(): Promise<V2ApiResponse<V2Employment | null
  */
 export async function updateEmployment(
   payload: UpdateEmploymentPayload
-): Promise<V2ApiResponse<{ employment: V2Employment; profile_completeness: number }>> {
-  const response = await api.put<V2ApiResponse<{ employment: V2Employment; profile_completeness: number }>>(
+): Promise<V2ApiResponse<{ employment: V2ProfileEmployment; profile_completeness: number }>> {
+  const response = await api.put<V2ApiResponse<{ employment: V2ProfileEmployment; profile_completeness: number }>>(
     `${BASE_PATH}/employment`,
     payload
   )
@@ -202,8 +202,8 @@ export interface UpdateBankAccountPayload {
 /**
  * Get primary bank account.
  */
-export async function getBankAccount(): Promise<V2ApiResponse<V2BankAccount | null>> {
-  const response = await api.get<V2ApiResponse<V2BankAccount | null>>(`${BASE_PATH}/bank-account`)
+export async function getBankAccount(): Promise<V2ApiResponse<V2ProfileBankAccount | null>> {
+  const response = await api.get<V2ApiResponse<V2ProfileBankAccount | null>>(`${BASE_PATH}/bank-account`)
   return response.data
 }
 
@@ -256,7 +256,7 @@ export interface UpdateReferencePayload {
 }
 
 export interface ReferencesListResponse {
-  data: V2Reference[]
+  data: V2ProfileReference[]
   meta: {
     total: number
     personal_count: number
@@ -267,7 +267,7 @@ export interface ReferencesListResponse {
 /**
  * List all references.
  */
-export async function listReferences(): Promise<V2ApiResponse<V2Reference[]> & { meta?: ReferencesListResponse['meta'] }> {
+export async function listReferences(): Promise<V2ApiResponse<V2ProfileReference[]> & { meta?: ReferencesListResponse['meta'] }> {
   const response = await api.get<ReferencesListResponse>(`${BASE_PATH}/references`)
   return {
     success: true,
@@ -281,8 +281,8 @@ export async function listReferences(): Promise<V2ApiResponse<V2Reference[]> & {
  */
 export async function addReference(
   payload: StoreReferencePayload
-): Promise<V2ApiResponse<V2Reference>> {
-  const response = await api.post<V2ApiResponse<V2Reference>>(`${BASE_PATH}/references`, payload)
+): Promise<V2ApiResponse<V2ProfileReference>> {
+  const response = await api.post<V2ApiResponse<V2ProfileReference>>(`${BASE_PATH}/references`, payload)
   return response.data
 }
 
@@ -292,8 +292,8 @@ export async function addReference(
 export async function updateReference(
   referenceId: string,
   payload: UpdateReferencePayload
-): Promise<V2ApiResponse<V2Reference>> {
-  const response = await api.put<V2ApiResponse<V2Reference>>(`${BASE_PATH}/references/${referenceId}`, payload)
+): Promise<V2ApiResponse<V2ProfileReference>> {
+  const response = await api.put<V2ApiResponse<V2ProfileReference>>(`${BASE_PATH}/references/${referenceId}`, payload)
   return response.data
 }
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore, useApplicationStore, useTenantStore, useKycStore, useApplicantStore } from '@/stores'
+import { useOnboardingStore, useApplicationStore, useTenantStore, useKycStore, useProfileStore } from '@/stores'
 import { AppButton, AppInput, AppRadioGroup, AppSelect, AppDatePicker } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
 import { logger } from '@/utils/logger'
@@ -14,7 +14,7 @@ const onboardingStore = useOnboardingStore()
 const applicationStore = useApplicationStore()
 const tenantStore = useTenantStore()
 const kycStore = useKycStore()
-const applicantStore = useApplicantStore()
+const profileStore = useProfileStore()
 
 // Check if KYC is verified
 const isKycVerified = computed(() => kycStore.verified && !!kycStore.lockedData.curp)
@@ -50,12 +50,12 @@ const submitError = ref('')
 onMounted(async () => {
   await onboardingStore.init()
 
-  // Load KYC verifications if applicant exists (to restore KYC state)
-  const applicantId = applicantStore.applicant?.id
-  log.debug('Applicant ID', { applicantId })
+  // Load KYC verifications if profile exists (to restore KYC state)
+  const personId = profileStore.profile?.id
+  log.debug('Person ID from profile', { personId })
 
-  if (applicantId) {
-    await kycStore.loadVerifications(applicantId)
+  if (personId) {
+    await kycStore.loadVerifications(personId)
     log.debug('After loadVerifications', {
       verified: kycStore.verified,
       lockedDataCurp: kycStore.lockedData.curp,
@@ -304,19 +304,19 @@ const handleSubmit = async () => {
   submitError.value = ''
 
   try {
-    // Save step 1 explicitly - this creates the applicant record
+    // Save step 1 explicitly - this creates/updates the profile record via V2 API
     await onboardingStore.completeStep(1)
-    log.debug('Step 1 completed - applicant record created')
+    log.debug('Step 1 completed - profile record created/updated')
 
-    // Reload the applicant to get the ID (if it was just created)
-    await applicantStore.loadApplicant()
-    const newApplicantId = applicantStore.applicant?.id
+    // Reload the profile to get the ID (if it was just created)
+    await profileStore.loadProfile()
+    const personId = profileStore.profile?.id
 
-    // If KYC was done but verifications weren't recorded (because applicant didn't exist),
+    // If KYC was done but verifications weren't recorded (because profile didn't exist),
     // record them now. This handles the case of new users doing KYC before Step 1.
-    if (newApplicantId && kycStore.lockedData.curp && !kycStore.verifiedFields.curp) {
-      log.debug('Recording pending KYC verifications for new applicant', { newApplicantId })
-      await kycStore.recordVerifications(newApplicantId)
+    if (personId && kycStore.lockedData.curp && !kycStore.verifiedFields.curp) {
+      log.debug('Recording pending KYC verifications for new profile', { personId })
+      await kycStore.recordVerifications(personId)
     }
 
     // ALWAYS create application if it doesn't exist (now that applicant exists)

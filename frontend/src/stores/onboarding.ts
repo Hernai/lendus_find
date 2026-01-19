@@ -1,8 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
-import { useApplicantStore } from './applicant'
+import { ref, computed } from 'vue'
+import { useProfileStore } from './profile'
 import { useApplicationStore } from './application'
-import type { Address, EmploymentRecord, BankAccount, Reference } from '@/types'
 import { logger } from '@/utils/logger'
 
 const onboardingLogger = logger.child('Onboarding')
@@ -43,7 +42,7 @@ interface Step3Data {
   housing_type: string
   years_at_address: number
   months_at_address: number
-  is_ine_address?: boolean // Flag to indicate address came from INE
+  is_ine_address?: boolean
 }
 
 interface Step4Data {
@@ -90,7 +89,6 @@ const STORAGE_KEY = 'onboarding_draft'
 
 /**
  * Convert date from DD/MM/YYYY format (OCR) to YYYY-MM-DD format (API)
- * Handles multiple input formats: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD
  */
 const formatDateForApi = (dateStr: string): string => {
   if (!dateStr) return ''
@@ -106,7 +104,6 @@ const formatDateForApi = (dateStr: string): string => {
     return `${parts[2]}-${parts[1]}-${parts[0]}`
   }
 
-  // Return as-is if no pattern matches
   return dateStr
 }
 
@@ -168,7 +165,7 @@ const getDefaultData = (): OnboardingData => ({
 })
 
 export const useOnboardingStore = defineStore('onboarding', () => {
-  const applicantStore = useApplicantStore()
+  const profileStore = useProfileStore()
   const applicationStore = useApplicationStore()
 
   // State
@@ -221,76 +218,67 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     }
   }
 
-  // Load existing data from backend
+  // Load existing data from backend using V2 API
   const loadFromBackend = async () => {
     isLoading.value = true
     try {
-      await applicantStore.loadApplicant()
+      // Load profile using V2 API
+      await profileStore.loadProfile()
 
-      // Try to restore current application from localStorage if not already loaded
+      // Try to restore current application
       const currentAppId = applicationStore.currentApplication?.id
       const savedAppId = localStorage.getItem('current_application_id')
 
       if (!currentAppId || currentAppId === 'null' || currentAppId === 'undefined') {
-        // No application in store, try to restore from localStorage
         if (savedAppId && savedAppId !== 'null' && savedAppId !== 'undefined') {
           onboardingLogger.debug('Restoring application from localStorage', { savedAppId })
           try {
             await applicationStore.loadApplication(savedAppId)
-            onboardingLogger.debug('Application restored', { appId: applicationStore.currentApplication?.id })
           } catch (e) {
             onboardingLogger.warn('Could not restore application', e)
             localStorage.removeItem('current_application_id')
           }
-        } else {
-          onboardingLogger.debug('No application ID in localStorage to restore')
         }
-      } else {
-        onboardingLogger.debug('Application already loaded', { currentAppId })
       }
 
-      if (applicantStore.applicant) {
-        const a = applicantStore.applicant
+      // Populate form data from V2 profile
+      if (profileStore.profile) {
+        const profile = profileStore.profile
 
-        // Populate step 1
-        if (a.first_name) {
+        // Populate step 1 from personal data
+        if (profile.personal_data.first_name) {
           data.value.step1 = {
-            first_name: a.first_name || '',
-            last_name: a.last_name_1 || '',
-            second_last_name: a.last_name_2 || '',
-            birth_date: a.birth_date || '',
-            birth_state: '',
-            gender: a.gender || '',
-            nationality: a.nationality || 'MX',
-            marital_status: a.marital_status || ''
+            first_name: profile.personal_data.first_name || '',
+            last_name: profile.personal_data.last_name_1 || '',
+            second_last_name: profile.personal_data.last_name_2 || '',
+            birth_date: profile.personal_data.birth_date || '',
+            birth_state: profile.personal_data.birth_state || '',
+            gender: profile.personal_data.gender || '',
+            nationality: profile.personal_data.nationality || 'MX',
+            marital_status: profile.personal_data.marital_status || ''
           }
           if (!completedSteps.value.includes(1)) {
             completedSteps.value.push(1)
           }
         }
 
-        // Populate step 2
-        if (a.curp || a.rfc) {
-          data.value.step2.curp = a.curp || ''
-          data.value.step2.rfc = a.rfc || ''
-          data.value.step2.clave_elector = a.ine_clave || ''
-          data.value.step2.numero_ocr = a.ine_ocr || ''
-          data.value.step2.folio_ine = a.ine_folio || ''
-          data.value.step2.passport_number = a.passport_number || ''
-          data.value.step2.passport_issue_date = a.passport_issue_date || ''
-          data.value.step2.passport_expiry_date = a.passport_expiry_date || ''
-          // Determine ID type based on which fields are populated
-          if (a.passport_number) {
-            data.value.step2.id_type = 'PASSPORT'
+        // Populate step 2 from identifications
+        if (profile.identifications.curp || profile.identifications.rfc) {
+          data.value.step2.curp = profile.identifications.curp || ''
+          data.value.step2.rfc = profile.identifications.rfc || ''
+          if (profile.identifications.ine) {
+            data.value.step2.clave_elector = profile.identifications.ine.clave_elector || ''
+            data.value.step2.numero_ocr = profile.identifications.ine.ocr || ''
+            data.value.step2.folio_ine = profile.identifications.ine.folio || ''
           }
           if (!completedSteps.value.includes(2)) {
             completedSteps.value.push(2)
           }
         }
 
-        // Populate step 3 from primary address
-        if (a.primary_address) {
-          const addr = a.primary_address
+        // Populate step 3 from address
+        if (profile.address) {
+          const addr = profile.address
           data.value.step3 = {
             street: addr.street || '',
             ext_number: addr.ext_number || '',
@@ -309,18 +297,18 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           }
         }
 
-        // Populate step 4 from current employment
-        if (a.current_employment) {
-          const emp = a.current_employment
+        // Populate step 4 from employment
+        if (profile.employment) {
+          const emp = profile.employment
           const totalMonths = emp.seniority_months || 0
           data.value.step4 = {
             employment_type: emp.employment_type || '',
             company_name: emp.company_name || '',
-            job_title: emp.position || '', // Backend sends 'position'
+            job_title: emp.position || '',
             monthly_income: emp.monthly_income || 0,
-            seniority_years: Math.floor(totalMonths / 12), // Convert months to years
-            seniority_months: totalMonths % 12, // Remaining months
-            company_phone: emp.work_phone || '', // Backend sends 'work_phone'
+            seniority_years: Math.floor(totalMonths / 12),
+            seniority_months: totalMonths % 12,
+            company_phone: emp.work_phone || '',
             company_address: ''
           }
           if (!completedSteps.value.includes(4)) {
@@ -328,8 +316,16 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           }
         }
 
-        // Step 5 is loan details - nothing to load from applicant data
-        // Purpose and confirmation are set during the onboarding flow
+        // Populate step 7 from references
+        if (profile.references && profile.references.length > 0) {
+          data.value.step7.references = profile.references.map(ref => ({
+            first_name: ref.full_name.split(' ')[0] || '',
+            last_name_1: ref.full_name.split(' ')[1] || '',
+            last_name_2: ref.full_name.split(' ')[2] || '',
+            phone: ref.phone || '',
+            relationship: ref.relationship || ''
+          }))
+        }
 
         saveToStorage()
       }
@@ -340,18 +336,17 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     }
   }
 
-  // Save specific step to backend
+  // Save specific step to backend using V2 API
   const saveStepToBackend = async (step: number) => {
     isSaving.value = true
     try {
       switch (step) {
         case 1: {
-          // Validate required fields for step 1
           const s1 = data.value.step1
           if (!s1.first_name || !s1.last_name || !s1.birth_date || !s1.gender) {
             throw new Error('Faltan campos requeridos en datos personales')
           }
-          await applicantStore.updatePersonalData({
+          await profileStore.updatePersonalData({
             first_name: s1.first_name,
             last_name_1: s1.last_name,
             last_name_2: s1.second_last_name || undefined,
@@ -359,47 +354,36 @@ export const useOnboardingStore = defineStore('onboarding', () => {
             birth_state: s1.birth_state || undefined,
             gender: s1.gender as 'M' | 'F',
             nationality: s1.nationality || 'MX',
-            marital_status: s1.marital_status || ''
+            marital_status: s1.marital_status || undefined
           })
           break
         }
 
-        case 2:
-          await applicantStore.updateIdentification(
-            data.value.step2.rfc,
-            data.value.step2.curp,
-            data.value.step2.id_type === 'INE'
-              ? {
-                  ine_clave: data.value.step2.clave_elector,
-                  ine_ocr: data.value.step2.numero_ocr,
-                  ine_folio: data.value.step2.folio_ine
-                }
-              : {
-                  passport_number: data.value.step2.passport_number,
-                  passport_issue_date: data.value.step2.passport_issue_date,
-                  passport_expiry_date: data.value.step2.passport_expiry_date
-                }
-          )
+        case 2: {
+          const s2 = data.value.step2
+          const payload: Record<string, string | undefined> = {
+            curp: s2.curp || undefined,
+            rfc: s2.rfc || undefined
+          }
+
+          if (s2.id_type === 'INE') {
+            payload.ine_clave = s2.clave_elector || undefined
+            payload.ine_ocr = s2.numero_ocr || undefined
+            payload.ine_folio = s2.folio_ine || undefined
+          } else {
+            payload.passport_number = s2.passport_number || undefined
+            payload.passport_issue_date = s2.passport_issue_date || undefined
+            payload.passport_expiry_date = s2.passport_expiry_date || undefined
+          }
+
+          await profileStore.updateIdentifications(payload)
           break
+        }
 
         case 3: {
-          // Validate required fields for step 3
-          // ext_number is optional when using INE address (is_ine_address flag)
           const s3 = data.value.step3
           const isIneAddress = s3.is_ine_address === true
 
-          // Log for debugging
-          onboardingLogger.debug('Step 3 data', {
-            street: s3.street,
-            ext_number: s3.ext_number,
-            neighborhood: s3.neighborhood,
-            postal_code: s3.postal_code,
-            state: s3.state,
-            housing_type: s3.housing_type,
-            is_ine_address: isIneAddress
-          })
-
-          // Check each required field individually for better error messages
           const missingFields: string[] = []
           if (!s3.street) missingFields.push('calle')
           if (!s3.neighborhood) missingFields.push('colonia')
@@ -410,20 +394,20 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           if (missingFields.length > 0) {
             throw new Error(`Faltan campos requeridos en dirección: ${missingFields.join(', ')}`)
           }
-          // ext_number is required only for non-INE addresses
           if (!isIneAddress && !s3.ext_number) {
             throw new Error('Falta el número exterior')
           }
-          await applicantStore.updateAddress({
+
+          await profileStore.updateAddress({
             street: s3.street,
-            ext_number: s3.ext_number,
+            ext_number: s3.ext_number || undefined,
             int_number: s3.int_number || undefined,
             neighborhood: s3.neighborhood,
             postal_code: s3.postal_code,
             city: s3.city || s3.municipality,
             state: s3.state,
             municipality: s3.municipality || undefined,
-            housing_type: s3.housing_type as any,
+            housing_type: s3.housing_type as 'OWNED' | 'RENTED' | 'FAMILY' | 'MORTGAGED' | 'EMPLOYER',
             years_at_address: Number(s3.years_at_address) || 0,
             months_at_address: Number(s3.months_at_address) || 0
           })
@@ -431,85 +415,64 @@ export const useOnboardingStore = defineStore('onboarding', () => {
         }
 
         case 4: {
-          // Validate required fields for step 4
           const s4 = data.value.step4
           if (!s4.employment_type || s4.monthly_income < 1000) {
             throw new Error('Faltan campos requeridos en información laboral')
           }
-          await applicantStore.updateEmployment({
-            employment_type: s4.employment_type as any,
+
+          await profileStore.updateEmployment({
+            employment_type: s4.employment_type,
             company_name: s4.company_name || undefined,
-            position: s4.job_title || undefined, // Backend expects 'position', not 'job_title'
+            position: s4.job_title || undefined,
             monthly_income: s4.monthly_income,
-            seniority_months: (Number(s4.seniority_years) || 0) * 12 + (Number(s4.seniority_months) || 0), // Convert years + months to total months
-            work_phone: s4.company_phone || undefined // Backend expects 'work_phone', not 'company_phone'
+            seniority_years: Number(s4.seniority_years) || 0,
+            seniority_months: Number(s4.seniority_months) || 0,
+            work_phone: s4.company_phone || undefined
           })
           break
         }
 
         case 5: {
-          // Loan details - save purpose directly to application (not to dynamic_data)
           const currentId = applicationStore.currentApplication?.id
-          onboardingLogger.debug('Step 5 save - currentApplication', { currentId: currentId || 'NULL' })
-
-          // Check if current application has valid ID
           const hasValidId = currentId && currentId !== 'null' && currentId !== 'undefined'
 
-          // If no current application or invalid ID, try to load or create one
           if (!applicationStore.currentApplication || !hasValidId) {
-            onboardingLogger.warn('No valid currentApplication - attempting recovery')
-
-            // Try to load from localStorage
-            let savedAppId = localStorage.getItem('current_application_id')
-
-            // Clean up invalid saved IDs
-            if (savedAppId === 'null' || savedAppId === 'undefined' || savedAppId === '') {
-              onboardingLogger.debug('Cleaning up invalid savedAppId', { savedAppId })
-              localStorage.removeItem('current_application_id')
-              savedAppId = null
-            }
-
-            if (savedAppId) {
-              onboardingLogger.debug('Trying to load application from saved ID', { savedAppId })
+            const savedAppId = localStorage.getItem('current_application_id')
+            if (savedAppId && savedAppId !== 'null' && savedAppId !== 'undefined') {
               try {
                 await applicationStore.loadApplication(savedAppId)
               } catch (e) {
-                onboardingLogger.warn('Could not load application', e)
                 localStorage.removeItem('current_application_id')
               }
             }
           }
 
-          // Check again if we have a valid application now
           const finalId = applicationStore.currentApplication?.id
           const hasFinalValidId = finalId && finalId !== 'null' && finalId !== 'undefined'
 
           if (applicationStore.currentApplication && hasFinalValidId) {
-            onboardingLogger.debug('Updating application with purpose', { purpose: data.value.step5.purpose })
             try {
               await applicationStore.updateApplication({
                 purpose: data.value.step5.purpose
               })
             } catch (err: unknown) {
               const error = err as { message?: string }
-              // If application was already submitted, the error handler in applicationStore
-              // will have cleared it. Check if we need to create a new one.
               if (error.message?.includes('ya fue enviada') || error.message?.includes('no fue encontrada')) {
-                onboardingLogger.debug('Previous application was submitted. Creating new one')
-                // The applicationStore should have cleared currentApplication
-                // Throw error to let user know they need to restart
                 throw new Error('Tu solicitud anterior ya fue enviada. Para crear una nueva solicitud, regresa al inicio.')
               }
               throw err
             }
           } else {
-            // Last resort: throw an error so the user sees feedback
             throw new Error('No se encontró la solicitud. Por favor, regresa al inicio y vuelve a empezar.')
           }
           break
         }
 
-        // Steps 6 and 7 handled separately (documents and references)
+        case 7: {
+          // References are saved individually through profileStore
+          // This step just marks completion
+          break
+        }
       }
 
       lastSavedAt.value = new Date()
@@ -567,37 +530,29 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     data.value[stepKey] = { ...data.value[stepKey], ...stepData }
     saveToStorage()
 
-    // Trigger auto-save with debounce (extract step number from stepKey)
     const stepNumber = parseInt(stepKey.replace('step', ''))
     if (!isNaN(stepNumber)) {
       triggerAutoSave(stepNumber)
     }
   }
 
-  // Auto-save with debounce (2 seconds after last change)
+  // Auto-save with debounce
   const triggerAutoSave = (step: number) => {
-    // Clear existing timer
     if (autoSaveTimer) {
       clearTimeout(autoSaveTimer)
     }
 
-    // Set new timer
     autoSaveTimer = setTimeout(async () => {
-      // Check if minimum required fields are filled before attempting save
       if (!canAutoSaveStep(step)) {
-        onboardingLogger.debug(`Skipping auto-save for step ${step} - required fields not filled`)
         return
       }
 
       try {
-        onboardingLogger.debug(`Auto-saving step ${step}`)
         await saveStepToBackend(step)
-        onboardingLogger.debug(`Auto-save complete for step ${step}`)
       } catch (error) {
         onboardingLogger.error(`Auto-save failed for step ${step}`, error)
-        // Don't throw - auto-save failures shouldn't block the user
       }
-    }, 2000) // 2 seconds debounce
+    }, 2000)
   }
 
   // Check if step has minimum data to attempt auto-save
@@ -609,7 +564,6 @@ export const useOnboardingStore = defineStore('onboarding', () => {
       }
       case 2: {
         const s2 = data.value.step2
-        // At least CURP or RFC should be filled
         return !!(s2.curp || s2.rfc)
       }
       case 3: {
@@ -621,15 +575,12 @@ export const useOnboardingStore = defineStore('onboarding', () => {
         return !!(s4.employment_type && s4.monthly_income >= 1000)
       }
       case 5: {
-        // Step 5 needs application ID to save
         const appId = applicationStore.currentApplication?.id
         return !!(appId && appId !== 'null' && appId !== 'undefined' && data.value.step5.purpose)
       }
       case 6:
-        // Documents don't auto-save, they upload individually
         return false
       case 7:
-        // References can always be saved
         return true
       default:
         return false
@@ -643,16 +594,14 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     currentStep.value = 1
     lastSavedAt.value = null
     localStorage.removeItem(STORAGE_KEY)
-    // Also clear application reference
     localStorage.removeItem('current_application_id')
+    profileStore.reset()
   }
 
-  // Handle application not found (404) - reset to appropriate state
+  // Handle application not found
   const handleApplicationNotFound = () => {
     onboardingLogger.warn('Application not found. Resetting onboarding to step 1')
-    // Clear application reference
     localStorage.removeItem('current_application_id')
-    // Reset to step 1 but keep data for steps 1-4 (applicant data)
     currentStep.value = 1
     completedSteps.value = completedSteps.value.filter(s => s <= 4)
     saveToStorage()
@@ -663,14 +612,11 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     loadFromStorage()
     await loadFromBackend()
 
-    // Validate: If currentStep >= 5, we need a valid application
-    // (Steps 5+ save to application, not just applicant)
     if (currentStep.value >= 5) {
       const appId = applicationStore.currentApplication?.id
       if (!appId || appId === 'null' || appId === 'undefined') {
         onboardingLogger.warn('Onboarding init: No valid application for step >= 5, resetting to step 1')
         currentStep.value = 1
-        // Keep completedSteps for steps 1-4 if they were completed
         completedSteps.value = completedSteps.value.filter(s => s <= 4)
         saveToStorage()
       }

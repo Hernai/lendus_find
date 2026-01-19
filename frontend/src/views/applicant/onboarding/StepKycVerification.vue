@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
-import { useKycStore, useOnboardingStore, useApplicationStore, useTenantStore, useApplicantStore } from '@/stores'
+import { useKycStore, useOnboardingStore, useApplicationStore, useTenantStore, useProfileStore } from '@/stores'
 import { useKycValidation } from '@/composables/useKycValidation'
 import { AppButton } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
@@ -16,7 +16,7 @@ const kycStore = useKycStore()
 const onboardingStore = useOnboardingStore()
 const applicationStore = useApplicationStore()
 const tenantStore = useTenantStore()
-const applicantStore = useApplicantStore()
+const profileStore = useProfileStore()
 
 // Use the validation composable
 const {
@@ -55,10 +55,10 @@ onMounted(async () => {
   isChecking.value = true
 
   try {
-    // Load applicant if exists (for returning users starting a new application)
-    // This is needed so that KYC verifications can be properly associated with the applicant
-    await applicantStore.loadApplicant()
-    log.debug('Applicant loaded', { applicantId: applicantStore.applicant?.id || 'none' })
+    // Load profile if exists (for returning users starting a new application)
+    // This is needed so that KYC verifications can be properly associated with the profile
+    await profileStore.loadProfile()
+    log.debug('Profile loaded', { personId: profileStore.profile?.id || 'none' })
 
     // Load tenant config to get products
     await tenantStore.loadConfig()

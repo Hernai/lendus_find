@@ -210,10 +210,10 @@ export const useProfileStore = defineStore('profile', () => {
       const response = await profileService.updateAddress(data)
       if (response.success && response.data) {
         if (profile.value) {
-          profile.value.address = response.data.address as V2ProfileAddress
+          profile.value.address = response.data.address
           profile.value.profile_completeness = response.data.profile_completeness
         }
-        return response.data.address as V2ProfileAddress
+        return response.data.address
       }
       error.value = response.message ?? 'Error al actualizar dirección'
       return null
@@ -261,10 +261,10 @@ export const useProfileStore = defineStore('profile', () => {
       const response = await profileService.updateEmployment(data)
       if (response.success && response.data) {
         if (profile.value) {
-          profile.value.employment = response.data.employment as V2ProfileEmployment
+          profile.value.employment = response.data.employment
           profile.value.profile_completeness = response.data.profile_completeness
         }
-        return response.data.employment as V2ProfileEmployment
+        return response.data.employment
       }
       error.value = response.message ?? 'Error al actualizar empleo'
       return null
@@ -349,9 +349,9 @@ export const useProfileStore = defineStore('profile', () => {
       const response = await profileService.listReferences()
       if (response.success && response.data) {
         if (profile.value) {
-          profile.value.references = response.data as V2ProfileReference[]
+          profile.value.references = response.data
         }
-        return response.data as V2ProfileReference[]
+        return response.data
       }
       error.value = response.message ?? 'Error al cargar referencias'
       return []
@@ -373,9 +373,9 @@ export const useProfileStore = defineStore('profile', () => {
       const response = await profileService.addReference(data)
       if (response.success && response.data) {
         if (profile.value) {
-          profile.value.references.push(response.data as V2ProfileReference)
+          profile.value.references.push(response.data)
         }
-        return response.data as V2ProfileReference
+        return response.data
       }
       error.value = response.message ?? 'Error al agregar referencia'
       return null
@@ -400,10 +400,10 @@ export const useProfileStore = defineStore('profile', () => {
         if (profile.value) {
           const index = profile.value.references.findIndex(r => r.id === referenceId)
           if (index !== -1) {
-            profile.value.references[index] = response.data as V2ProfileReference
+            profile.value.references[index] = response.data
           }
         }
-        return response.data as V2ProfileReference
+        return response.data
       }
       error.value = response.message ?? 'Error al actualizar referencia'
       return null

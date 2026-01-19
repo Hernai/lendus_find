@@ -636,7 +636,7 @@ const paginationRange = computed(() => {
                 </div>
               </td>
               <td class="px-3 py-2 whitespace-nowrap">
-                <span class="text-sm text-gray-600">{{ formatPhoneForDisplay(user.phone) || '-' }}</span>
+                <span class="text-sm text-gray-600">{{ formatPhone(user.phone) || '-' }}</span>
               </td>
               <td class="px-3 py-2 whitespace-nowrap">
                 <span
