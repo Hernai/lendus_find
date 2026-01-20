@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
 import { logger } from '@/utils/logger'
 
 const kycLogger = logger.child('KYC:Compliance')
@@ -82,29 +82,25 @@ export function useKycCompliance(): UseKycComplianceReturn {
     error.value = null
 
     try {
-      kycLogger.debug('Calling /kyc/ofac/check API...')
-      const response = await api.post<{
-        data: { found: boolean; matches: ComplianceMatch[]; count: number; warning?: string }
-      }>('/kyc/ofac/check', {
-        name,
-        similarity
-      })
+      kycLogger.debug('Calling V2 OFAC check API...')
+      // V2 service returns unwrapped data directly
+      const data = await v2.applicant.kyc.checkOfac(name, similarity)
 
-      kycLogger.debug('OFAC response:', response.data)
+      kycLogger.debug('OFAC response:', data)
 
       ofacResult.value = {
-        found: response.data.data.found,
-        matches: response.data.data.matches,
-        count: response.data.data.count || 0,
-        warning: response.data.data.warning
+        found: data.found,
+        matches: data.matches,
+        count: data.count || 0,
+        warning: data.warning
       }
 
       // If there's a warning (service unavailable), treat as not found
-      if (response.data.data.warning) {
-        kycLogger.warn('OFAC warning', { warning: response.data.data.warning })
+      if (data.warning) {
+        kycLogger.warn('OFAC warning', { warning: data.warning })
       }
 
-      return !response.data.data.found
+      return !data.found
     } catch (err: unknown) {
       kycLogger.error('Failed to check OFAC', err)
       const errorResponse = err as { response?: { data?: { message?: string } } }
@@ -133,30 +129,25 @@ export function useKycCompliance(): UseKycComplianceReturn {
     error.value = null
 
     try {
-      kycLogger.debug('Calling /kyc/pld/check API...')
-      const response = await api.post<{
-        data: { found: boolean; matches: ComplianceMatch[]; count: number; warning?: string }
-      }>('/kyc/pld/check', {
-        name,
-        curp: curp || undefined,
-        similarity // Higher threshold for PLD to reduce false positives
-      })
+      kycLogger.debug('Calling V2 PLD check API...')
+      // V2 service returns unwrapped data directly
+      const data = await v2.applicant.kyc.checkPldBlacklists(name, curp, similarity)
 
-      kycLogger.debug('PLD response:', response.data)
+      kycLogger.debug('PLD response:', data)
 
       pldResult.value = {
-        found: response.data.data.found,
-        matches: response.data.data.matches,
-        count: response.data.data.count || 0,
-        warning: response.data.data.warning
+        found: data.found,
+        matches: data.matches as ComplianceMatch[],
+        count: data.count || 0,
+        warning: data.warning
       }
 
       // If there's a warning (service unavailable), treat as not found
-      if (response.data.data.warning) {
-        kycLogger.warn('PLD warning', { warning: response.data.data.warning })
+      if (data.warning) {
+        kycLogger.warn('PLD warning', { warning: data.warning })
       }
 
-      return !response.data.data.found
+      return !data.found
     } catch (err: unknown) {
       kycLogger.error('Failed to check PLD blacklists', err)
       const errorResponse = err as { response?: { data?: { message?: string } } }

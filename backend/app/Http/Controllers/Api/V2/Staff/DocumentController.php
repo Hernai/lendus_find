@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V2\Staff;
 
+use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\DocumentV2;
 use App\Models\Person;
@@ -19,6 +20,8 @@ use Illuminate\Support\Facades\Storage;
  */
 class DocumentController extends Controller
 {
+    use ApiResponses;
+
     public function __construct(
         private DocumentV2Service $service
     ) {}
@@ -35,7 +38,7 @@ class DocumentController extends Controller
 
         $documents = $this->service->getPendingForReview($staff->tenant);
 
-        return response()->json([
+        return $this->success([
             'documents' => $documents->map(fn($doc) => $this->formatDocumentForReview($doc)),
         ]);
     }
@@ -54,7 +57,7 @@ class DocumentController extends Controller
 
         $documents = $this->service->getExpiringSoon($staff->tenant, $days);
 
-        return response()->json([
+        return $this->success([
             'documents' => $documents->map(fn($doc) => $this->formatDocumentForReview($doc)),
         ]);
     }
@@ -74,16 +77,13 @@ class DocumentController extends Controller
             ->first();
 
         if (!$person) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Persona no encontrada.',
-            ], 404);
+            return $this->notFound('Persona no encontrada.');
         }
 
         $type = $request->query('type');
         $documents = $this->service->getDocumentsFor($person, $type);
 
-        return response()->json([
+        return $this->success([
             'documents' => $documents->map(fn($doc) => $this->formatDocument($doc)),
         ]);
     }
@@ -103,13 +103,10 @@ class DocumentController extends Controller
             ->first();
 
         if (!$document) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Documento no encontrado.',
-            ], 404);
+            return $this->notFound('Documento no encontrado.');
         }
 
-        return response()->json([
+        return $this->success([
             'document' => $this->formatDocumentDetail($document),
         ]);
     }
@@ -129,17 +126,14 @@ class DocumentController extends Controller
             ->first();
 
         if (!$document) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Documento no encontrado.',
-            ], 404);
+            return $this->notFound('Documento no encontrado.');
         }
 
         // Generate signed URL for secure download
         $url = Storage::disk($document->storage_disk ?? 'local')
             ->temporaryUrl($document->file_path, now()->addMinutes(30));
 
-        return response()->json([
+        return $this->success([
             'url' => $url,
             'expires_at' => now()->addMinutes(30)->toIso8601String(),
             'filename' => $document->original_filename,
@@ -165,25 +159,18 @@ class DocumentController extends Controller
             ->first();
 
         if (!$document) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Documento no encontrado.',
-            ], 404);
+            return $this->notFound('Documento no encontrado.');
         }
 
         if (!$document->isPending()) {
-            return response()->json([
-                'error' => 'NOT_PENDING',
-                'message' => 'Este documento ya ha sido revisado.',
-            ], 400);
+            return $this->badRequest('NOT_PENDING', 'Este documento ya ha sido revisado.');
         }
 
         $document = $this->service->approve($document, $staff, $validated['notes'] ?? null);
 
-        return response()->json([
-            'message' => 'Documento aprobado.',
+        return $this->success([
             'document' => $this->formatDocument($document),
-        ]);
+        ], 'Documento aprobado.');
     }
 
     /**
@@ -205,25 +192,18 @@ class DocumentController extends Controller
             ->first();
 
         if (!$document) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Documento no encontrado.',
-            ], 404);
+            return $this->notFound('Documento no encontrado.');
         }
 
         if (!$document->isPending()) {
-            return response()->json([
-                'error' => 'NOT_PENDING',
-                'message' => 'Este documento ya ha sido revisado.',
-            ], 400);
+            return $this->badRequest('NOT_PENDING', 'Este documento ya ha sido revisado.');
         }
 
         $document = $this->service->reject($document, $staff, $validated['reason']);
 
-        return response()->json([
-            'message' => 'Documento rechazado.',
+        return $this->success([
             'document' => $this->formatDocument($document),
-        ]);
+        ], 'Documento rechazado.');
     }
 
     /**
@@ -246,10 +226,7 @@ class DocumentController extends Controller
             ->first();
 
         if (!$document) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Documento no encontrado.',
-            ], 404);
+            return $this->notFound('Documento no encontrado.');
         }
 
         $document = $this->service->setOcrData(
@@ -258,15 +235,14 @@ class DocumentController extends Controller
             $validated['confidence'] ?? null
         );
 
-        return response()->json([
-            'message' => 'Datos OCR guardados.',
+        return $this->success([
             'document' => [
                 'id' => $document->id,
                 'ocr_processed' => $document->ocr_processed,
                 'ocr_data' => $document->ocr_data,
                 'ocr_confidence' => $document->ocr_confidence,
             ],
-        ]);
+        ], 'Datos OCR guardados.');
     }
 
     /**
@@ -289,10 +265,7 @@ class DocumentController extends Controller
             ->first();
 
         if (!$person) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Persona no encontrada.',
-            ], 404);
+            return $this->notFound('Persona no encontrada.');
         }
 
         $requiredTypes = $validated['required_types'];
@@ -300,7 +273,7 @@ class DocumentController extends Controller
         $missing = $this->service->getMissingRequired($person, $requiredTypes);
         $rejected = $this->service->getRejectedForReupload($person);
 
-        return response()->json([
+        return $this->success([
             'is_complete' => $allApproved,
             'missing_types' => $missing,
             'rejected_count' => $rejected->count(),
@@ -320,7 +293,7 @@ class DocumentController extends Controller
      */
     public function types(): JsonResponse
     {
-        return response()->json([
+        return $this->success([
             'types' => DocumentV2::typeLabels(),
             'categories' => DocumentV2::categories(),
         ]);

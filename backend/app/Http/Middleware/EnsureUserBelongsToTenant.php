@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\ApplicantAccount;
 use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
@@ -15,10 +16,12 @@ class EnsureUserBelongsToTenant
      *
      * Ensures the authenticated user belongs to the current tenant.
      * Uses fail-closed design: if tenant context is missing, denies access.
+     *
+     * Supports both StaffAccount (User) and ApplicantAccount authentication.
      */
     public function handle(Request $request, Closure $next): Response
     {
-        /** @var User|null $user */
+        /** @var User|ApplicantAccount|null $user */
         $user = $request->user();
 
         // If no authenticated user, let auth middleware handle it
@@ -41,8 +44,9 @@ class EnsureUserBelongsToTenant
 
         $tenantId = app('tenant.id');
 
-        // Super admins can access any tenant
-        if ($user->isSuperAdmin()) {
+        // Super admins can access any tenant (only staff users can be super admins)
+        // ApplicantAccount doesn't have isSuperAdmin() - they're never super admins
+        if (method_exists($user, 'isSuperAdmin') && $user->isSuperAdmin()) {
             return $next($request);
         }
 

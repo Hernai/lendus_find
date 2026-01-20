@@ -252,12 +252,15 @@ class ApplicationV2Service
                 'rfc' => $person->rfc,
                 'birth_date' => $person->birth_date?->format('Y-m-d'),
                 'nationality' => $person->nationality,
+                // Access as property to get the loaded model, not the relation
                 'current_address' => $person->currentHomeAddress?->toArray(),
-                'current_employment' => $person->currentEmployment()?->toArray(),
+                'current_employment' => $person->currentEmployment?->toArray(),
             ];
         }
 
         $company = $application->company;
+        // Get first legal representative from the collection
+        $legalRep = $company->getLegalRepresentatives()->first();
         return [
             'type' => 'company',
             'company_id' => $company->id,
@@ -265,7 +268,7 @@ class ApplicationV2Service
             'trade_name' => $company->trade_name,
             'rfc' => $company->rfc,
             'fiscal_regime' => $company->fiscal_regime,
-            'legal_representative' => $company->legalRepresentative()?->person?->full_name,
+            'legal_representative' => $legalRep?->person?->full_name,
         ];
     }
 
@@ -663,7 +666,7 @@ class ApplicationV2Service
         int $perPage = 20
     ): LengthAwarePaginator {
         $query = ApplicationV2::where('tenant_id', $tenant->id)
-            ->with(['person', 'company', 'product', 'assignedTo']);
+            ->with(['person.account.phoneIdentity', 'company', 'product', 'assignedTo']);
 
         // Apply filters
         if (!empty($filters['status'])) {

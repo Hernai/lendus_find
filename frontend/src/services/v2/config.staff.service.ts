@@ -126,64 +126,56 @@ export async function getConfig(): Promise<V2ApiResponse<V2ConfigResponse>> {
 /**
  * Update tenant basic info.
  */
-export async function updateTenant(payload: V2TenantUpdatePayload): Promise<V2ApiResponse<V2TenantInfo>> {
-  const response = await api.put<V2ApiResponse<V2TenantInfo>>(`${BASE_PATH}/tenant`, payload)
+export async function updateTenant(payload: V2TenantUpdatePayload): Promise<V2ApiResponse<{ tenant: V2TenantInfo }>> {
+  const response = await api.put<V2ApiResponse<{ tenant: V2TenantInfo }>>(`${BASE_PATH}/tenant`, payload)
   return response.data
 }
 
 /**
  * Update tenant branding.
  */
-export async function updateBranding(payload: V2BrandingUpdatePayload): Promise<V2ApiResponse<V2Branding>> {
-  const response = await api.put<V2ApiResponse<V2Branding>>(`${BASE_PATH}/branding`, payload)
+export async function updateBranding(payload: V2BrandingUpdatePayload): Promise<V2ApiResponse<{ branding: V2Branding }>> {
+  const response = await api.put<V2ApiResponse<{ branding: V2Branding }>>(`${BASE_PATH}/branding`, payload)
   return response.data
 }
 
 /**
  * List API configurations.
  */
-export async function listApiConfigs(): Promise<{
-  data: V2ApiConfig[]
+export async function listApiConfigs(): Promise<V2ApiResponse<{
+  api_configs: V2ApiConfig[]
   available_providers: Record<string, string>
   available_service_types: Record<string, string>
-}> {
-  const response = await api.get<{
-    data: V2ApiConfig[]
+}>> {
+  const response = await api.get<V2ApiResponse<{
+    api_configs: V2ApiConfig[]
     available_providers: Record<string, string>
     available_service_types: Record<string, string>
-  }>(`${BASE_PATH}/api-configs`)
+  }>>(`${BASE_PATH}/api-configs`)
   return response.data
 }
 
 /**
  * Create or update an API configuration.
  */
-export async function saveApiConfig(payload: V2ApiConfigPayload): Promise<V2ApiResponse<V2ApiConfig>> {
-  const response = await api.post<V2ApiResponse<V2ApiConfig>>(`${BASE_PATH}/api-configs`, payload)
+export async function saveApiConfig(payload: V2ApiConfigPayload): Promise<V2ApiResponse<{ api_config: V2ApiConfig }>> {
+  const response = await api.post<V2ApiResponse<{ api_config: V2ApiConfig }>>(`${BASE_PATH}/api-configs`, payload)
   return response.data
 }
 
 /**
  * Delete an API configuration.
  */
-export async function deleteApiConfig(id: string): Promise<V2ApiResponse<{ message: string }>> {
-  const response = await api.delete<V2ApiResponse<{ message: string }>>(`${BASE_PATH}/api-configs/${id}`)
+export async function deleteApiConfig(id: string): Promise<V2ApiResponse<null>> {
+  const response = await api.delete<V2ApiResponse<null>>(`${BASE_PATH}/api-configs/${id}`)
   return response.data
 }
 
 /**
  * Test an API configuration.
  */
-export async function testApiConfig(id: string): Promise<{
-  success: boolean
-  message: string
-  data: V2ApiConfig
-}> {
-  const response = await api.post<{
-    success: boolean
-    message: string
-    data: V2ApiConfig
-  }>(`${BASE_PATH}/api-configs/${id}/test`)
+export async function testApiConfig(id: string): Promise<V2ApiResponse<{ api_config: V2ApiConfig }>> {
+  const response = await api.post<V2ApiResponse<{ api_config: V2ApiConfig }>>(`${BASE_PATH}/api-configs/${id}/test`)
   return response.data
 }
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V2\Staff;
 
 use App\Enums\AuditAction;
+use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\StaffAccount;
@@ -19,6 +20,7 @@ use Illuminate\Support\Facades\Log;
  */
 class AuthController extends Controller
 {
+    use ApiResponses;
     /**
      * Login with email + password.
      */
@@ -34,18 +36,12 @@ class AuthController extends Controller
             ->first();
 
         if (!$account) {
-            return response()->json([
-                'error' => 'INVALID_CREDENTIALS',
-                'message' => 'Correo o contraseña incorrectos',
-            ], 401);
+            return $this->error('INVALID_CREDENTIALS', 'Correo o contraseña incorrectos', 401);
         }
 
         // Check if account is active
         if (!$account->is_active) {
-            return response()->json([
-                'error' => 'ACCOUNT_DISABLED',
-                'message' => 'Tu cuenta ha sido desactivada. Contacta al administrador.',
-            ], 403);
+            return $this->forbidden('Tu cuenta ha sido desactivada. Contacta al administrador.');
         }
 
         $metadata = $request->attributes->get('metadata', []);
@@ -67,10 +63,7 @@ class AuthController extends Controller
                 ])
             );
 
-            return response()->json([
-                'error' => 'INVALID_CREDENTIALS',
-                'message' => 'Correo o contraseña incorrectos',
-            ], 401);
+            return $this->error('INVALID_CREDENTIALS', 'Correo o contraseña incorrectos', 401);
         }
 
         // Record login
@@ -95,8 +88,7 @@ class AuthController extends Controller
             ])
         );
 
-        return response()->json([
-            'success' => true,
+        return $this->success([
             'token' => $token,
             'user' => $this->formatStaffResponse($account),
         ]);
@@ -111,15 +103,12 @@ class AuthController extends Controller
 
         // Ensure this is a StaffAccount
         if (!$account instanceof StaffAccount) {
-            return response()->json([
-                'error' => 'INVALID_TOKEN',
-                'message' => 'Token no válido para esta ruta',
-            ], 401);
+            return $this->unauthorized('Token no válido para esta ruta');
         }
 
         $account->load('profile');
 
-        return response()->json([
+        return $this->success([
             'user' => $this->formatStaffResponse($account),
         ]);
     }
@@ -145,10 +134,7 @@ class AuthController extends Controller
             'auth_version' => 'v2',
         ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Sesión cerrada',
-        ]);
+        return $this->success(null, 'Sesión cerrada');
     }
 
     /**
@@ -159,10 +145,7 @@ class AuthController extends Controller
         $account = $request->user();
 
         if (!$account instanceof StaffAccount) {
-            return response()->json([
-                'error' => 'INVALID_TOKEN',
-                'message' => 'Token no válido para esta ruta',
-            ], 401);
+            return $this->unauthorized('Token no válido para esta ruta');
         }
 
         // Delete current token
@@ -173,10 +156,7 @@ class AuthController extends Controller
         // Create new token
         $newToken = $account->createToken('staff-token', ['staff'])->plainTextToken;
 
-        return response()->json([
-            'success' => true,
-            'token' => $newToken,
-        ]);
+        return $this->success(['token' => $newToken]);
     }
 
     /**

@@ -230,22 +230,18 @@ onUnmounted(() => {
 
     <!-- Capture options (initial state) -->
     <div v-else class="space-y-4">
-      <!-- Selfie illustration/guide -->
-      <div class="relative aspect-square max-w-xs mx-auto rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex flex-col items-center justify-center p-6">
-        <!-- Face placeholder icon -->
-        <svg class="w-20 h-20 text-gray-400 mb-2" fill="none" viewBox="0 0 80 80">
-          <circle cx="40" cy="40" r="38" stroke="currentColor" stroke-width="2" stroke-dasharray="6 4" />
-          <circle cx="40" cy="35" r="15" stroke="currentColor" stroke-width="2" />
-          <path d="M20 55c5-10 15-15 20-15s15 5 20 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-          <circle cx="33" cy="32" r="2" fill="currentColor" />
-          <circle cx="47" cy="32" r="2" fill="currentColor" />
-          <path d="M36 40c2 2 6 2 8 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      <!-- Simple selfie illustration -->
+      <div class="w-40 h-40 mx-auto rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center">
+        <svg class="w-20 h-20 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="8" r="4" />
+          <path d="M12 14c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z" />
         </svg>
-
-        <p class="text-gray-500 text-center text-sm">
-          Mira directamente a la cámara
-        </p>
       </div>
+
+      <!-- Instruction text -->
+      <p class="text-center text-gray-600 font-medium">
+        Mira directamente a la cámara
+      </p>
 
       <!-- Hint -->
       <p class="text-center text-sm text-gray-500">

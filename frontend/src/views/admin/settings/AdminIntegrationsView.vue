@@ -641,7 +641,7 @@ const loadIntegrations = async () => {
     isLoading.value = true
     error.value = null
     const response = await v2.staff.integration.list()
-    integrations.value = response.data ?? []
+    integrations.value = response.data?.integrations ?? []
   } catch (err: unknown) {
     error.value = getErrorMessage(err, 'Error al cargar integraciones')
     log.error('Error al cargar integraciones', { error: err })
@@ -654,8 +654,8 @@ const loadIntegrations = async () => {
 const loadOptions = async () => {
   try {
     const response = await v2.staff.integration.getOptions()
-    providers.value = response.providers
-    serviceTypes.value = response.service_types
+    providers.value = response.data?.providers ?? {}
+    serviceTypes.value = response.data?.service_types ?? {}
   } catch (err) {
     log.error('Error al cargar opciones', { error: err })
   }
@@ -746,8 +746,13 @@ const runTest = async () => {
   try {
     isTesting.value = true
     testResult.value = null
-    const result = await v2.staff.integration.test(testingIntegration.value.id, testForm.value)
-    testResult.value = result
+    const response = await v2.staff.integration.test(testingIntegration.value.id, testForm.value)
+    // Map response to expected test result format
+    testResult.value = {
+      success: response.success,
+      message: response.message ?? 'Test completado',
+      error: !response.success ? (response.message ?? 'Error desconocido') : undefined,
+    }
     await loadIntegrations() // Reload to show updated test status
   } catch (err: unknown) {
     testResult.value = {

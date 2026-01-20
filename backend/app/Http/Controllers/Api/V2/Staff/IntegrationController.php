@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V2\Staff;
 
+use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\StaffAccount;
 use App\Models\TenantApiConfig;
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\Validator;
  */
 class IntegrationController extends Controller
 {
+    use ApiResponses;
     public function __construct(
         protected KycServiceFactory $kycFactory,
         protected TwilioServiceFactory $twilioFactory
@@ -39,8 +41,8 @@ class IntegrationController extends Controller
             ->orderBy('service_type')
             ->get();
 
-        return response()->json([
-            'data' => $configs->map(fn($config) => $config->toApiArray()),
+        return $this->success([
+            'integrations' => $configs->map(fn($config) => $config->toApiArray()),
         ]);
     }
 
@@ -51,7 +53,7 @@ class IntegrationController extends Controller
      */
     public function options(): JsonResponse
     {
-        return response()->json([
+        return $this->success([
             'providers' => TenantApiConfig::PROVIDERS,
             'service_types' => TenantApiConfig::SERVICE_TYPES,
         ]);
@@ -86,10 +88,7 @@ class IntegrationController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'error' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
+            return $this->validationError('Error de validación', $validator->errors()->toArray());
         }
 
         // Check if config already exists
@@ -147,11 +146,9 @@ class IntegrationController extends Controller
         // Invalidate cache for this provider/service
         $this->clearIntegrationCache($tenant->id, $request->provider, $request->service_type);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Integración guardada correctamente',
-            'data' => $config->toApiArray(),
-        ]);
+        return $this->success([
+            'integration' => $config->toApiArray(),
+        ], 'Integración guardada correctamente');
     }
 
     /**
@@ -189,12 +186,7 @@ class IntegrationController extends Controller
         if (!empty($rules)) {
             $validator = Validator::make($request->all(), $rules);
             if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Datos requeridos',
-                    'error' => 'Se requiere número de teléfono para la prueba',
-                    'errors' => $validator->errors(),
-                ], 422);
+                return $this->validationError('Se requiere número de teléfono para la prueba', $validator->errors()->toArray());
             }
         }
 
@@ -214,19 +206,13 @@ class IntegrationController extends Controller
                 ]);
 
                 if ($result['success']) {
-                    return response()->json([
-                        'success' => true,
-                        'message' => 'Conexión exitosa - Token obtenido',
+                    return $this->success([
                         'details' => [
                             'token_preview' => $result['token_preview'] ?? null,
                         ],
-                    ]);
+                    ], 'Conexión exitosa - Token obtenido');
                 } else {
-                    return response()->json([
-                        'success' => false,
-                        'message' => $result['message'] ?? 'Error de autenticación',
-                        'error' => $result['error'] ?? 'No se pudo obtener token',
-                    ], 400);
+                    return $this->badRequest('AUTH_FAILED', $result['message'] ?? 'Error de autenticación');
                 }
             }
 
@@ -249,28 +235,18 @@ class IntegrationController extends Controller
                 ]);
 
                 if ($result['success']) {
-                    return response()->json([
-                        'success' => true,
-                        'message' => 'Mensaje enviado exitosamente',
+                    return $this->success([
                         'details' => [
                             'sid' => $result['sid'] ?? null,
                             'status' => $result['status'] ?? null,
                         ],
-                    ]);
+                    ], 'Mensaje enviado exitosamente');
                 } else {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Error al enviar mensaje',
-                        'error' => $result['error'] ?? 'No se pudo enviar',
-                    ], 400);
+                    return $this->badRequest('SEND_FAILED', $result['error'] ?? 'No se pudo enviar');
                 }
             }
 
-            return response()->json([
-                'success' => false,
-                'message' => 'No implementado',
-                'error' => 'Test not implemented for this provider/service type',
-            ], 501);
+            return $this->error('NOT_IMPLEMENTED', 'Test not implemented for this provider/service type', 501);
         } catch (\Exception $e) {
             $config->update([
                 'last_tested_at' => now(),
@@ -278,11 +254,7 @@ class IntegrationController extends Controller
                 'last_test_error' => $e->getMessage(),
             ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Error en la prueba',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->serverError('Error en la prueba: ' . $e->getMessage());
         }
     }
 
@@ -305,11 +277,9 @@ class IntegrationController extends Controller
             'is_active' => !$config->is_active,
         ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => $config->is_active ? 'Integración habilitada' : 'Integración deshabilitada',
-            'data' => $config->toApiArray(),
-        ]);
+        return $this->success([
+            'integration' => $config->toApiArray(),
+        ], $config->is_active ? 'Integración habilitada' : 'Integración deshabilitada');
     }
 
     /**
@@ -329,9 +299,6 @@ class IntegrationController extends Controller
 
         $config->delete();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Integración eliminada correctamente',
-        ]);
+        return $this->success(null, 'Integración eliminada correctamente');
     }
 }

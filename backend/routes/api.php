@@ -71,8 +71,10 @@ Route::middleware(['tenant'])->group(function () {
 
 // Broadcasting auth (for WebSocket channel authorization)
 Route::middleware(['tenant', 'auth:sanctum'])->post('/broadcasting/auth', function () {
+    /** @var \Illuminate\Contracts\Auth\Guard $auth */
+    $auth = auth();
     \Illuminate\Support\Facades\Log::info('Broadcasting auth request', [
-        'user_id' => auth()->id(),
+        'user_id' => $auth->id(),
         'channel_name' => request('channel_name'),
         'socket_id' => request('socket_id'),
     ]);
@@ -385,6 +387,24 @@ Route::middleware(['tenant', 'auth:sanctum', 'tenant.user', 'staff', 'metadata']
 
 use App\Http\Controllers\Api\V2\Staff\AuthController as StaffAuthController;
 use App\Http\Controllers\Api\V2\Applicant\AuthController as ApplicantAuthController;
+use App\Http\Controllers\Api\V2\Public\SimulatorController as V2SimulatorController;
+use App\Http\Controllers\Api\V2\Public\ConfigController as V2ConfigController;
+
+// =============================================
+// V2: PUBLIC CONFIG (no authentication required)
+// =============================================
+Route::middleware(['tenant', 'metadata'])->prefix('v2')->group(function () {
+    Route::get('/config', [V2ConfigController::class, 'index']);
+});
+
+// =============================================
+// V2: PUBLIC SIMULATOR (no authentication required)
+// =============================================
+Route::middleware(['tenant', 'metadata'])->prefix('v2/simulator')->group(function () {
+    Route::get('/products', [V2SimulatorController::class, 'products']);
+    Route::post('/calculate', [V2SimulatorController::class, 'calculate']);
+    Route::post('/amortization', [V2SimulatorController::class, 'amortization']);
+});
 
 // =============================================
 // V2: STAFF AUTHENTICATION (uses StaffAccount model)
@@ -441,6 +461,7 @@ require __DIR__ . '/api/company.php';
 use App\Http\Controllers\Api\V2\Applicant\ApplicationController as ApplicantAppController;
 use App\Http\Controllers\Api\V2\Applicant\DocumentController as ApplicantDocController;
 use App\Http\Controllers\Api\V2\Applicant\ProfileController as ApplicantProfileController;
+use App\Http\Controllers\Api\V2\Applicant\KycController as ApplicantKycController;
 
 Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
     ->prefix('v2/applicant')
@@ -467,7 +488,12 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
             Route::get('/employment', [ApplicantProfileController::class, 'getEmployment']);
             Route::put('/employment', [ApplicantProfileController::class, 'updateEmployment']);
 
-            // Bank account
+            // Bank accounts
+            Route::get('/bank-accounts', [ApplicantProfileController::class, 'listBankAccounts']);
+            Route::post('/bank-accounts', [ApplicantProfileController::class, 'storeBankAccount']);
+            Route::patch('/bank-accounts/{id}/primary', [ApplicantProfileController::class, 'setPrimaryBankAccount']);
+            Route::delete('/bank-accounts/{id}', [ApplicantProfileController::class, 'deleteBankAccount']);
+            // Legacy single bank-account endpoints
             Route::get('/bank-account', [ApplicantProfileController::class, 'getBankAccount']);
             Route::put('/bank-account', [ApplicantProfileController::class, 'updateBankAccount']);
             Route::post('/validate-clabe', [ApplicantProfileController::class, 'validateClabe']);
@@ -504,7 +530,67 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
         Route::get('/documents/missing', [ApplicantDocController::class, 'missing']);
         Route::get('/documents/{id}', [ApplicantDocController::class, 'show']);
         Route::get('/documents/{id}/download', [ApplicantDocController::class, 'download']);
+        Route::get('/documents/{id}/stream', [ApplicantDocController::class, 'stream']);
         Route::delete('/documents/{id}', [ApplicantDocController::class, 'destroy']);
+
+        // =============================================
+        // KYC - Identity Validation Services
+        // =============================================
+        Route::prefix('kyc')->group(function () {
+            // Get available services (no rate limit - read only)
+            Route::get('/services', [ApplicantKycController::class, 'services']);
+
+            // Connection test and token management (standard KYC rate limit)
+            Route::middleware('throttle:kyc')->group(function () {
+                Route::post('/test-connection', [ApplicantKycController::class, 'testConnection']);
+                Route::post('/refresh-token', [ApplicantKycController::class, 'refreshToken']);
+            });
+
+            // Document validation endpoints (standard KYC rate limit: 10/min)
+            Route::middleware('throttle:kyc')->group(function () {
+                // CURP validation and lookup
+                Route::post('/curp/validate', [ApplicantKycController::class, 'validateCurp']);
+                Route::post('/curp/get', [ApplicantKycController::class, 'getCurp']);
+
+                // RFC validation
+                Route::post('/rfc/validate', [ApplicantKycController::class, 'validateRfc']);
+
+                // INE/IFE validation with OCR
+                Route::post('/ine/validate', [ApplicantKycController::class, 'validateIne']);
+
+                // SPEI CEP validation
+                Route::post('/cep/validate', [ApplicantKycController::class, 'validateCep']);
+
+                // OFAC & UN sanctions block lists
+                Route::post('/ofac/check', [ApplicantKycController::class, 'checkOfac']);
+
+                // PLD Mexican blacklists (PGR, PGJ, PEPs, SAT 69/69B, etc.)
+                Route::post('/pld/check', [ApplicantKycController::class, 'checkPldBlacklists']);
+
+                // IMSS history
+                Route::post('/imss/history', [ApplicantKycController::class, 'getImssHistory']);
+
+                // Cédula Profesional
+                Route::post('/cedula/validate', [ApplicantKycController::class, 'validateCedula']);
+            });
+
+            // Biometric endpoints (stricter rate limit: 5/min - more expensive, sensitive)
+            Route::middleware('throttle:kyc-biometric')->group(function () {
+                // Biometric SDK token
+                Route::post('/biometric/token', [ApplicantKycController::class, 'getBiometricToken']);
+
+                // Face Match - compare selfie with INE photo
+                Route::post('/biometric/face-match', [ApplicantKycController::class, 'validateFaceMatch']);
+
+                // Liveness detection - verify real person (anti-spoofing)
+                Route::post('/biometric/liveness', [ApplicantKycController::class, 'validateLiveness']);
+            });
+
+            // Data Verifications - record and retrieve verified fields (no external API)
+            Route::post('/verifications', [ApplicantKycController::class, 'recordVerifications']);
+            Route::get('/verifications', [ApplicantKycController::class, 'getVerifications']);
+            Route::post('/verifications/check', [ApplicantKycController::class, 'checkFieldsVerified']);
+        });
     });
 
 // =============================================
@@ -632,6 +718,7 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff'])
         // Application Documents (nested under application)
         Route::get('/applications/{appId}/documents/{docId}/url', [StaffAppController::class, 'getDocumentUrl']);
         Route::get('/applications/{appId}/documents/{docId}/download', [StaffAppController::class, 'downloadDocument']);
+        Route::get('/applications/{appId}/documents/{docId}/history', [StaffAppController::class, 'getDocumentHistory']);
         Route::put('/applications/{appId}/documents/{docId}/approve', [StaffAppController::class, 'approveDocument'])
             ->middleware('permission:canReviewDocuments');
         Route::put('/applications/{appId}/documents/{docId}/reject', [StaffAppController::class, 'rejectDocument'])

@@ -33,6 +33,7 @@ export {
   formatHousingType,
   // Bank Account
   formatAccountType,
+  setAccountTypeOptions,
   // Payment
   formatFrequency,
   // Reference

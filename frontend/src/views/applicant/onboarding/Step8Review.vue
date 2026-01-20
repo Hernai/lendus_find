@@ -3,9 +3,10 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOnboardingStore, useApplicationStore, useAuthStore } from '@/stores'
 import { AppButton, AppSignaturePad } from '@/components/common'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
 import { type AxiosErrorResponse } from '@/types/api'
 import { logger } from '@/utils/logger'
+import { formatMoney, formatFrequency } from '@/utils/formatters'
 
 const log = logger.child('Step8Review')
 
@@ -38,20 +39,7 @@ const canSubmit = computed(() =>
   signature.value !== null
 )
 
-const formatMoney = (amount: number) => {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(amount)
-}
 
-const frequencyLabels: Record<string, string> = {
-  WEEKLY: 'semanal',
-  BIWEEKLY: 'quincenal',
-  MONTHLY: 'mensual'
-}
 
 const handleSubmit = async () => {
   if (!canSubmit.value) {
@@ -74,9 +62,10 @@ const handleSubmit = async () => {
 
   try {
     // 1. Save signature to applicant (required for hasSigned() validation)
-    await api.post('/applicant/signature', {
-      signature: signature.value
-    })
+    if (!signature.value) {
+      throw new Error('Firma requerida')
+    }
+    await v2.applicant.profile.saveSignature(signature.value)
     log.debug('Signature saved to applicant')
 
     // KYC verifications are now automatically recorded by the backend
@@ -165,7 +154,7 @@ const sections = computed(() => {
       items: [
         { label: 'Monto', value: simulation.value ? formatMoney(simulation.value.requested_amount) : '-' },
         { label: 'Plazo', value: simulation.value ? `${simulation.value.term_months} meses` : '-' },
-        { label: 'Pago', value: simulation.value ? `${formatMoney(simulation.value.periodic_payment)} ${frequencyLabels[simulation.value.payment_frequency]}` : '-' }
+        { label: 'Pago', value: simulation.value ? `${formatMoney(simulation.value.periodic_payment)} ${formatFrequency(simulation.value.payment_frequency)}` : '-' }
       ]
     }
   ]

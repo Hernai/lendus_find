@@ -32,6 +32,7 @@ import staffApplication from './application.staff.service'
 import applicantDocument from './document.applicant.service'
 import staffDocument from './document.staff.service'
 import applicantProfile from './profile.service'
+import applicantKyc from './kyc.applicant.service'
 import staffUser from './user.staff.service'
 import staffProduct from './product.staff.service'
 import staffConfig from './config.staff.service'
@@ -40,6 +41,8 @@ import staffTenant from './tenant.staff.service'
 import staffIntegration from './integration.staff.service'
 import person from './person.service'
 import company from './company.service'
+import simulator from './simulator.service'
+import publicConfig from './config.public.service'
 
 // =====================================================
 // Organized V2 API Namespace
@@ -63,6 +66,7 @@ export const v2 = {
     application: applicantApplication,
     document: applicantDocument,
     profile: applicantProfile,
+    kyc: applicantKyc,
   },
 
   /**
@@ -89,6 +93,16 @@ export const v2 = {
    * Company entity services (for Persona Moral)
    */
   company,
+
+  /**
+   * Public simulator services
+   */
+  simulator,
+
+  /**
+   * Public config service
+   */
+  config: publicConfig,
 }
 
 // =====================================================
@@ -103,6 +117,7 @@ export {
   applicantDocument,
   staffDocument,
   applicantProfile,
+  applicantKyc,
   staffUser,
   staffProduct,
   staffConfig,
@@ -111,6 +126,8 @@ export {
   staffIntegration,
   person,
   company,
+  simulator,
+  publicConfig,
 }
 
 // =====================================================

@@ -65,21 +65,27 @@ class ApplicantAuthService
         // Log the request
         $this->logOtpRequest($tenantId, $type, $identifier, $channel);
 
-        // In production, send OTP via Twilio/MessageBird
-        // For now, just return the code in dev mode
+        // Base response data
         $data = [
             'expires_in' => 600,
             'masked_target' => $this->maskIdentifier($type, $identifier),
         ];
 
-        // In development, include the code for testing
-        if (app()->environment('local', 'testing')) {
+        // In development/local mode, include the code for testing (not sent via SMS)
+        $isDevelopment = app()->environment('local', 'testing');
+        if ($isDevelopment) {
             $data['code'] = $otpRequest->code;
+            $data['dev_mode'] = true;
         }
+
+        // Determine the appropriate message
+        $message = $isDevelopment
+            ? '[DEV] Código generado (no enviado - modo desarrollo)'
+            : $this->getOtpSentMessage($channel);
 
         return [
             'success' => true,
-            'message' => $this->getOtpSentMessage($channel),
+            'message' => $message,
             'data' => $data,
         ];
     }
@@ -253,11 +259,11 @@ class ApplicantAuthService
      */
     public function setupPin(ApplicantAccount $account, string $pin): array
     {
-        // Validate PIN format (6 digits)
-        if (!preg_match('/^\d{6}$/', $pin)) {
+        // Validate PIN format (4 digits)
+        if (!preg_match('/^\d{4}$/', $pin)) {
             return [
                 'success' => false,
-                'message' => 'El PIN debe ser de 6 dígitos numéricos',
+                'message' => 'El PIN debe ser de 4 dígitos numéricos',
                 'error' => 'INVALID_PIN_FORMAT',
             ];
         }
@@ -310,11 +316,11 @@ class ApplicantAuthService
             ];
         }
 
-        // Validate new PIN
-        if (!preg_match('/^\d{6}$/', $newPin)) {
+        // Validate new PIN (4 digits)
+        if (!preg_match('/^\d{4}$/', $newPin)) {
             return [
                 'success' => false,
-                'message' => 'El nuevo PIN debe ser de 6 dígitos numéricos',
+                'message' => 'El nuevo PIN debe ser de 4 dígitos numéricos',
                 'error' => 'INVALID_PIN_FORMAT',
             ];
         }
@@ -473,6 +479,7 @@ class ApplicantAuthService
     {
         return [
             'id' => $account->id,
+            'tenant_id' => $account->tenant_id,
             'phone' => $account->primary_phone,
             'email' => $account->primary_email,
             'has_pin' => $account->hasPin(),
@@ -480,6 +487,9 @@ class ApplicantAuthService
             'onboarding_step' => $account->onboarding_step,
             'onboarding_completed' => $account->onboarding_completed,
             'preferences' => $account->preferences,
+            'person_id' => $account->person_id,
+            'created_at' => $account->created_at?->toIso8601String(),
+            'last_login_at' => $account->last_login_at?->toIso8601String(),
         ];
     }
 
@@ -520,18 +530,20 @@ class ApplicantAuthService
     }
 
     /**
-     * Check if PIN is too simple.
+     * Check if PIN is too simple (for 4-digit PINs).
      */
     private function isPinTooSimple(string $pin): bool
     {
-        // All same digits
-        if (preg_match('/^(\d)\1{5}$/', $pin)) {
+        $length = strlen($pin);
+
+        // All same digits (e.g., 1111, 0000)
+        if (preg_match('/^(\d)\1{' . ($length - 1) . '}$/', $pin)) {
             return true;
         }
 
-        // Sequential ascending
+        // Sequential ascending (e.g., 1234, 2345)
         $sequential = true;
-        for ($i = 1; $i < 6; $i++) {
+        for ($i = 1; $i < $length; $i++) {
             if (intval($pin[$i]) !== intval($pin[$i - 1]) + 1) {
                 $sequential = false;
                 break;
@@ -541,9 +553,9 @@ class ApplicantAuthService
             return true;
         }
 
-        // Sequential descending
+        // Sequential descending (e.g., 4321, 9876)
         $sequential = true;
-        for ($i = 1; $i < 6; $i++) {
+        for ($i = 1; $i < $length; $i++) {
             if (intval($pin[$i]) !== intval($pin[$i - 1]) - 1) {
                 $sequential = false;
                 break;

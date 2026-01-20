@@ -272,9 +272,9 @@ const fetchTenants = async () => {
 
     const response = await v2.staff.tenant.list(filters)
 
-    tenants.value = response.data as Tenant[]
-    totalPages.value = response.meta.last_page
-    totalItems.value = response.meta.total
+    tenants.value = (response.data?.tenants ?? []) as Tenant[]
+    totalPages.value = response.data?.meta.last_page ?? 1
+    totalItems.value = response.data?.meta.total ?? 0
   } catch (e) {
     log.error('Error al cargar tenants', { error: e })
     error.value = 'Error al cargar los tenants'
@@ -839,7 +839,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
             v-model="searchQuery"
             type="text"
             placeholder="Buscar por nombre, slug, RFC..."
-            class="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 focus:bg-white transition-colors"
+            class="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-50 focus:bg-white transition-colors"
           />
         </div>
 
@@ -1088,10 +1088,10 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                   placeholder="Lendus Demo"
                   @blur="!editingTenant && !form.slug && generateSlug()"
                   :class="[
-                    'w-full px-3 py-2 text-sm border rounded-lg transition-colors',
+                    'w-full px-3 py-2.5 text-sm border rounded-lg transition-colors',
                     formErrors.name
-                      ? 'border-red-300 bg-red-50 focus:border-red-400 focus:ring-1 focus:ring-red-400'
-                      : 'border-gray-200 bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400'
+                      ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-2 focus:ring-red-500'
+                      : 'border-gray-200 bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500'
                   ]"
                 />
                 <p v-if="formErrors.name" class="mt-1 text-xs text-red-600">{{ formErrors.name }}</p>
@@ -1104,10 +1104,10 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                     placeholder="demo"
                     :disabled="!!editingTenant"
                     :class="[
-                      'flex-1 px-3 py-2 text-sm border rounded-lg transition-colors',
+                      'flex-1 px-3 py-2.5 text-sm border rounded-lg transition-colors',
                       formErrors.slug
-                        ? 'border-red-300 bg-red-50 focus:border-red-400 focus:ring-1 focus:ring-red-400'
-                        : 'border-gray-200 bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400',
+                        ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-2 focus:ring-red-500'
+                        : 'border-gray-200 bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500',
                       editingTenant ? 'bg-gray-100 cursor-not-allowed' : ''
                     ]"
                   />
@@ -1122,7 +1122,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
               <input
                 v-model="form.legal_name"
                 placeholder="Empresa S.A. de C.V. SOFOM E.N.R."
-                class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400 transition-colors"
+                class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-colors"
               />
             </div>
 
@@ -1133,7 +1133,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                   v-model="form.rfc"
                   placeholder="ABC123456789"
                   maxlength="13"
-                  class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400 transition-colors uppercase"
+                  class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-colors uppercase"
                 />
               </div>
               <div>
@@ -1142,7 +1142,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                   v-model="form.phone"
                   placeholder="5555555555"
                   type="tel"
-                  class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400 transition-colors"
+                  class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-colors"
                 />
               </div>
             </div>
@@ -1155,10 +1155,10 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                   type="email"
                   placeholder="contacto@empresa.mx"
                   :class="[
-                    'w-full px-3 py-2 text-sm border rounded-lg transition-colors',
+                    'w-full px-3 py-2.5 text-sm border rounded-lg transition-colors',
                     formErrors.email
-                      ? 'border-red-300 bg-red-50 focus:border-red-400 focus:ring-1 focus:ring-red-400'
-                      : 'border-gray-200 bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400'
+                      ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-2 focus:ring-red-500'
+                      : 'border-gray-200 bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500'
                   ]"
                 />
                 <p v-if="formErrors.email" class="mt-1 text-xs text-red-600">{{ formErrors.email }}</p>
@@ -1168,7 +1168,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                 <input
                   v-model="form.website"
                   placeholder="https://empresa.mx"
-                  class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400 transition-colors"
+                  class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-colors"
                 />
               </div>
             </div>
@@ -1236,7 +1236,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
     <Teleport to="body">
       <div
         v-if="showConfigModal"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
         @click.self="showConfigModal = false"
       >
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
@@ -1517,7 +1517,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                       <select
                         v-model="apiFormConfig.provider"
                         :disabled="!!editingApiInConfig"
-                        class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
                         <option value="">Seleccionar proveedor...</option>
                         <option v-for="(label, key) in configData.available_providers" :key="key" :value="key">
@@ -1530,7 +1530,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                       <select
                         v-model="apiFormConfig.service_type"
                         :disabled="!!editingApiInConfig"
-                        class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
                       >
                         <option value="">Seleccionar servicio...</option>
                         <option v-for="(label, key) in configData.available_service_types" :key="key" :value="key">
@@ -1550,7 +1550,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                         <input
                           v-model="apiFormConfig.account_sid"
                           :placeholder="editingApiInConfig ? '(dejar vacío para mantener)' : 'ACxxxxxxxxx'"
-                          class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400 transition-colors"
+                          class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-colors"
                         />
                       </div>
                       <div v-if="getProviderFieldsConfig.includes('auth_token')">
@@ -1559,7 +1559,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                           v-model="apiFormConfig.auth_token"
                           type="password"
                           :placeholder="editingApiInConfig ? '(dejar vacío para mantener)' : ''"
-                          class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400 transition-colors"
+                          class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-colors"
                         />
                       </div>
                       <div v-if="getProviderFieldsConfig.includes('api_key')">
@@ -1569,7 +1569,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                             v-model="apiFormConfig.api_key"
                             :type="showApiKeyConfig ? 'text' : 'password'"
                             :placeholder="editingApiInConfig ? '(dejar vacío para mantener)' : ''"
-                            class="w-full px-3 py-2 pr-10 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400 transition-colors"
+                            class="w-full px-3 py-2 pr-10 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-colors"
                           />
                           <button
                             type="button"
@@ -1596,7 +1596,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                             v-model="apiFormConfig.api_secret"
                             :type="showApiSecretConfig ? 'text' : 'password'"
                             :placeholder="editingApiInConfig ? '(dejar vacío para mantener)' : ''"
-                            class="w-full px-3 py-2 pr-10 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400 transition-colors"
+                            class="w-full px-3 py-2 pr-10 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-colors"
                           />
                           <button
                             type="button"
@@ -1621,7 +1621,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                         <input
                           v-model="apiFormConfig.from_number"
                           placeholder="+521234567890"
-                          class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400 transition-colors"
+                          class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-colors"
                         />
                       </div>
                       <div v-if="getProviderFieldsConfig.includes('from_email')">
@@ -1630,7 +1630,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                           v-model="apiFormConfig.from_email"
                           type="email"
                           placeholder="noreply@empresa.mx"
-                          class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400 transition-colors"
+                          class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-colors"
                         />
                       </div>
                       <div v-if="getProviderFieldsConfig.includes('domain')">
@@ -1638,7 +1638,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                         <input
                           v-model="apiFormConfig.domain"
                           placeholder="mg.empresa.mx"
-                          class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-1 focus:ring-primary-400 transition-colors"
+                          class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-colors"
                         />
                       </div>
                     </div>
@@ -1731,10 +1731,10 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
     <Teleport to="body">
       <div
         v-if="showTestModal"
-        class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4"
+        class="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4"
         @click.self="closeTestModal"
       >
-        <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
           <!-- Header -->
           <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
             <div class="flex items-center gap-3">

@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore, useTenantStore } from '@/stores'
 import { AppButton, AppInput } from '@/components/common'
 import { logger } from '@/utils/logger'
+import { formatPhoneInput } from '@/utils/formatters'
 import type { OtpMethod } from '@/types'
 
 const log = logger.child('AuthPhoneView')
@@ -39,17 +40,9 @@ const isValidPhone = computed(() => {
   return digitCount.value === 10
 })
 
-const formatPhone = (value: string) => {
-  // Format as (55) 1234-5678
-  const cleaned = value.replace(/\D/g, '').slice(0, 10)
-  if (cleaned.length <= 2) return cleaned
-  if (cleaned.length <= 6) return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2)}`
-  return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`
-}
-
 const handlePhoneInput = (event: Event) => {
   const input = event.target as HTMLInputElement
-  const formatted = formatPhone(input.value)
+  const formatted = formatPhoneInput(input.value)
   phone.value = formatted
 
   // Force the input value to match the formatted value

@@ -2,6 +2,8 @@
 
 namespace App\Enums;
 
+use App\Enums\Traits\HasOptions;
+
 /**
  * Payment frequency enum.
  *
@@ -10,6 +12,8 @@ namespace App\Enums;
  */
 enum PaymentFrequency: string
 {
+    use HasOptions;
+
     case WEEKLY = 'WEEKLY';
     case BIWEEKLY = 'BIWEEKLY';
     case MONTHLY = 'MONTHLY';

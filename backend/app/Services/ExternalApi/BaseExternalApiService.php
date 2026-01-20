@@ -21,6 +21,8 @@ abstract class BaseExternalApiService
      * Context for API logging.
      */
     protected ?string $applicantId = null;
+    protected ?string $entityType = null;
+    protected ?string $entityId = null;
     protected ?string $applicationId = null;
     protected ?string $userId = null;
 
@@ -51,11 +53,24 @@ abstract class BaseExternalApiService
     }
 
     /**
-     * Set the applicant context for API logging.
+     * Set the applicant context for API logging (legacy).
+     * @deprecated Use forEntity() instead
      */
     public function forApplicant(?string $applicantId): static
     {
         $this->applicantId = $applicantId;
+        return $this;
+    }
+
+    /**
+     * Set the entity context for API logging (Person or Company).
+     */
+    public function forEntity($entity): static
+    {
+        if ($entity) {
+            $this->entityType = get_class($entity);
+            $this->entityId = $entity->id;
+        }
         return $this;
     }
 
@@ -211,6 +226,8 @@ abstract class BaseExternalApiService
             ApiLog::withoutGlobalScopes()->create([
                 'tenant_id' => $this->tenant->id,
                 'applicant_id' => $this->applicantId,
+                'entity_type' => $this->entityType,
+                'entity_id' => $this->entityId,
                 'application_id' => $this->applicationId,
                 'user_id' => $this->userId,
                 'provider' => strtoupper($this->provider),

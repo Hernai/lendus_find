@@ -7,6 +7,7 @@ import { v2, type V2Application } from '@/services/v2'
 import { useWebSocket } from '@/composables/useWebSocket'
 import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent } from '@/types/realtime'
 import { logger } from '@/utils/logger'
+import { formatMoney, formatDateShort } from '@/utils/formatters'
 
 const log = logger.child('Dashboard')
 const router = useRouter()
@@ -76,18 +77,20 @@ useWebSocket({
 const loadApplications = async () => {
   try {
     const response = await v2.applicant.application.list()
-    applications.value = response.data.map((app: V2Application) => ({
-      id: app.id,
-      folio: app.folio,
-      status: app.status,
-      product_name: app.product?.name || 'Crédito',
-      requested_amount: app.requested_amount,
-      term_months: app.term_months,
-      created_at: app.created_at,
-      updated_at: app.updated_at,
-      next_action: getNextAction(app.status),
-      pending_documents: app.pending_documents
-    }))
+    if (response.success && response.data) {
+      applications.value = response.data.applications.map((app: V2Application) => ({
+        id: app.id,
+        folio: app.folio || '',
+        status: app.status,
+        product_name: app.product?.name || 'Crédito',
+        requested_amount: app.requested_amount,
+        term_months: app.requested_term_months || app.term_months || 12,
+        created_at: app.created_at,
+        updated_at: app.updated_at,
+        next_action: getNextAction(app.status),
+        pending_documents: app.pending_documents
+      }))
+    }
   } catch (e) {
     log.error('Failed to load applications:', e)
     applications.value = []
@@ -148,21 +151,6 @@ const userName = computed(() => {
 
 const tenantName = computed(() => tenantStore.name || 'LendusFind')
 
-const formatMoney = (amount: number) => {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 0
-  }).format(amount)
-}
-
-const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('es-MX', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
-  })
-}
 
 const getStatusInfo = (status: string) => {
   const statusMap: Record<string, { label: string; color: string; bg: string; icon: string; description: string }> = {
@@ -455,7 +443,7 @@ const handleCancelApplication = async () => {
                   </div>
                   <div class="text-right text-sm text-gray-500">
                     <p>Creada</p>
-                    <p class="font-medium text-gray-700">{{ formatDate(app.created_at) }}</p>
+                    <p class="font-medium text-gray-700">{{ formatDateShort(app.created_at) }}</p>
                   </div>
                 </div>
 

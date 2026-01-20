@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeMount, onBeforeUnmount, watch } from 'vue'
 import { api } from '@/services/api'
 import { logger } from '@/utils/logger'
-import { useToast } from '@/composables'
+import { useToast, useDocumentTypes } from '@/composables'
+import { formatDateTime } from '@/utils/formatters'
+import { getDocStatusBadge } from '@/utils/admin-styles'
+import { useTenantStore } from '@/stores'
 import ConfirmModal from './ConfirmModal.vue'
 
 const log = logger.child('AdminDocumentGallery')
 const toast = useToast()
+const tenantStore = useTenantStore()
+const { loadDocumentTypes, getDocumentTypeLabel } = useDocumentTypes()
 
 interface Document {
   id: string
@@ -50,20 +55,14 @@ const emit = defineEmits<{
   'refresh': []
 }>()
 
-// Document type labels
-const docTypeLabels: Record<string, string> = {
-  'INE_FRONT': 'INE (Frente)',
-  'INE_BACK': 'INE (Reverso)',
-  'PROOF_ADDRESS': 'Comprobante de Domicilio',
-  'PROOF_INCOME': 'Comprobante de Ingresos',
-  'BANK_STATEMENT': 'Estado de Cuenta',
-  'RFC_CONSTANCIA': 'Constancia RFC',
-  'SIGNATURE': 'Firma',
-  'SELFIE': 'Foto de Perfil',
-  'PAYSLIP_1': 'Recibo de Nómina 1',
-  'PAYSLIP_2': 'Recibo de Nómina 2',
-  'PAYSLIP_3': 'Recibo de Nómina 3',
-  'VEHICLE_INVOICE': 'Factura del Vehículo'
+// Load document types from backend on mount
+onBeforeMount(async () => {
+  await loadDocumentTypes()
+})
+
+// Helper to get document type label from backend
+const getDocTypeLabel = (type: string): string => {
+  return getDocumentTypeLabel(type)
 }
 
 // State
@@ -91,16 +90,8 @@ const isRejecting = ref(false)
 const isUnapproving = ref(false)
 const isUnrejecting = ref(false)
 
-// Rejection reasons (values must match backend RejectionReason enum)
-const rejectionReasons = [
-  { value: 'ILLEGIBLE', label: 'Documento ilegible' },
-  { value: 'EXPIRED', label: 'Documento vencido' },
-  { value: 'WRONG_DOC', label: 'Documento incorrecto' },
-  { value: 'INCOMPLETE', label: 'Documento incompleto' },
-  { value: 'TAMPERED', label: 'Documento alterado' },
-  { value: 'MISMATCH', label: 'No coincide con datos' },
-  { value: 'OTHER', label: 'Otro' }
-]
+// Rejection reasons from backend enum via tenantStore.options
+const rejectionReasons = computed(() => tenantStore.options.documentRejectionReason ?? [])
 
 // Computed
 const missingDocuments = computed(() => {
@@ -109,17 +100,17 @@ const missingDocuments = computed(() => {
     .filter(type => !uploadedTypes.has(type))
     .map(type => ({
       type,
-      name: docTypeLabels[type] || type,
+      name: getDocTypeLabel(type),
       missing: true
     }))
 })
 
-const getDocTypeName = (type: string) => docTypeLabels[type] || type
+const getDocTypeName = (type: string) => getDocTypeLabel(type)
 
 // Get rejection reason label from value
 const getRejectionReasonLabel = (value?: string): string => {
   if (!value) return ''
-  const reason = rejectionReasons.find(r => r.value === value)
+  const reason = rejectionReasons.value.find(r => r.value === value)
   return reason?.label || value
 }
 
@@ -485,17 +476,8 @@ const viewerUnreject = () => {
   }
 }
 
-// Status badge colors
-const getStatusBadge = (status: string) => {
-  switch (status) {
-    case 'APPROVED':
-      return { label: 'Aprobado', class: 'bg-green-100 text-green-800' }
-    case 'REJECTED':
-      return { label: 'Rechazado', class: 'bg-red-100 text-red-800' }
-    default:
-      return { label: 'Pendiente', class: 'bg-yellow-100 text-yellow-800' }
-  }
-}
+// Status badge - using centralized function from admin-styles
+// Returns { bg, text, label } - use `${bg} ${text}` for class attribute
 
 // Load document review history
 const loadDocumentHistory = async (doc: Document) => {
@@ -516,18 +498,8 @@ const loadDocumentHistory = async (doc: Document) => {
   }
 }
 
-// Format date for history display
-const formatHistoryDate = (dateString: string | null): string => {
-  if (!dateString) return ''
-  const date = new Date(dateString)
-  return date.toLocaleDateString('es-MX', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
+// Alias for template usage
+const formatHistoryDate = formatDateTime
 </script>
 
 <template>
@@ -623,9 +595,9 @@ const formatHistoryDate = (dateString: string | null): string => {
             <!-- Status badge -->
             <span
               class="absolute top-2 right-2 px-2 py-0.5 rounded-full text-xs font-medium"
-              :class="getStatusBadge(doc.status).class"
+              :class="[getDocStatusBadge(doc.status).bg, getDocStatusBadge(doc.status).text]"
             >
-              {{ getStatusBadge(doc.status).label }}
+              {{ getDocStatusBadge(doc.status).label }}
             </span>
           </button>
 
@@ -769,9 +741,9 @@ const formatHistoryDate = (dateString: string | null): string => {
               <span
                 v-if="selectedDocument"
                 class="px-2 py-0.5 rounded-full text-xs font-medium"
-                :class="getStatusBadge(selectedDocument.status).class"
+                :class="[getDocStatusBadge(selectedDocument.status).bg, getDocStatusBadge(selectedDocument.status).text]"
               >
-                {{ getStatusBadge(selectedDocument.status).label }}
+                {{ getDocStatusBadge(selectedDocument.status).label }}
               </span>
             </div>
             <div class="flex items-center gap-2">

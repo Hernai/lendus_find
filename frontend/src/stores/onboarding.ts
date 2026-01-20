@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useProfileStore } from './profile'
 import { useApplicationStore } from './application'
 import { logger } from '@/utils/logger'
+import { isValidRfc } from '@/utils/validators'
 
 const onboardingLogger = logger.child('Onboarding')
 
@@ -300,14 +301,21 @@ export const useOnboardingStore = defineStore('onboarding', () => {
         // Populate step 4 from employment
         if (profile.employment) {
           const emp = profile.employment
-          const totalMonths = emp.seniority_months || 0
+          // Use explicit years/months if available, otherwise calculate from seniority_months
+          let seniorityYears = emp.years_employed ?? 0
+          let seniorityMonths = emp.months_employed ?? 0
+          // Fallback to calculated values if explicit values are 0 but seniority_months is set
+          if (seniorityYears === 0 && seniorityMonths === 0 && emp.seniority_months) {
+            seniorityYears = Math.floor(emp.seniority_months / 12)
+            seniorityMonths = emp.seniority_months % 12
+          }
           data.value.step4 = {
             employment_type: emp.employment_type || '',
             company_name: emp.company_name || '',
             job_title: emp.position || '',
             monthly_income: emp.monthly_income || 0,
-            seniority_years: Math.floor(totalMonths / 12),
-            seniority_months: totalMonths % 12,
+            seniority_years: seniorityYears,
+            seniority_months: seniorityMonths,
             company_phone: emp.work_phone || '',
             company_address: ''
           }
@@ -361,9 +369,16 @@ export const useOnboardingStore = defineStore('onboarding', () => {
 
         case 2: {
           const s2 = data.value.step2
+          const rfc = s2.rfc?.trim().toUpperCase()
+
+          // Validate RFC format before sending (must be valid 12-13 character RFC)
+          if (rfc && !isValidRfc(rfc)) {
+            throw new Error('El RFC debe tener 12-13 caracteres con formato válido (incluyendo homoclave)')
+          }
+
           const payload: Record<string, string | undefined> = {
-            curp: s2.curp || undefined,
-            rfc: s2.rfc || undefined
+            curp: s2.curp?.toUpperCase() || undefined,
+            rfc: rfc || undefined
           }
 
           if (s2.id_type === 'INE') {

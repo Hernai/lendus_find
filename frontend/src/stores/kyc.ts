@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { api } from '@/services/api'
-import { kycService } from '@/services'
+import { v2 } from '@/services/v2'
+import { kycService, recordVerifications as recordVerificationsApi } from '@/services'
 import { logger } from '@/utils/logger'
 
 const kycLogger = logger.child('KYC')
@@ -134,6 +134,14 @@ export const useKycStore = defineStore('kyc', () => {
     kyc: {}
   })
 
+  // Cache control for verifications
+  const verificationsLoadedFor = ref<string | null>(null)
+  const verificationsLoadingPromise = ref<Promise<boolean> | null>(null)
+
+  // Cache control for services check
+  const servicesChecked = ref(false)
+  const servicesCheckPromise = ref<Promise<boolean> | null>(null)
+
   // Captured images (base64)
   const ineFrontImage = ref<string | null>(null)
   const ineBackImage = ref<string | null>(null)
@@ -248,23 +256,42 @@ export const useKycStore = defineStore('kyc', () => {
   })
 
   // Actions
-  const checkServices = async () => {
-    isLoading.value = true
-    error.value = null
-
-    try {
-      const result = await kycService.checkServices()
-      isConfigured.value = result.configured
-      availableServices.value = result.services
-      birthStates.value = result.birthStates
+  const checkServices = async (force = false) => {
+    // Return cached result if already checked (unless forced)
+    if (!force && servicesChecked.value) {
+      kycLogger.debug('Services already checked, using cache')
       return isConfigured.value
-    } catch (err) {
-      kycLogger.error('Failed to check KYC services', err)
-      isConfigured.value = false
-      return false
-    } finally {
-      isLoading.value = false
     }
+
+    // If already checking, wait for the existing promise
+    if (servicesCheckPromise.value) {
+      kycLogger.debug('Services check already in progress, waiting')
+      return servicesCheckPromise.value
+    }
+
+    const checkPromise = (async () => {
+      isLoading.value = true
+      error.value = null
+
+      try {
+        const result = await kycService.checkServices()
+        isConfigured.value = result.configured
+        availableServices.value = result.services
+        birthStates.value = result.birthStates
+        servicesChecked.value = true
+        return isConfigured.value
+      } catch (err) {
+        kycLogger.error('Failed to check KYC services', err)
+        isConfigured.value = false
+        return false
+      } finally {
+        isLoading.value = false
+        servicesCheckPromise.value = null
+      }
+    })()
+
+    servicesCheckPromise.value = checkPromise
+    return checkPromise
   }
 
   /**
@@ -479,15 +506,17 @@ export const useKycStore = defineStore('kyc', () => {
     error.value = null
 
     try {
+      // V2 service returns: { rfc_data: {...}, valid: boolean }
       const response = await kycService.validateRfc(rfc.toUpperCase(), _applicantId)
 
-      const razonSocial = response.data.razon_social || response.data.mensaje || response.data.informacion_adicional
+      const rfcData = response.rfc_data
+      const razonSocial = rfcData.razon_social || rfcData.mensaje || rfcData.informacion_adicional
 
       const result = {
         valid: response.valid,
-        rfc: response.data.rfc,
+        rfc: rfcData.rfc,
         razon_social: razonSocial,
-        tipo_persona: response.data.tipo_persona_label
+        tipo_persona: rfcData.tipo_persona_label
       }
 
       rfcValidation.value = result
@@ -522,28 +551,24 @@ export const useKycStore = defineStore('kyc', () => {
     error.value = null
 
     try {
-      kycLogger.debug('Calling /kyc/ofac/check API...')
-      const response = await api.post<{
-        data: { found: boolean; matches: unknown[]; count: number; warning?: string }
-      }>('/kyc/ofac/check', {
-        name: nameToCheck,
-        similarity: 80 // Similarity threshold (0-100)
-      })
+      kycLogger.debug('Calling V2 OFAC check API...')
+      // V2 service returns unwrapped data directly (OfacCheckData)
+      const data = await v2.applicant.kyc.checkOfac(nameToCheck, 80)
 
-      kycLogger.debug('OFAC response:', response.data)
+      kycLogger.debug('OFAC response:', data)
 
       validations.value.ofac = {
-        found: response.data.data.found,
-        matches: response.data.data.matches as unknown[],
-        score: response.data.data.count || 0
+        found: data.found,
+        matches: data.matches as unknown[],
+        score: data.count || 0
       }
 
       // If there's a warning (service unavailable), treat as not found
-      if (response.data.data.warning) {
-        kycLogger.warn('OFAC warning', { warning: response.data.data.warning })
+      if (data.warning) {
+        kycLogger.warn('OFAC warning', { warning: data.warning })
       }
 
-      return !response.data.data.found
+      return !data.found
     } catch (err: unknown) {
       kycLogger.error('Failed to check OFAC', err)
       const errorResponse = err as { response?: { data?: { message?: string } } }
@@ -572,30 +597,29 @@ export const useKycStore = defineStore('kyc', () => {
     error.value = null
 
     try {
-      kycLogger.debug('Calling /kyc/pld/check API...')
-      const response = await api.post<{
-        data: { found: boolean; matches: unknown[]; count: number; warning?: string }
-      }>('/kyc/pld/check', {
-        name: nameToCheck,
-        curp: curpToCheck || undefined,
-        similarity: 90 // Higher threshold for PLD to reduce false positives
-      })
+      kycLogger.debug('Calling V2 PLD check API...')
+      // V2 service returns unwrapped data directly (PldCheckData)
+      const data = await v2.applicant.kyc.checkPldBlacklists(
+        nameToCheck,
+        curpToCheck || undefined,
+        90 // Higher threshold for PLD to reduce false positives
+      )
 
-      kycLogger.debug('PLD response:', response.data)
+      kycLogger.debug('PLD response:', data)
 
       // Store in ofac field for compatibility (or create a separate pld field if needed)
       validations.value.ofac = {
-        found: response.data.data.found,
-        matches: response.data.data.matches as unknown[],
-        score: response.data.data.count || 0
+        found: data.found,
+        matches: data.matches as unknown[],
+        score: data.count || 0
       }
 
       // If there's a warning (service unavailable), treat as not found
-      if (response.data.data.warning) {
-        kycLogger.warn('PLD warning', { warning: response.data.data.warning })
+      if (data.warning) {
+        kycLogger.warn('PLD warning', { warning: data.warning })
       }
 
-      return !response.data.data.found
+      return !data.found
     } catch (err: unknown) {
       kycLogger.error('Failed to check PLD blacklists', err)
       const errorResponse = err as { response?: { data?: { message?: string } } }
@@ -938,11 +962,17 @@ export const useKycStore = defineStore('kyc', () => {
 
     try {
       kycLogger.debug('Recording verifications:', verifications.length)
-      await api.post('/kyc/verifications', {
-        applicant_id: applicantId,
-        verifications
-      })
+      // Use V2 API - doesn't need applicant_id, uses authenticated user's applicant
+      // Map to V2 format (remove 'verified' field, ensure value is string)
+      await recordVerificationsApi(applicantId, verifications.map(v => ({
+        field: v.field,
+        value: String(v.value),
+        method: v.method,
+        metadata: v.metadata
+      })))
       kycLogger.debug('Verifications recorded successfully')
+      // Invalidate cache so next loadVerifications fetches fresh data
+      invalidateVerificationsCache()
       return true
     } catch (err) {
       kycLogger.error('Failed to record verifications', err)
@@ -983,17 +1013,16 @@ export const useKycStore = defineStore('kyc', () => {
     for (const [applicantId, verifications] of grouped) {
       try {
         kycLogger.debug(`Batch sending ${verifications.length} verifications for applicant`, { applicantId })
-        await api.post('/kyc/verifications', {
-          applicant_id: applicantId,
-          verifications: verifications.map(v => ({
-            field: v.field,
-            value: v.value,
-            method: v.method,
-            verified: v.verified,
-            metadata: v.metadata
-          }))
-        })
+        // Use V2 API - doesn't need applicant_id, uses authenticated user's applicant
+        await recordVerificationsApi(applicantId, verifications.map(v => ({
+          field: v.field,
+          value: String(v.value),
+          method: v.method,
+          metadata: v.metadata
+        })))
         kycLogger.debug(`Batch of ${verifications.length} verifications recorded successfully`)
+        // Invalidate cache so next loadVerifications fetches fresh data
+        invalidateVerificationsCache()
       } catch (err) {
         kycLogger.error('Failed to batch record verifications', err)
       }
@@ -1044,62 +1073,97 @@ export const useKycStore = defineStore('kyc', () => {
   /**
    * Load verified fields from backend for an applicant.
    * Reconstructs lockedData from the verified fields for KYC state restoration.
+   * Uses caching to avoid redundant API calls.
    */
-  const loadVerificationsFromBackend = async (applicantId: string): Promise<boolean> => {
+  const loadVerificationsFromBackend = async (applicantId: string, force = false): Promise<boolean> => {
     if (!applicantId) {
       kycLogger.warn('No applicant ID for loading verifications')
       return false
     }
 
-    try {
-      kycLogger.debug('Loading verifications for applicant:', applicantId)
-      const response = await kycService.loadVerifications(applicantId)
-
-      // Cast types since service uses compatible structure
-      verifiedFields.value = (response.verified_fields || {}) as Record<string, VerifiedField>
-      verificationsSummary.value = (response.summary || {
-        personal_data: {},
-        contact: {},
-        address: {},
-        kyc: {}
-      }) as typeof verificationsSummary.value
-
-      // Reconstruct lockedData from verified fields
-      const fields = verifiedFields.value
-      const hasCurp = !!fields.curp?.value
-
-      if (fields.curp?.value) lockedData.value.curp = fields.curp.value
-      if (fields.first_name?.value) lockedData.value.nombres = fields.first_name.value
-      if (fields.last_name_1?.value) lockedData.value.apellido_paterno = fields.last_name_1.value
-      if (fields.last_name_2?.value) lockedData.value.apellido_materno = fields.last_name_2.value
-      if (fields.birth_date?.value) lockedData.value.fecha_nacimiento = fields.birth_date.value
-      if (fields.gender?.value) {
-        const genderValue = fields.gender.value.toUpperCase()
-        lockedData.value.sexo = (genderValue === 'H' || genderValue === 'M') ? genderValue as 'H' | 'M' : null
-      }
-      if (fields.birth_state?.value) lockedData.value.entidad_nacimiento = fields.birth_state.value
-      if (fields.ine_clave?.value) lockedData.value.clave_elector = fields.ine_clave.value
-      if (fields.ine_ocr?.value) lockedData.value.ocr = fields.ine_ocr.value
-      if (fields.ine_folio?.value || fields.ine_cic?.value) {
-        lockedData.value.cic = fields.ine_folio?.value || fields.ine_cic?.value || null
-      }
-
-      // Reconstruct direccion_ine
-      if (fields.address_street?.value) lockedData.value.direccion_ine.calle = fields.address_street.value
-      if (fields.address_neighborhood?.value) lockedData.value.direccion_ine.colonia = fields.address_neighborhood.value
-      if (fields.address_postal_code?.value) lockedData.value.direccion_ine.cp = fields.address_postal_code.value
-      if (fields.address_city?.value) lockedData.value.direccion_ine.municipio = fields.address_city.value
-      if (fields.address_state?.value) lockedData.value.direccion_ine.estado = fields.address_state.value
-
-      const hasExistingCurp = !!lockedData.value.curp
-      verified.value = response.kyc_verified || hasCurp || hasExistingCurp
-
-      kycLogger.debug('Loaded verifications:', Object.keys(verifiedFields.value).length)
+    // Return cached result if already loaded for this applicant (unless forced)
+    if (!force && verificationsLoadedFor.value === applicantId) {
+      kycLogger.debug('Verifications already loaded for applicant, using cache:', applicantId)
       return true
-    } catch (err) {
-      kycLogger.error('Failed to load verifications', err)
-      return false
     }
+
+    // If already loading, wait for the existing promise
+    if (verificationsLoadingPromise.value) {
+      kycLogger.debug('Verifications already loading, waiting for existing request')
+      return verificationsLoadingPromise.value
+    }
+
+    const loadPromise = (async () => {
+      try {
+        kycLogger.debug('Loading verifications for applicant:', applicantId)
+        const response = await kycService.loadVerifications(applicantId)
+
+        // Cast types since service uses compatible structure
+        verifiedFields.value = (response.verified_fields || {}) as Record<string, VerifiedField>
+        verificationsSummary.value = (response.summary || {
+          personal_data: {},
+          contact: {},
+          address: {},
+          kyc: {}
+        }) as typeof verificationsSummary.value
+
+        // Reconstruct lockedData from verified fields
+        const fields = verifiedFields.value
+        reconstructLockedDataFromFields(fields)
+
+        const hasCurp = !!fields.curp?.value
+        const hasExistingCurp = !!lockedData.value.curp
+        verified.value = response.kyc_verified || hasCurp || hasExistingCurp
+
+        // Mark as loaded for this applicant
+        verificationsLoadedFor.value = applicantId
+
+        kycLogger.debug('Loaded verifications:', Object.keys(verifiedFields.value).length)
+        return true
+      } catch (err) {
+        kycLogger.error('Failed to load verifications', err)
+        return false
+      } finally {
+        verificationsLoadingPromise.value = null
+      }
+    })()
+
+    verificationsLoadingPromise.value = loadPromise
+    return loadPromise
+  }
+
+  /**
+   * Helper to reconstruct lockedData from verified fields.
+   * Extracts all verified field values and populates the lockedData state.
+   */
+  function reconstructLockedDataFromFields(fields: Record<string, VerifiedField>): void {
+    // Personal data
+    if (fields.curp?.value) lockedData.value.curp = fields.curp.value
+    if (fields.first_name?.value) lockedData.value.nombres = fields.first_name.value
+    if (fields.last_name_1?.value) lockedData.value.apellido_paterno = fields.last_name_1.value
+    if (fields.last_name_2?.value) lockedData.value.apellido_materno = fields.last_name_2.value
+    if (fields.birth_date?.value) lockedData.value.fecha_nacimiento = fields.birth_date.value
+    if (fields.birth_state?.value) lockedData.value.entidad_nacimiento = fields.birth_state.value
+
+    // Gender mapping
+    if (fields.gender?.value) {
+      const genderValue = fields.gender.value.toUpperCase()
+      lockedData.value.sexo = (genderValue === 'H' || genderValue === 'M') ? genderValue as 'H' | 'M' : null
+    }
+
+    // INE data
+    if (fields.ine_clave?.value) lockedData.value.clave_elector = fields.ine_clave.value
+    if (fields.ine_ocr?.value) lockedData.value.ocr = fields.ine_ocr.value
+    if (fields.ine_folio?.value || fields.ine_cic?.value) {
+      lockedData.value.cic = fields.ine_folio?.value || fields.ine_cic?.value || null
+    }
+
+    // Address from INE
+    if (fields.address_street?.value) lockedData.value.direccion_ine.calle = fields.address_street.value
+    if (fields.address_neighborhood?.value) lockedData.value.direccion_ine.colonia = fields.address_neighborhood.value
+    if (fields.address_postal_code?.value) lockedData.value.direccion_ine.cp = fields.address_postal_code.value
+    if (fields.address_city?.value) lockedData.value.direccion_ine.municipio = fields.address_city.value
+    if (fields.address_state?.value) lockedData.value.direccion_ine.estado = fields.address_state.value
   }
 
   /**
@@ -1156,10 +1220,10 @@ export const useKycStore = defineStore('kyc', () => {
         const frontFile = new File([frontBlob], 'ine_front.jpg', { type: 'image/jpeg' })
 
         const { v2 } = await import('@/services/v2')
+        // Note: Document is automatically associated with Person
+        // application_id is passed in metadata for reference
         await v2.applicant.document.upload(frontFile, 'INE_FRONT', {
-          documentable_type: 'Application',
-          documentable_id: applicationId,
-          metadata: kycMetadata
+          metadata: { ...kycMetadata, application_id: applicationId }
         })
         result.front = true
         kycLogger.debug('INE_FRONT uploaded with KYC metadata')
@@ -1173,10 +1237,10 @@ export const useKycStore = defineStore('kyc', () => {
         const backFile = new File([backBlob], 'ine_back.jpg', { type: 'image/jpeg' })
 
         const { v2 } = await import('@/services/v2')
+        // Note: Document is automatically associated with Person
+        // application_id is passed in metadata for reference
         await v2.applicant.document.upload(backFile, 'INE_BACK', {
-          documentable_type: 'Application',
-          documentable_id: applicationId,
-          metadata: kycMetadata
+          metadata: { ...kycMetadata, application_id: applicationId }
         })
         result.back = true
         kycLogger.debug('INE_BACK uploaded with KYC metadata')
@@ -1230,10 +1294,10 @@ export const useKycStore = defineStore('kyc', () => {
       const selfieFile = new File([selfieBlob], 'selfie.jpg', { type: 'image/jpeg' })
 
       const { v2 } = await import('@/services/v2')
+      // Note: Document is automatically associated with Person
+      // application_id is passed in metadata for reference
       await v2.applicant.document.upload(selfieFile, 'SELFIE', {
-        documentable_type: 'Application',
-        documentable_id: applicationId,
-        metadata: selfieMetadata
+        metadata: { ...selfieMetadata, application_id: applicationId }
       })
 
       kycLogger.debug('SELFIE uploaded with face match metadata')
@@ -1293,6 +1357,20 @@ export const useKycStore = defineStore('kyc', () => {
       address: {},
       kyc: {}
     }
+    // Reset cache
+    verificationsLoadedFor.value = null
+    verificationsLoadingPromise.value = null
+    servicesChecked.value = false
+    servicesCheckPromise.value = null
+  }
+
+  /**
+   * Invalidate verifications cache to force reload on next call.
+   * Call this after recording new verifications.
+   */
+  const invalidateVerificationsCache = () => {
+    verificationsLoadedFor.value = null
+    verificationsLoadingPromise.value = null
   }
 
   return {
@@ -1344,6 +1422,7 @@ export const useKycStore = defineStore('kyc', () => {
     recordVerifications,
     recordSingleVerification,
     loadVerifications: loadVerificationsFromBackend,
+    invalidateVerificationsCache,
     isFieldVerified,
     isFieldLocked,
     getFieldVerification,

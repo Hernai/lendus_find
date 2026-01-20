@@ -256,6 +256,17 @@ export function formatSeniority(months: number | null | undefined): string {
 // Gender Formatters
 // =====================================================
 
+// Cached options from backend
+let cachedGenderOptions: Array<{ value: string; label: string }> = []
+
+/**
+ * Set gender options from tenant config.
+ * @param options - Array of { value, label } from backend Gender enum
+ */
+export function setGenderOptions(options: Array<{ value: string; label: string }>): void {
+  cachedGenderOptions = options
+}
+
 /**
  * Format gender code to Spanish display text.
  * @param gender - Gender code (M/F/H)
@@ -263,25 +274,23 @@ export function formatSeniority(months: number | null | undefined): string {
  */
 export function formatGender(gender: string | null | undefined): string {
   if (!gender) return '-'
-  const genderMap: Record<string, string> = {
-    M: 'Masculino',
-    F: 'Femenino',
-    H: 'Masculino', // Alternative code
-  }
-  return genderMap[gender.toUpperCase()] || gender
+  const found = cachedGenderOptions.find(opt => opt.value === gender || opt.value === gender.toUpperCase())
+  return found?.label || gender
 }
 
 // =====================================================
 // Employment Type Formatters
 // =====================================================
 
-const employmentTypeLabels: Record<string, string> = {
-  EMPLOYED: 'Empleado',
-  SELF_EMPLOYED: 'Independiente',
-  BUSINESS_OWNER: 'Dueño de negocio',
-  RETIRED: 'Jubilado',
-  UNEMPLOYED: 'Desempleado',
-  STUDENT: 'Estudiante',
+// Cached options from backend
+let cachedEmploymentTypeOptions: Array<{ value: string; label: string }> = []
+
+/**
+ * Set employment type options from tenant config.
+ * @param options - Array of { value, label } from backend EmploymentType enum
+ */
+export function setEmploymentTypeOptions(options: Array<{ value: string; label: string }>): void {
+  cachedEmploymentTypeOptions = options
 }
 
 /**
@@ -291,7 +300,8 @@ const employmentTypeLabels: Record<string, string> = {
  */
 export function formatEmploymentType(type: string | null | undefined): string {
   if (!type) return '-'
-  return employmentTypeLabels[type] || type
+  const found = cachedEmploymentTypeOptions.find(opt => opt.value === type)
+  return found?.label || type
 }
 
 // =====================================================
@@ -319,10 +329,15 @@ export function formatContractType(type: string | null | undefined): string {
 // Payment Frequency Formatters
 // =====================================================
 
-const frequencyLabels: Record<string, string> = {
-  WEEKLY: 'semanal',
-  BIWEEKLY: 'quincenal',
-  MONTHLY: 'mensual',
+// Cached options from backend
+let cachedFrequencyOptions: Array<{ value: string; label: string }> = []
+
+/**
+ * Set payment frequency options from tenant config.
+ * @param options - Array of { value, label } from backend PaymentFrequency enum
+ */
+export function setFrequencyOptions(options: Array<{ value: string; label: string }>): void {
+  cachedFrequencyOptions = options
 }
 
 /**
@@ -332,7 +347,8 @@ const frequencyLabels: Record<string, string> = {
  */
 export function formatFrequency(frequency: string | null | undefined): string {
   if (!frequency) return '-'
-  return frequencyLabels[frequency] || frequency.toLowerCase()
+  const found = cachedFrequencyOptions.find(opt => opt.value === frequency)
+  return found?.label.toLowerCase() || frequency.toLowerCase()
 }
 
 // =====================================================
@@ -385,12 +401,15 @@ export function truncate(text: string | null | undefined, maxLength = 50): strin
 // Housing Type Formatters
 // =====================================================
 
-const housingTypeLabels: Record<string, string> = {
-  OWNED: 'Propia',
-  RENTED: 'Rentada',
-  FAMILY: 'Familiar',
-  MORTGAGED: 'Hipotecada',
-  EMPLOYER: 'Del empleador',
+// Cached options from backend
+let cachedHousingTypeOptions: Array<{ value: string; label: string }> = []
+
+/**
+ * Set housing type options from tenant config.
+ * @param options - Array of { value, label } from backend HousingType enum
+ */
+export function setHousingTypeOptions(options: Array<{ value: string; label: string }>): void {
+  cachedHousingTypeOptions = options
 }
 
 /**
@@ -400,20 +419,23 @@ const housingTypeLabels: Record<string, string> = {
  */
 export function formatHousingType(type: string | null | undefined): string {
   if (!type) return '-'
-  return housingTypeLabels[type] || type
+  const found = cachedHousingTypeOptions.find(opt => opt.value === type)
+  return found?.label || type
 }
 
 // =====================================================
 // Marital Status Formatters
 // =====================================================
 
-const maritalStatusLabels: Record<string, string> = {
-  SINGLE: 'Soltero(a)',
-  MARRIED: 'Casado(a)',
-  DIVORCED: 'Divorciado(a)',
-  WIDOWED: 'Viudo(a)',
-  FREE_UNION: 'Unión libre',
-  SEPARATED: 'Separado(a)',
+// Cached options from backend
+let cachedMaritalStatusOptions: Array<{ value: string; label: string }> = []
+
+/**
+ * Set marital status options from tenant config.
+ * @param options - Array of { value, label } from backend MaritalStatus enum
+ */
+export function setMaritalStatusOptions(options: Array<{ value: string; label: string }>): void {
+  cachedMaritalStatusOptions = options
 }
 
 /**
@@ -423,33 +445,75 @@ const maritalStatusLabels: Record<string, string> = {
  */
 export function formatMaritalStatus(status: string | null | undefined): string {
   if (!status) return '-'
-  return maritalStatusLabels[status] || status
+  const found = cachedMaritalStatusOptions.find(opt => opt.value === status)
+  return found?.label || status
 }
 
 // =====================================================
 // Bank Account Type Formatters
 // =====================================================
 
-const accountTypeLabels: Record<string, string> = {
-  DEBIT: 'Débito',
-  PAYROLL: 'Nómina',
-  SAVINGS: 'Ahorro',
-  CHECKING: 'Cheques',
-  // Legacy codes (V1 API)
-  DEBITO: 'Débito',
-  NOMINA: 'Nómina',
-  AHORRO: 'Ahorro',
-  CHEQUES: 'Cheques',
-  INVERSION: 'Inversión',
-  OTRO: 'Otro',
+// Cache for options loaded from backend
+let cachedAccountTypeOptions: Array<{ value: string; label: string }> = []
+
+/**
+ * Set account type options from tenant config.
+ * Call this after loading tenant config to enable proper formatting.
+ * @param options - Array of { value, label } from backend BankAccountType enum
+ */
+export function setAccountTypeOptions(options: Array<{ value: string; label: string }>): void {
+  cachedAccountTypeOptions = options
 }
 
 /**
  * Format bank account type code to Spanish display text.
+ * Uses options from backend BankAccountType enum when available.
  * @param type - Account type code
+ * @param options - Optional override for account type options
  * @returns Spanish account type string
  */
-export function formatAccountType(type: string | null | undefined): string {
+export function formatAccountType(
+  type: string | null | undefined,
+  options?: Array<{ value: string; label: string }>
+): string {
   if (!type) return '-'
-  return accountTypeLabels[type] || type
+
+  // Use provided options, cached options, or fall back to raw value
+  const optionsToUse = options || cachedAccountTypeOptions
+  const found = optionsToUse.find(opt => opt.value === type)
+  return found?.label || type
+}
+
+// =====================================================
+// Formatter Options Initializer
+// =====================================================
+
+interface FormatterOptions {
+  gender?: Array<{ value: string; label: string }>
+  employmentType?: Array<{ value: string; label: string }>
+  housingType?: Array<{ value: string; label: string }>
+  maritalStatus?: Array<{ value: string; label: string }>
+  paymentFrequency?: Array<{ value: string; label: string }>
+  bankAccountType?: Array<{ value: string; label: string }>
+}
+
+/**
+ * Initialize all formatter caches with options from tenant config.
+ * Call this once after loading tenant config to enable proper enum formatting.
+ *
+ * @example
+ * ```typescript
+ * // In tenant store after loading config:
+ * initializeFormatters(response.options)
+ * ```
+ *
+ * @param options - Options object from tenant config (camelCase keys)
+ */
+export function initializeFormatters(options: FormatterOptions): void {
+  if (options.gender) setGenderOptions(options.gender)
+  if (options.employmentType) setEmploymentTypeOptions(options.employmentType)
+  if (options.housingType) setHousingTypeOptions(options.housingType)
+  if (options.maritalStatus) setMaritalStatusOptions(options.maritalStatus)
+  if (options.paymentFrequency) setFrequencyOptions(options.paymentFrequency)
+  if (options.bankAccountType) setAccountTypeOptions(options.bankAccountType)
 }

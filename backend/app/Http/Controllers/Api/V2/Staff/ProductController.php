@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\V2\Staff;
 
+use App\Enums\DocumentType;
+use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
@@ -16,6 +18,7 @@ use Illuminate\Validation\Rule;
  */
 class ProductController extends Controller
 {
+    use ApiResponses;
     /**
      * List all products with optional filters.
      */
@@ -51,9 +54,8 @@ class ProductController extends Controller
         $perPage = min($request->input('per_page', 20), 100);
         $products = $query->withCount('applications')->paginate($perPage);
 
-        return response()->json([
-            'success' => true,
-            'data' => collect($products->items())->map(fn ($p) => $this->formatProduct($p)),
+        return $this->success([
+            'products' => collect($products->items())->map(fn ($p) => $this->formatProduct($p)),
             'meta' => [
                 'current_page' => $products->currentPage(),
                 'last_page' => $products->lastPage(),
@@ -92,18 +94,13 @@ class ProductController extends Controller
             'payment_frequencies.*' => 'string|in:WEEKLY,BIWEEKLY,MONTHLY',
             'term_config' => 'nullable|array',
             'required_documents' => 'nullable|array',
-            'required_documents.*' => 'string',
+            'required_documents.*' => ['string', Rule::in(DocumentType::values())],
             'eligibility_rules' => 'nullable|array',
             'is_active' => 'boolean',
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'error' => 'VALIDATION_ERROR',
-                'message' => 'Error de validación',
-                'errors' => $validator->errors(),
-            ], 422);
+            return $this->validationError('Error de validación', $validator->errors()->toArray());
         }
 
         $data = $validator->validated();
@@ -130,10 +127,9 @@ class ProductController extends Controller
         $product = Product::create($data);
         $product->loadCount('applications');
 
-        return response()->json([
-            'success' => true,
-            'data' => $this->formatProduct($product),
-        ], 201);
+        return $this->created([
+            'product' => $this->formatProduct($product),
+        ]);
     }
 
     /**
@@ -144,16 +140,11 @@ class ProductController extends Controller
         $product = Product::withCount('applications')->find($id);
 
         if (!$product) {
-            return response()->json([
-                'success' => false,
-                'error' => 'NOT_FOUND',
-                'message' => 'Producto no encontrado',
-            ], 404);
+            return $this->notFound('Producto no encontrado');
         }
 
-        return response()->json([
-            'success' => true,
-            'data' => $this->formatProduct($product),
+        return $this->success([
+            'product' => $this->formatProduct($product),
         ]);
     }
 
@@ -165,11 +156,7 @@ class ProductController extends Controller
         $product = Product::find($id);
 
         if (!$product) {
-            return response()->json([
-                'success' => false,
-                'error' => 'NOT_FOUND',
-                'message' => 'Producto no encontrado',
-            ], 404);
+            return $this->notFound('Producto no encontrado');
         }
 
         $validator = Validator::make($request->all(), [
@@ -197,18 +184,13 @@ class ProductController extends Controller
             'payment_frequencies.*' => 'string|in:WEEKLY,BIWEEKLY,MONTHLY',
             'term_config' => 'nullable|array',
             'required_documents' => 'nullable|array',
-            'required_documents.*' => 'string',
+            'required_documents.*' => ['string', Rule::in(DocumentType::values())],
             'eligibility_rules' => 'nullable|array',
             'is_active' => 'boolean',
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'error' => 'VALIDATION_ERROR',
-                'message' => 'Error de validación',
-                'errors' => $validator->errors(),
-            ], 422);
+            return $this->validationError('Error de validación', $validator->errors()->toArray());
         }
 
         $data = $validator->validated();
@@ -228,9 +210,8 @@ class ProductController extends Controller
         $product->update($data);
         $product->loadCount('applications');
 
-        return response()->json([
-            'success' => true,
-            'data' => $this->formatProduct($product),
+        return $this->success([
+            'product' => $this->formatProduct($product),
         ]);
     }
 
@@ -242,28 +223,17 @@ class ProductController extends Controller
         $product = Product::withCount('applications')->find($id);
 
         if (!$product) {
-            return response()->json([
-                'success' => false,
-                'error' => 'NOT_FOUND',
-                'message' => 'Producto no encontrado',
-            ], 404);
+            return $this->notFound('Producto no encontrado');
         }
 
         // Check if product has applications
         if ($product->applications_count > 0) {
-            return response()->json([
-                'success' => false,
-                'error' => 'HAS_APPLICATIONS',
-                'message' => 'No se puede eliminar un producto con solicitudes asociadas',
-            ], 422);
+            return $this->badRequest('HAS_APPLICATIONS', 'No se puede eliminar un producto con solicitudes asociadas');
         }
 
         $product->delete();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Producto eliminado correctamente',
-        ]);
+        return $this->success(null, 'Producto eliminado correctamente');
     }
 
     /**

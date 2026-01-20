@@ -6,7 +6,7 @@
  */
 
 import { api } from '../api'
-import type { V2ApiResponse, V2PaginatedResponse } from '@/types/v2'
+import type { V2ApiResponse } from '@/types/v2'
 
 // =====================================================
 // Types
@@ -88,6 +88,21 @@ export interface V2ProductFilters {
   page?: number
 }
 
+/**
+ * Response structure for paginated product list.
+ */
+export interface V2ProductListResponse {
+  products: V2Product[]
+  meta: {
+    current_page: number
+    from: number | null
+    last_page: number
+    per_page: number
+    to: number | null
+    total: number
+  }
+}
+
 const BASE_PATH = '/v2/staff/products'
 
 // =====================================================
@@ -97,32 +112,32 @@ const BASE_PATH = '/v2/staff/products'
 /**
  * List all products with optional filters.
  */
-export async function list(filters?: V2ProductFilters): Promise<V2PaginatedResponse<V2Product>> {
-  const response = await api.get<V2PaginatedResponse<V2Product>>(BASE_PATH, { params: filters })
+export async function list(filters?: V2ProductFilters): Promise<V2ApiResponse<V2ProductListResponse>> {
+  const response = await api.get<V2ApiResponse<V2ProductListResponse>>(BASE_PATH, { params: filters })
   return response.data
 }
 
 /**
  * Create a new product.
  */
-export async function create(payload: V2ProductCreatePayload): Promise<V2ApiResponse<V2Product>> {
-  const response = await api.post<V2ApiResponse<V2Product>>(BASE_PATH, payload)
+export async function create(payload: V2ProductCreatePayload): Promise<V2ApiResponse<{ product: V2Product }>> {
+  const response = await api.post<V2ApiResponse<{ product: V2Product }>>(BASE_PATH, payload)
   return response.data
 }
 
 /**
  * Get a specific product by ID.
  */
-export async function get(id: string): Promise<V2ApiResponse<V2Product>> {
-  const response = await api.get<V2ApiResponse<V2Product>>(`${BASE_PATH}/${id}`)
+export async function get(id: string): Promise<V2ApiResponse<{ product: V2Product }>> {
+  const response = await api.get<V2ApiResponse<{ product: V2Product }>>(`${BASE_PATH}/${id}`)
   return response.data
 }
 
 /**
  * Update a product.
  */
-export async function update(id: string, payload: V2ProductUpdatePayload): Promise<V2ApiResponse<V2Product>> {
-  const response = await api.put<V2ApiResponse<V2Product>>(`${BASE_PATH}/${id}`, payload)
+export async function update(id: string, payload: V2ProductUpdatePayload): Promise<V2ApiResponse<{ product: V2Product }>> {
+  const response = await api.put<V2ApiResponse<{ product: V2Product }>>(`${BASE_PATH}/${id}`, payload)
   return response.data
 }
 

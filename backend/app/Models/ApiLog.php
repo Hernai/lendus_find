@@ -14,6 +14,8 @@ class ApiLog extends Model
     protected $fillable = [
         'tenant_id',
         'applicant_id',
+        'entity_type',
+        'entity_id',
         'application_id',
         'user_id',
         'provider',
@@ -57,11 +59,19 @@ class ApiLog extends Model
     public const PROVIDER_SEPOMEX = 'SEPOMEX';
 
     /**
-     * Get the applicant associated with this log.
+     * Get the applicant associated with this log (legacy).
      */
     public function applicant(): BelongsTo
     {
         return $this->belongsTo(Applicant::class);
+    }
+
+    /**
+     * Get the entity (Person or Company) - polymorphic relationship.
+     */
+    public function entity(): \Illuminate\Database\Eloquent\Relations\MorphTo
+    {
+        return $this->morphTo();
     }
 
     /**
@@ -70,6 +80,15 @@ class ApiLog extends Model
     public function application(): BelongsTo
     {
         return $this->belongsTo(Application::class);
+    }
+
+    /**
+     * Scope to filter by entity (Person or Company).
+     */
+    public function scopeForEntity($query, $entity)
+    {
+        return $query->where('entity_type', get_class($entity))
+            ->where('entity_id', $entity->id);
     }
 
     /**

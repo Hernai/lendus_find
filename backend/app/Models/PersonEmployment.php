@@ -355,8 +355,8 @@ class PersonEmployment extends Model
         $start = $this->start_date;
         $end = $this->end_date ?? now();
 
-        $years = $start->diffInYears($end);
-        $months = $start->copy()->addYears($years)->diffInMonths($end);
+        $years = (int) $start->diffInYears($end);
+        $months = (int) $start->copy()->addYears($years)->diffInMonths($end);
 
         $this->update([
             'years_employed' => $years,

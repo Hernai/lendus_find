@@ -4,26 +4,29 @@ import { v2 } from '@/services/v2'
 import type { V2StaffUser } from '@/services/v2/user.staff.service'
 import { AppButton } from '@/components/common'
 import { useToast } from '@/composables'
+import { useTenantStore } from '@/stores'
 import { getErrorMessage, type AxiosErrorResponse } from '@/types/api'
 import { logger } from '@/utils/logger'
 import { formatDateOnly, formatTimeOnly, formatPhone, formatPhoneInput } from '@/utils/formatters'
+import { getRoleBadge } from '@/utils/admin-styles'
 
 const log = logger.child('AdminUsers')
 const toast = useToast()
+const tenantStore = useTenantStore()
 
 // Use V2 StaffUser type
 type User = V2StaffUser
 
-// Role labels in Spanish
-const roleLabels: Record<string, string> = {
-  SUPER_ADMIN: 'Super Admin',
-  ADMIN: 'Administrador',
-  ANALYST: 'Analista',
-  SUPERVISOR: 'Supervisor',
-  VIEWER: 'Visor'
-}
+// Role labels from backend enum
+const roleLabels = computed(() => {
+  const labels: Record<string, string> = {}
+  for (const opt of tenantStore.options.userType) {
+    labels[opt.value] = opt.label
+  }
+  return labels
+})
 
-const getRoleLabel = (role: string) => roleLabels[role] || role
+const getRoleLabel = (role: string) => roleLabels.value[role] || role
 
 // Filters
 const searchQuery = ref('')
@@ -114,19 +117,21 @@ const generatePassword = () => {
   showPassword.value = true // Show so user can see generated password
 }
 
-// Role options
-const roleFilterOptions = [
-  { value: '', label: 'Todos los roles' },
-  { value: 'SUPERVISOR', label: 'Supervisor' },
-  { value: 'ANALYST', label: 'Analista' },
-  { value: 'ADMIN', label: 'Administrador' }
-]
+// Role options from backend enum
+const roleFilterOptions = computed(() => {
+  // Filter to only staff roles (exclude APPLICANT)
+  const staffRoles = tenantStore.options.userType.filter(
+    opt => opt.value !== 'APPLICANT'
+  )
+  return [{ value: '', label: 'Todos los roles' }, ...staffRoles]
+})
 
-const roleOptions = [
-  { value: 'SUPERVISOR', label: 'Supervisor' },
-  { value: 'ANALYST', label: 'Analista' },
-  { value: 'ADMIN', label: 'Administrador' }
-]
+const roleOptions = computed(() => {
+  // Filter to only staff roles (exclude APPLICANT and SUPER_ADMIN which cannot be created)
+  return tenantStore.options.userType.filter(
+    opt => opt.value !== 'APPLICANT' && opt.value !== 'SUPER_ADMIN'
+  )
+})
 
 const activeFilterOptions = [
   { value: '', label: 'Todos' },
@@ -167,9 +172,9 @@ const fetchUsers = async () => {
 
     const response = await v2.staff.user.list(filters)
 
-    users.value = response.data
-    totalItems.value = response.meta.total
-    totalPages.value = response.meta.last_page
+    users.value = response.data?.users ?? []
+    totalItems.value = response.data?.meta.total ?? 0
+    totalPages.value = response.data?.meta.last_page ?? 1
   } catch (e) {
     log.error('Error al cargar usuarios', { error: e })
     error.value = 'Error al cargar los usuarios'
@@ -191,16 +196,6 @@ watch([roleFilter, searchQuery, activeFilter], () => {
 watch(currentPage, () => {
   fetchUsers()
 })
-
-const getRoleBadge = (type: string) => {
-  const badges: Record<string, { bg: string; text: string }> = {
-    SUPER_ADMIN: { bg: 'bg-purple-100', text: 'text-purple-800' },
-    ADMIN: { bg: 'bg-red-100', text: 'text-red-800' },
-    ANALYST: { bg: 'bg-blue-100', text: 'text-blue-800' },
-    SUPERVISOR: { bg: 'bg-green-100', text: 'text-green-800' }
-  }
-  return badges[type] || { bg: 'bg-gray-100', text: 'text-gray-800' }
-}
 
 // Modal methods
 const openCreateModal = () => {
@@ -527,7 +522,7 @@ const paginationRange = computed(() => {
               v-model="searchQuery"
               type="text"
               placeholder="Buscar por nombre o email..."
-              class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              class="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
           </div>
         </div>
@@ -536,7 +531,7 @@ const paginationRange = computed(() => {
         <div>
           <select
             v-model="roleFilter"
-            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            class="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           >
             <option v-for="opt in roleFilterOptions" :key="opt.value" :value="opt.value">
               {{ opt.label }}
@@ -548,7 +543,7 @@ const paginationRange = computed(() => {
         <div>
           <select
             v-model="activeFilter"
-            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            class="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
           >
             <option v-for="opt in activeFilterOptions" :key="opt.value" :value="opt.value">
               {{ opt.label }}
@@ -760,12 +755,13 @@ const paginationRange = computed(() => {
     </div>
 
     <!-- Create/Edit User Modal -->
-    <div
-      v-if="showUserModal"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      @click.self="showUserModal = false"
-    >
-      <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+    <Teleport to="body">
+      <div
+        v-if="showUserModal"
+        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+        @click.self="showUserModal = false"
+      >
+        <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
         <h3 class="text-lg font-semibold text-gray-900 mb-4">
           {{ editingUser ? 'Editar Usuario' : 'Crear Usuario' }}
         </h3>
@@ -778,60 +774,60 @@ const paginationRange = computed(() => {
 
           <!-- Name -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Nombre *</label>
             <input
               v-model="form.name"
               type="text"
-              class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              :class="formErrors.name ? 'border-red-300' : 'border-gray-300'"
+              class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+              :class="formErrors.name ? 'border-red-300' : 'border-gray-200'"
               placeholder="Nombre completo"
             />
-            <p v-if="formErrors.name" class="text-sm text-red-600 mt-1">{{ formErrors.name }}</p>
+            <p v-if="formErrors.name" class="mt-1 text-sm text-red-500">{{ formErrors.name }}</p>
           </div>
 
           <!-- Email -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Email *</label>
             <input
               v-model="form.email"
               type="email"
-              class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              :class="formErrors.email ? 'border-red-300' : 'border-gray-300'"
+              class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+              :class="formErrors.email ? 'border-red-300' : 'border-gray-200'"
               placeholder="correo@ejemplo.com"
             />
-            <p v-if="formErrors.email" class="text-sm text-red-600 mt-1">{{ formErrors.email }}</p>
+            <p v-if="formErrors.email" class="mt-1 text-sm text-red-500">{{ formErrors.email }}</p>
           </div>
 
           <!-- Phone -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Teléfono</label>
             <input
               :value="form.phone"
               type="tel"
               maxlength="15"
-              class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              :class="formErrors.phone ? 'border-red-300' : 'border-gray-300'"
+              class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+              :class="formErrors.phone ? 'border-red-300' : 'border-gray-200'"
               placeholder="(55) 1234-5678"
               @keydown="handlePhoneKeydown"
               @input="handlePhoneInput"
             />
-            <p class="text-xs text-gray-500 mt-1">10 dígitos</p>
-            <p v-if="formErrors.phone" class="text-sm text-red-600 mt-1">{{ formErrors.phone }}</p>
+            <p class="mt-1 text-xs text-gray-500">10 dígitos</p>
+            <p v-if="formErrors.phone" class="mt-1 text-sm text-red-500">{{ formErrors.phone }}</p>
           </div>
 
           <!-- Role -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Rol *</label>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Rol *</label>
             <select
               v-model="form.role"
-              class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              :class="formErrors.role ? 'border-red-300' : 'border-gray-300'"
+              class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+              :class="formErrors.role ? 'border-red-300' : 'border-gray-200'"
             >
               <option v-for="opt in roleOptions" :key="opt.value" :value="opt.value">
                 {{ opt.label }}
               </option>
             </select>
-            <p v-if="formErrors.role" class="text-sm text-red-600 mt-1">{{ formErrors.role }}</p>
+            <p v-if="formErrors.role" class="mt-1 text-sm text-red-500">{{ formErrors.role }}</p>
           </div>
 
           <!-- Password Section -->
@@ -878,8 +874,8 @@ const paginationRange = computed(() => {
                 <input
                   v-model="form.password"
                   :type="showPassword ? 'text' : 'password'"
-                  class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent pr-10"
-                  :class="formErrors.password ? 'border-red-300' : 'border-gray-300'"
+                  class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors pr-10"
+                  :class="formErrors.password ? 'border-red-300' : 'border-gray-200'"
                   placeholder="Mínimo 8 caracteres"
                 />
                 <button
@@ -920,15 +916,15 @@ const paginationRange = computed(() => {
 
               <!-- Confirm password -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Confirmar contraseña</label>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Confirmar contraseña</label>
                 <input
                   v-model="form.password_confirmation"
                   :type="showPassword ? 'text' : 'password'"
-                  class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  :class="formErrors.password_confirmation ? 'border-red-300' : 'border-gray-300'"
+                  class="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                  :class="formErrors.password_confirmation ? 'border-red-300' : 'border-gray-200'"
                   placeholder="Repetir contraseña"
                 />
-                <p v-if="formErrors.password_confirmation" class="text-sm text-red-600 mt-1">{{ formErrors.password_confirmation }}</p>
+                <p v-if="formErrors.password_confirmation" class="mt-1 text-sm text-red-500">{{ formErrors.password_confirmation }}</p>
               </div>
 
               <!-- Cancel change password (only when editing) -->
@@ -974,50 +970,53 @@ const paginationRange = computed(() => {
             </AppButton>
           </div>
         </form>
+        </div>
       </div>
-    </div>
+    </Teleport>
 
     <!-- Delete Confirmation Modal -->
-    <div
-      v-if="showDeleteModal && userToDelete"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      @click.self="showDeleteModal = false"
-    >
-      <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-        <div class="flex items-center gap-4 mb-4">
-          <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
+    <Teleport to="body">
+      <div
+        v-if="showDeleteModal && userToDelete"
+        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+        @click.self="showDeleteModal = false"
+      >
+        <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+          <div class="flex items-center gap-4 mb-4">
+            <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+              <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">Eliminar Usuario</h3>
+              <p class="text-sm text-gray-500">Esta acción no se puede deshacer</p>
+            </div>
           </div>
-          <div>
-            <h3 class="text-lg font-semibold text-gray-900">Eliminar Usuario</h3>
-            <p class="text-sm text-gray-500">Esta acción no se puede deshacer</p>
+
+          <p class="text-gray-700 mb-6">
+            ¿Estás seguro de que deseas eliminar al usuario <strong>{{ userToDelete.name }}</strong>?
+          </p>
+
+          <div class="flex gap-3">
+            <AppButton
+              variant="outline"
+              class="flex-1"
+              @click="showDeleteModal = false"
+            >
+              Cancelar
+            </AppButton>
+            <AppButton
+              variant="danger"
+              class="flex-1"
+              :loading="isDeleting"
+              @click="confirmDelete"
+            >
+              Eliminar
+            </AppButton>
           </div>
-        </div>
-
-        <p class="text-gray-700 mb-6">
-          ¿Estás seguro de que deseas eliminar al usuario <strong>{{ userToDelete.name }}</strong>?
-        </p>
-
-        <div class="flex gap-3">
-          <AppButton
-            variant="outline"
-            class="flex-1"
-            @click="showDeleteModal = false"
-          >
-            Cancelar
-          </AppButton>
-          <AppButton
-            variant="danger"
-            class="flex-1"
-            :loading="isDeleting"
-            @click="confirmDelete"
-          >
-            Eliminar
-          </AppButton>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>

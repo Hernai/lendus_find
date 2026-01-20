@@ -6,7 +6,7 @@
  */
 
 import { api } from '../api'
-import type { V2PaginatedResponse, V2ApiResponse } from '@/types/v2'
+import type { V2ApiResponse } from '@/types/v2'
 
 const BASE_PATH = '/v2/staff/tenants'
 
@@ -185,38 +185,54 @@ export interface V2TenantBrandingPayload {
 }
 
 // =====================================================
+// Response Types
+// =====================================================
+
+export interface V2TenantListResponse {
+  tenants: V2Tenant[]
+  meta: {
+    current_page: number
+    from: number | null
+    last_page: number
+    per_page: number
+    to: number | null
+    total: number
+  }
+}
+
+// =====================================================
 // API Functions
 // =====================================================
 
 /**
  * List tenants with filters and pagination.
  */
-export async function list(filters?: V2TenantFilters): Promise<V2PaginatedResponse<V2Tenant>> {
-  const response = await api.get<V2PaginatedResponse<V2Tenant>>(BASE_PATH, { params: filters })
+export async function list(filters?: V2TenantFilters): Promise<V2ApiResponse<V2TenantListResponse>> {
+  const response = await api.get<V2ApiResponse<V2TenantListResponse>>(BASE_PATH, { params: filters })
   return response.data
 }
 
 /**
  * Get a single tenant by ID.
  */
-export async function get(id: string): Promise<V2ApiResponse<V2TenantDetailed>> {
-  const response = await api.get<V2ApiResponse<V2TenantDetailed>>(`${BASE_PATH}/${id}`)
+export async function get(id: string): Promise<V2ApiResponse<{ tenant: V2TenantDetailed }>> {
+  const response = await api.get<V2ApiResponse<{ tenant: V2TenantDetailed }>>(`${BASE_PATH}/${id}`)
   return response.data
 }
 
 /**
  * Create a new tenant.
  */
-export async function create(payload: V2TenantCreatePayload): Promise<V2ApiResponse<V2TenantDetailed>> {
-  const response = await api.post<V2ApiResponse<V2TenantDetailed>>(BASE_PATH, payload)
+export async function create(payload: V2TenantCreatePayload): Promise<V2ApiResponse<{ tenant: V2TenantDetailed }>> {
+  const response = await api.post<V2ApiResponse<{ tenant: V2TenantDetailed }>>(BASE_PATH, payload)
   return response.data
 }
 
 /**
  * Update a tenant.
  */
-export async function update(id: string, payload: V2TenantUpdatePayload): Promise<V2ApiResponse<V2TenantDetailed>> {
-  const response = await api.put<V2ApiResponse<V2TenantDetailed>>(`${BASE_PATH}/${id}`, payload)
+export async function update(id: string, payload: V2TenantUpdatePayload): Promise<V2ApiResponse<{ tenant: V2TenantDetailed }>> {
+  const response = await api.put<V2ApiResponse<{ tenant: V2TenantDetailed }>>(`${BASE_PATH}/${id}`, payload)
   return response.data
 }
 
@@ -247,8 +263,8 @@ export async function getConfig(id: string): Promise<V2ApiResponse<V2TenantConfi
 /**
  * Update tenant branding.
  */
-export async function updateBranding(id: string, payload: V2TenantBrandingPayload): Promise<V2ApiResponse<V2TenantBranding>> {
-  const response = await api.put<V2ApiResponse<V2TenantBranding>>(`${BASE_PATH}/${id}/branding`, payload)
+export async function updateBranding(id: string, payload: V2TenantBrandingPayload): Promise<V2ApiResponse<{ branding: V2TenantBranding }>> {
+  const response = await api.put<V2ApiResponse<{ branding: V2TenantBranding }>>(`${BASE_PATH}/${id}/branding`, payload)
   return response.data
 }
 
@@ -271,24 +287,24 @@ export async function uploadLogo(id: string, file: File, field: 'logo_url' | 'lo
 /**
  * List API configurations for a tenant.
  */
-export async function listApiConfigs(id: string): Promise<{
-  data: V2TenantApiConfig[]
+export async function listApiConfigs(id: string): Promise<V2ApiResponse<{
+  api_configs: V2TenantApiConfig[]
   available_providers: Record<string, string>
   available_service_types: Record<string, string>
-}> {
-  const response = await api.get<{
-    data: V2TenantApiConfig[]
+}>> {
+  const response = await api.get<V2ApiResponse<{
+    api_configs: V2TenantApiConfig[]
     available_providers: Record<string, string>
     available_service_types: Record<string, string>
-  }>(`${BASE_PATH}/${id}/api-configs`)
+  }>>(`${BASE_PATH}/${id}/api-configs`)
   return response.data
 }
 
 /**
  * Create or update an API configuration for a tenant.
  */
-export async function saveApiConfig(id: string, payload: V2TenantApiConfigPayload): Promise<V2ApiResponse<V2TenantApiConfig>> {
-  const response = await api.post<V2ApiResponse<V2TenantApiConfig>>(`${BASE_PATH}/${id}/api-configs`, payload)
+export async function saveApiConfig(id: string, payload: V2TenantApiConfigPayload): Promise<V2ApiResponse<{ api_config: V2TenantApiConfig }>> {
+  const response = await api.post<V2ApiResponse<{ api_config: V2TenantApiConfig }>>(`${BASE_PATH}/${id}/api-configs`, payload)
   return response.data
 }
 
@@ -307,8 +323,8 @@ export async function testApiConfig(
   tenantId: string,
   configId: string,
   payload?: { test_phone?: string; test_email?: string }
-): Promise<V2ApiResponse<V2TenantApiConfig & { success: boolean; message: string }>> {
-  const response = await api.post<V2ApiResponse<V2TenantApiConfig & { success: boolean; message: string }>>(
+): Promise<V2ApiResponse<{ api_config: V2TenantApiConfig }>> {
+  const response = await api.post<V2ApiResponse<{ api_config: V2TenantApiConfig }>>(
     `${BASE_PATH}/${tenantId}/api-configs/${configId}/test`,
     payload
   )

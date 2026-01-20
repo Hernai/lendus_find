@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onBeforeMount, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { AppButton } from '@/components/common'
 import { v2, type V2Application, type V2Document } from '@/services/v2'
+import { useDocumentTypes } from '@/composables'
 import { logger } from '@/utils/logger'
 
 const log = logger.child('DocumentsUpload')
+
+const { loadDocumentTypes, getDocumentTypeLabel } = useDocumentTypes()
 
 interface PendingDocument {
   type: string
@@ -48,23 +51,14 @@ const documents = ref<DocumentItem[]>([])
 const documentToDelete = ref<DocumentItem | null>(null)
 const showDeleteModal = ref(false)
 
-// Helper to get human-readable document label
+// Helper to get human-readable document label (uses backend types)
 const getDocumentLabel = (type: string): string => {
-  const labels: Record<string, string> = {
-    'INE_FRONT': 'INE (Frente)',
-    'INE_BACK': 'INE (Reverso)',
-    'PROOF_ADDRESS': 'Comprobante de domicilio',
-    'PROOF_INCOME': 'Comprobante de ingresos',
-    'BANK_STATEMENT': 'Estado de cuenta bancario',
-    'RFC_CONSTANCIA': 'Constancia de situación fiscal',
-    'SIGNATURE': 'Firma',
-    'PAYSLIP_1': 'Recibo de nómina 1',
-    'PAYSLIP_2': 'Recibo de nómina 2',
-    'PAYSLIP_3': 'Recibo de nómina 3',
-    'VEHICLE_INVOICE': 'Factura del vehículo',
-  }
-  return labels[type] || type
+  return getDocumentTypeLabel(type)
 }
+
+onBeforeMount(async () => {
+  await loadDocumentTypes()
+})
 
 onMounted(async () => {
   await loadApplication()
@@ -83,7 +77,7 @@ const loadApplication = async () => {
 
     application.value = {
       id: data.id,
-      folio: data.folio,
+      folio: data.folio || '',
       status: data.status,
       pending_documents: data.pending_documents,
       documents: data.documents,
@@ -164,12 +158,13 @@ const uploadDocument = async (doc: DocumentItem) => {
   doc.uploadError = undefined
 
   try {
+    // Note: Document is automatically associated with Person
+    // application_id is passed in metadata for reference
     const response = await v2.applicant.document.upload(doc.file, doc.type, {
-      documentable_type: 'Application',
-      documentable_id: applicationId,
+      metadata: { application_id: applicationId }
     })
     doc.uploaded = true
-    doc.existingDoc = response.data
+    doc.existingDoc = response.data?.document
     // Mantener el label original (tipo de documento), no sobrescribir con el nombre del archivo
     doc.description = 'Documento cargado'
   } catch (e: unknown) {

@@ -2,7 +2,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore, useTenantStore, useProfileStore, useApplicantStore } from '@/stores'
-import type { BankAccount } from '@/types/applicant'
 import BankAccountCard from '@/components/BankAccountCard.vue'
 import AddBankAccountModal from '@/components/AddBankAccountModal.vue'
 import { v2 } from '@/services/v2'
@@ -23,11 +22,10 @@ const router = useRouter()
 const authStore = useAuthStore()
 const tenantStore = useTenantStore()
 const profileStore = useProfileStore()
-// Keep applicantStore for bank accounts and photo operations (not yet in V2 profile)
+// Keep applicantStore for bank account CRUD and photo operations
 const applicantStore = useApplicantStore()
 
 const isLoading = ref(true)
-const bankAccounts = ref<BankAccount[]>([])
 const showAddBankModal = ref(false)
 const profilePhotoUrl = ref<string | null>(null)
 const profilePhotoVerified = ref(false)
@@ -38,6 +36,9 @@ const activeApplicationId = ref<string | null>(null)
 const showPhotoViewer = ref(false)
 
 const profile = computed(() => profileStore.profile)
+
+// Get bank accounts from profile (already loaded with profile, no separate API call needed)
+const bankAccounts = computed(() => profileStore.bankAccounts)
 
 const userName = computed(() => {
   const pd = profile.value?.personal_data
@@ -63,43 +64,48 @@ const getGenderLabel = (gender: string | null | undefined) => {
 
 const getMaritalStatusLabel = (status: string | null | undefined) => {
   if (!status) return '-'
-  const option = tenantStore.options.marital_status.find(o => o.value === status)
+  const option = tenantStore.options.maritalStatus.find(o => o.value === status)
   return option?.label || formatMaritalStatus(status)
 }
 
 const getEmploymentTypeLabel = (type: string | null | undefined) => {
   if (!type) return '-'
-  const option = tenantStore.options.employment_type.find(o => o.value === type)
+  const option = tenantStore.options.employmentType.find(o => o.value === type)
   return option?.label || formatEmploymentType(type)
 }
 
 const getHousingTypeLabel = (type: string | null | undefined) => {
   if (!type) return '-'
-  const option = tenantStore.options.housing_type.find(o => o.value === type)
+  const option = tenantStore.options.housingType.find(o => o.value === type)
   return option?.label || formatHousingType(type)
 }
 
-// Load data
-const loadBankAccounts = async () => {
-  try {
-    bankAccounts.value = await applicantStore.loadBankAccounts()
-  } catch (e) {
-    log.error('Failed to load bank accounts:', e)
-    bankAccounts.value = []
-  }
+const formatResidenceTime = (years: number | null | undefined, months: number | null | undefined) => {
+  const y = years ?? 0
+  const m = months ?? 0
+  if (y === 0 && m === 0) return '-'
+  const parts = []
+  if (y > 0) parts.push(`${y} ${y === 1 ? 'año' : 'años'}`)
+  if (m > 0) parts.push(`${m} ${m === 1 ? 'mes' : 'meses'}`)
+  return parts.join(', ')
 }
 
+// Load application and photo
 const loadApplicationAndPhoto = async () => {
   try {
     const response = await v2.applicant.application.list()
-    const firstApp = response.data[0]
-    if (firstApp) {
-      // Get the most recent application
-      activeApplicationId.value = firstApp.id
-      // Try to load the profile photo
-      const result = await applicantStore.getProfilePhotoUrl(activeApplicationId.value)
-      profilePhotoUrl.value = result.url
-      profilePhotoVerified.value = result.isVerified
+    if (response.success && response.data) {
+      const firstApp = response.data.applications[0]
+      if (firstApp) {
+        // Get the most recent application
+        activeApplicationId.value = firstApp.id
+        // Try to load the profile photo
+        if (activeApplicationId.value) {
+          const result = await applicantStore.getProfilePhotoUrl(activeApplicationId.value)
+          profilePhotoUrl.value = result.url
+          profilePhotoVerified.value = result.isVerified
+        }
+      }
     }
   } catch (e) {
     log.error('Failed to load application/photo:', e)
@@ -108,11 +114,9 @@ const loadApplicationAndPhoto = async () => {
 
 onMounted(async () => {
   await tenantStore.loadConfig()
+  // Profile now includes bank_accounts array, no separate API call needed
   await profileStore.loadProfile()
-  await Promise.all([
-    loadBankAccounts(),
-    loadApplicationAndPhoto()
-  ])
+  await loadApplicationAndPhoto()
   isLoading.value = false
 })
 
@@ -193,11 +197,16 @@ const handlePhotoSelect = async (event: Event) => {
   }
 }
 
-// Bank account actions
+// Bank account actions - reload profile to get updated bank_accounts
+const reloadBankAccounts = async () => {
+  profileStore.invalidateProfileCache()
+  await profileStore.loadProfile(true)
+}
+
 const setPrimaryAccount = async (accountId: string) => {
   try {
     await applicantStore.setPrimaryBankAccount(accountId)
-    await loadBankAccounts()
+    await reloadBankAccounts()
   } catch (e) {
     log.error('Failed to set primary:', e)
   }
@@ -206,7 +215,7 @@ const setPrimaryAccount = async (accountId: string) => {
 const deleteAccount = async (accountId: string) => {
   try {
     await applicantStore.deleteBankAccount(accountId)
-    await loadBankAccounts()
+    await reloadBankAccounts()
   } catch (e) {
     log.error('Failed to delete account:', e)
   }
@@ -214,7 +223,7 @@ const deleteAccount = async (accountId: string) => {
 
 const onAccountSaved = async () => {
   showAddBankModal.value = false
-  await loadBankAccounts()
+  await reloadBankAccounts()
 }
 
 const goBack = () => {
@@ -397,9 +406,13 @@ const handleLogout = async () => {
             <p class="text-gray-500">
               {{ profile.address.municipality || profile.address.city }}, {{ profile.address.state }}
             </p>
-            <div v-if="profile.address.housing_type" class="mt-3 pt-3 border-t border-gray-100">
-              <span class="text-gray-500">Tipo de vivienda:</span>
-              <span class="ml-2 text-gray-900 font-medium">{{ getHousingTypeLabel(profile.address.housing_type) }}</span>
+            <div v-if="profile.address.housing_type" class="mt-3 pt-3 border-t border-gray-100 flex justify-between">
+              <span class="text-gray-500">Tipo de vivienda</span>
+              <span class="text-gray-900 font-medium">{{ getHousingTypeLabel(profile.address.housing_type) }}</span>
+            </div>
+            <div v-if="profile.address.years_at_address != null || profile.address.months_at_address != null" class="flex justify-between" :class="profile.address.housing_type ? 'mt-2' : 'mt-3 pt-3 border-t border-gray-100'">
+              <span class="text-gray-500">Tiempo de residencia</span>
+              <span class="text-gray-900 font-medium">{{ formatResidenceTime(profile.address.years_at_address, profile.address.months_at_address) }}</span>
             </div>
           </div>
           <p v-else class="text-gray-500 text-sm">Sin dirección registrada</p>

@@ -465,7 +465,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
             <select
               :value="branding.font_family"
               @change="updateField('font_family', ($event.target as HTMLSelectElement).value)"
-              class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-2 focus:ring-primary-100 transition-all cursor-pointer"
+              class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-all cursor-pointer"
               :style="{ fontFamily: branding.font_family }"
             >
               <option v-for="font in suggestedFonts" :key="font" :value="font" :style="{ fontFamily: font }">
@@ -480,7 +480,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
               <select
                 :value="branding.border_radius"
                 @change="updateField('border_radius', ($event.target as HTMLSelectElement).value)"
-                class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-2 focus:ring-primary-100 transition-all cursor-pointer"
+                class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-all cursor-pointer"
               >
                 <option value="0">Cuadrado</option>
                 <option value="4px">Sutil (4px)</option>
@@ -494,7 +494,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
               <select
                 :value="branding.button_style"
                 @change="updateField('button_style', ($event.target as HTMLSelectElement).value)"
-                class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-400 focus:ring-2 focus:ring-primary-100 transition-all cursor-pointer"
+                class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-all cursor-pointer"
               >
                 <option value="rounded">Redondo</option>
                 <option value="pill">Pill</option>

@@ -3,12 +3,13 @@ import { onMounted, computed } from 'vue'
 import { useOnboardingStore, useTenantStore } from '@/stores'
 import { useStepForm, rules } from '@/composables'
 import { AppButton, AppInput, AppSelect } from '@/components/common'
+import { formatPhoneInput } from '@/utils/formatters'
 
 const onboardingStore = useOnboardingStore()
 const tenantStore = useTenantStore()
 
 // Get employment type options from backend
-const employmentTypeOptions = computed(() => tenantStore.options.employment_type)
+const employmentTypeOptions = computed(() => tenantStore.options.employmentType)
 
 // Define form using composable - eliminates 80+ lines of boilerplate
 const { form, errors, submitError, handleSubmit, prevStep, isSaving, init } = useStepForm({
@@ -71,6 +72,12 @@ const showCompanyDetails = computed(() => form.employment_type === 'EMPLOYEE')
 const showBusinessDetails = computed(() =>
   ['SELF_EMPLOYED', 'BUSINESS_OWNER'].includes(form.employment_type)
 )
+
+// Handle phone input (format as user types)
+const handlePhoneInput = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  form.company_phone = formatPhoneInput(target.value)
+}
 </script>
 
 <template>
@@ -113,13 +120,23 @@ const showBusinessDetails = computed(() =>
             required
           />
 
-          <AppInput
-            v-model="form.company_phone"
-            type="tel"
-            label="Teléfono de trabajo (opcional)"
-            placeholder="55 1234 5678"
-            :maxlength="12"
-          />
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              Teléfono de trabajo (opcional)
+            </label>
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">+52</span>
+              <input
+                :value="form.company_phone"
+                type="tel"
+                inputmode="numeric"
+                placeholder="55 1234 5678"
+                maxlength="12"
+                class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 focus:outline-none"
+                @input="handlePhoneInput"
+              >
+            </div>
+          </div>
 
           <div class="grid grid-cols-2 gap-3">
             <div>

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V2\Applicant;
 
+use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\ApplicantAccount;
 use App\Models\DocumentV2;
@@ -9,6 +10,7 @@ use App\Services\DocumentV2Service;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Applicant Document Controller (v2).
@@ -18,6 +20,7 @@ use Illuminate\Support\Facades\Storage;
  */
 class DocumentController extends Controller
 {
+    use ApiResponses;
     public function __construct(
         private DocumentV2Service $service
     ) {}
@@ -33,16 +36,13 @@ class DocumentController extends Controller
         $account = $request->user();
 
         if (!$account->person) {
-            return response()->json([
-                'error' => 'PROFILE_INCOMPLETE',
-                'message' => 'Debes completar tu perfil antes de ver documentos.',
-            ], 400);
+            return $this->badRequest('PROFILE_INCOMPLETE', 'Debes completar tu perfil antes de ver documentos.');
         }
 
         $type = $request->query('type');
         $documents = $this->service->getDocumentsFor($account->person, $type);
 
-        return response()->json([
+        return $this->success([
             'documents' => $documents->map(fn($doc) => $this->formatDocument($doc)),
         ]);
     }
@@ -54,6 +54,15 @@ class DocumentController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        // Parse metadata JSON string if sent from FormData
+        if ($request->has('metadata') && is_string($request->input('metadata'))) {
+            $metadataString = $request->input('metadata');
+            $parsedMetadata = json_decode($metadataString, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $request->merge(['metadata' => $parsedMetadata]);
+            }
+        }
+
         $validated = $request->validate([
             'type' => 'required|string|in:' . implode(',', DocumentV2::validTypes()),
             'file' => 'required|file|mimes:jpg,jpeg,png,pdf|max:10240', // 10MB
@@ -66,10 +75,7 @@ class DocumentController extends Controller
         $person = $account->person;
 
         if (!$person) {
-            return response()->json([
-                'error' => 'PROFILE_INCOMPLETE',
-                'message' => 'Debes completar tu perfil antes de subir documentos.',
-            ], 400);
+            return $this->badRequest('PROFILE_INCOMPLETE', 'Debes completar tu perfil antes de subir documentos.');
         }
 
         // Determine documentable entity
@@ -82,10 +88,7 @@ class DocumentController extends Controller
                 ->first();
 
             if (!$identification) {
-                return response()->json([
-                    'error' => 'IDENTIFICATION_NOT_FOUND',
-                    'message' => 'Identificación no encontrada.',
-                ], 404);
+                return $this->notFound('Identificación no encontrada.');
             }
 
             $documentable = $identification;
@@ -100,15 +103,11 @@ class DocumentController extends Controller
                 $validated['metadata'] ?? []
             );
 
-            return response()->json([
-                'message' => 'Documento subido exitosamente.',
+            return $this->created([
                 'document' => $this->formatDocument($document),
-            ], 201);
+            ], 'Documento subido exitosamente.');
         } catch (\InvalidArgumentException $e) {
-            return response()->json([
-                'error' => 'UPLOAD_FAILED',
-                'message' => $e->getMessage(),
-            ], 400);
+            return $this->badRequest('UPLOAD_FAILED', $e->getMessage());
         }
     }
 
@@ -125,13 +124,10 @@ class DocumentController extends Controller
         $document = $this->getApplicantDocument($account, $id);
 
         if (!$document) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Documento no encontrado.',
-            ], 404);
+            return $this->notFound('Documento no encontrado.');
         }
 
-        return response()->json([
+        return $this->success([
             'document' => $this->formatDocumentDetail($document),
         ]);
     }
@@ -149,21 +145,68 @@ class DocumentController extends Controller
         $document = $this->getApplicantDocument($account, $id);
 
         if (!$document) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Documento no encontrado.',
-            ], 404);
+            return $this->notFound('Documento no encontrado.');
         }
 
         // Generate signed URL for secure download
-        $url = Storage::disk($document->storage_disk ?? 'local')
-            ->temporaryUrl($document->file_path, now()->addMinutes(15));
+        /** @var \Illuminate\Contracts\Filesystem\Filesystem&\Illuminate\Filesystem\FilesystemAdapter $disk */
+        $disk = Storage::disk($document->storage_disk ?? 'local');
 
-        return response()->json([
+        // Check if disk supports temporary URLs (S3, MinIO, etc.)
+        if (method_exists($disk, 'temporaryUrl')) {
+            $url = $disk->temporaryUrl($document->file_path, now()->addMinutes(15));
+        } else {
+            // Fallback: return regular URL for local disk
+            $url = $disk->url($document->file_path);
+        }
+
+        return $this->success([
             'url' => $url,
             'expires_at' => now()->addMinutes(15)->toIso8601String(),
             'filename' => $document->original_filename,
         ]);
+    }
+
+    /**
+     * Stream document content directly (no external URL).
+     *
+     * GET /v2/applicant/documents/{id}/stream
+     */
+    public function stream(Request $request, string $id): StreamedResponse|JsonResponse
+    {
+        /** @var ApplicantAccount $account */
+        $account = $request->user();
+
+        $document = $this->getApplicantDocument($account, $id);
+
+        if (!$document) {
+            return $this->notFound('Documento no encontrado.');
+        }
+
+        $disk = Storage::disk($document->storage_disk ?? 'local');
+
+        if (!$disk->exists($document->file_path)) {
+            return $this->notFound('Archivo no encontrado.');
+        }
+
+        $mimeType = $document->mime_type ?? 'application/octet-stream';
+        $filename = $document->original_filename ?? 'document';
+
+        return response()->stream(
+            function () use ($disk, $document) {
+                $stream = $disk->readStream($document->file_path);
+                if ($stream) {
+                    fpassthru($stream);
+                    fclose($stream);
+                }
+            },
+            200,
+            [
+                'Content-Type' => $mimeType,
+                'Content-Disposition' => 'inline; filename="' . $filename . '"',
+                'Cache-Control' => 'private, max-age=3600',
+            ]
+        );
     }
 
     /**
@@ -179,25 +222,17 @@ class DocumentController extends Controller
         $document = $this->getApplicantDocument($account, $id);
 
         if (!$document) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Documento no encontrado.',
-            ], 404);
+            return $this->notFound('Documento no encontrado.');
         }
 
         // Only allow deletion of pending or rejected documents
         if ($document->isApproved()) {
-            return response()->json([
-                'error' => 'NOT_DELETABLE',
-                'message' => 'No puedes eliminar documentos aprobados.',
-            ], 400);
+            return $this->badRequest('NOT_DELETABLE', 'No puedes eliminar documentos aprobados.');
         }
 
         $this->service->delete($document, $account->id);
 
-        return response()->json([
-            'message' => 'Documento eliminado exitosamente.',
-        ]);
+        return $this->success(null, 'Documento eliminado exitosamente.');
     }
 
     /**
@@ -211,15 +246,12 @@ class DocumentController extends Controller
         $account = $request->user();
 
         if (!$account->person) {
-            return response()->json([
-                'error' => 'PROFILE_INCOMPLETE',
-                'message' => 'Debes completar tu perfil.',
-            ], 400);
+            return $this->badRequest('PROFILE_INCOMPLETE', 'Debes completar tu perfil.');
         }
 
         $rejected = $this->service->getRejectedForReupload($account->person);
 
-        return response()->json([
+        return $this->success([
             'documents' => $rejected->map(fn($doc) => [
                 'id' => $doc->id,
                 'type' => $doc->type,
@@ -243,10 +275,7 @@ class DocumentController extends Controller
         $account = $request->user();
 
         if (!$account->person) {
-            return response()->json([
-                'error' => 'PROFILE_INCOMPLETE',
-                'message' => 'Debes completar tu perfil.',
-            ], 400);
+            return $this->badRequest('PROFILE_INCOMPLETE', 'Debes completar tu perfil.');
         }
 
         // Get required docs from product or use default identity docs
@@ -269,7 +298,7 @@ class DocumentController extends Controller
 
         $missing = $this->service->getMissingRequired($account->person, $requiredTypes);
 
-        return response()->json([
+        return $this->success([
             'missing_types' => $missing,
             'missing_labels' => collect($missing)->map(fn($type) => [
                 'type' => $type,
@@ -286,7 +315,7 @@ class DocumentController extends Controller
      */
     public function types(): JsonResponse
     {
-        return response()->json([
+        return $this->success([
             'types' => DocumentV2::typeLabels(),
             'categories' => DocumentV2::categories(),
         ]);

@@ -231,6 +231,7 @@ export const STORAGE_KEYS = {
   AUTH_TOKEN: 'auth_token',
   REFRESH_TOKEN: 'refresh_token',
   CURRENT_USER_ID: 'current_user_id',
+  CURRENT_USER_TYPE: 'current_user_type', // 'staff' | 'applicant'
   CURRENT_TENANT_ID: 'current_tenant_id',
   CURRENT_TENANT_SLUG: 'current_tenant_slug',
   CURRENT_APPLICATION_ID: 'current_application_id',

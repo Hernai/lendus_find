@@ -4,6 +4,7 @@ import { useTenantStore, useApplicationStore } from '@/stores'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import SimulatorCard from '@/components/simulator/SimulatorCard.vue'
+import { formatMoney } from '@/utils/formatters'
 import type { Product } from '@/types'
 
 const tenantStore = useTenantStore()
@@ -26,14 +27,6 @@ const goBack = () => {
   applicationStore.setSelectedProduct(null)
 }
 
-const formatMoney = (amount: number) => {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(amount)
-}
 
 const getProductIcon = (icon: string) => {
   const icons: Record<string, string> = {

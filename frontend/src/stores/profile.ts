@@ -40,6 +40,10 @@ export const useProfileStore = defineStore('profile', () => {
   const isSaving = ref(false)
   const error = ref<string | null>(null)
 
+  // Cache control
+  const profileLoaded = ref(false)
+  const profileLoadPromise = ref<Promise<V2Profile | null> | null>(null)
+
   // =====================================================
   // Getters
   // =====================================================
@@ -49,6 +53,7 @@ export const useProfileStore = defineStore('profile', () => {
   const address = computed(() => profile.value?.address ?? null)
   const employment = computed(() => profile.value?.employment ?? null)
   const bankAccount = computed(() => profile.value?.bank_account ?? null)
+  const bankAccounts = computed(() => profile.value?.bank_accounts ?? [])
   const references = computed(() => profile.value?.references ?? [])
 
   const fullName = computed(() => profile.value?.personal_data.full_name ?? '')
@@ -76,24 +81,50 @@ export const useProfileStore = defineStore('profile', () => {
   // Actions - Profile Loading
   // =====================================================
 
-  async function loadProfile(): Promise<V2Profile | null> {
-    isLoading.value = true
-    error.value = null
-
-    try {
-      const response = await profileService.getProfile()
-      if (response.success && response.data) {
-        profile.value = response.data
-        return response.data
-      }
-      error.value = response.message ?? 'Error al cargar el perfil'
-      return null
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Error desconocido'
-      return null
-    } finally {
-      isLoading.value = false
+  async function loadProfile(force = false): Promise<V2Profile | null> {
+    // Return cached result if already loaded (unless forced)
+    if (!force && profileLoaded.value && profile.value) {
+      return profile.value
     }
+
+    // If already loading, wait for the existing promise
+    if (profileLoadPromise.value) {
+      return profileLoadPromise.value
+    }
+
+    const loadPromise = (async () => {
+      isLoading.value = true
+      error.value = null
+
+      try {
+        const response = await profileService.getProfile()
+        if (response.success && response.data) {
+          profile.value = response.data
+          profileLoaded.value = true
+          return response.data
+        }
+        error.value = response.message ?? 'Error al cargar el perfil'
+        return null
+      } catch (e) {
+        error.value = e instanceof Error ? e.message : 'Error desconocido'
+        return null
+      } finally {
+        isLoading.value = false
+        profileLoadPromise.value = null
+      }
+    })()
+
+    profileLoadPromise.value = loadPromise
+    return loadPromise
+  }
+
+  /**
+   * Invalidate profile cache to force reload on next call.
+   * Call this after updating profile data.
+   */
+  function invalidateProfileCache(): void {
+    profileLoaded.value = false
+    profileLoadPromise.value = null
   }
 
   async function loadSummary(): Promise<V2ProfileSummary | null> {
@@ -472,6 +503,9 @@ export const useProfileStore = defineStore('profile', () => {
     error.value = null
     isLoading.value = false
     isSaving.value = false
+    // Reset cache
+    profileLoaded.value = false
+    profileLoadPromise.value = null
   }
 
   // =====================================================
@@ -492,6 +526,7 @@ export const useProfileStore = defineStore('profile', () => {
     address,
     employment,
     bankAccount,
+    bankAccounts,
     references,
     fullName,
     profileCompleteness,
@@ -509,6 +544,7 @@ export const useProfileStore = defineStore('profile', () => {
     // Actions
     loadProfile,
     loadSummary,
+    invalidateProfileCache,
     updatePersonalData,
     updateIdentifications,
     getAddress,

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { formatMoney } from '@/utils/formatters'
+
 interface LoanData {
   requested_amount: number
   monthly_payment: number
@@ -9,15 +11,6 @@ interface LoanData {
 defineProps<{
   loan: LoanData
 }>()
-
-const formatMoney = (amount: number) => {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
 </script>
 
 <template>

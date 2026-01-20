@@ -9,6 +9,7 @@ import { useProfileStore } from '@/stores/profile'
 import { getEcho, type EchoInstance } from '@/plugins/echo'
 import type { DataCorrectionSubmittedEvent } from '@/types/realtime'
 import { logger } from '@/utils/logger'
+import { formatMoney, formatDateTime } from '@/utils/formatters'
 
 const log = logger.child('DataCorrections')
 const router = useRouter()
@@ -196,7 +197,7 @@ const fieldLabels: Record<string, string> = {
 }
 
 // Employment type options from backend
-const employmentTypes = computed(() => tenantStore.options.employment_type)
+const employmentTypes = computed(() => tenantStore.options.employmentType)
 
 onMounted(async () => {
   await loadCorrections()
@@ -387,25 +388,6 @@ const submitSectionCorrection = async (sectionId: string) => {
   }
 }
 
-const formatDate = (dateString: string): string => {
-  if (!dateString) return ''
-  const date = new Date(dateString)
-  return date.toLocaleDateString('es-MX', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
-const formatCurrency = (value: number): string => {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 0
-  }).format(value)
-}
 
 const goBack = () => {
   router.push('/dashboard')
@@ -443,9 +425,10 @@ const handleDocumentUpload = async (doc: RejectedDocument, event: Event) => {
   doc.uploadError = undefined
 
   try {
+    // Note: Document is automatically associated with Person
+    // application_id is passed in metadata for reference
     await v2.applicant.document.upload(file, doc.type, {
-      documentable_type: 'Application',
-      documentable_id: doc.application_id,
+      metadata: { application_id: doc.application_id }
     })
     doc.uploadSuccess = true
     successMessage.value = `${doc.type_label} subido correctamente`
@@ -656,7 +639,7 @@ onMounted(() => {
                 <div class="flex items-start justify-between mb-2">
                   <span class="font-medium text-gray-900">{{ entry.field_label }}</span>
                   <div class="text-right">
-                    <span class="text-xs text-gray-500 block">{{ formatDate(entry.corrected_at) }}</span>
+                    <span class="text-xs text-gray-500 block">{{ formatDateTime(entry.corrected_at) }}</span>
                     <span v-if="entry.corrected_by" class="text-xs text-gray-400">por {{ entry.corrected_by.name }}</span>
                   </div>
                 </div>
@@ -745,7 +728,7 @@ onMounted(() => {
                     <div class="flex-1">
                       <p class="text-sm font-medium text-red-800">{{ field.field_label }}</p>
                       <p class="text-sm text-red-700">{{ field.rejection_reason }}</p>
-                      <p class="text-xs text-red-500 mt-1">Rechazado {{ formatDate(field.rejected_at) }}</p>
+                      <p class="text-xs text-red-500 mt-1">Rechazado {{ formatDateTime(field.rejected_at) }}</p>
                     </div>
                   </div>
                 </div>
@@ -855,7 +838,7 @@ onMounted(() => {
                       <div class="grid grid-cols-2 gap-3">
                         <div>
                           <p class="text-xs text-gray-500">{{ fieldLabels.monthly_income }}</p>
-                          <p class="text-sm font-medium text-gray-900">{{ formatCurrency(formData.empleo.monthly_income) }}</p>
+                          <p class="text-sm font-medium text-gray-900">{{ formatMoney(formData.empleo.monthly_income) }}</p>
                         </div>
                         <div>
                           <p class="text-xs text-gray-500">{{ fieldLabels.seniority_months }}</p>
@@ -1195,7 +1178,7 @@ onMounted(() => {
                     <div class="flex-1">
                       <p class="text-sm font-medium text-red-800">Motivo del rechazo</p>
                       <p class="text-sm text-red-700">{{ doc.rejection_reason }}</p>
-                      <p class="text-xs text-red-500 mt-1">Rechazado {{ formatDate(doc.rejected_at) }}</p>
+                      <p class="text-xs text-red-500 mt-1">Rechazado {{ formatDateTime(doc.rejected_at) }}</p>
                     </div>
                   </div>
                 </div>
@@ -1271,7 +1254,7 @@ onMounted(() => {
                 <div class="flex items-start justify-between mb-2">
                   <span class="font-medium text-gray-900">{{ entry.field_label }}</span>
                   <div class="text-right">
-                    <span class="text-xs text-gray-500 block">{{ formatDate(entry.corrected_at) }}</span>
+                    <span class="text-xs text-gray-500 block">{{ formatDateTime(entry.corrected_at) }}</span>
                     <span v-if="entry.corrected_by" class="text-xs text-gray-400">por {{ entry.corrected_by.name }}</span>
                   </div>
                 </div>

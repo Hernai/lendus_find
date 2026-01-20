@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { reactive, computed, watch, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore, useKycStore, useAuthStore, useProfileStore } from '@/stores'
+import { useOnboardingStore, useKycStore, useAuthStore, useProfileStore, useTenantStore } from '@/stores'
 import { AppButton, AppInput, AppRadioGroup } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
 import { generarRFCDesdeKyc } from '@/services/rfc.service'
 import { logger } from '@/utils/logger'
+import { isValidRfc, isValidCurp } from '@/utils/validators'
 
 const log = logger.child('Step2Identification')
 
@@ -14,6 +15,7 @@ const onboardingStore = useOnboardingStore()
 const kycStore = useKycStore()
 const authStore = useAuthStore()
 const profileStore = useProfileStore()
+const tenantStore = useTenantStore()
 
 // Check if KYC data is available (from INE OCR)
 const hasKycData = computed(() => kycStore.verified && !!kycStore.lockedData.curp)
@@ -76,22 +78,12 @@ const errors = reactive({
 const showIneFields = computed(() => form.id_type === 'INE')
 const showPassportFields = computed(() => form.id_type === 'PASSPORT')
 
-const idTypeOptions = [
-  { value: 'INE', label: 'INE/IFE' },
-  { value: 'PASSPORT', label: 'Pasaporte' }
-]
+// Get ID type options from backend enum
+const idTypeOptions = computed(() => tenantStore.options.idType)
 
-// CURP validation: 18 characters
-const validateCurp = (curp: string): boolean => {
-  const curpRegex = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z\d]\d$/
-  return curpRegex.test(curp.toUpperCase())
-}
-
-// RFC validation: 12 (moral) or 13 (physical) characters
-const validateRfcFormat = (rfc: string): boolean => {
-  const rfcRegex = /^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$/
-  return rfcRegex.test(rfc.toUpperCase())
-}
+// Use centralized validators from utils
+const validateCurp = (curp: string): boolean => isValidCurp(curp.toUpperCase())
+const validateRfcFormat = (rfc: string): boolean => isValidRfc(rfc.toUpperCase())
 
 // Validate RFC with SAT via Nubarium (called automatically)
 const validateRfcWithSat = async () => {

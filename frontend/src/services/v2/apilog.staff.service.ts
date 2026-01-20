@@ -6,7 +6,7 @@
  */
 
 import { api } from '../api'
-import type { V2PaginatedResponse, V2ApiResponse } from '@/types/v2'
+import type { V2ApiResponse } from '@/types/v2'
 
 const BASE_PATH = '/v2/staff/api-logs'
 
@@ -58,6 +58,18 @@ export interface V2ApiLogFilters {
   page?: number
 }
 
+export interface V2ApiLogListResponse {
+  logs: V2ApiLog[]
+  meta: {
+    current_page: number
+    from: number | null
+    last_page: number
+    per_page: number
+    to: number | null
+    total: number
+  }
+}
+
 // =====================================================
 // API Functions
 // =====================================================
@@ -65,16 +77,16 @@ export interface V2ApiLogFilters {
 /**
  * List API logs with filters.
  */
-export async function list(filters?: V2ApiLogFilters): Promise<V2PaginatedResponse<V2ApiLog>> {
-  const response = await api.get<V2PaginatedResponse<V2ApiLog>>(BASE_PATH, { params: filters })
+export async function list(filters?: V2ApiLogFilters): Promise<V2ApiResponse<V2ApiLogListResponse>> {
+  const response = await api.get<V2ApiResponse<V2ApiLogListResponse>>(BASE_PATH, { params: filters })
   return response.data
 }
 
 /**
  * Get a single API log by ID.
  */
-export async function get(id: string): Promise<V2ApiResponse<V2ApiLog>> {
-  const response = await api.get<V2ApiResponse<V2ApiLog>>(`${BASE_PATH}/${id}`)
+export async function get(id: string): Promise<V2ApiResponse<{ log: V2ApiLog }>> {
+  const response = await api.get<V2ApiResponse<{ log: V2ApiLog }>>(`${BASE_PATH}/${id}`)
   return response.data
 }
 
@@ -89,8 +101,8 @@ export async function getStats(): Promise<V2ApiResponse<V2ApiLogStats>> {
 /**
  * Get available providers for filter dropdown.
  */
-export async function getProviders(): Promise<V2ApiResponse<string[]>> {
-  const response = await api.get<V2ApiResponse<string[]>>(`${BASE_PATH}/providers`)
+export async function getProviders(): Promise<V2ApiResponse<{ providers: string[] }>> {
+  const response = await api.get<V2ApiResponse<{ providers: string[] }>>(`${BASE_PATH}/providers`)
   return response.data
 }
 

@@ -19,6 +19,8 @@ class DataVerification extends Model
     protected $fillable = [
         'tenant_id',
         'applicant_id',
+        'entity_type',
+        'entity_id',
         'field_name',
         'field_value',
         'method',
@@ -46,11 +48,19 @@ class DataVerification extends Model
     ];
 
     /**
-     * Get the applicant.
+     * Get the applicant (legacy).
      */
     public function applicant(): BelongsTo
     {
         return $this->belongsTo(Applicant::class);
+    }
+
+    /**
+     * Get the entity (Person or Company) - polymorphic relationship.
+     */
+    public function entity(): \Illuminate\Database\Eloquent\Relations\MorphTo
+    {
+        return $this->morphTo();
     }
 
     /**
@@ -59,6 +69,15 @@ class DataVerification extends Model
     public function verifier(): BelongsTo
     {
         return $this->belongsTo(User::class, 'verified_by');
+    }
+
+    /**
+     * Scope to filter by entity (Person or Company).
+     */
+    public function scopeForEntity($query, $entity)
+    {
+        return $query->where('entity_type', get_class($entity))
+            ->where('entity_id', $entity->id);
     }
 
     /**

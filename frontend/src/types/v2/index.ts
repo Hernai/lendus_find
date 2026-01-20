@@ -78,33 +78,79 @@ export interface V2PinChangePayload {
   new_pin_confirmation: string
 }
 
+/**
+ * Auth response from OTP verify.
+ * Backend returns: { token, is_new_user, user }
+ */
 export interface V2AuthResponse {
   token: string
-  token_type: 'Bearer'
-  expires_at: string
+  is_new_user?: boolean
   user: V2ApplicantUser | V2StaffUser
+  // Legacy fields for backwards compatibility
+  token_type?: 'Bearer'
+  expires_at?: string
 }
 
+/**
+ * Applicant user as returned by login endpoints.
+ * Backend formatUserResponse() returns these fields.
+ */
 export interface V2ApplicantUser {
   id: string
+  tenant_id: string
   phone: string
   email: string | null
-  person_id: string | null
-  tenant_id: string
+  has_pin: boolean
   is_active: boolean
+  onboarding_step: number
+  onboarding_completed: boolean
+  preferences: Record<string, unknown> | null
   created_at: string
+  // Optional fields (not always included)
+  person_id?: string | null
   person?: V2Person
+  last_login_at?: string | null
 }
 
+/**
+ * Staff user as returned by auth endpoints.
+ * Backend formatStaffResponse() returns profile as nested object.
+ */
 export interface V2StaffUser {
   id: string
-  name: string
   email: string
   role: 'ANALYST' | 'SUPERVISOR' | 'ADMIN' | 'SUPER_ADMIN'
-  tenant_id: string
+  is_staff?: boolean
   is_active: boolean
-  permissions: string[]
-  created_at: string
+  // Permissions can be array (legacy) or object (V2)
+  permissions?: string[] | Record<string, boolean>
+  last_login_at?: string | null
+  // Profile data - nested object from backend auth
+  profile?: {
+    first_name: string
+    last_name: string
+    last_name_2?: string | null
+    full_name: string
+    initials: string
+    phone?: string | null
+    avatar_url?: string | null
+    title?: string | null
+  }
+  // Legacy/convenience fields (may be flattened by some endpoints like user.staff.service)
+  name?: string
+  first_name?: string | null
+  last_name?: string | null
+  last_name_2?: string | null
+  phone?: string | null
+  title?: string | null
+  initials?: string
+  tenant_id?: string
+  created_at?: string
+  updated_at?: string
+  stats?: {
+    total_assigned: number
+    pending_review: number
+  }
 }
 
 export interface V2StaffLoginPayload {
@@ -336,7 +382,8 @@ export interface V2ReferencePayload {
 // Bank Account Types
 // =====================================================
 
-export type V2BankAccountType = 'CHECKING' | 'SAVINGS' | 'PAYROLL'
+// Account type values come from backend BankAccountType enum via options.bank_account_type
+export type V2BankAccountType = string
 
 export interface V2BankAccount {
   id: string
@@ -388,25 +435,276 @@ export interface V2FieldVerification {
   status: string
   verified: boolean
   method: string | null
+  method_label?: string | null
   rejection_reason: string | null
   notes: string | null
   verified_at: string | null
   verified_by: string | null
+  is_locked?: boolean
+  metadata?: Record<string, unknown>
+}
+
+// =====================================================
+// Application Detail Response Types (V2 Staff API)
+// =====================================================
+
+/**
+ * Loan data as returned by the V2 API (flat structure).
+ */
+export interface V2ApplicationLoan {
+  product_id: string
+  product_name: string | null
+  product_type: string | null
+  requested_amount: number
+  requested_term_months: number
+  purpose: string | null
+  purpose_description: string | null
+  interest_rate: number | null
+  monthly_payment: number | null
+  total_interest: number | null
+  total_amount: number | null
+  cat: number | null
+  approved_amount: number | null
+  approved_term_months: number | null
+  approved_interest_rate: number | null
+  has_counter_offer: boolean
+  counter_offer: V2CounterOffer | null
+  counter_offer_accepted: boolean | null
+  risk_level: string | null
+  risk_data: Record<string, unknown> | null
+}
+
+/**
+ * Person data nested inside applicant.
+ */
+export interface V2ApplicationPerson {
+  id: string
+  personal_data: {
+    first_name: string
+    last_name_1: string
+    last_name_2: string | null
+    full_name: string
+    birth_date: string | null
+    birth_state: string | null
+    gender: string | null
+    nationality: string | null
+    marital_status: string | null
+    education_level: string | null
+    dependents_count: number
+  }
+  identifications: {
+    curp: string | null
+    rfc: string | null
+  }
+  contact: {
+    email: string | null
+    phone: string | null
+  }
+  address: V2ApplicationAddress | null
+  employment: V2ApplicationEmployment | null
+  references: V2ApplicationReference[]
+  bank_accounts: V2ApplicationBankAccount[]
+  kyc_status: string
+  kyc_verified_at: string | null
+  profile_completeness: number
+}
+
+/**
+ * Company data nested inside applicant.
+ */
+export interface V2ApplicationCompany {
+  id: string
+  legal_name: string
+  trade_name: string | null
+  rfc: string
+  contact: {
+    email: string | null
+    phone: string | null
+  }
+}
+
+/**
+ * Applicant wrapper with type discriminator.
+ */
+export interface V2ApplicationApplicant {
+  type: 'INDIVIDUAL' | 'COMPANY'
+  person?: V2ApplicationPerson
+  company?: V2ApplicationCompany
+}
+
+/**
+ * Address as returned in application detail.
+ */
+export interface V2ApplicationAddress {
+  id: string
+  type: string
+  street: string
+  exterior_number: string
+  interior_number: string | null
+  neighborhood: string
+  municipality: string
+  state: string
+  postal_code: string
+  country: string
+  housing_type: string | null
+  years_at_address: number | null
+  months_at_address: number | null
+  is_current: boolean
+  verification_status: string | null
+}
+
+/**
+ * Employment as returned in application detail.
+ */
+export interface V2ApplicationEmployment {
+  id: string
+  employment_type: string
+  employer_name: string | null
+  employer_rfc: string | null
+  employer_phone: string | null
+  job_title: string | null
+  department: string | null
+  monthly_income: number | null
+  additional_income: number | null
+  payment_frequency: string | null
+  start_date: string | null
+  years_employed: number | null
+  months_employed: number | null
+  is_current: boolean
+  verification_status: string | null
+}
+
+/**
+ * Reference as returned in application detail.
+ */
+export interface V2ApplicationReference {
+  id: string
+  full_name: string
+  first_name: string | null
+  last_name_1: string | null
+  last_name_2: string | null
+  phone: string
+  email: string | null
+  relationship: string
+  type: string
+  years_known: number | null
+  verification_status: string | null
+  verified_at: string | null
+  verification_notes: string | null
+}
+
+/**
+ * Bank account as returned in application detail.
+ */
+export interface V2ApplicationBankAccount {
+  id: string
+  bank_name: string
+  bank_code: string | null
+  clabe: string
+  account_number: string | null
+  account_type: string | null
+  holder_name: string | null
+  is_primary: boolean
+  is_verified: boolean
+  verified_at: string | null
+  created_at: string | null
+}
+
+/**
+ * Verification section in application detail.
+ */
+export interface V2ApplicationVerification {
+  kyc_status: string
+  kyc_verified_at: string | null
+  fields: Record<string, V2FieldVerification>
+  signature: V2Signature
+  checklist: Record<string, unknown>
+}
+
+/**
+ * Document as returned in application detail.
+ */
+export interface V2ApplicationDocument {
+  id: string
+  type: string
+  category: string | null
+  file_name: string
+  mime_type: string
+  file_size: number
+  status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  rejection_reason: string | null
+  reviewed_at: string | null
+  ocr_data: Record<string, unknown> | null
+  created_at: string | null
+  is_kyc_locked: boolean
+}
+
+/**
+ * Workflow section in application detail.
+ */
+export interface V2ApplicationWorkflow {
+  assigned_to: {
+    id: string
+    name: string
+    email: string
+  } | null
+  status_history: V2StatusHistoryEntry[]
+  notes: V2ApplicationNote[]
+}
+
+/**
+ * Integration section in application detail.
+ */
+export interface V2ApplicationIntegration {
+  external_id: string | null
+  external_system: string | null
+  synced_at: string | null
+  snapshot_data: Record<string, unknown> | null
+}
+
+/**
+ * Full application detail response from V2 Staff API.
+ */
+export interface V2ApplicationDetail {
+  id: string
+  folio: string
+  status: V2ApplicationStatus
+  status_label: string
+  applicant_type: 'individual' | 'company'
+  created_at: string
+  updated_at: string
+  submitted_at: string | null
+  loan: V2ApplicationLoan
+  required_documents: string[]
+  applicant: V2ApplicationApplicant | null
+  verification: V2ApplicationVerification
+  documents: V2ApplicationDocument[]
+  workflow: V2ApplicationWorkflow
+  integration: V2ApplicationIntegration
 }
 
 export interface V2Application {
   id: string
-  tenant_id: string
-  folio: string
-  applicant_id: string
+  tenant_id?: string
+  folio?: string
+  applicant_id?: string
   product_id: string
   requested_amount: number
+  requested_term_months: number
+  term_months?: number // Alias for requested_term_months (backward compatibility)
   approved_amount: number | null
-  term_months: number
+  approved_term_months: number | null
   interest_rate: number | null
   payment_frequency: V2PaymentFrequency
   monthly_payment: number | null
+  opening_commission: number
+  total_interest: number
+  total_amount: number
+  cat: number
+  purpose: string | null
+  has_counter_offer?: boolean
   status: V2ApplicationStatus
+  status_label?: string
   status_reason: string | null
   status_changed_at: string | null
   status_changed_by: string | null
@@ -415,12 +713,13 @@ export interface V2Application {
   submitted_at: string | null
   approved_at: string | null
   rejected_at: string | null
+  decision_at: string | null
   disbursed_at: string | null
   disbursement_reference: string | null
   risk_score: number | null
   risk_assessment: Record<string, unknown> | null
   counter_offer: V2CounterOffer | null
-  status_history: V2StatusHistoryEntry[]
+  status_history?: V2StatusHistoryEntry[]
   created_at: string
   updated_at: string
   // Relations (when loaded)
@@ -433,6 +732,15 @@ export interface V2Application {
   pending_documents?: V2PendingDocument[]
   // Field-level verifications
   field_verifications?: Record<string, V2FieldVerification>
+  // Signature data
+  signature?: V2Signature
+}
+
+export interface V2Signature {
+  has_signed: boolean
+  signature_base64?: string | null
+  signature_date?: string | null
+  signature_ip?: string | null
 }
 
 export interface V2PendingDocument {
@@ -474,6 +782,8 @@ export interface V2ApplicationCreatePayload {
   term_months: number
   payment_frequency?: V2PaymentFrequency
   purpose?: string
+  purpose_description?: string
+  simulation_data?: Record<string, unknown>
 }
 
 export interface V2ApplicationUpdatePayload {
@@ -545,6 +855,8 @@ export interface V2Document {
   updated_at: string
   // Computed
   download_url?: string
+  // KYC lock indicator (from backend)
+  is_kyc_locked?: boolean
 }
 
 export interface V2DocumentUploadPayload {
@@ -610,36 +922,53 @@ export interface V2AssignApplicationPayload {
   user_id: string
 }
 
+/**
+ * Payload for changing application status.
+ * Backend expects: status, notes
+ */
 export interface V2ChangeStatusPayload {
   status: V2ApplicationStatus
-  reason?: string
-  internal_note?: string
-}
-
-export interface V2ApprovePayload {
-  approved_amount: number
-  interest_rate: number
-  term_months: number
   notes?: string
 }
 
-export interface V2RejectPayload {
-  reason: string
-  internal_note?: string
+/**
+ * Payload for approving an application.
+ * Backend expects: amount, term_months, interest_rate, notes
+ */
+export interface V2ApprovePayload {
+  amount?: number
+  term_months?: number
+  interest_rate?: number
+  notes?: string
 }
 
+/**
+ * Payload for rejecting an application.
+ * Backend expects: reason, notes
+ */
+export interface V2RejectPayload {
+  reason: string
+  notes?: string
+}
+
+/**
+ * Payload for creating a counter-offer.
+ * Backend expects: amount, term_months, interest_rate, reason
+ */
 export interface V2CounterOfferCreatePayload {
   amount: number
   term_months: number
-  interest_rate: number
-  payment_frequency: V2PaymentFrequency
-  reason: string
+  interest_rate?: number
+  reason?: string
 }
 
+/**
+ * Payload for setting risk assessment.
+ * Backend expects: level (LOW, MEDIUM, HIGH, VERY_HIGH), data
+ */
 export interface V2RiskAssessmentPayload {
-  score: number
-  factors: Record<string, unknown>
-  notes?: string
+  level: 'LOW' | 'MEDIUM' | 'HIGH' | 'VERY_HIGH'
+  data?: Record<string, unknown>
 }
 
 // Lowercase status keys as returned by V2 API
@@ -790,6 +1119,7 @@ export interface V2Profile {
   address: V2ProfileAddress | null
   employment: V2ProfileEmployment | null
   bank_account: V2ProfileBankAccount | null
+  bank_accounts: V2ProfileBankAccount[]
   references: V2ProfileReference[]
   profile_completeness: number
   missing_data: string[]
@@ -835,6 +1165,8 @@ export interface V2ProfileEmployment {
   work_phone: string | null
   monthly_income: number | null
   payment_frequency: string | null
+  years_employed: number | null
+  months_employed: number | null
   seniority_months: number | null
   start_date: string | null
   is_verified: boolean
@@ -850,18 +1182,23 @@ export interface V2ProfileBankAccount {
   account_number: string | null
   holder_name: string
   account_type: string | null
+  is_primary: boolean
   is_verified: boolean
 }
 
 export interface V2ProfileReference {
   id: string
   type: 'PERSONAL' | 'WORK'
+  // Individual name fields from V2 API
+  first_name?: string
+  last_name_1?: string
+  last_name_2?: string
   full_name: string
   phone: string
   relationship: string
   years_known: number | null
-  is_verified: boolean
-  verification_status: string
+  is_verified?: boolean
+  verification_status?: string
 }
 
 export interface V2ClabeValidation {

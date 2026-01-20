@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V2\Staff;
 
+use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\ApplicationV2;
@@ -25,6 +26,7 @@ use Illuminate\Support\Str;
  */
 class TenantController extends Controller
 {
+    use ApiResponses;
     /**
      * List all tenants.
      *
@@ -61,8 +63,8 @@ class TenantController extends Controller
         $perPage = min($request->input('per_page', 20), 100);
         $tenants = $query->paginate($perPage);
 
-        return response()->json([
-            'data' => $tenants->map(fn($tenant) => $this->formatTenant($tenant)),
+        return $this->success([
+            'tenants' => $tenants->map(fn($tenant) => $this->formatTenant($tenant)),
             'meta' => [
                 'current_page' => $tenants->currentPage(),
                 'from' => $tenants->firstItem(),
@@ -83,8 +85,8 @@ class TenantController extends Controller
     {
         $tenant = Tenant::findOrFail($id);
 
-        return response()->json([
-            'data' => $this->formatTenantDetailed($tenant)
+        return $this->success([
+            'tenant' => $this->formatTenantDetailed($tenant)
         ]);
     }
 
@@ -135,10 +137,9 @@ class TenantController extends Controller
             'activated_at' => $request->boolean('is_active', true) ? now() : null,
         ]);
 
-        return response()->json([
-            'message' => 'Tenant creado exitosamente',
-            'data' => $this->formatTenantDetailed($tenant)
-        ], 201);
+        return $this->created([
+            'tenant' => $this->formatTenantDetailed($tenant)
+        ], 'Tenant creado exitosamente');
     }
 
     /**
@@ -210,10 +211,9 @@ class TenantController extends Controller
 
         $tenant->save();
 
-        return response()->json([
-            'message' => 'Tenant actualizado exitosamente',
-            'data' => $this->formatTenantDetailed($tenant)
-        ]);
+        return $this->success([
+            'tenant' => $this->formatTenantDetailed($tenant)
+        ], 'Tenant actualizado exitosamente');
     }
 
     /**
@@ -230,17 +230,12 @@ class TenantController extends Controller
         $hasApplications = $tenant->applications()->count() > 0;
 
         if ($hasUsers || $hasApplications) {
-            return response()->json([
-                'message' => 'No se puede eliminar el tenant porque tiene usuarios o solicitudes asociadas',
-                'error' => 'HAS_RELATED_DATA'
-            ], 422);
+            return $this->badRequest('HAS_RELATED_DATA', 'No se puede eliminar el tenant porque tiene usuarios o solicitudes asociadas');
         }
 
         $tenant->delete();
 
-        return response()->json([
-            'message' => 'Tenant eliminado exitosamente'
-        ]);
+        return $this->success(null, 'Tenant eliminado exitosamente');
     }
 
     /**
@@ -277,15 +272,13 @@ class TenantController extends Controller
             ->where('is_active', true)
             ->count();
 
-        return response()->json([
-            'data' => [
-                'users_count' => $usersCount,
-                'staff_count' => $staffCount,
-                'applications_count' => $applicationsCount,
-                'applications_by_status' => $applicationsByStatus,
-                'products_count' => $productsCount,
-                'active_products_count' => $activeProductsCount,
-            ]
+        return $this->success([
+            'users_count' => $usersCount,
+            'staff_count' => $staffCount,
+            'applications_count' => $applicationsCount,
+            'applications_by_status' => $applicationsByStatus,
+            'products_count' => $productsCount,
+            'active_products_count' => $activeProductsCount,
         ]);
     }
 
@@ -298,23 +291,21 @@ class TenantController extends Controller
     {
         $tenant = Tenant::findOrFail($id);
 
-        return response()->json([
-            'data' => [
-                'tenant' => [
-                    'id' => $tenant->id,
-                    'name' => $tenant->name,
-                    'slug' => $tenant->slug,
-                    'legal_name' => $tenant->legal_name,
-                    'rfc' => $tenant->rfc,
-                    'email' => $tenant->email,
-                    'phone' => $tenant->phone,
-                    'website' => $tenant->website,
-                ],
-                'branding' => $tenant->brandingConfig?->toApiArray() ?? $this->getDefaultBranding(),
-                'api_configs' => $tenant->apiConfigs->map->toApiArray(),
-                'available_providers' => TenantApiConfig::PROVIDERS,
-                'available_service_types' => TenantApiConfig::SERVICE_TYPES,
-            ]
+        return $this->success([
+            'tenant' => [
+                'id' => $tenant->id,
+                'name' => $tenant->name,
+                'slug' => $tenant->slug,
+                'legal_name' => $tenant->legal_name,
+                'rfc' => $tenant->rfc,
+                'email' => $tenant->email,
+                'phone' => $tenant->phone,
+                'website' => $tenant->website,
+            ],
+            'branding' => $tenant->brandingConfig?->toApiArray() ?? $this->getDefaultBranding(),
+            'api_configs' => $tenant->apiConfigs->map->toApiArray(),
+            'available_providers' => TenantApiConfig::PROVIDERS,
+            'available_service_types' => TenantApiConfig::SERVICE_TYPES,
         ]);
     }
 
@@ -349,10 +340,9 @@ class TenantController extends Controller
             $validated
         );
 
-        return response()->json([
-            'message' => 'Branding actualizado',
-            'data' => $branding->toApiArray()
-        ]);
+        return $this->success([
+            'branding' => $branding->toApiArray()
+        ], 'Branding actualizado');
     }
 
     /**
@@ -392,11 +382,10 @@ class TenantController extends Controller
             [$field => $url]
         );
 
-        return response()->json([
-            'message' => 'Logo subido correctamente',
+        return $this->success([
             'url' => $url,
             'field' => $field
-        ]);
+        ], 'Logo subido correctamente');
     }
 
     /**
@@ -408,8 +397,8 @@ class TenantController extends Controller
     {
         $tenant = Tenant::findOrFail($id);
 
-        return response()->json([
-            'data' => $tenant->apiConfigs->map->toApiArray(),
+        return $this->success([
+            'api_configs' => $tenant->apiConfigs->map->toApiArray(),
             'available_providers' => TenantApiConfig::PROVIDERS,
             'available_service_types' => TenantApiConfig::SERVICE_TYPES,
         ]);
@@ -450,10 +439,9 @@ class TenantController extends Controller
             collect($validated)->except(['provider', 'service_type'])->toArray()
         );
 
-        return response()->json([
-            'message' => 'Configuración guardada',
-            'data' => $config->toApiArray()
-        ]);
+        return $this->success([
+            'api_config' => $config->toApiArray()
+        ], 'Configuración guardada');
     }
 
     /**
@@ -471,9 +459,7 @@ class TenantController extends Controller
 
         $config->delete();
 
-        return response()->json([
-            'message' => 'Configuración eliminada'
-        ]);
+        return $this->success(null, 'Configuración eliminada');
     }
 
     /**
@@ -499,11 +485,13 @@ class TenantController extends Controller
             'last_test_error' => $error,
         ]);
 
-        return response()->json([
-            'success' => $success,
-            'message' => $success ? 'Conexión exitosa' : $error,
-            'data' => $config->fresh()->toApiArray()
-        ]);
+        if ($success) {
+            return $this->success([
+                'api_config' => $config->fresh()->toApiArray()
+            ], 'Conexión exitosa');
+        }
+
+        return $this->badRequest('TEST_FAILED', $error ?? 'Error en la prueba');
     }
 
     /**

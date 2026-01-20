@@ -1,15 +1,30 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import type { BankAccount } from '@/types/applicant'
+import type { V2ProfileBankAccount } from '@/types/v2'
+import { useTenantStore } from '@/stores'
+
+// Support both V2ProfileBankAccount and legacy BankAccount types
+interface BankAccountLike {
+  id: string
+  bank_name: string
+  clabe: string
+  holder_name: string
+  is_primary: boolean
+  is_verified: boolean
+  account_type?: string | null
+}
 
 const props = defineProps<{
-  account: BankAccount
+  account: V2ProfileBankAccount | BankAccountLike
 }>()
 
 const emit = defineEmits<{
   'set-primary': [accountId: string]
   'delete': [accountId: string]
 }>()
+
+// Get account type labels from backend enum
+const tenantStore = useTenantStore()
 
 const showMenu = ref(false)
 const isDeleting = ref(false)
@@ -30,15 +45,12 @@ onUnmounted(() => {
 })
 
 const accountTypeLabel = computed(() => {
-  const map: Record<string, string> = {
-    'DEBITO': 'Debito',
-    'NOMINA': 'Nomina',
-    'AHORRO': 'Ahorro',
-    'CHEQUES': 'Cheques',
-    'INVERSION': 'Inversion',
-    'OTRO': 'Otro'
-  }
-  return map[props.account.account_type] || props.account.account_type
+  const accountType = props.account.account_type
+  if (!accountType) return 'Cuenta'
+
+  // Find label from backend options
+  const option = tenantStore.options.bankAccountType.find(opt => opt.value === accountType)
+  return option?.label || accountType
 })
 
 // Check if menu has any available actions

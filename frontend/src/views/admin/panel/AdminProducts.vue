@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeMount, onBeforeUnmount, watch } from 'vue'
 import { v2 } from '@/services/v2'
 import type { V2Product, V2TermConfig } from '@/services/v2/product.staff.service'
 import { AppButton } from '@/components/common'
 import { useToast } from '@/composables'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore, useTenantStore } from '@/stores'
 import { logger } from '@/utils/logger'
 import { formatMoney } from '@/utils/formatters'
 
 const log = logger.child('AdminProducts')
 const toast = useToast()
 const authStore = useAuthStore()
+const tenantStore = useTenantStore()
 
 // Permission check
 const canManageProducts = computed(() => authStore.permissions?.canManageProducts ?? false)
@@ -19,15 +20,14 @@ const canManageProducts = computed(() => authStore.permissions?.canManageProduct
 type Product = V2Product
 type TermConfig = V2TermConfig
 
-// Type labels
-const typeLabels: Record<string, string> = {
-  PERSONAL: 'Personal',
-  AUTO: 'Auto',
-  HIPOTECARIO: 'Hipotecario',
-  PYME: 'PyME',
-  NOMINA: 'Nómina',
-  ARRENDAMIENTO: 'Arrendamiento'
-}
+// Build type labels from backend enum
+const typeLabels = computed(() => {
+  const labels: Record<string, string> = {}
+  for (const opt of tenantStore.options.productType) {
+    labels[opt.value] = opt.label
+  }
+  return labels
+})
 
 // SVG paths for product type icons (Heroicons style)
 const typeIcons: Record<string, string> = {
@@ -48,35 +48,40 @@ const typeIcons: Record<string, string> = {
 // Default icon for unknown types
 const defaultIcon = 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'
 
-// Frequency labels
-const frequencyLabels: Record<string, string> = {
-  WEEKLY: 'Semanal',
-  BIWEEKLY: 'Quincenal',
-  QUINCENAL: 'Quincenal',
-  MONTHLY: 'Mensual',
-  MENSUAL: 'Mensual'
-}
+// Build frequency labels from backend enum
+const frequencyLabels = computed(() => {
+  const labels: Record<string, string> = {}
+  for (const opt of tenantStore.options.paymentFrequency) {
+    labels[opt.value] = opt.label
+  }
+  return labels
+})
 
-// Document labels
-const documentLabels: Record<string, string> = {
-  INE_FRONT: 'INE (Frente)',
-  INE_BACK: 'INE (Reverso)',
-  PROOF_ADDRESS: 'Comprobante de Domicilio',
-  PROOF_INCOME: 'Comprobante de Ingresos',
-  BANK_STATEMENT: 'Estado de Cuenta Bancario',
-  RFC: 'Constancia de Situación Fiscal',
-  CURP: 'CURP',
-  BIRTH_CERTIFICATE: 'Acta de Nacimiento',
-  MARRIAGE_CERTIFICATE: 'Acta de Matrimonio',
-  TAX_RETURN: 'Declaración de Impuestos',
-  BUSINESS_LICENSE: 'Licencia Comercial',
-  CONSTITUTIVE_ACT: 'Acta Constitutiva',
-  POWER_OF_ATTORNEY: 'Poder Notarial',
-  SELFIE: 'Selfie',
-  SIGNATURE: 'Firma'
-}
+// Document labels - loaded from backend
+const documentLabels = ref<Record<string, string>>({})
+const allDocumentOptions = computed(() =>
+  Object.entries(documentLabels.value).map(([value, label]) => ({ value, label }))
+)
 
-const allDocumentOptions = Object.entries(documentLabels).map(([value, label]) => ({ value, label }))
+// Load document types from backend
+const loadDocumentTypes = async () => {
+  try {
+    const response = await v2.staff.document.getTypes()
+    if (response.success && response.data?.types) {
+      // Backend returns types as Record<string, string> { TYPE: 'Label' }
+      documentLabels.value = response.data.types as unknown as Record<string, string>
+    }
+  } catch (e) {
+    log.error('Error loading document types', { error: e })
+    // Fallback to basic types if API fails
+    documentLabels.value = {
+      INE_FRONT: 'INE (Frente)',
+      INE_BACK: 'INE (Reverso)',
+      PROOF_OF_ADDRESS: 'Comprobante de Domicilio',
+      SELFIE: 'Selfie'
+    }
+  }
+}
 
 // Filters
 const searchQuery = ref('')
@@ -223,21 +228,11 @@ const addTermToFrequency = (freq: string, term: number): void => {
 
 const formErrors = ref<Record<string, string>>({})
 
-// Type options
-const typeOptions = [
-  { value: 'PERSONAL', label: 'Personal' },
-  { value: 'AUTO', label: 'Auto' },
-  { value: 'HIPOTECARIO', label: 'Hipotecario' },
-  { value: 'PYME', label: 'PyME' },
-  { value: 'NOMINA', label: 'Nómina' },
-  { value: 'ARRENDAMIENTO', label: 'Arrendamiento' }
-]
+// Type options from backend enum
+const typeOptions = computed(() => tenantStore.options.productType)
 
-const frequencyOptions = [
-  { value: 'WEEKLY', label: 'Semanal' },
-  { value: 'BIWEEKLY', label: 'Quincenal' },
-  { value: 'MONTHLY', label: 'Mensual' }
-]
+// Frequency options from backend enum
+const frequencyOptions = computed(() => tenantStore.options.paymentFrequency)
 
 const activeFilterOptions = [
   { value: '', label: 'Todos' },
@@ -266,7 +261,7 @@ const fetchProducts = async () => {
     }
 
     const response = await v2.staff.product.list(filters)
-    products.value = response.data
+    products.value = response.data?.products ?? []
   } catch (e: unknown) {
     error.value = 'Error al cargar los productos'
     log.error('Error al cargar productos', { error: e })
@@ -298,7 +293,7 @@ const openCreateModal = () => {
     late_fee_rate: 2,
     payment_frequencies: ['MONTHLY'],
     term_config: { MONTHLY: { available_terms: [3, 6, 12, 18, 24, 36, 48] } },
-    required_documents: ['INE_FRONT', 'INE_BACK', 'PROOF_ADDRESS'],
+    required_documents: ['INE_FRONT', 'INE_BACK', 'PROOF_OF_ADDRESS'],
     is_active: true
   }
   // Initialize newTermInput for all frequencies for proper reactivity
@@ -537,6 +532,7 @@ watch([searchQuery, activeFilter], () => {
   fetchProducts()
 })
 
+onBeforeMount(loadDocumentTypes)
 onMounted(fetchProducts)
 </script>
 
@@ -569,7 +565,7 @@ onMounted(fetchProducts)
               v-model="searchQuery"
               type="text"
               placeholder="Buscar por nombre o código..."
-              class="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              class="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
             />
           </div>
         </div>
@@ -578,7 +574,7 @@ onMounted(fetchProducts)
         <div class="w-full sm:w-48">
           <select
             v-model="activeFilter"
-            class="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            class="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
           >
             <option v-for="opt in activeFilterOptions" :key="opt.value" :value="opt.value">
               {{ opt.label }}
@@ -785,7 +781,7 @@ onMounted(fetchProducts)
               <div v-show="activeTab === 'basic'" class="space-y-4">
                 <!-- Name -->
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">
                     Nombre del Producto *
                   </label>
                   <input
@@ -793,7 +789,7 @@ onMounted(fetchProducts)
                     type="text"
                     placeholder="Ej: Crédito Personal"
                     :class="[
-                      'w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
+                      'w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors',
                       formErrors.name ? 'border-red-300' : 'border-gray-200'
                     ]"
                   />
@@ -803,7 +799,7 @@ onMounted(fetchProducts)
                 <!-- Code and Type -->
                 <div class="grid grid-cols-2 gap-4">
                   <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
                       Código *
                     </label>
                     <input
@@ -811,19 +807,19 @@ onMounted(fetchProducts)
                       type="text"
                       placeholder="Ej: PERS-001"
                       :class="[
-                        'w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 uppercase',
+                        'w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors uppercase',
                         formErrors.code ? 'border-red-300' : 'border-gray-200'
                       ]"
                     />
                     <p v-if="formErrors.code" class="mt-1 text-sm text-red-500">{{ formErrors.code }}</p>
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
                       Tipo *
                     </label>
                     <select
                       v-model="form.type"
-                      class="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      class="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                     >
                       <option v-for="opt in typeOptions" :key="opt.value" :value="opt.value">
                         {{ opt.label }}
@@ -834,14 +830,14 @@ onMounted(fetchProducts)
 
                 <!-- Description -->
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">
                     Descripción
                   </label>
                   <textarea
                     v-model="form.description"
                     rows="3"
                     placeholder="Descripción breve del producto..."
-                    class="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    class="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors resize-none"
                   ></textarea>
                 </div>
 
@@ -889,7 +885,7 @@ onMounted(fetchProducts)
                             min="0"
                             step="1000"
                             :class="[
-                              'w-full pl-7 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white',
+                              'w-full pl-7 pr-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white transition-colors',
                               formErrors.min_amount ? 'border-red-300' : 'border-gray-200'
                             ]"
                           />
@@ -906,7 +902,7 @@ onMounted(fetchProducts)
                             min="0"
                             step="1000"
                             :class="[
-                              'w-full pl-7 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white',
+                              'w-full pl-7 pr-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white transition-colors',
                               formErrors.max_amount ? 'border-red-300' : 'border-gray-200'
                             ]"
                           />
@@ -932,7 +928,7 @@ onMounted(fetchProducts)
                           type="number"
                           min="1"
                           :class="[
-                            'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white',
+                            'w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white transition-colors',
                             formErrors.min_term_months ? 'border-red-300' : 'border-gray-200'
                           ]"
                         />
@@ -945,7 +941,7 @@ onMounted(fetchProducts)
                           type="number"
                           min="1"
                           :class="[
-                            'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white',
+                            'w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white transition-colors',
                             formErrors.max_term_months ? 'border-red-300' : 'border-gray-200'
                           ]"
                         />
@@ -972,17 +968,17 @@ onMounted(fetchProducts)
                         min="0"
                         max="100"
                         step="0.1"
-                        :class="['w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white', formErrors.interest_rate ? 'border-red-300' : 'border-gray-200']"
+                        :class="['w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white transition-colors', formErrors.interest_rate ? 'border-red-300' : 'border-gray-200']"
                       />
                       <p v-if="formErrors.interest_rate" class="mt-1 text-xs text-red-500">{{ formErrors.interest_rate }}</p>
                     </div>
                     <div>
                       <label class="block text-xs text-gray-500 mb-1">Comisión Apertura (%)</label>
-                      <input v-model.number="form.opening_commission" type="number" min="0" max="100" step="0.1" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white" />
+                      <input v-model.number="form.opening_commission" type="number" min="0" max="100" step="0.1" class="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white transition-colors" />
                     </div>
                     <div>
                       <label class="block text-xs text-gray-500 mb-1">Mora (%)</label>
-                      <input v-model.number="form.late_fee_rate" type="number" min="0" max="100" step="0.1" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white" />
+                      <input v-model.number="form.late_fee_rate" type="number" min="0" max="100" step="0.1" class="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white transition-colors" />
                     </div>
                   </div>
                 </div>

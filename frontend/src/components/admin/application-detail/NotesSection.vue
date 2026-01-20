@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { AppButton } from '@/components/common'
+import { formatDateTime } from '@/utils/formatters'
 
 interface Note {
   id: string
@@ -27,15 +28,6 @@ const handleSubmit = () => {
   }
 }
 
-const formatDateTime = (dateStr: string) => {
-  return new Date(dateStr).toLocaleString('es-MX', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 </script>
 
 <template>
@@ -51,7 +43,7 @@ const formatDateTime = (dateStr: string) => {
           v-model="newNoteText"
           rows="2"
           placeholder="Agregar una nota..."
-          class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
+          class="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none transition-colors"
           :disabled="isAdding"
         ></textarea>
         <AppButton

@@ -27,6 +27,11 @@ export {
 // =====================================================
 
 export * as kycService from './kyc.service'
+export {
+  recordVerifications,
+  recordSingleVerification,
+  loadVerifications,
+} from './kyc.service'
 export type {
   KycServicesResponse,
   IneOcrData,

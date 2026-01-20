@@ -21,15 +21,13 @@ const currentUser = computed(() => authStore.user)
 const tenantName = computed(() => tenantStore.name || 'LendusFind')
 const permissions = computed(() => authStore.permissions)
 
-// Role labels for display
-const roleLabels: Record<string, string> = {
-  'SUPERVISOR': 'Supervisor',
-  'ANALYST': 'Analista',
-  'ADMIN': 'Administrador',
-  'SUPER_ADMIN': 'Super Admin'
-}
-
-const userRole = computed(() => roleLabels[currentUser.value?.role || ''] || 'Staff')
+// Get user role label from backend enum options
+const userRole = computed(() => {
+  const role = currentUser.value?.role
+  if (!role) return 'Staff'
+  const option = tenantStore.options.userType.find(o => o.value === role)
+  return option?.label || 'Staff'
+})
 
 // Navigation items filtered by permissions
 const navItems = computed(() => {

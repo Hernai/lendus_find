@@ -5,6 +5,7 @@ import { useOnboardingStore, useApplicationStore, useTenantStore, useKycStore, u
 import { AppButton, AppInput, AppRadioGroup, AppSelect, AppDatePicker } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
 import { logger } from '@/utils/logger'
+import { MEXICAN_STATES, COUNTRIES, YES_NO_OPTIONS } from '@/constants'
 import type { PaymentFrequency } from '@/types'
 
 const log = logger.child('Step1PersonalData')
@@ -124,79 +125,13 @@ watch(form, () => {
   })
 }, { deep: true })
 
-const genderOptions = [
-  { value: 'M', label: 'Masculino' },
-  { value: 'F', label: 'Femenino' }
-]
+// Get gender options from backend enum
+const genderOptions = computed(() => tenantStore.options.gender)
 
-const mexicanOptions = [
-  { value: 'SI', label: 'Sí' },
-  { value: 'NO', label: 'No' }
-]
-
-// Entidades federativas de México (códigos CURP)
-const mexicanStates = [
-  { value: 'AS', label: 'Aguascalientes' },
-  { value: 'BC', label: 'Baja California' },
-  { value: 'BS', label: 'Baja California Sur' },
-  { value: 'CC', label: 'Campeche' },
-  { value: 'CS', label: 'Chiapas' },
-  { value: 'CH', label: 'Chihuahua' },
-  { value: 'DF', label: 'Ciudad de México' },
-  { value: 'CL', label: 'Coahuila' },
-  { value: 'CM', label: 'Colima' },
-  { value: 'DG', label: 'Durango' },
-  { value: 'GT', label: 'Guanajuato' },
-  { value: 'GR', label: 'Guerrero' },
-  { value: 'HG', label: 'Hidalgo' },
-  { value: 'JC', label: 'Jalisco' },
-  { value: 'MC', label: 'Estado de México' },
-  { value: 'MN', label: 'Michoacán' },
-  { value: 'MS', label: 'Morelos' },
-  { value: 'NT', label: 'Nayarit' },
-  { value: 'NL', label: 'Nuevo León' },
-  { value: 'OC', label: 'Oaxaca' },
-  { value: 'PL', label: 'Puebla' },
-  { value: 'QT', label: 'Querétaro' },
-  { value: 'QR', label: 'Quintana Roo' },
-  { value: 'SP', label: 'San Luis Potosí' },
-  { value: 'SL', label: 'Sinaloa' },
-  { value: 'SR', label: 'Sonora' },
-  { value: 'TC', label: 'Tabasco' },
-  { value: 'TS', label: 'Tamaulipas' },
-  { value: 'TL', label: 'Tlaxcala' },
-  { value: 'VZ', label: 'Veracruz' },
-  { value: 'YN', label: 'Yucatán' },
-  { value: 'ZS', label: 'Zacatecas' },
-  { value: 'NE', label: 'Nacido en el Extranjero' }
-]
-
-// Países más comunes para extranjeros en México
-const countries = [
-  { value: 'US', label: 'Estados Unidos' },
-  { value: 'GT', label: 'Guatemala' },
-  { value: 'HN', label: 'Honduras' },
-  { value: 'SV', label: 'El Salvador' },
-  { value: 'VE', label: 'Venezuela' },
-  { value: 'CO', label: 'Colombia' },
-  { value: 'AR', label: 'Argentina' },
-  { value: 'CU', label: 'Cuba' },
-  { value: 'NI', label: 'Nicaragua' },
-  { value: 'ES', label: 'España' },
-  { value: 'PE', label: 'Perú' },
-  { value: 'EC', label: 'Ecuador' },
-  { value: 'BR', label: 'Brasil' },
-  { value: 'CL', label: 'Chile' },
-  { value: 'CA', label: 'Canadá' },
-  { value: 'CN', label: 'China' },
-  { value: 'IN', label: 'India' },
-  { value: 'FR', label: 'Francia' },
-  { value: 'DE', label: 'Alemania' },
-  { value: 'IT', label: 'Italia' },
-  { value: 'JP', label: 'Japón' },
-  { value: 'KR', label: 'Corea del Sur' },
-  { value: 'OTHER', label: 'Otro país' }
-]
+// Options from shared constants
+const mexicanOptions = YES_NO_OPTIONS
+const mexicanStates = MEXICAN_STATES
+const countries = COUNTRIES
 
 const isMexican = computed(() => form.is_mexican === 'SI')
 const isForeigner = computed(() => form.is_mexican === 'NO')
@@ -349,8 +284,8 @@ const handleSubmit = async () => {
 
         params = {
           product_id: product.id,
-          requested_amount: product.rules?.min_amount || 10000,
-          term_months: product.rules?.min_term_months || 12,
+          requested_amount: product.min_amount || product.rules?.min_amount || 10000,
+          term_months: product.min_term_months || product.rules?.min_term_months || 12,
           payment_frequency: 'MONTHLY'
         }
 

@@ -115,6 +115,9 @@ class Person extends Model
         'kyc_verified_at',
         'kyc_verified_by',
         'kyc_data',
+        'signature_base64',
+        'signature_date',
+        'signature_ip',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -125,6 +128,7 @@ class Person extends Model
         return [
             'birth_date' => 'date',
             'kyc_verified_at' => 'datetime',
+            'signature_date' => 'datetime',
             'missing_data' => 'array',
             'kyc_data' => 'array',
             'dependents_count' => 'integer',
@@ -183,6 +187,14 @@ class Person extends Model
     {
         return $this->hasMany(PersonBankAccount::class, 'owner_id')
             ->where('owner_type', 'persons');
+    }
+
+    /**
+     * Get all V2 documents for this person (polymorphic).
+     */
+    public function documents(): \Illuminate\Database\Eloquent\Relations\MorphMany
+    {
+        return $this->morphMany(DocumentV2::class, 'documentable');
     }
 
     // =====================================================

@@ -20,7 +20,9 @@ class RecordVerificationsRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'applicant_id' => 'required|uuid',
+            // applicant_id is optional for V2 API (uses authenticated user's applicant)
+            // but still supported for V1 API and admin/staff endpoints
+            'applicant_id' => 'nullable|uuid',
             'verifications' => 'required|array',
             'verifications.*.field' => 'required|string',
             'verifications.*.value' => 'nullable',
@@ -34,7 +36,6 @@ class RecordVerificationsRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'applicant_id.required' => 'El ID del solicitante es requerido',
             'applicant_id.uuid' => 'El ID del solicitante debe ser un UUID válido',
             'verifications.required' => 'Las verificaciones son requeridas',
             'verifications.array' => 'Las verificaciones deben ser un arreglo',

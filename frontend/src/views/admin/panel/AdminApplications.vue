@@ -5,15 +5,18 @@ import { v2 } from '@/services/v2'
 import type { V2ApplicationFilters } from '@/types/v2'
 import { AppButton, AppConfirmModal } from '@/components/common'
 import { useAuthStore } from '@/stores/auth'
+import { useTenantStore } from '@/stores'
 import { useToast } from '@/composables'
 import { logger } from '@/utils/logger'
 import { formatMoney, formatMoneyShort, formatDateOnly, formatDateShort, formatTimeOnly, formatPhone } from '@/utils/formatters'
+import { getStatusBadge } from '@/utils/admin-styles'
 
 const log = logger.child('AdminApplications')
 const toast = useToast()
 
 const router = useRouter()
 const authStore = useAuthStore()
+const tenantStore = useTenantStore()
 
 // Permisos
 const canAssign = computed(() => authStore.permissions?.canAssignApplications ?? false)
@@ -108,17 +111,13 @@ const quickFilters = [
   },
 ]
 
-const statusOptions = [
-  { value: '', label: 'Todos los estados' },
-  { value: 'DRAFT', label: 'Borrador' },
-  { value: 'SUBMITTED', label: 'Nueva' },
-  { value: 'IN_REVIEW', label: 'En Revisión' },
-  { value: 'DOCS_PENDING', label: 'Docs Pendientes' },
-  { value: 'APPROVED', label: 'Aprobada' },
-  { value: 'REJECTED', label: 'Rechazada' },
-  { value: 'CANCELLED', label: 'Cancelada' },
-  { value: 'DISBURSED', label: 'Desembolsada' }
-]
+// Status options from backend enum
+const statusOptions = computed(() => {
+  return [
+    { value: '', label: 'Todos los estados' },
+    ...tenantStore.options.applicationStatus
+  ]
+})
 
 const assignmentOptions = [
   { value: '', label: 'Todas' },
@@ -126,12 +125,13 @@ const assignmentOptions = [
   { value: 'assigned', label: 'Asignadas' }
 ]
 
-// Only show active workflow states as click filters
-const activeStatusFilters = [
-  { value: 'SUBMITTED', label: 'Nueva' },
-  { value: 'IN_REVIEW', label: 'En Revisión' },
-  { value: 'DOCS_PENDING', label: 'Docs Pendientes' }
-]
+// Only show active workflow states as click filters (subset of applicationStatus)
+const activeStatusFilters = computed(() => {
+  const activeValues = ['SUBMITTED', 'IN_REVIEW', 'DOCS_PENDING']
+  return tenantStore.options.applicationStatus.filter(
+    opt => activeValues.includes(opt.value)
+  )
+})
 
 const fetchApplications = async () => {
   isLoading.value = true
@@ -166,31 +166,44 @@ const fetchApplications = async () => {
     const response = await v2.staff.application.list(filters)
 
     // Map V2 response to local Application type
-    applications.value = response.data.map((app) => ({
-      id: app.id,
-      folio: app.folio,
-      applicant_name: app.applicant?.full_name ?? null,
-      applicant_phone: app.applicant?.phone ?? null,
-      applicant_email: app.applicant?.email ?? null,
-      product: app.product ? {
-        id: app.product.id,
-        name: app.product.name,
-        type: app.product.type
-      } : null,
-      requested_amount: app.requested_amount,
-      approved_amount: app.approved_amount,
-      term_months: app.term_months,
-      payment_frequency: app.payment_frequency,
-      monthly_payment: app.monthly_payment,
-      status: app.status,
-      status_label: app.status_reason ?? app.status,
-      created_at: app.created_at,
-      updated_at: app.updated_at,
-      assigned_to: app.assigned_to_id,
-      risk_level: app.risk_score ? (app.risk_score > 70 ? 'HIGH' : app.risk_score > 40 ? 'MEDIUM' : 'LOW') : null
-    }))
-    totalItems.value = response.meta.total
-    totalPages.value = response.meta.last_page
+    // Backend formatApplication returns: applicant_name (string), assigned_to ({ id, name } | null)
+    if (response.success && response.data) {
+      applications.value = response.data.applications.map((app) => {
+        // Backend sends these fields directly from formatApplication():
+        // - applicant_name: string | null (NOT applicant.full_name)
+        // - assigned_to: { id, name } | null (NOT assigned_to_id)
+        // - product: { id, name, type }
+        // - requested_term_months (NOT term_months)
+        // - risk_level (NOT risk_score)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rawApp = app as any
+        return {
+          id: rawApp.id,
+          folio: rawApp.folio,
+          applicant_name: rawApp.applicant_name ?? null,
+          applicant_phone: rawApp.applicant_phone ?? rawApp.applicant?.phone ?? null,
+          applicant_email: rawApp.applicant?.email ?? null,
+          product: rawApp.product ? {
+            id: rawApp.product.id,
+            name: rawApp.product.name,
+            type: rawApp.product.type
+          } : null,
+          requested_amount: rawApp.requested_amount,
+          approved_amount: rawApp.approved_amount ?? null,
+          term_months: rawApp.requested_term_months ?? rawApp.term_months ?? 0,
+          payment_frequency: rawApp.payment_frequency ?? 'MONTHLY',
+          monthly_payment: rawApp.monthly_payment,
+          status: rawApp.status,
+          status_label: rawApp.status_label ?? rawApp.status,
+          created_at: rawApp.created_at,
+          updated_at: rawApp.updated_at ?? rawApp.created_at,
+          assigned_to: rawApp.assigned_to?.name ?? null,
+          risk_level: rawApp.risk_level ?? null
+        }
+      })
+      totalItems.value = response.data.meta.total
+      totalPages.value = response.data.meta.last_page
+    }
   } catch (e) {
     log.error('Error al cargar solicitudes', { error: e })
     error.value = 'Error al cargar las solicitudes'
@@ -247,7 +260,7 @@ const applyQuickFilter = (filterId: string) => {
 const fetchProducts = async () => {
   try {
     const response = await v2.staff.product.list({ active: true })
-    products.value = response.data.map((p) => ({
+    products.value = (response.data?.products ?? []).map((p) => ({
       id: p.id,
       name: p.name,
       type: p.type
@@ -318,22 +331,6 @@ const getInactivityInfo = (app: Application) => {
     return { level: 'attention', label: '+8h', color: 'text-yellow-600', bg: 'bg-yellow-100', border: 'border-yellow-300' }
   }
   return null
-}
-
-const getStatusBadge = (status: string) => {
-  const badges: Record<string, { bg: string; text: string; label: string }> = {
-    DRAFT: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Borrador' },
-    SUBMITTED: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Nueva' },
-    IN_REVIEW: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'En Revisión' },
-    DOCS_PENDING: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Docs Pendientes' },
-    CORRECTIONS_PENDING: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Correcciones' },
-    APPROVED: { bg: 'bg-green-100', text: 'text-green-800', label: 'Aprobada' },
-    REJECTED: { bg: 'bg-red-100', text: 'text-red-800', label: 'Rechazada' },
-    CANCELLED: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Cancelada' },
-    DISBURSED: { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Desembolsada' },
-    SYNCED: { bg: 'bg-teal-100', text: 'text-teal-800', label: 'Sincronizada' }
-  }
-  return badges[status] || { bg: 'bg-gray-100', text: 'text-gray-800', label: status }
 }
 
 const viewApplication = (app: Application) => {
@@ -451,7 +448,7 @@ const openBulkAssignModal = async () => {
 
   try {
     const response = await v2.staff.user.list({ active: true, role: 'ANALYST' })
-    analysts.value = response.data.map((u) => ({
+    analysts.value = (response.data?.users ?? []).map((u) => ({
       id: u.id,
       name: u.name,
       email: u.email,
@@ -507,16 +504,7 @@ const showBulkRejectModal = ref(false)
 const bulkRejectReason = ref('')
 const isRejecting = ref(false)
 
-const rejectReasons = [
-  { value: 'SCORE_BAJO', label: 'Score crediticio bajo' },
-  { value: 'INGRESOS_INSUFICIENTES', label: 'Ingresos insuficientes' },
-  { value: 'HISTORIAL_NEGATIVO', label: 'Historial crediticio negativo' },
-  { value: 'DOCUMENTACION_FALSA', label: 'Documentación falsa o inconsistente' },
-  { value: 'REFERENCIAS_NO_VERIFICADAS', label: 'Referencias no verificadas' },
-  { value: 'SOBREENDEUDAMIENTO', label: 'Sobreendeudamiento' },
-  { value: 'POLITICAS_INTERNAS', label: 'No cumple políticas internas' },
-  { value: 'OTRO', label: 'Otro motivo' }
-]
+const rejectReasons = computed(() => tenantStore.options.rejectionReason ?? [])
 
 const openBulkRejectModal = () => {
   bulkRejectReason.value = ''
@@ -643,7 +631,7 @@ const confirmBulkReject = async (): Promise<void> => {
             type="text"
             placeholder="Buscar por nombre, folio, email..."
             aria-label="Buscar solicitudes"
-            class="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 focus:bg-white transition-colors"
+            class="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-50 focus:bg-white transition-colors"
           >
         </div>
 
@@ -651,7 +639,7 @@ const confirmBulkReject = async (): Promise<void> => {
         <select
           v-model="productFilter"
           aria-label="Filtrar por producto"
-          class="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white"
+          class="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
         >
           <option value="">Todos los productos</option>
           <option v-for="prod in products" :key="prod.id" :value="prod.id">

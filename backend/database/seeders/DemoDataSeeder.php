@@ -63,7 +63,7 @@ class DemoDataSeeder extends Seeder
                 'opening_commission' => 3.0,
                 'late_fee_rate' => 5.0,
                 'payment_frequencies' => ['WEEKLY', 'BIWEEKLY', 'MONTHLY'],
-                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_ADDRESS', 'PROOF_INCOME'],
+                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_OF_ADDRESS', 'PAYSLIP'],
                 'is_active' => true,
                 'display_order' => 1,
             ],
@@ -82,7 +82,7 @@ class DemoDataSeeder extends Seeder
                 'opening_commission' => 2.0,
                 'late_fee_rate' => 3.0,
                 'payment_frequencies' => ['BIWEEKLY', 'MONTHLY'],
-                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_ADDRESS', 'PAYSLIP_1', 'PAYSLIP_2', 'PAYSLIP_3'],
+                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_OF_ADDRESS', 'PAYSLIP_1', 'PAYSLIP_2', 'PAYSLIP_3'],
                 'is_active' => true,
                 'display_order' => 2,
             ],
@@ -101,7 +101,7 @@ class DemoDataSeeder extends Seeder
                 'opening_commission' => 2.5,
                 'late_fee_rate' => 4.0,
                 'payment_frequencies' => ['MONTHLY'],
-                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_ADDRESS', 'PROOF_INCOME', 'VEHICLE_INVOICE'],
+                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_OF_ADDRESS', 'PAYSLIP', 'VEHICLE_INVOICE'],
                 'is_active' => true,
                 'display_order' => 3,
             ],
@@ -236,8 +236,8 @@ class DemoDataSeeder extends Seeder
         $labels = [
             'INE_FRONT' => 'INE - Frente',
             'INE_BACK' => 'INE - Reverso',
-            'PROOF_ADDRESS' => 'Comprobante de Domicilio',
-            'PROOF_INCOME' => 'Comprobante de Ingresos',
+            'PROOF_OF_ADDRESS' => 'Comprobante de Domicilio',
+            'PAYSLIP' => 'Recibo de Nómina',
         ];
         $label = $labels[$docType] ?? $docType;
 

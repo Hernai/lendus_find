@@ -58,10 +58,10 @@ const loadLogs = async () => {
       to_date: filters.value.to_date || undefined,
     })
 
-    logs.value = response.data
-    currentPage.value = response.meta.current_page
-    lastPage.value = response.meta.last_page
-    total.value = response.meta.total
+    logs.value = response.data?.logs ?? []
+    currentPage.value = response.data?.meta.current_page ?? 1
+    lastPage.value = response.data?.meta.last_page ?? 1
+    total.value = response.data?.meta.total ?? 0
   } catch (e) {
     componentLog.error('Error al cargar logs de API', { error: e })
   } finally {
@@ -86,7 +86,7 @@ const loadStats = async () => {
 const loadProviders = async () => {
   try {
     const response = await v2.staff.apiLog.getProviders()
-    providers.value = response.data ?? []
+    providers.value = response.data?.providers ?? []
   } catch (e) {
     componentLog.error('Error al cargar proveedores', { error: e })
   }
@@ -99,7 +99,7 @@ const loadLogDetail = async (apiLog: ApiLog) => {
   isLoadingDetail.value = true
   try {
     const response = await v2.staff.apiLog.get(apiLog.id)
-    selectedLog.value = response.data ?? null
+    selectedLog.value = response.data?.log ?? null
   } catch (e) {
     componentLog.error('Error al cargar detalle del log', { error: e })
   } finally {

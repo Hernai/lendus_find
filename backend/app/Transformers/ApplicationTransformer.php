@@ -210,44 +210,28 @@ class ApplicationTransformer
 
     /**
      * Get human-readable label for a document type.
+     * Uses DocumentType enum for consistency.
      */
     public function getDocumentLabel(string $type): string
     {
-        return match ($type) {
-            'INE_FRONT' => 'INE (Frente)',
-            'INE_BACK' => 'INE (Reverso)',
-            'PROOF_ADDRESS' => 'Comprobante de domicilio',
-            'PROOF_INCOME' => 'Comprobante de ingresos',
-            'PAYSLIP_1' => 'Recibo de nómina 1',
-            'PAYSLIP_2' => 'Recibo de nómina 2',
-            'PAYSLIP_3' => 'Recibo de nómina 3',
-            'BANK_STATEMENT' => 'Estado de cuenta bancario',
-            'VEHICLE_INVOICE' => 'Factura del vehículo',
-            'RFC_CONSTANCY', 'RFC_CONSTANCIA' => 'Constancia de RFC',
-            'CURP' => 'CURP',
-            'SELFIE' => 'Selfie con INE',
-            default => ucwords(str_replace('_', ' ', strtolower($type))),
-        };
+        $docType = \App\Enums\DocumentType::tryFrom($type);
+        if ($docType) {
+            return $docType->label();
+        }
+        return ucwords(str_replace('_', ' ', strtolower($type)));
     }
 
     /**
      * Get description for a document type.
+     * Uses DocumentType enum label as description.
      */
     public function getDocumentDescription(string $type): string
     {
-        return match ($type) {
-            'INE_FRONT' => 'Fotografía clara del frente de tu INE',
-            'INE_BACK' => 'Fotografía clara del reverso de tu INE',
-            'PROOF_ADDRESS' => 'Recibo de luz, agua, teléfono o estado de cuenta (máximo 3 meses)',
-            'PROOF_INCOME' => 'Último recibo de nómina o declaración fiscal',
-            'PAYSLIP_1', 'PAYSLIP_2', 'PAYSLIP_3' => 'Recibo de nómina reciente',
-            'BANK_STATEMENT' => 'Estado de cuenta bancario de los últimos 3 meses',
-            'VEHICLE_INVOICE' => 'Factura original del vehículo',
-            'RFC_CONSTANCY', 'RFC_CONSTANCIA' => 'Constancia de situación fiscal del SAT',
-            'CURP' => 'Clave Única de Registro de Población',
-            'SELFIE' => 'Selfie sosteniendo tu INE junto a tu rostro',
-            default => 'Documento requerido',
-        };
+        $docType = \App\Enums\DocumentType::tryFrom($type);
+        if ($docType) {
+            return $docType->description();
+        }
+        return 'Documento requerido';
     }
 
     /**

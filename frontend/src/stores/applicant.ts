@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
 import type {
   Applicant,
   Address,
@@ -31,6 +32,17 @@ interface BankAccountResponse {
 
 interface BankAccountListResponse {
   data: BankAccount[]
+}
+
+// Simplified bank account type for V2 API responses
+interface SimpleBankAccount {
+  id: string
+  bank_name: string
+  clabe: string
+  holder_name: string
+  account_type: string
+  is_primary: boolean
+  is_verified: boolean
 }
 
 interface DocumentResponse {
@@ -181,8 +193,20 @@ export const useApplicantStore = defineStore('applicant', () => {
 
   const { execute: executeLoadBankAccounts } = useAsyncAction(
     async () => {
-      const response = await api.get<BankAccountListResponse>('/applicant/bank-accounts')
-      return response.data.data
+      // Use V2 profile API
+      const response = await v2.applicant.profile.listBankAccounts()
+      if (response.data?.bank_accounts) {
+        return response.data.bank_accounts.map(ba => ({
+          id: ba.id,
+          bank_name: ba.bank_name,
+          clabe: ba.clabe,
+          holder_name: ba.holder_name,
+          account_type: ba.account_type,
+          is_primary: ba.is_primary,
+          is_verified: ba.is_verified,
+        }))
+      }
+      return []
     },
     {
       onError: (e) => log.error('Failed to load bank accounts', { error: e.message })
@@ -191,8 +215,26 @@ export const useApplicantStore = defineStore('applicant', () => {
 
   const { execute: executeCreateBankAccount } = useAsyncAction(
     async (data: Partial<BankAccount>) => {
-      const response = await api.post<BankAccountResponse>('/applicant/bank-accounts', data)
-      return response.data.data
+      // Use V2 profile API
+      const response = await v2.applicant.profile.createBankAccount({
+        clabe: data.clabe || '',
+        holder_name: data.holder_name || '',
+        // Account type from backend BankAccountType enum
+        account_type: data.account_type,
+      })
+      if (response.data?.bank_account) {
+        const ba = response.data.bank_account
+        return {
+          id: ba.id,
+          bank_name: ba.bank_name,
+          clabe: ba.clabe,
+          holder_name: ba.holder_name,
+          account_type: ba.account_type,
+          is_primary: ba.is_primary,
+          is_verified: ba.is_verified,
+        }
+      }
+      throw new Error('Failed to create bank account')
     },
     {
       onError: (e) => log.error('Failed to create bank account', { error: e.message }),
@@ -202,7 +244,8 @@ export const useApplicantStore = defineStore('applicant', () => {
 
   const { execute: executeSetPrimaryBankAccount } = useAsyncAction(
     async (accountId: string) => {
-      await api.patch(`/applicant/bank-accounts/${accountId}/primary`)
+      // Use V2 profile API
+      await v2.applicant.profile.setPrimaryBankAccount(accountId)
     },
     {
       onError: (e) => log.error('Failed to set primary bank account', { error: e.message }),
@@ -212,7 +255,8 @@ export const useApplicantStore = defineStore('applicant', () => {
 
   const { execute: executeDeleteBankAccount } = useAsyncAction(
     async (accountId: string) => {
-      await api.delete(`/applicant/bank-accounts/${accountId}`)
+      // Use V2 profile API
+      await v2.applicant.profile.deleteBankAccount(accountId)
     },
     {
       onError: (e) => log.error('Failed to delete bank account', { error: e.message }),
@@ -222,11 +266,15 @@ export const useApplicantStore = defineStore('applicant', () => {
 
   const { execute: executeValidateClabe } = useAsyncAction(
     async (clabe: string) => {
-      const response = await api.post<{ data: { valid: boolean; bank_name?: string; error?: string } }>(
-        '/validate-clabe',
-        { clabe }
-      )
-      return response.data.data
+      // Use V2 profile API
+      const response = await v2.applicant.profile.validateClabe(clabe)
+      if (response.data) {
+        return {
+          valid: response.data.is_valid,
+          bank_name: response.data.bank_name ?? undefined,
+        }
+      }
+      return { valid: false, error: 'Error validando CLABE' }
     },
     {
       onError: (e) => log.error('Failed to validate CLABE', { error: e.message })
@@ -251,10 +299,13 @@ export const useApplicantStore = defineStore('applicant', () => {
 
   const { execute: executeSaveSignature } = useAsyncAction(
     async (signatureData: string) => {
-      const response = await api.post<ApplicantResponse>('/applicant/signature', {
-        signature: signatureData
-      })
-      applicant.value = response.data.data
+      // Use V2 profile API for signature
+      const response = await v2.applicant.profile.saveSignature(signatureData)
+      // V2 returns { signed_at: string }, not the full applicant
+      // Reload applicant to get updated state
+      if (response.success) {
+        await executeLoadApplicant()
+      }
       return applicant.value
     },
     {
@@ -265,12 +316,31 @@ export const useApplicantStore = defineStore('applicant', () => {
 
   const { execute: executeAddReference } = useAsyncAction(
     async (params: { applicationId: string; reference: Omit<Reference, 'id' | 'applicant_id' | 'application_id'> }) => {
-      const response = await api.post<{ data: Reference }>(
-        `/applications/${params.applicationId}/references`,
-        params.reference
-      )
-      references.value.push(response.data.data)
-      return response.data.data
+      // Use V2 profile API for references
+      const refType = params.reference.type === 'WORK' ? 'WORK' : 'PERSONAL'
+      const response = await v2.applicant.profile.addReference({
+        type: refType,
+        first_name: params.reference.first_name || '',
+        last_name_1: params.reference.last_name_1 || '',
+        last_name_2: params.reference.last_name_2,
+        phone: params.reference.phone,
+        relationship: params.reference.relationship,
+      })
+      if (response.data) {
+        const newRef: Reference = {
+          id: response.data.id,
+          first_name: response.data.first_name || '',
+          last_name_1: response.data.last_name_1 || '',
+          last_name_2: response.data.last_name_2 || '',
+          full_name: response.data.full_name || '',
+          phone: response.data.phone || '',
+          relationship: response.data.relationship || '',
+          type: response.data.type as 'PERSONAL' | 'WORK',
+        }
+        references.value.push(newRef)
+        return newRef
+      }
+      throw new Error('Failed to add reference')
     },
     {
       onError: (e) => log.error('Failed to add reference', { error: e.message }),
@@ -279,9 +349,21 @@ export const useApplicantStore = defineStore('applicant', () => {
   )
 
   const { execute: executeLoadReferences } = useAsyncAction(
-    async (applicationId: string) => {
-      const response = await api.get<{ data: Reference[] }>(`/applications/${applicationId}/references`)
-      references.value = response.data.data
+    async (_applicationId: string) => {
+      // Use V2 profile API for references
+      const response = await v2.applicant.profile.listReferences()
+      if (response.data) {
+        references.value = response.data.map(ref => ({
+          id: ref.id,
+          first_name: ref.first_name || '',
+          last_name_1: ref.last_name_1 || '',
+          last_name_2: ref.last_name_2 || '',
+          full_name: ref.full_name || '',
+          phone: ref.phone || '',
+          relationship: ref.relationship || '',
+          type: ref.type as 'PERSONAL' | 'WORK',
+        }))
+      }
       return references.value
     },
     {
@@ -291,16 +373,14 @@ export const useApplicantStore = defineStore('applicant', () => {
 
   const { execute: executeUploadProfilePhoto } = useAsyncAction(
     async (params: { applicationId: string; file: File }) => {
-      const formData = new FormData()
-      formData.append('file', params.file)
-      formData.append('type', 'SELFIE')
+      // Use V2 API - applicationId kept for metadata reference
+      const response = await v2.applicant.document.upload(params.file, 'SELFIE', {
+        metadata: { application_id: params.applicationId }
+      })
 
-      const response = await api.post<DocumentResponse>(
-        `/applications/${params.applicationId}/documents`,
-        formData
-      )
-
-      return response.data.data.signed_url || response.data.data.url || ''
+      // V2 doesn't return signed URL directly, return empty string
+      // Caller should use download endpoint if URL is needed
+      return response.data?.document?.id || ''
     },
     {
       onError: (e) => log.error('Failed to upload profile photo', { error: e.message }),
@@ -309,16 +389,13 @@ export const useApplicantStore = defineStore('applicant', () => {
   )
 
   const { execute: executeGetProfilePhotoUrl } = useAsyncAction(
-    async (applicationId: string) => {
-      const response = await api.get<DocumentListResponse>(`/applications/${applicationId}/documents`)
-      const selfieDoc = response.data.data.find(doc => doc.type === 'SELFIE')
+    async (_applicationId: string) => {
+      // Use V2 API to list documents
+      const listResponse = await v2.applicant.document.list({ type: 'SELFIE' })
+      const selfieDoc = listResponse.data?.documents?.find(doc => doc.type === 'SELFIE')
       if (selfieDoc) {
-        const imageResponse = await api.get(`/documents/${selfieDoc.id}/download`, {
-          responseType: 'blob'
-        })
-        const blob = new Blob([imageResponse.data as BlobPart], {
-          type: imageResponse.headers['content-type'] || 'image/jpeg'
-        })
+        // Stream document content directly through API (no external storage URL)
+        const blob = await v2.applicant.document.stream(selfieDoc.id)
         const isVerified = selfieDoc.status === 'APPROVED'
         // NOTE: Caller is responsible for calling URL.revokeObjectURL when done
         return { url: URL.createObjectURL(blob), isVerified }
@@ -401,12 +478,12 @@ export const useApplicantStore = defineStore('applicant', () => {
     return result
   }
 
-  const loadBankAccounts = async (): Promise<BankAccount[]> => {
+  const loadBankAccounts = async (): Promise<SimpleBankAccount[]> => {
     const result = await executeLoadBankAccounts()
     return result ?? []
   }
 
-  const createBankAccount = async (data: Partial<BankAccount>): Promise<BankAccount> => {
+  const createBankAccount = async (data: Partial<BankAccount>): Promise<SimpleBankAccount> => {
     const result = await executeCreateBankAccount(data)
     if (!result) throw new Error('Failed to create bank account')
     return result

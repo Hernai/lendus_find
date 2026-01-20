@@ -3,9 +3,10 @@ import { reactive, ref, onMounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOnboardingStore, useApplicationStore, useTenantStore } from '@/stores'
 import { AppButton, AppInput, AppSelect } from '@/components/common'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
 import { getErrorMessage } from '@/types/api'
 import { logger } from '@/utils/logger'
+import { formatPhoneInput } from '@/utils/formatters'
 
 const log = logger.child('Step7References')
 
@@ -16,8 +17,8 @@ const tenantStore = useTenantStore()
 const isSaving = ref(false)
 
 // Get relationship options from backend
-const familyRelationshipOptions = computed(() => tenantStore.options.relationship_family)
-const nonFamilyRelationshipOptions = computed(() => tenantStore.options.relationship_non_family)
+const familyRelationshipOptions = computed(() => tenantStore.options.relationshipFamily)
+const nonFamilyRelationshipOptions = computed(() => tenantStore.options.relationshipNonFamily)
 
 interface Reference {
   first_name: string
@@ -79,21 +80,11 @@ const isPhoneValid = (phone: string): boolean => {
   return digits.length === 10
 }
 
-const formatPhone = (phone: string): string => {
-  const digits = phone.replace(/\D/g, '').slice(0, 10)
-  if (digits.length >= 6) {
-    return `${digits.slice(0, 2)} ${digits.slice(2, 6)} ${digits.slice(6)}`
-  } else if (digits.length >= 2) {
-    return `${digits.slice(0, 2)} ${digits.slice(2)}`
-  }
-  return digits
-}
-
 const handlePhoneInput = (index: number, event: Event) => {
   const target = event.target as HTMLInputElement
   const ref = references[index]
   if (ref) {
-    ref.phone = formatPhone(target.value)
+    ref.phone = formatPhoneInput(target.value)
   }
 }
 
@@ -167,16 +158,16 @@ const handleSubmit = async () => {
   isSaving.value = true
 
   try {
-    // Save each reference to backend via API
+    // Save each reference to backend via V2 API
     for (const ref of references) {
-      const fullName = [
-        ref.first_name.toUpperCase(),
-        ref.last_name_1.toUpperCase(),
-        ref.last_name_2.toUpperCase()
-      ].filter(Boolean).join(' ')
+      // Determine type based on relationship
+      const refType = getTypeFromRelationship(ref.relationship)
 
-      await api.post(`/applications/${appId}/references`, {
-        full_name: fullName,
+      await v2.applicant.profile.addReference({
+        type: refType,
+        first_name: ref.first_name.toUpperCase(),
+        last_name_1: ref.last_name_1.toUpperCase(),
+        last_name_2: ref.last_name_2.toUpperCase() || undefined,
         relationship: ref.relationship,
         phone: ref.phone.replace(/\D/g, '')
       })

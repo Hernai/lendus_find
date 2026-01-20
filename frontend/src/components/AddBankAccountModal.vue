@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useApplicantStore, useProfileStore } from '@/stores'
+import { useApplicantStore, useProfileStore, useTenantStore } from '@/stores'
 
 const emit = defineEmits<{
   close: []
@@ -11,6 +11,8 @@ const emit = defineEmits<{
 const profileStore = useProfileStore()
 // Keep applicantStore for creating bank accounts (V1 API handles multiple accounts)
 const applicantStore = useApplicantStore()
+// Get enum options from tenant config
+const tenantStore = useTenantStore()
 
 const isSubmitting = ref(false)
 const error = ref<string | null>(null)
@@ -18,7 +20,6 @@ const error = ref<string | null>(null)
 // Form state
 const clabe = ref('')
 const bankName = ref('')
-const accountType = ref('DEBITO')
 const holderName = ref('')
 const holderRfc = ref('')
 const isOwnAccount = ref(true)
@@ -30,14 +31,15 @@ const clabeError = ref<string | null>(null)
 const clabeValid = ref(false)
 const bankNameAutoDetected = ref(false)
 
-const accountTypeOptions = [
-  { value: 'DEBITO', label: 'Débito' },
-  { value: 'NOMINA', label: 'Nómina' },
-  { value: 'AHORRO', label: 'Ahorro' },
-  { value: 'CHEQUES', label: 'Cheques' },
-  { value: 'INVERSION', label: 'Inversión' },
-  { value: 'OTRO', label: 'Otro' }
-]
+// Account type options from backend enum
+const accountTypeOptions = computed(() => tenantStore.options.bankAccountType)
+// Default to first option or DEBIT
+const accountType = ref('')
+watch(accountTypeOptions, (opts) => {
+  if (opts.length > 0 && !accountType.value) {
+    accountType.value = opts[0]?.value || 'DEBIT'
+  }
+}, { immediate: true })
 
 const canSubmit = computed(() => {
   return (

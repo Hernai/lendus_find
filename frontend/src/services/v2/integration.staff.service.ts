@@ -64,10 +64,11 @@ export interface V2IntegrationTestPayload {
   test_email?: string
 }
 
+/**
+ * Response structure for successful test.
+ * Note: This is the data inside success response, not the full V2ApiResponse.
+ */
 export interface V2IntegrationTestResult {
-  success: boolean
-  message: string
-  error?: string
   details?: {
     sid?: string
     status?: string
@@ -82,40 +83,40 @@ export interface V2IntegrationTestResult {
 /**
  * List all integrations for current tenant.
  */
-export async function list(): Promise<V2ApiResponse<V2Integration[]>> {
-  const response = await api.get<V2ApiResponse<V2Integration[]>>(BASE_PATH)
+export async function list(): Promise<V2ApiResponse<{ integrations: V2Integration[] }>> {
+  const response = await api.get<V2ApiResponse<{ integrations: V2Integration[] }>>(BASE_PATH)
   return response.data
 }
 
 /**
  * Get available providers and service types.
  */
-export async function getOptions(): Promise<V2IntegrationOptions> {
-  const response = await api.get<V2IntegrationOptions>(`${BASE_PATH}/options`)
+export async function getOptions(): Promise<V2ApiResponse<V2IntegrationOptions>> {
+  const response = await api.get<V2ApiResponse<V2IntegrationOptions>>(`${BASE_PATH}/options`)
   return response.data
 }
 
 /**
  * Create or update an integration.
  */
-export async function save(payload: V2IntegrationPayload): Promise<V2ApiResponse<V2Integration>> {
-  const response = await api.post<V2ApiResponse<V2Integration>>(BASE_PATH, payload)
+export async function save(payload: V2IntegrationPayload): Promise<V2ApiResponse<{ integration: V2Integration }>> {
+  const response = await api.post<V2ApiResponse<{ integration: V2Integration }>>(BASE_PATH, payload)
   return response.data
 }
 
 /**
  * Test an integration.
  */
-export async function test(id: string, payload?: V2IntegrationTestPayload): Promise<V2IntegrationTestResult> {
-  const response = await api.post<V2IntegrationTestResult>(`${BASE_PATH}/${id}/test`, payload)
+export async function test(id: string, payload?: V2IntegrationTestPayload): Promise<V2ApiResponse<V2IntegrationTestResult>> {
+  const response = await api.post<V2ApiResponse<V2IntegrationTestResult>>(`${BASE_PATH}/${id}/test`, payload)
   return response.data
 }
 
 /**
  * Toggle integration active status.
  */
-export async function toggle(id: string): Promise<V2ApiResponse<V2Integration>> {
-  const response = await api.patch<V2ApiResponse<V2Integration>>(`${BASE_PATH}/${id}/toggle`)
+export async function toggle(id: string): Promise<V2ApiResponse<{ integration: V2Integration }>> {
+  const response = await api.patch<V2ApiResponse<{ integration: V2Integration }>>(`${BASE_PATH}/${id}/toggle`)
   return response.data
 }
 

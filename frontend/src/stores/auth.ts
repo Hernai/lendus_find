@@ -141,6 +141,10 @@ export const useAuthStore = defineStore('auth', () => {
   // Permissions state (for staff users)
   const permissions = ref<UserPermissions | null>(null)
 
+  // Cache control for checkAuth
+  const authChecked = ref(false)
+  const authCheckPromise = ref<Promise<boolean> | null>(null)
+
   // Super admin tenant switching
   // Use storage utility consistently - no fallback to raw localStorage
   const selectedTenantId = ref<string | null>(storage.get<string>(STORAGE_KEYS.CURRENT_TENANT_ID))
@@ -270,8 +274,19 @@ export const useAuthStore = defineStore('auth', () => {
           code,
         })
 
-        if (response.success && response.data) {
-          const authData = response.data
+        // Handle both response formats:
+        // - Standard V2: { success: true, data: { token, user } }
+        // - Legacy/Direct: { success: true, token, user }
+        const rawResponse = response as unknown as {
+          success: boolean
+          data?: { token: string; user: import('@/types/v2').V2ApplicantUser }
+          token?: string
+          user?: import('@/types/v2').V2ApplicantUser
+        }
+
+        const authData = rawResponse.data || (rawResponse.token && rawResponse.user ? { token: rawResponse.token, user: rawResponse.user } : null)
+
+        if (response.success && authData) {
           // Cast to V2ApplicantUser since we're using applicant auth
           const apiUser = authData.user as import('@/types/v2').V2ApplicantUser
 
@@ -298,6 +313,7 @@ export const useAuthStore = defineStore('auth', () => {
           token.value = authData.token
           storage.set(STORAGE_KEYS.AUTH_TOKEN, authData.token)
           storage.set(STORAGE_KEYS.CURRENT_USER_ID, apiUser.id)
+          storage.set(STORAGE_KEYS.CURRENT_USER_TYPE, 'applicant')
 
           // Set PIN state (only for phone-based authentication, not email)
           const isPhoneAuth = otpMethod.value === 'sms' || otpMethod.value === 'whatsapp'
@@ -357,6 +373,7 @@ export const useAuthStore = defineStore('auth', () => {
         token.value = response.data.token
         storage.set(STORAGE_KEYS.AUTH_TOKEN, response.data.token)
         storage.set(STORAGE_KEYS.CURRENT_USER_ID, apiUser.id)
+        storage.set(STORAGE_KEYS.CURRENT_USER_TYPE, 'applicant')
 
         // Set PIN state (only for phone-based authentication, not email)
         const isPhoneAuth = otpMethod.value === 'sms' || otpMethod.value === 'whatsapp'
@@ -437,10 +454,13 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = null
       token.value = null
       permissions.value = null
+      authChecked.value = false
+      authCheckPromise.value = null
 
       // Clear storage (new manager + legacy)
       storage.remove(STORAGE_KEYS.AUTH_TOKEN)
       storage.remove(STORAGE_KEYS.CURRENT_USER_ID)
+      storage.remove(STORAGE_KEYS.CURRENT_USER_TYPE)
       localStorage.removeItem('auth_token')
       localStorage.removeItem('current_user_id')
 
@@ -455,18 +475,98 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const checkAuth = async (targetPath?: string) => {
+  const checkAuth = async (targetPath?: string, force = false) => {
     if (!token.value) return false
 
-    try {
-      const response = await api.get<MeApiResponse>('/me')
-      const apiUser = response.data.user
+    // If already checked and user exists, skip (unless forced)
+    if (!force && authChecked.value && user.value) {
+      // Just check route access
+      const pathToCheck = targetPath || window.location.pathname
+      const isAdminRoute = pathToCheck.startsWith('/admin')
+      if (isAdminRoute && !isStaff.value) {
+        return false
+      }
+      return true
+    }
+
+    // If already checking, wait for existing promise
+    if (authCheckPromise.value) {
+      authLogger.debug('checkAuth already in progress, waiting...')
+      return authCheckPromise.value
+    }
+
+    const checkPromise = (async () => {
+      try {
+        // Determine user type from storage or try both endpoints
+        const userType = storage.get<string>(STORAGE_KEYS.CURRENT_USER_TYPE)
+      let apiUser: {
+        id: string
+        tenant_id?: string
+        phone?: string | null
+        email?: string | null
+        type?: string
+        role?: string
+        is_admin?: boolean
+        is_staff: boolean
+        has_pin?: boolean
+        applicant?: unknown
+        permissions?: UserPermissions
+      }
+
+      if (userType === 'staff') {
+        // Try staff endpoint
+        const response = await v2.staff.auth.getMe()
+        if (!response.success || !response.data) {
+          throw new Error('Failed to get staff user')
+        }
+        const staffUser = response.data.user
+        apiUser = {
+          id: staffUser.id,
+          email: staffUser.email,
+          type: staffUser.role,
+          role: staffUser.role,
+          is_staff: true,
+          permissions: staffUser.permissions ? (
+            // Handle both array format (legacy) and object format (V2)
+            Array.isArray(staffUser.permissions) ? {
+              canViewAllApplications: staffUser.permissions.includes('canViewAllApplications'),
+              canReviewDocuments: staffUser.permissions.includes('canReviewDocuments'),
+              canVerifyReferences: staffUser.permissions.includes('canVerifyReferences'),
+              canChangeApplicationStatus: staffUser.permissions.includes('canChangeApplicationStatus'),
+              canApproveRejectApplications: staffUser.permissions.includes('canApproveRejectApplications'),
+              canAssignApplications: staffUser.permissions.includes('canAssignApplications'),
+              canManageProducts: staffUser.permissions.includes('canManageProducts'),
+              canManageUsers: staffUser.permissions.includes('canManageUsers'),
+              canViewReports: staffUser.permissions.includes('canViewReports'),
+              canConfigureTenant: staffUser.permissions.includes('canConfigureTenant'),
+            } : staffUser.permissions as unknown as UserPermissions
+          ) : undefined
+        }
+      } else {
+        // Try applicant endpoint (default)
+        const response = await v2.applicant.auth.getMe()
+        if (!response.success || !response.data) {
+          throw new Error('Failed to get applicant user')
+        }
+        const appUser = response.data.user
+        apiUser = {
+          id: appUser.id,
+          tenant_id: appUser.tenant_id,
+          phone: appUser.phone,
+          email: appUser.email,
+          type: 'APPLICANT',
+          is_admin: false,
+          is_staff: false,
+          has_pin: appUser.has_pin,
+          applicant: appUser.person_id ? { id: appUser.person_id } : null
+        }
+      }
 
       // Map backend user to frontend User type
       // For staff users, use the backend type directly
       const userRole = apiUser.is_staff
-        ? apiUser.type as User['role']
-        : mapUserType(apiUser.type, apiUser.is_admin)
+        ? (apiUser.type || apiUser.role) as User['role']
+        : mapUserType(apiUser.type || 'APPLICANT', apiUser.is_admin || false)
 
       // Check if user changed (different user_id)
       const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
@@ -477,9 +577,9 @@ export const useAuthStore = defineStore('auth', () => {
 
       user.value = {
         id: apiUser.id,
-        tenant_id: '',
+        tenant_id: apiUser.tenant_id || '',
         phone: apiUser.phone || '',
-        email: apiUser.email,
+        email: apiUser.email || null,
         role: userRole,
         phone_verified_at: apiUser.phone ? new Date().toISOString() : null,
         created_at: new Date().toISOString(),
@@ -508,6 +608,9 @@ export const useAuthStore = defineStore('auth', () => {
         needsPinSetup.value = hasPhone && !apiUser.has_pin
       }
 
+      // Mark as checked
+      authChecked.value = true
+
       // Check if user has access to target route
       const pathToCheck = targetPath || window.location.pathname
       const isAdminRoute = pathToCheck.startsWith('/admin')
@@ -523,10 +626,18 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = null
       token.value = null
       permissions.value = null
+      authChecked.value = false
       storage.remove(STORAGE_KEYS.AUTH_TOKEN)
+      storage.remove(STORAGE_KEYS.CURRENT_USER_TYPE)
       localStorage.removeItem('auth_token')
       return false
+    } finally {
+      authCheckPromise.value = null
     }
+    })()
+
+    authCheckPromise.value = checkPromise
+    return checkPromise
   }
 
   // PIN-related actions
@@ -613,6 +724,7 @@ export const useAuthStore = defineStore('auth', () => {
           token.value = authData.token
           storage.set(STORAGE_KEYS.AUTH_TOKEN, authData.token)
           storage.set(STORAGE_KEYS.CURRENT_USER_ID, apiUser.id)
+          storage.set(STORAGE_KEYS.CURRENT_USER_TYPE, 'applicant')
           hasPin.value = true
           needsPinSetup.value = false
 
@@ -658,6 +770,7 @@ export const useAuthStore = defineStore('auth', () => {
         token.value = response.data.token
         storage.set(STORAGE_KEYS.AUTH_TOKEN, response.data.token)
         storage.set(STORAGE_KEYS.CURRENT_USER_ID, apiUser.id)
+        storage.set(STORAGE_KEYS.CURRENT_USER_TYPE, 'applicant')
         hasPin.value = true
         needsPinSetup.value = false
 
@@ -776,11 +889,9 @@ export const useAuthStore = defineStore('auth', () => {
         // V2 API - uses StaffAccount model
         const response = await v2.staff.auth.login({ email, password })
 
-        // V2 response has success/token/user at root level (not in data)
-        const apiResponse = response as unknown as {
-          success: boolean
-          token: string
-          user: {
+        // V2 response wraps data in { success, data: { token, user } }
+        if (response.success && response.data) {
+          const apiUser = response.data.user as {
             id: string
             email: string
             role: string
@@ -790,11 +901,7 @@ export const useAuthStore = defineStore('auth', () => {
             permissions: Record<string, boolean>
             created_at?: string
           }
-          error?: string
-        }
-
-        if (apiResponse.success) {
-          const apiUser = apiResponse.user
+          const apiToken = response.data.token
 
           // Check if user changed (different user_id)
           const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
@@ -819,17 +926,18 @@ export const useAuthStore = defineStore('auth', () => {
             permissions.value = apiUser.permissions as unknown as UserPermissions
           }
 
-          token.value = apiResponse.token
-          storage.set(STORAGE_KEYS.AUTH_TOKEN, apiResponse.token)
+          token.value = apiToken
+          storage.set(STORAGE_KEYS.AUTH_TOKEN, apiToken)
           storage.set(STORAGE_KEYS.CURRENT_USER_ID, apiUser.id)
+          storage.set(STORAGE_KEYS.CURRENT_USER_TYPE, 'staff')
 
           // Initialize WebSocket
-          initializeEcho(apiResponse.token)
+          initializeEcho(apiToken)
 
           return { success: true }
         }
 
-        return { success: false, error: apiResponse.error || 'LOGIN_FAILED' }
+        return { success: false, error: response.message || 'LOGIN_FAILED' }
       }
 
       // V1 API (legacy)
@@ -864,6 +972,7 @@ export const useAuthStore = defineStore('auth', () => {
         token.value = response.data.token
         storage.set(STORAGE_KEYS.AUTH_TOKEN, response.data.token)
         storage.set(STORAGE_KEYS.CURRENT_USER_ID, apiUser.id)
+        storage.set(STORAGE_KEYS.CURRENT_USER_TYPE, 'staff')
 
         // Inicializar WebSocket
         initializeEcho(response.data.token)

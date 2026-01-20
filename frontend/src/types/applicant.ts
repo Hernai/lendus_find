@@ -167,23 +167,26 @@ export interface BankAccount {
 
 export type BankAccountType = 'DISBURSEMENT' | 'PAYMENT' | 'BOTH'
 
-// Legacy V1 API account types (Spanish values from backend)
-// For new code, use V2BankAccountType from types/v2
-export type AccountType = 'DEBITO' | 'NOMINA' | 'AHORRO' | 'CHEQUES' | 'INVERSION' | 'OTRO'
+// Account type values come from backend BankAccountType enum via options.bank_account_type
+export type AccountType = string
 
 // Reference (existing structure)
 export interface Reference {
   id: string
   applicant_id?: string
   application_id?: string
+  // V2 API uses separate name fields
+  first_name?: string
+  last_name_1?: string
+  last_name_2?: string
   full_name: string
   phone: string
   email?: string
-  relationship: ReferenceRelationship
+  relationship: ReferenceRelationship | string
   type: ReferenceType
   address?: string
   years_known?: number
-  is_verified: boolean
+  is_verified?: boolean
   verification_result?: string
   verification_notes?: string
   verified_at?: string

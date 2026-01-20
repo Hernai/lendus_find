@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApplicationStore, useTenantStore, useAuthStore } from '@/stores'
 import { AppButton, AppSlider } from '@/components/common'
+import { formatMoney, formatMoneyDecimals, formatFrequency } from '@/utils/formatters'
 import type { PaymentFrequency, Product } from '@/types'
 
 interface Props {
@@ -186,24 +187,6 @@ watch([amount, selectedPayments, paymentFrequency, activeProduct], async () => {
   }
 })
 
-// Format currency
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(value)
-}
-
-const formatCurrencyDecimals = (value: number) => {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(value)
-}
 
 // Request credit
 const handleRequestCredit = async () => {
@@ -246,13 +229,11 @@ const handleRequestCredit = async () => {
   }
 }
 
-const frequencyLabels: Record<PaymentFrequency, string> = {
-  SEMANAL: 'Semanal',
-  WEEKLY: 'Semanal',
-  BIWEEKLY: 'Quincenal',
-  QUINCENAL: 'Quincenal',
-  MONTHLY: 'Mensual',
-  MENSUAL: 'Mensual'
+// Get frequency label from backend enum via formatters utility
+const getFrequencyLabel = (freq: PaymentFrequency) => {
+  // Capitalize first letter for display in selector buttons
+  const label = formatFrequency(freq)
+  return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
 const paymentLabel = computed(() => {
@@ -277,7 +258,7 @@ const paymentLabel = computed(() => {
         :max="maxAmount"
         :step="1000"
         label="¿Cuánto necesitas?"
-        :format-value="formatCurrency"
+        :format-value="formatMoney"
       />
     </div>
 
@@ -298,7 +279,7 @@ const paymentLabel = computed(() => {
           ]"
           @click="paymentFrequency = freq"
         >
-          {{ frequencyLabels[freq] }}
+          {{ getFrequencyLabel(freq) }}
         </button>
       </div>
     </div>
@@ -334,7 +315,7 @@ const paymentLabel = computed(() => {
         <div>
           <p class="text-primary-100 text-sm">Tu pago {{ paymentLabel }}</p>
           <p class="text-3xl md:text-4xl font-bold">
-            {{ formatCurrencyDecimals(simulation.periodic_payment) }}
+            {{ formatMoneyDecimals(simulation.periodic_payment) }}
           </p>
         </div>
         <div class="text-right">
@@ -346,11 +327,11 @@ const paymentLabel = computed(() => {
       <div class="grid grid-cols-2 gap-4 pt-4 border-t border-white/20 text-sm">
         <div>
           <p class="text-primary-200">Total a pagar</p>
-          <p class="font-semibold">{{ formatCurrencyDecimals(simulation.total_amount) }}</p>
+          <p class="font-semibold">{{ formatMoneyDecimals(simulation.total_amount) }}</p>
         </div>
         <div>
           <p class="text-primary-200">Intereses</p>
-          <p class="font-semibold">{{ formatCurrencyDecimals(simulation.total_interest) }}</p>
+          <p class="font-semibold">{{ formatMoneyDecimals(simulation.total_interest) }}</p>
         </div>
       </div>
     </div>

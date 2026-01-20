@@ -146,7 +146,7 @@ class SecondTenantSeeder extends Seeder
                 'opening_commission' => 4.0,
                 'late_fee_rate' => 6.0,
                 'payment_frequencies' => ['SEMANAL', 'QUINCENAL'],
-                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_ADDRESS'],
+                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_OF_ADDRESS'],
                 'rules' => [
                     'min_amount' => 3000,
                     'max_amount' => 50000,
@@ -169,7 +169,7 @@ class SecondTenantSeeder extends Seeder
                 'opening_commission' => 2.5,
                 'late_fee_rate' => 4.0,
                 'payment_frequencies' => ['MENSUAL'],
-                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_ADDRESS', 'RFC_CONSTANCIA', 'BANK_STATEMENT'],
+                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_OF_ADDRESS', 'RFC_CONSTANCIA', 'BANK_STATEMENT'],
                 'rules' => [
                     'min_amount' => 50000,
                     'max_amount' => 500000,
@@ -192,7 +192,7 @@ class SecondTenantSeeder extends Seeder
                 'opening_commission' => 2.0,
                 'late_fee_rate' => 3.0,
                 'payment_frequencies' => ['MENSUAL'],
-                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_ADDRESS', 'PROOF_INCOME', 'VEHICLE_INVOICE'],
+                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_OF_ADDRESS', 'PAYSLIP', 'VEHICLE_INVOICE'],
                 'rules' => [
                     'min_amount' => 100000,
                     'max_amount' => 800000,

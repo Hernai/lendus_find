@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V2\Staff;
 
+use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\StaffAccount;
 use App\Models\TenantApiConfig;
@@ -16,6 +17,7 @@ use Illuminate\Http\Request;
  */
 class ConfigController extends Controller
 {
+    use ApiResponses;
     /**
      * Get current tenant's configuration.
      *
@@ -27,23 +29,21 @@ class ConfigController extends Controller
         $staff = $request->user();
         $tenant = $staff->tenant;
 
-        return response()->json([
-            'data' => [
-                'tenant' => [
-                    'id' => $tenant->id,
-                    'name' => $tenant->name,
-                    'slug' => $tenant->slug,
-                    'legal_name' => $tenant->legal_name,
-                    'rfc' => $tenant->rfc,
-                    'email' => $tenant->email,
-                    'phone' => $tenant->phone,
-                    'website' => $tenant->website,
-                ],
-                'branding' => $tenant->brandingConfig?->toApiArray() ?? $this->getDefaultBranding(),
-                'api_configs' => $tenant->apiConfigs->map->toApiArray(),
-                'available_providers' => TenantApiConfig::PROVIDERS,
-                'available_service_types' => TenantApiConfig::SERVICE_TYPES,
-            ]
+        return $this->success([
+            'tenant' => [
+                'id' => $tenant->id,
+                'name' => $tenant->name,
+                'slug' => $tenant->slug,
+                'legal_name' => $tenant->legal_name,
+                'rfc' => $tenant->rfc,
+                'email' => $tenant->email,
+                'phone' => $tenant->phone,
+                'website' => $tenant->website,
+            ],
+            'branding' => $tenant->brandingConfig?->toApiArray() ?? $this->getDefaultBranding(),
+            'api_configs' => $tenant->apiConfigs->map->toApiArray(),
+            'available_providers' => TenantApiConfig::PROVIDERS,
+            'available_service_types' => TenantApiConfig::SERVICE_TYPES,
         ]);
     }
 
@@ -69,9 +69,8 @@ class ConfigController extends Controller
 
         $tenant->update($validated);
 
-        return response()->json([
-            'message' => 'Información actualizada',
-            'data' => [
+        return $this->success([
+            'tenant' => [
                 'id' => $tenant->id,
                 'name' => $tenant->name,
                 'slug' => $tenant->slug,
@@ -81,7 +80,7 @@ class ConfigController extends Controller
                 'phone' => $tenant->phone,
                 'website' => $tenant->website,
             ]
-        ]);
+        ], 'Información actualizada');
     }
 
     /**
@@ -117,10 +116,9 @@ class ConfigController extends Controller
             $validated
         );
 
-        return response()->json([
-            'message' => 'Branding actualizado',
-            'data' => $branding->toApiArray()
-        ]);
+        return $this->success([
+            'branding' => $branding->toApiArray()
+        ], 'Branding actualizado');
     }
 
     /**
@@ -134,8 +132,8 @@ class ConfigController extends Controller
         $staff = $request->user();
         $tenant = $staff->tenant;
 
-        return response()->json([
-            'data' => $tenant->apiConfigs->map->toApiArray(),
+        return $this->success([
+            'api_configs' => $tenant->apiConfigs->map->toApiArray(),
             'available_providers' => TenantApiConfig::PROVIDERS,
             'available_service_types' => TenantApiConfig::SERVICE_TYPES,
         ]);
@@ -178,10 +176,9 @@ class ConfigController extends Controller
             collect($validated)->except(['provider', 'service_type'])->toArray()
         );
 
-        return response()->json([
-            'message' => 'Configuración guardada',
-            'data' => $config->toApiArray()
-        ]);
+        return $this->success([
+            'api_config' => $config->toApiArray()
+        ], 'Configuración guardada');
     }
 
     /**
@@ -201,9 +198,7 @@ class ConfigController extends Controller
 
         $config->delete();
 
-        return response()->json([
-            'message' => 'Configuración eliminada'
-        ]);
+        return $this->success(null, 'Configuración eliminada');
     }
 
     /**
@@ -231,11 +226,13 @@ class ConfigController extends Controller
             'last_test_error' => $error,
         ]);
 
-        return response()->json([
-            'success' => $success,
-            'message' => $success ? 'Conexión exitosa' : $error,
-            'data' => $config->toApiArray()
-        ]);
+        if ($success) {
+            return $this->success([
+                'api_config' => $config->toApiArray()
+            ], 'Conexión exitosa');
+        }
+
+        return $this->badRequest('TEST_FAILED', $error ?? 'Error en la prueba');
     }
 
     /**

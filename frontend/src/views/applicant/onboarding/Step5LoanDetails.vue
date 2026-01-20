@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore, useApplicationStore } from '@/stores'
+import { useOnboardingStore, useApplicationStore, useTenantStore } from '@/stores'
 import { useStepForm, rules } from '@/composables'
 import { AppButton, AppSelect } from '@/components/common'
+import { formatMoney } from '@/utils/formatters'
 
 const router = useRouter()
 const onboardingStore = useOnboardingStore()
 const applicationStore = useApplicationStore()
+const tenantStore = useTenantStore()
 
 const simulation = computed(() => applicationStore.simulation)
 
@@ -48,31 +50,18 @@ onMounted(async () => {
   }
 })
 
-const purposeOptions = [
-  { value: 'PERSONAL', label: 'Gastos personales' },
-  { value: 'CONSOLIDACION', label: 'Consolidar deudas' },
-  { value: 'NEGOCIO', label: 'Capital de trabajo / negocio' },
-  { value: 'MEDICO', label: 'Gastos médicos' },
-  { value: 'EDUCACION', label: 'Educación' },
-  { value: 'VIAJE', label: 'Viaje' },
-  { value: 'HOGAR', label: 'Mejoras del hogar' },
-  { value: 'OTRO', label: 'Otro' },
-]
+// Get options from backend enums
+const purposeOptions = computed(() => tenantStore.options.loanPurpose)
 
-const frequencyLabels: Record<string, string> = {
-  WEEKLY: 'semanal',
-  BIWEEKLY: 'quincenal',
-  MONTHLY: 'mensual',
-}
+// Build frequency labels from backend enum
+const frequencyLabels = computed(() => {
+  const labels: Record<string, string> = {}
+  for (const opt of tenantStore.options.paymentFrequency) {
+    labels[opt.value] = opt.label.toLowerCase()
+  }
+  return labels
+})
 
-const formatMoney = (amount: number) => {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
 </script>
 
 <template>
@@ -114,7 +103,7 @@ const formatMoney = (amount: number) => {
             </div>
             <div>
               <p class="text-primary-200 text-xs">CAT</p>
-              <p class="font-semibold">{{ simulation.cat.toFixed(1) }}%</p>
+              <p class="font-semibold">{{ (simulation.cat || 0).toFixed(1) }}%</p>
             </div>
           </div>
         </div>

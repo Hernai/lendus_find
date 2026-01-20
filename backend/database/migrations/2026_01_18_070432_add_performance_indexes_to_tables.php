@@ -86,11 +86,13 @@ return new class extends Migration
                     ['tenant_id', 'status', 'created_at'],
                     'applications_v2_tenant_status_idx'
                 );
-                // Índice para aplicaciones asignadas
-                $table->index(
-                    ['tenant_id', 'assigned_to_id', 'status'],
-                    'applications_v2_assigned_status_idx'
-                );
+                // Índice para aplicaciones asignadas (solo si la columna existe)
+                if (Schema::hasColumn('applications_v2', 'assigned_to_id')) {
+                    $table->index(
+                        ['tenant_id', 'assigned_to_id', 'status'],
+                        'applications_v2_assigned_status_idx'
+                    );
+                }
             });
         }
     }
@@ -131,8 +133,13 @@ return new class extends Migration
         if (Schema::hasTable('applications_v2')) {
             Schema::table('applications_v2', function (Blueprint $table) {
                 $table->dropIndex('applications_v2_tenant_status_idx');
-                $table->dropIndex('applications_v2_assigned_status_idx');
             });
+            // Solo eliminar si la columna existe
+            if (Schema::hasColumn('applications_v2', 'assigned_to_id')) {
+                Schema::table('applications_v2', function (Blueprint $table) {
+                    $table->dropIndex('applications_v2_assigned_status_idx');
+                });
+            }
         }
     }
 };

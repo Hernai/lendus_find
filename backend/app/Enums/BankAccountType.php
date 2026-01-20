@@ -2,6 +2,8 @@
 
 namespace App\Enums;
 
+use App\Enums\Traits\HasOptions;
+
 /**
  * Bank account type enum.
  *
@@ -10,6 +12,8 @@ namespace App\Enums;
  */
 enum BankAccountType: string
 {
+    use HasOptions;
+
     case DEBIT = 'DEBIT';
     case PAYROLL = 'PAYROLL';
     case SAVINGS = 'SAVINGS';

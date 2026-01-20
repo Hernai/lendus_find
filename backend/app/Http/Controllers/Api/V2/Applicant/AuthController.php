@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V2\Applicant;
 
+use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\ApplicantAccount;
 use App\Services\ApplicantAuthService;
@@ -16,6 +17,7 @@ use Illuminate\Http\Request;
  */
 class AuthController extends Controller
 {
+    use ApiResponses;
     public function __construct(
         private ApplicantAuthService $authService
     ) {}
@@ -51,17 +53,10 @@ class AuthController extends Controller
                 default => 400,
             };
 
-            return response()->json([
-                'error' => $result['error'] ?? 'OTP_REQUEST_FAILED',
-                'message' => $result['message'],
-            ], $statusCode);
+            return $this->error($result['error'] ?? 'OTP_REQUEST_FAILED', $result['message'], $statusCode);
         }
 
-        return response()->json([
-            'success' => true,
-            'message' => $result['message'],
-            'data' => $result['data'] ?? [],
-        ]);
+        return $this->success($result['data'] ?? [], $result['message']);
     }
 
     /**
@@ -94,20 +89,14 @@ class AuthController extends Controller
                 default => 400,
             };
 
-            return response()->json([
-                'error' => $result['error'] ?? 'VERIFICATION_FAILED',
-                'message' => $result['message'],
-                'data' => $result['data'] ?? null,
-            ], $statusCode);
+            return $this->error($result['error'] ?? 'VERIFICATION_FAILED', $result['message'], $statusCode);
         }
 
-        return response()->json([
-            'success' => true,
-            'message' => $result['message'],
+        return $this->success([
             'token' => $result['data']['token'],
             'is_new_user' => $result['data']['is_new_user'] ?? false,
             'user' => $result['data']['user'],
-        ]);
+        ], $result['message']);
     }
 
     /**
@@ -120,7 +109,7 @@ class AuthController extends Controller
         $validated = $request->validate([
             'type' => 'required|string|in:phone,email,PHONE,EMAIL',
             'identifier' => 'required|string',
-            'pin' => 'required|string|size:6',
+            'pin' => 'required|string|digits:4',
         ]);
 
         $tenantId = app('tenant.id');
@@ -142,19 +131,13 @@ class AuthController extends Controller
                 default => 400,
             };
 
-            return response()->json([
-                'error' => $result['error'] ?? 'LOGIN_FAILED',
-                'message' => $result['message'],
-                'data' => $result['data'] ?? null,
-            ], $statusCode);
+            return $this->error($result['error'] ?? 'LOGIN_FAILED', $result['message'], $statusCode);
         }
 
-        return response()->json([
-            'success' => true,
-            'message' => $result['message'],
+        return $this->success([
             'token' => $result['data']['token'],
             'user' => $result['data']['user'],
-        ]);
+        ], $result['message']);
     }
 
     /**
@@ -165,7 +148,7 @@ class AuthController extends Controller
     public function setupPin(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'pin' => 'required|string|size:6',
+            'pin' => 'required|string|digits:4',
             'pin_confirmation' => 'required|string|same:pin',
         ]);
 
@@ -173,32 +156,20 @@ class AuthController extends Controller
         $account = $request->user();
 
         if (!$account instanceof ApplicantAccount) {
-            return response()->json([
-                'error' => 'INVALID_TOKEN',
-                'message' => 'Token no válido para esta ruta',
-            ], 401);
+            return $this->unauthorized('Token no válido para esta ruta');
         }
 
         if ($account->hasPin()) {
-            return response()->json([
-                'error' => 'PIN_ALREADY_SET',
-                'message' => 'Ya tienes un PIN configurado. Usa cambiar PIN.',
-            ], 400);
+            return $this->badRequest('PIN_ALREADY_SET', 'Ya tienes un PIN configurado. Usa cambiar PIN.');
         }
 
         $result = $this->authService->setupPin($account, $validated['pin']);
 
         if (!$result['success']) {
-            return response()->json([
-                'error' => $result['error'] ?? 'PIN_SETUP_FAILED',
-                'message' => $result['message'],
-            ], 400);
+            return $this->badRequest($result['error'] ?? 'PIN_SETUP_FAILED', $result['message']);
         }
 
-        return response()->json([
-            'success' => true,
-            'message' => $result['message'],
-        ]);
+        return $this->success(null, $result['message']);
     }
 
     /**
@@ -209,8 +180,8 @@ class AuthController extends Controller
     public function changePin(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'current_pin' => 'required|string|size:6',
-            'new_pin' => 'required|string|size:6',
+            'current_pin' => 'required|string|digits:4',
+            'new_pin' => 'required|string|digits:4',
             'new_pin_confirmation' => 'required|string|same:new_pin',
         ]);
 
@@ -218,10 +189,7 @@ class AuthController extends Controller
         $account = $request->user();
 
         if (!$account instanceof ApplicantAccount) {
-            return response()->json([
-                'error' => 'INVALID_TOKEN',
-                'message' => 'Token no válido para esta ruta',
-            ], 401);
+            return $this->unauthorized('Token no válido para esta ruta');
         }
 
         $result = $this->authService->changePin(
@@ -231,16 +199,10 @@ class AuthController extends Controller
         );
 
         if (!$result['success']) {
-            return response()->json([
-                'error' => $result['error'] ?? 'PIN_CHANGE_FAILED',
-                'message' => $result['message'],
-            ], 400);
+            return $this->badRequest($result['error'] ?? 'PIN_CHANGE_FAILED', $result['message']);
         }
 
-        return response()->json([
-            'success' => true,
-            'message' => $result['message'],
-        ]);
+        return $this->success(null, $result['message']);
     }
 
     /**
@@ -263,7 +225,7 @@ class AuthController extends Controller
             $validated['identifier']
         );
 
-        return response()->json($result);
+        return $this->success($result);
     }
 
     /**
@@ -277,17 +239,15 @@ class AuthController extends Controller
         $account = $request->user();
 
         if (!$account instanceof ApplicantAccount) {
-            return response()->json([
-                'error' => 'INVALID_TOKEN',
-                'message' => 'Token no válido para esta ruta',
-            ], 401);
+            return $this->unauthorized('Token no válido para esta ruta');
         }
 
         $account->load(['primaryIdentity', 'phoneIdentity', 'emailIdentity']);
 
-        return response()->json([
+        return $this->success([
             'user' => [
                 'id' => $account->id,
+                'tenant_id' => $account->tenant_id,
                 'phone' => $account->primary_phone,
                 'email' => $account->primary_email,
                 'has_pin' => $account->hasPin(),
@@ -295,6 +255,8 @@ class AuthController extends Controller
                 'onboarding_step' => $account->onboarding_step,
                 'onboarding_completed' => $account->onboarding_completed,
                 'preferences' => $account->preferences,
+                'person_id' => $account->person_id,
+                'created_at' => $account->created_at?->toIso8601String(),
                 'last_login_at' => $account->last_login_at?->toIso8601String(),
             ],
         ]);
@@ -311,18 +273,12 @@ class AuthController extends Controller
         $account = $request->user();
 
         if (!$account instanceof ApplicantAccount) {
-            return response()->json([
-                'error' => 'INVALID_TOKEN',
-                'message' => 'Token no válido para esta ruta',
-            ], 401);
+            return $this->unauthorized('Token no válido para esta ruta');
         }
 
         $result = $this->authService->logout($account);
 
-        return response()->json([
-            'success' => true,
-            'message' => $result['message'],
-        ]);
+        return $this->success(null, $result['message']);
     }
 
     /**
@@ -336,10 +292,7 @@ class AuthController extends Controller
         $account = $request->user();
 
         if (!$account instanceof ApplicantAccount) {
-            return response()->json([
-                'error' => 'INVALID_TOKEN',
-                'message' => 'Token no válido para esta ruta',
-            ], 401);
+            return $this->unauthorized('Token no válido para esta ruta');
         }
 
         // Delete current token
@@ -350,9 +303,6 @@ class AuthController extends Controller
         // Create new token
         $newToken = $account->createToken('applicant-token', ['applicant'])->plainTextToken;
 
-        return response()->json([
-            'success' => true,
-            'token' => $newToken,
-        ]);
+        return $this->success(['token' => $newToken]);
     }
 }

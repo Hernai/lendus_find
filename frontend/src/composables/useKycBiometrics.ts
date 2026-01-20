@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
 import { logger } from '@/utils/logger'
 
 const kycLogger = logger.child('KYC:Biometrics')
@@ -62,14 +62,8 @@ export function useKycBiometrics(): UseKycBiometricsReturn {
     error.value = null
 
     try {
-      const response = await api.post<{
-        message: string
-        data: BiometricTokenData
-      }>('/kyc/biometric/token', {
-        application_id: applicationId
-      })
-
-      return response.data.data
+      const data = await v2.applicant.kyc.getBiometricToken(applicationId)
+      return data
     } catch (err: unknown) {
       kycLogger.error('Failed to get biometric token', err)
       const errorResponse = err as { response?: { data?: { message?: string } } }
@@ -101,23 +95,13 @@ export function useKycBiometrics(): UseKycBiometricsReturn {
     error.value = null
 
     try {
-      kycLogger.debug('Calling /kyc/biometric/face-match API...')
-      const response = await api.post<{
-        message: string
-        match: boolean
-        score: number
-        threshold: number
-        validation_code?: string
-      }>('/kyc/biometric/face-match', {
-        selfie_image: selfieImage,
-        ine_image: ineImage,
-        threshold: 80 // 80% similarity threshold
-      })
+      kycLogger.debug('Calling V2 face-match API...')
+      const response = await v2.applicant.kyc.validateFaceMatch(selfieImage, ineImage, 80)
 
-      kycLogger.debug('Face match response:', response.data)
+      kycLogger.debug('Face match response:', response)
 
-      const match = response.data.match
-      const score = response.data.score
+      const match = response.match
+      const score = response.score
 
       faceMatchResult.value = { score, match }
 
@@ -149,20 +133,13 @@ export function useKycBiometrics(): UseKycBiometricsReturn {
     error.value = null
 
     try {
-      kycLogger.debug('Calling /kyc/biometric/liveness API...')
-      const response = await api.post<{
-        message: string
-        passed: boolean
-        score: number
-        validation_code?: string
-      }>('/kyc/biometric/liveness', {
-        face_image: faceImage
-      })
+      kycLogger.debug('Calling V2 liveness API...')
+      const response = await v2.applicant.kyc.validateLiveness(faceImage)
 
-      kycLogger.debug('Liveness response:', response.data)
+      kycLogger.debug('Liveness response:', response)
 
-      const passed = response.data.passed
-      const score = response.data.score
+      const passed = response.passed
+      const score = response.score
 
       livenessResult.value = { passed, score }
 

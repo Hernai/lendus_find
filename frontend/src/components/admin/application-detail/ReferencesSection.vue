@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { formatPhone } from '@/utils/formatters'
 
 interface Reference {
   id: string
@@ -26,15 +27,6 @@ const stats = computed(() => ({
   verified: props.references.filter(r => r.verified).length,
   pending: props.references.filter(r => !r.verified).length,
 }))
-
-const formatPhone = (phone: string | null | undefined): string => {
-  if (!phone) return '-'
-  const cleaned = phone.replace(/\D/g, '')
-  if (cleaned.length === 10) {
-    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`
-  }
-  return phone
-}
 </script>
 
 <template>

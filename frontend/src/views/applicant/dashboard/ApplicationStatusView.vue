@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useApplicationStore } from '@/stores'
 import { AppButton, AppProgressBar } from '@/components/common'
 import { logger } from '@/utils/logger'
+import { formatMoney, formatFrequency } from '@/utils/formatters'
 
 const log = logger.child('ApplicationStatusView')
 
@@ -94,20 +95,7 @@ const goToAction = () => {
   }
 }
 
-const formatMoney = (amount: number) => {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(amount)
-}
 
-const frequencyLabels: Record<string, string> = {
-  WEEKLY: 'semanal',
-  BIWEEKLY: 'quincenal',
-  MONTHLY: 'mensual'
-}
 
 const goHome = () => router.push('/dashboard')
 
@@ -231,7 +219,7 @@ onMounted(async () => {
             <p class="font-semibold text-gray-900">{{ simulation.term_months }} meses</p>
           </div>
           <div>
-            <p class="text-xs text-gray-500">Pago {{ frequencyLabels[simulation.payment_frequency] }}</p>
+            <p class="text-xs text-gray-500">Pago {{ formatFrequency(simulation.payment_frequency) }}</p>
             <p class="font-semibold text-gray-900">{{ formatMoney(simulation.periodic_payment) }}</p>
           </div>
         </div>

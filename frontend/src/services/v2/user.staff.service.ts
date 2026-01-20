@@ -6,7 +6,7 @@
  */
 
 import { api } from '../api'
-import type { V2ApiResponse, V2PaginatedResponse } from '@/types/v2'
+import type { V2ApiResponse } from '@/types/v2'
 
 // =====================================================
 // Types
@@ -67,8 +67,19 @@ export interface V2StaffUserFilters {
   page?: number
 }
 
-export interface V2StaffUserCreateResponse extends V2StaffUser {
-  temporary_password?: string | null
+/**
+ * Response structure for paginated staff user list.
+ */
+export interface V2StaffUserListResponse {
+  users: V2StaffUser[]
+  meta: {
+    current_page: number
+    from: number | null
+    last_page: number
+    per_page: number
+    to: number | null
+    total: number
+  }
 }
 
 const BASE_PATH = '/v2/staff/users'
@@ -80,8 +91,8 @@ const BASE_PATH = '/v2/staff/users'
 /**
  * List all staff users with optional filters.
  */
-export async function list(filters?: V2StaffUserFilters): Promise<V2PaginatedResponse<V2StaffUser>> {
-  const response = await api.get<V2PaginatedResponse<V2StaffUser>>(BASE_PATH, { params: filters })
+export async function list(filters?: V2StaffUserFilters): Promise<V2ApiResponse<V2StaffUserListResponse>> {
+  const response = await api.get<V2ApiResponse<V2StaffUserListResponse>>(BASE_PATH, { params: filters })
   return response.data
 }
 
@@ -90,8 +101,8 @@ export async function list(filters?: V2StaffUserFilters): Promise<V2PaginatedRes
  */
 export async function create(
   payload: V2StaffUserCreatePayload
-): Promise<V2ApiResponse<V2StaffUserCreateResponse> & { temporary_password?: string | null }> {
-  const response = await api.post<V2ApiResponse<V2StaffUserCreateResponse> & { temporary_password?: string | null }>(
+): Promise<V2ApiResponse<{ user: V2StaffUser; temporary_password?: string | null }>> {
+  const response = await api.post<V2ApiResponse<{ user: V2StaffUser; temporary_password?: string | null }>>(
     BASE_PATH,
     payload
   )
@@ -101,16 +112,16 @@ export async function create(
 /**
  * Get a specific staff user by ID.
  */
-export async function get(id: string): Promise<V2ApiResponse<V2StaffUser>> {
-  const response = await api.get<V2ApiResponse<V2StaffUser>>(`${BASE_PATH}/${id}`)
+export async function get(id: string): Promise<V2ApiResponse<{ user: V2StaffUser }>> {
+  const response = await api.get<V2ApiResponse<{ user: V2StaffUser }>>(`${BASE_PATH}/${id}`)
   return response.data
 }
 
 /**
  * Update a staff user.
  */
-export async function update(id: string, payload: V2StaffUserUpdatePayload): Promise<V2ApiResponse<V2StaffUser>> {
-  const response = await api.put<V2ApiResponse<V2StaffUser>>(`${BASE_PATH}/${id}`, payload)
+export async function update(id: string, payload: V2StaffUserUpdatePayload): Promise<V2ApiResponse<{ user: V2StaffUser }>> {
+  const response = await api.put<V2ApiResponse<{ user: V2StaffUser }>>(`${BASE_PATH}/${id}`, payload)
   return response.data
 }
 

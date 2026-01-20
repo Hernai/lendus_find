@@ -100,7 +100,7 @@ const handleSubmit = async () => {
                   :type="showPassword ? 'text' : 'password'"
                   placeholder="Tu contraseña"
                   autocomplete="current-password"
-                  class="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                  class="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                 />
                 <button
                   type="button"

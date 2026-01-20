@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
 import { detectTenantSlug } from '@/utils/tenant'
 import { logger } from '@/utils/logger'
+import { initializeFormatters } from '@/utils/formatters'
 import type { Tenant, Product } from '@/types'
 
 const log = logger.child('TenantStore')
@@ -13,25 +14,36 @@ interface Option {
   label: string
 }
 
-/** All enum options from backend */
+/** All enum options from backend (camelCase keys) */
 interface EnumOptions {
-  employment_type: Option[]
-  housing_type: Option[]
-  marital_status: Option[]
+  // Profile enums
   gender: Option[]
-  education_level: Option[]
-  reference_type: Option[]
+  maritalStatus: Option[]
+  educationLevel: Option[]
+  housingType: Option[]
+  employmentType: Option[]
+  bankAccountType: Option[]
+  // Reference enums
+  referenceType: Option[]
   relationship: Option[]
-  relationship_family: Option[]
-  relationship_non_family: Option[]
-  document_type: Option[]
+  relationshipFamily: Option[]
+  relationshipNonFamily: Option[]
+  // Document and ID enums
+  documentType: Option[]
+  idType: Option[]
+  // Application enums
+  loanPurpose: Option[]
+  paymentFrequency: Option[]
+  applicationStatus: Option[]
+  // Product enums
+  productType: Option[]
+  // Admin enums
+  userType: Option[]
+  rejectionReason: Option[]
+  documentRejectionReason: Option[]
 }
 
-interface TenantConfigResponse {
-  tenant: Tenant
-  products: Product[]
-  options: EnumOptions
-}
+// TenantConfigResponse removed - now using V2 types from v2.config.getConfig
 
 // Helper to convert hex to HSL
 function hexToHSL(hex: string): { h: number; s: number; l: number } {
@@ -126,16 +138,31 @@ function generateColorPalette(baseColor: string): Record<string, string> {
 
 /** Default empty options */
 const defaultOptions: EnumOptions = {
-  employment_type: [],
-  housing_type: [],
-  marital_status: [],
+  // Profile enums
   gender: [],
-  education_level: [],
-  reference_type: [],
+  maritalStatus: [],
+  educationLevel: [],
+  housingType: [],
+  employmentType: [],
+  bankAccountType: [],
+  // Reference enums
+  referenceType: [],
   relationship: [],
-  relationship_family: [],
-  relationship_non_family: [],
-  document_type: [],
+  relationshipFamily: [],
+  relationshipNonFamily: [],
+  // Document and ID enums
+  documentType: [],
+  idType: [],
+  // Application enums
+  loanPurpose: [],
+  paymentFrequency: [],
+  applicationStatus: [],
+  // Product enums
+  productType: [],
+  // Admin enums
+  userType: [],
+  rejectionReason: [],
+  documentRejectionReason: [],
 }
 
 export const useTenantStore = defineStore('tenant', () => {
@@ -147,6 +174,9 @@ export const useTenantStore = defineStore('tenant', () => {
   const isLoaded = ref(false)
   const loadFailed = ref(false)
   const error = ref<string | null>(null)
+
+  // Cache control for concurrent requests
+  const configLoadPromise = ref<Promise<void> | null>(null)
 
   // Getters
   const hasTenant = computed(() => isLoaded.value && tenant.value !== null && !loadFailed.value)
@@ -175,6 +205,12 @@ export const useTenantStore = defineStore('tenant', () => {
       return
     }
 
+    // If already loading, wait for existing promise
+    if (configLoadPromise.value) {
+      log.debug('Config already loading, waiting for existing request')
+      return configLoadPromise.value
+    }
+
     // If tenant changed, reset first
     if (isLoaded.value && tenantSlug && tenant.value?.slug !== tenantSlug) {
       log.debug('URL tenant changed', { from: tenant.value?.slug, to: tenantSlug })
@@ -189,31 +225,48 @@ export const useTenantStore = defineStore('tenant', () => {
       return
     }
 
-    isLoading.value = true
-    error.value = null
-    loadFailed.value = false
-
-    try {
-      log.debug(' Loading config for tenant:', tenantSlug)
-      const response = await api.get<TenantConfigResponse>('/config')
-      tenant.value = response.data.tenant
-      products.value = response.data.products
-      options.value = response.data.options ?? defaultOptions
-      isLoaded.value = true
+    const loadPromise = (async () => {
+      isLoading.value = true
+      error.value = null
       loadFailed.value = false
-      log.debug(' Config loaded:', {
-        tenantName: tenant.value?.name,
-        primaryColor: tenant.value?.branding?.primary_color,
-        optionsLoaded: Object.keys(response.data.options ?? {}).length
-      })
-    } catch (e) {
-      error.value = 'Error al cargar la configuración'
-      loadFailed.value = true
-      isLoaded.value = true
-      log.error(' Failed to load tenant config:', e)
-    } finally {
-      isLoading.value = false
-    }
+
+      try {
+        log.debug(' Loading config for tenant:', tenantSlug)
+        const response = await v2.config.getConfig()
+
+        if (!response.success || !response.data) {
+          throw new Error(response.message || 'Error al cargar configuración')
+        }
+
+        tenant.value = response.data.tenant as unknown as Tenant
+        products.value = response.data.products as unknown as Product[]
+        options.value = response.data.options ?? defaultOptions
+
+        // Initialize formatters with enum options from backend
+        if (response.data.options) {
+          initializeFormatters(response.data.options)
+        }
+
+        isLoaded.value = true
+        loadFailed.value = false
+        log.debug(' Config loaded:', {
+          tenantName: tenant.value?.name,
+          primaryColor: tenant.value?.branding?.primary_color,
+          optionsLoaded: Object.keys(response.data.options ?? {}).length
+        })
+      } catch (e) {
+        error.value = 'Error al cargar la configuración'
+        loadFailed.value = true
+        isLoaded.value = true
+        log.error(' Failed to load tenant config:', e)
+      } finally {
+        isLoading.value = false
+        configLoadPromise.value = null
+      }
+    })()
+
+    configLoadPromise.value = loadPromise
+    return loadPromise
   }
 
   const applyTheme = (isAdminRoute = false) => {
@@ -386,6 +439,7 @@ export const useTenantStore = defineStore('tenant', () => {
     isLoaded.value = false
     loadFailed.value = false
     error.value = null
+    configLoadPromise.value = null
   }
 
   return {

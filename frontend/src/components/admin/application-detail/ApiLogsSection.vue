@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/formatters'
+import { getProviderColor } from '@/utils/admin-styles'
+
 interface ApiLog {
   id: string
   provider: string
@@ -25,27 +28,6 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'view-detail', log: ApiLog): void
 }>()
-
-const formatDateTime = (date: string) => {
-  return new Date(date).toLocaleString('es-MX', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-const getProviderColor = (provider: string) => {
-  const colors: Record<string, string> = {
-    NUBARIUM: 'bg-purple-100 text-purple-800',
-    TWILIO: 'bg-blue-100 text-blue-800',
-    SAT: 'bg-green-100 text-green-800',
-    RENAPO: 'bg-yellow-100 text-yellow-800',
-    INE: 'bg-orange-100 text-orange-800',
-    BUREAU: 'bg-red-100 text-red-800',
-  }
-  return colors[provider] || 'bg-gray-100 text-gray-800'
-}
 </script>
 
 <template>

@@ -30,10 +30,27 @@ class PersonEmploymentService
             $data['person_id'] = $person->id;
             $data['status'] = $data['status'] ?? PersonEmployment::STATUS_PENDING;
 
+            \Log::info('PersonEmploymentService::create data', [
+                'years_employed' => $data['years_employed'] ?? 'NOT_SET',
+                'months_employed' => $data['months_employed'] ?? 'NOT_SET',
+                'years_employed_isset' => isset($data['years_employed']),
+                'months_employed_isset' => isset($data['months_employed']),
+            ]);
+
             $employment = PersonEmployment::create($data);
 
-            // Calculate duration if start_date is provided
-            if ($employment->start_date && $employment->is_current) {
+            // Only calculate duration from start_date if explicit years/months were NOT provided
+            // This prevents overwriting user-entered seniority values
+            $hasExplicitSeniority = isset($data['years_employed']) || isset($data['months_employed']);
+
+            \Log::info('PersonEmploymentService::create after save', [
+                'hasExplicitSeniority' => $hasExplicitSeniority,
+                'employment_years_employed' => $employment->years_employed,
+                'employment_months_employed' => $employment->months_employed,
+                'will_calculateDuration' => $employment->start_date && $employment->is_current && !$hasExplicitSeniority,
+            ]);
+
+            if ($employment->start_date && $employment->is_current && !$hasExplicitSeniority) {
                 $employment->calculateDuration();
             }
 

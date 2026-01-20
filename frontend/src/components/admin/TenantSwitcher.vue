@@ -43,7 +43,7 @@ const loadTenants = async (): Promise<void> => {
   try {
     // Limit to reasonable number of tenants for dropdown
     const response = await v2.staff.tenant.list({ active: true, per_page: 50 })
-    tenants.value = response.data || []
+    tenants.value = response.data?.tenants || []
   } catch (error) {
     log.error('Failed to load tenants', { error })
     tenants.value = []

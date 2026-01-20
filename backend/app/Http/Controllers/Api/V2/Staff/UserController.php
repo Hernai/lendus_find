@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V2\Staff;
 
+use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\StaffAccount;
 use App\Models\StaffProfile;
@@ -21,6 +22,7 @@ use Illuminate\Validation\Rule;
  */
 class UserController extends Controller
 {
+    use ApiResponses;
     /**
      * List all staff users.
      */
@@ -60,9 +62,8 @@ class UserController extends Controller
         $perPage = min($request->input('per_page', 20), 100);
         $paginated = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
-        return response()->json([
-            'success' => true,
-            'data' => $paginated->map(fn($account) => $this->formatStaffAccount($account)),
+        return $this->success([
+            'users' => $paginated->map(fn($account) => $this->formatStaffAccount($account)),
             'meta' => [
                 'current_page' => $paginated->currentPage(),
                 'last_page' => $paginated->lastPage(),
@@ -102,11 +103,7 @@ class UserController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error de validación',
-                'errors' => $validator->errors()
-            ], 422);
+            return $this->validationError('Error de validación', $validator->errors()->toArray());
         }
 
         // Generate password if not provided
@@ -140,12 +137,10 @@ class UserController extends Controller
 
             $account->load('profile');
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Usuario creado',
-                'data' => $this->formatStaffAccount($account),
+            return $this->created([
+                'user' => $this->formatStaffAccount($account),
                 'temporary_password' => $request->password ? null : $password,
-            ], 201);
+            ], 'Usuario creado');
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
@@ -165,15 +160,11 @@ class UserController extends Controller
             ->first();
 
         if (!$account) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Usuario no encontrado'
-            ], 404);
+            return $this->notFound('Usuario no encontrado');
         }
 
-        return response()->json([
-            'success' => true,
-            'data' => $this->formatStaffAccount($account, true),
+        return $this->success([
+            'user' => $this->formatStaffAccount($account, true),
         ]);
     }
 
@@ -191,18 +182,12 @@ class UserController extends Controller
             ->first();
 
         if (!$account) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Usuario no encontrado'
-            ], 404);
+            return $this->notFound('Usuario no encontrado');
         }
 
         // Prevent self-demotion
         if ($currentUser && $account->id === $currentUser->id && $request->has('role') && $request->role !== $account->role) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No puedes cambiar tu propio rol'
-            ], 400);
+            return $this->badRequest('SELF_ROLE_CHANGE', 'No puedes cambiar tu propio rol');
         }
 
         // Format phone before validation
@@ -228,11 +213,7 @@ class UserController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error de validación',
-                'errors' => $validator->errors()
-            ], 422);
+            return $this->validationError('Error de validación', $validator->errors()->toArray());
         }
 
         try {
@@ -293,11 +274,9 @@ class UserController extends Controller
             $account->refresh();
             $account->load('profile');
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Usuario actualizado',
-                'data' => $this->formatStaffAccount($account),
-            ]);
+            return $this->success([
+                'user' => $this->formatStaffAccount($account),
+            ], 'Usuario actualizado');
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
@@ -317,28 +296,19 @@ class UserController extends Controller
             ->first();
 
         if (!$account) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Usuario no encontrado'
-            ], 404);
+            return $this->notFound('Usuario no encontrado');
         }
 
         // Prevent self-deletion
         if ($currentUser && $account->id === $currentUser->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No puedes eliminar tu propia cuenta'
-            ], 400);
+            return $this->badRequest('SELF_DELETE', 'No puedes eliminar tu propia cuenta');
         }
 
         // TODO: Check if user has assigned applications once we migrate applications to V2
 
         $account->delete();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Usuario eliminado'
-        ]);
+        return $this->success(null, 'Usuario eliminado');
     }
 
     /**

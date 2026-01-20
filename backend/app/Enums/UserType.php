@@ -2,8 +2,12 @@
 
 namespace App\Enums;
 
+use App\Enums\Traits\HasOptions;
+
 enum UserType: string
 {
+    use HasOptions;
+
     case APPLICANT = 'APPLICANT';
     case SUPERVISOR = 'SUPERVISOR';
     case ANALYST = 'ANALYST';

@@ -186,8 +186,28 @@ export async function updateEmployment(
 }
 
 // =====================================================
-// Bank Account
+// Bank Accounts
 // =====================================================
+
+export interface BankAccountResponse {
+  id: string
+  bank_name: string
+  clabe: string
+  clabe_masked: string
+  holder_name: string
+  account_type: string
+  is_primary: boolean
+  is_verified: boolean
+  status: string
+  created_at: string
+}
+
+export interface CreateBankAccountPayload {
+  clabe: string
+  holder_name: string
+  // Account type - validated by backend BankAccountType enum
+  account_type?: string
+}
 
 export interface UpdateBankAccountPayload {
   bank_name: string
@@ -196,7 +216,47 @@ export interface UpdateBankAccountPayload {
   account_number?: string
   card_number?: string
   holder_name: string
-  account_type?: 'DEBIT' | 'PAYROLL' | 'SAVINGS' | 'CHECKING'
+  // Account type - validated by backend BankAccountType enum
+  account_type?: string
+}
+
+/**
+ * List all bank accounts.
+ */
+export async function listBankAccounts(): Promise<V2ApiResponse<{ bank_accounts: BankAccountResponse[] }>> {
+  const response = await api.get<V2ApiResponse<{ bank_accounts: BankAccountResponse[] }>>(`${BASE_PATH}/bank-accounts`)
+  return response.data
+}
+
+/**
+ * Create a new bank account.
+ */
+export async function createBankAccount(
+  payload: CreateBankAccountPayload
+): Promise<V2ApiResponse<{ bank_account: BankAccountResponse }>> {
+  const response = await api.post<V2ApiResponse<{ bank_account: BankAccountResponse }>>(
+    `${BASE_PATH}/bank-accounts`,
+    payload
+  )
+  return response.data
+}
+
+/**
+ * Set a bank account as primary.
+ */
+export async function setPrimaryBankAccount(id: string): Promise<V2ApiResponse<{ bank_account: BankAccountResponse }>> {
+  const response = await api.patch<V2ApiResponse<{ bank_account: BankAccountResponse }>>(
+    `${BASE_PATH}/bank-accounts/${id}/primary`
+  )
+  return response.data
+}
+
+/**
+ * Delete a bank account.
+ */
+export async function deleteBankAccount(id: string): Promise<V2ApiResponse<null>> {
+  const response = await api.delete<V2ApiResponse<null>>(`${BASE_PATH}/bank-accounts/${id}`)
+  return response.data
 }
 
 /**
@@ -208,12 +268,12 @@ export async function getBankAccount(): Promise<V2ApiResponse<V2ProfileBankAccou
 }
 
 /**
- * Update bank account.
+ * Update bank account (legacy single account endpoint).
  */
 export async function updateBankAccount(
   payload: UpdateBankAccountPayload
-): Promise<V2ApiResponse<{ bank_account: { id: string; bank_name: string; clabe_masked: string } }>> {
-  const response = await api.put<V2ApiResponse<{ bank_account: { id: string; bank_name: string; clabe_masked: string } }>>(
+): Promise<V2ApiResponse<{ bank_account: BankAccountResponse }>> {
+  const response = await api.put<V2ApiResponse<{ bank_account: BankAccountResponse }>>(
     `${BASE_PATH}/bank-account`,
     payload
   )
@@ -256,7 +316,7 @@ export interface UpdateReferencePayload {
 }
 
 export interface ReferencesListResponse {
-  data: V2ProfileReference[]
+  references: V2ProfileReference[]
   meta: {
     total: number
     personal_count: number
@@ -267,12 +327,14 @@ export interface ReferencesListResponse {
 /**
  * List all references.
  */
-export async function listReferences(): Promise<V2ApiResponse<V2ProfileReference[]> & { meta?: ReferencesListResponse['meta'] }> {
-  const response = await api.get<ReferencesListResponse>(`${BASE_PATH}/references`)
+export async function listReferences(): Promise<V2ApiResponse<V2ProfileReference[]>> {
+  const response = await api.get<V2ApiResponse<ReferencesListResponse>>(`${BASE_PATH}/references`)
+  // Backend returns { references: [...], meta: {...} } inside data
+  // We flatten it to return just the array for the store
   return {
-    success: true,
-    data: response.data.data,
-    meta: response.data.meta,
+    success: response.data.success,
+    data: response.data.data?.references ?? [],
+    message: response.data.message,
   }
 }
 
@@ -335,7 +397,11 @@ export default {
   // Employment
   getEmployment,
   updateEmployment,
-  // Bank account
+  // Bank accounts
+  listBankAccounts,
+  createBankAccount,
+  setPrimaryBankAccount,
+  deleteBankAccount,
   getBankAccount,
   updateBankAccount,
   validateClabe,

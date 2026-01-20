@@ -109,8 +109,10 @@ const handleOtpComplete = async (code: string) => {
         error.value = 'El código ha expirado. Solicita uno nuevo.'
       } else if (result.error === 'MAX_ATTEMPTS_EXCEEDED') {
         error.value = 'Demasiados intentos. Solicita un nuevo código.'
-      } else {
+      } else if (result.attempts_remaining !== undefined) {
         error.value = `Código incorrecto. ${result.attempts_remaining} intentos restantes.`
+      } else {
+        error.value = 'Código incorrecto. Intenta de nuevo.'
       }
       otpCode.value = ''
     }

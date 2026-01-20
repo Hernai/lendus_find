@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
 import { logger } from '@/utils/logger'
 
 const kycLogger = logger.child('KYC:Documents')
@@ -55,7 +55,8 @@ export function useKycDocuments() {
   }
 
   /**
-   * Upload INE documents (front and back).
+   * Upload INE documents (front and back) using V2 API.
+   * Note: applicationId is kept for metadata but documents are attached to Person automatically.
    */
   const uploadIneDocuments = async (
     applicationId: string
@@ -72,15 +73,17 @@ export function useKycDocuments() {
       // Upload front
       if (documents.value.front) {
         try {
-          kycLogger.debug('Uploading INE front')
-          const response = await api.post<{ data?: { id?: string } }>(`/applications/${applicationId}/documents`, {
-            type: 'INE_FRONT',
-            file: documents.value.front,
-            source: 'kyc_capture',
+          kycLogger.debug('Uploading INE front via V2 API')
+          // Convert base64 to File
+          const frontBlob = await fetch(`data:image/jpeg;base64,${documents.value.front}`).then(r => r.blob())
+          const frontFile = new File([frontBlob], 'ine_front.jpg', { type: 'image/jpeg' })
+
+          const response = await v2.applicant.document.upload(frontFile, 'INE_FRONT', {
+            metadata: { source: 'kyc_capture', application_id: applicationId }
           })
           results.front = {
-            success: true,
-            documentId: response.data.data?.id,
+            success: response.success,
+            documentId: response.data?.document?.id,
           }
         } catch (error) {
           results.front = {
@@ -94,15 +97,17 @@ export function useKycDocuments() {
       // Upload back
       if (documents.value.back) {
         try {
-          kycLogger.debug('Uploading INE back')
-          const response = await api.post<{ data?: { id?: string } }>(`/applications/${applicationId}/documents`, {
-            type: 'INE_BACK',
-            file: documents.value.back,
-            source: 'kyc_capture',
+          kycLogger.debug('Uploading INE back via V2 API')
+          // Convert base64 to File
+          const backBlob = await fetch(`data:image/jpeg;base64,${documents.value.back}`).then(r => r.blob())
+          const backFile = new File([backBlob], 'ine_back.jpg', { type: 'image/jpeg' })
+
+          const response = await v2.applicant.document.upload(backFile, 'INE_BACK', {
+            metadata: { source: 'kyc_capture', application_id: applicationId }
           })
           results.back = {
-            success: true,
-            documentId: response.data.data?.id,
+            success: response.success,
+            documentId: response.data?.document?.id,
           }
         } catch (error) {
           results.back = {
@@ -120,7 +125,8 @@ export function useKycDocuments() {
   }
 
   /**
-   * Upload selfie document.
+   * Upload selfie document using V2 API.
+   * Note: applicationId is kept for metadata but documents are attached to Person automatically.
    */
   const uploadSelfie = async (applicationId: string): Promise<DocumentUploadResult> => {
     if (!documents.value.selfie) {
@@ -131,16 +137,18 @@ export function useKycDocuments() {
     uploadError.value = null
 
     try {
-      kycLogger.debug('Uploading selfie')
-      const response = await api.post<{ data?: { id?: string } }>(`/applications/${applicationId}/documents`, {
-        type: 'SELFIE',
-        file: documents.value.selfie,
-        source: 'kyc_capture',
+      kycLogger.debug('Uploading selfie via V2 API')
+      // Convert base64 to File
+      const selfieBlob = await fetch(`data:image/jpeg;base64,${documents.value.selfie}`).then(r => r.blob())
+      const selfieFile = new File([selfieBlob], 'selfie.jpg', { type: 'image/jpeg' })
+
+      const response = await v2.applicant.document.upload(selfieFile, 'SELFIE', {
+        metadata: { source: 'kyc_capture', application_id: applicationId }
       })
 
       return {
-        success: true,
-        documentId: response.data.data?.id,
+        success: response.success,
+        documentId: response.data?.document?.id,
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error uploading selfie'

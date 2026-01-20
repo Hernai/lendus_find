@@ -5,6 +5,7 @@ import { useOnboardingStore, useKycStore, useTenantStore, useProfileStore } from
 import { AppButton, AppInput, AppSelect } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
 import { logger } from '@/utils/logger'
+import { STATE_ABBREVIATIONS, MEXICAN_STATES_FULL } from '@/constants'
 
 const log = logger.child('Step3Address')
 
@@ -15,7 +16,7 @@ const tenantStore = useTenantStore()
 const profileStore = useProfileStore()
 
 // Get housing type options from backend
-const housingTypeOptions = computed(() => tenantStore.options.housing_type)
+const housingTypeOptions = computed(() => tenantStore.options.housingType)
 
 // Check if KYC is verified and has address data
 const isKycVerified = computed(() => kycStore.verified && !!kycStore.lockedData.curp)
@@ -23,41 +24,8 @@ const hasIneAddress = computed(() =>
   isKycVerified.value && !!kycStore.lockedData.direccion_ine.calle
 )
 
-// Mexican state abbreviations mapping
-const stateAbbreviations: Record<string, string> = {
-  'AGS.': 'AGUASCALIENTES', 'AGS': 'AGUASCALIENTES',
-  'B.C.': 'BAJA CALIFORNIA', 'BC': 'BAJA CALIFORNIA', 'BCN': 'BAJA CALIFORNIA',
-  'B.C.S.': 'BAJA CALIFORNIA SUR', 'BCS': 'BAJA CALIFORNIA SUR',
-  'CAMP.': 'CAMPECHE', 'CAMP': 'CAMPECHE', 'CAM': 'CAMPECHE',
-  'CHIS.': 'CHIAPAS', 'CHIS': 'CHIAPAS', 'CHS': 'CHIAPAS',
-  'CHIH.': 'CHIHUAHUA', 'CHIH': 'CHIHUAHUA', 'CHH': 'CHIHUAHUA',
-  'CDMX': 'CIUDAD DE MEXICO', 'D.F.': 'CIUDAD DE MEXICO', 'DF': 'CIUDAD DE MEXICO',
-  'COAH.': 'COAHUILA', 'COAH': 'COAHUILA', 'COA': 'COAHUILA',
-  'COL.': 'COLIMA', 'COL': 'COLIMA',
-  'DGO.': 'DURANGO', 'DGO': 'DURANGO', 'DUR': 'DURANGO',
-  'GTO.': 'GUANAJUATO', 'GTO': 'GUANAJUATO', 'GUA': 'GUANAJUATO',
-  'GRO.': 'GUERRERO', 'GRO': 'GUERRERO',
-  'HGO.': 'HIDALGO', 'HGO': 'HIDALGO', 'HID': 'HIDALGO',
-  'JAL.': 'JALISCO', 'JAL': 'JALISCO',
-  'MEX.': 'ESTADO DE MEXICO', 'MEX': 'ESTADO DE MEXICO', 'EDO. MEX.': 'ESTADO DE MEXICO',
-  'MICH.': 'MICHOACAN', 'MICH': 'MICHOACAN', 'MIC': 'MICHOACAN',
-  'MOR.': 'MORELOS', 'MOR': 'MORELOS',
-  'NAY.': 'NAYARIT', 'NAY': 'NAYARIT',
-  'N.L.': 'NUEVO LEON', 'NL': 'NUEVO LEON', 'NLE': 'NUEVO LEON',
-  'OAX.': 'OAXACA', 'OAX': 'OAXACA',
-  'PUE.': 'PUEBLA', 'PUE': 'PUEBLA',
-  'QRO.': 'QUERETARO', 'QRO': 'QUERETARO', 'QUE': 'QUERETARO',
-  'Q.R.': 'QUINTANA ROO', 'QR': 'QUINTANA ROO', 'Q. ROO': 'QUINTANA ROO', 'ROO': 'QUINTANA ROO',
-  'S.L.P.': 'SAN LUIS POTOSI', 'SLP': 'SAN LUIS POTOSI',
-  'SIN.': 'SINALOA', 'SIN': 'SINALOA',
-  'SON.': 'SONORA', 'SON': 'SONORA',
-  'TAB.': 'TABASCO', 'TAB': 'TABASCO',
-  'TAMPS.': 'TAMAULIPAS', 'TAMPS': 'TAMAULIPAS', 'TAM': 'TAMAULIPAS',
-  'TLAX.': 'TLAXCALA', 'TLAX': 'TLAXCALA', 'TLA': 'TLAXCALA',
-  'VER.': 'VERACRUZ', 'VER': 'VERACRUZ',
-  'YUC.': 'YUCATAN', 'YUC': 'YUCATAN',
-  'ZAC.': 'ZACATECAS', 'ZAC': 'ZACATECAS'
-}
+// State abbreviations from shared constants
+const stateAbbreviations = STATE_ABBREVIATIONS
 
 // Parse INE address - extract CP from colonia, num_ext from calle if concatenated
 const parsedIneAddress = computed(() => {
@@ -327,40 +295,8 @@ watch(() => form.postal_code, (newValue) => {
   }
 })
 
-const stateOptions = [
-  { value: 'AGUASCALIENTES', label: 'Aguascalientes' },
-  { value: 'BAJA CALIFORNIA', label: 'Baja California' },
-  { value: 'BAJA CALIFORNIA SUR', label: 'Baja California Sur' },
-  { value: 'CAMPECHE', label: 'Campeche' },
-  { value: 'CHIAPAS', label: 'Chiapas' },
-  { value: 'CHIHUAHUA', label: 'Chihuahua' },
-  { value: 'CIUDAD DE MEXICO', label: 'Ciudad de México' },
-  { value: 'COAHUILA', label: 'Coahuila' },
-  { value: 'COLIMA', label: 'Colima' },
-  { value: 'DURANGO', label: 'Durango' },
-  { value: 'GUANAJUATO', label: 'Guanajuato' },
-  { value: 'GUERRERO', label: 'Guerrero' },
-  { value: 'HIDALGO', label: 'Hidalgo' },
-  { value: 'JALISCO', label: 'Jalisco' },
-  { value: 'MEXICO', label: 'Estado de México' },
-  { value: 'MICHOACAN', label: 'Michoacán' },
-  { value: 'MORELOS', label: 'Morelos' },
-  { value: 'NAYARIT', label: 'Nayarit' },
-  { value: 'NUEVO LEON', label: 'Nuevo León' },
-  { value: 'OAXACA', label: 'Oaxaca' },
-  { value: 'PUEBLA', label: 'Puebla' },
-  { value: 'QUERETARO', label: 'Querétaro' },
-  { value: 'QUINTANA ROO', label: 'Quintana Roo' },
-  { value: 'SAN LUIS POTOSI', label: 'San Luis Potosí' },
-  { value: 'SINALOA', label: 'Sinaloa' },
-  { value: 'SONORA', label: 'Sonora' },
-  { value: 'TABASCO', label: 'Tabasco' },
-  { value: 'TAMAULIPAS', label: 'Tamaulipas' },
-  { value: 'TLAXCALA', label: 'Tlaxcala' },
-  { value: 'VERACRUZ', label: 'Veracruz' },
-  { value: 'YUCATAN', label: 'Yucatán' },
-  { value: 'ZACATECAS', label: 'Zacatecas' }
-]
+// State options from shared constants
+const stateOptions = MEXICAN_STATES_FULL
 
 const validate = () => {
   let isValid = true

@@ -36,9 +36,10 @@ export async function requestOtp(payload: V2OtpRequestPayload): Promise<V2ApiRes
 /**
  * Verify OTP code and authenticate.
  * Rate limited: 5 attempts per minute.
+ * Backend returns: { token, is_new_user, user }
  */
-export async function verifyOtp(payload: V2OtpVerifyPayload): Promise<V2ApiResponse<V2AuthResponse>> {
-  const response = await api.post<V2ApiResponse<V2AuthResponse>>(
+export async function verifyOtp(payload: V2OtpVerifyPayload): Promise<V2ApiResponse<{ token: string; is_new_user?: boolean; user: V2ApplicantUser }>> {
+  const response = await api.post<V2ApiResponse<{ token: string; is_new_user?: boolean; user: V2ApplicantUser }>>(
     `${BASE_PATH}/otp/verify`,
     payload
   )
@@ -59,9 +60,10 @@ export async function checkUser(payload: V2CheckUserPayload): Promise<V2ApiRespo
 /**
  * Login with phone and PIN.
  * Rate limited: 5 attempts per minute.
+ * Backend returns: { token, user }
  */
-export async function loginWithPin(payload: V2PinLoginPayload): Promise<V2ApiResponse<V2AuthResponse>> {
-  const response = await api.post<V2ApiResponse<V2AuthResponse>>(
+export async function loginWithPin(payload: V2PinLoginPayload): Promise<V2ApiResponse<{ token: string; user: V2ApplicantUser }>> {
+  const response = await api.post<V2ApiResponse<{ token: string; user: V2ApplicantUser }>>(
     `${BASE_PATH}/pin/login`,
     payload
   )
@@ -72,35 +74,38 @@ export async function loginWithPin(payload: V2PinLoginPayload): Promise<V2ApiRes
  * Get current authenticated applicant profile.
  * Requires authentication.
  */
-export async function getMe(): Promise<V2ApiResponse<V2ApplicantUser>> {
-  const response = await api.get<V2ApiResponse<V2ApplicantUser>>(`${BASE_PATH}/me`)
+export async function getMe(): Promise<V2ApiResponse<{ user: V2ApplicantUser }>> {
+  const response = await api.get<V2ApiResponse<{ user: V2ApplicantUser }>>(`${BASE_PATH}/me`)
   return response.data
 }
 
 /**
  * Logout current applicant session.
  * Requires authentication.
+ * Note: Backend returns null data with success message.
  */
-export async function logout(): Promise<V2ApiResponse<{ message: string }>> {
-  const response = await api.post<V2ApiResponse<{ message: string }>>(`${BASE_PATH}/logout`)
+export async function logout(): Promise<V2ApiResponse<null>> {
+  const response = await api.post<V2ApiResponse<null>>(`${BASE_PATH}/logout`)
   return response.data
 }
 
 /**
  * Refresh authentication token.
  * Requires authentication.
+ * Note: Backend only returns token, not full user object.
  */
-export async function refreshToken(): Promise<V2ApiResponse<V2AuthResponse>> {
-  const response = await api.post<V2ApiResponse<V2AuthResponse>>(`${BASE_PATH}/refresh`)
+export async function refreshToken(): Promise<V2ApiResponse<{ token: string }>> {
+  const response = await api.post<V2ApiResponse<{ token: string }>>(`${BASE_PATH}/refresh`)
   return response.data
 }
 
 /**
  * Setup PIN for the first time.
  * Requires authentication.
+ * Note: Backend returns null data with success message.
  */
-export async function setupPin(payload: V2PinSetupPayload): Promise<V2ApiResponse<{ message: string }>> {
-  const response = await api.post<V2ApiResponse<{ message: string }>>(
+export async function setupPin(payload: V2PinSetupPayload): Promise<V2ApiResponse<null>> {
+  const response = await api.post<V2ApiResponse<null>>(
     `${BASE_PATH}/pin/setup`,
     payload
   )
@@ -110,9 +115,10 @@ export async function setupPin(payload: V2PinSetupPayload): Promise<V2ApiRespons
 /**
  * Change existing PIN.
  * Requires authentication.
+ * Note: Backend returns null data with success message.
  */
-export async function changePin(payload: V2PinChangePayload): Promise<V2ApiResponse<{ message: string }>> {
-  const response = await api.post<V2ApiResponse<{ message: string }>>(
+export async function changePin(payload: V2PinChangePayload): Promise<V2ApiResponse<null>> {
+  const response = await api.post<V2ApiResponse<null>>(
     `${BASE_PATH}/pin/change`,
     payload
   )

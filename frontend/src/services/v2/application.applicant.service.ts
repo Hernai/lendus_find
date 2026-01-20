@@ -8,7 +8,6 @@
 import { api } from '../api'
 import type {
   V2ApiResponse,
-  V2PaginatedResponse,
   V2Application,
   V2ApplicationCreatePayload,
   V2ApplicationUpdatePayload,
@@ -25,8 +24,8 @@ export async function list(params?: {
   status?: string
   page?: number
   per_page?: number
-}): Promise<V2PaginatedResponse<V2Application>> {
-  const response = await api.get<V2PaginatedResponse<V2Application>>(BASE_PATH, { params })
+}): Promise<V2ApiResponse<{ applications: V2Application[] }>> {
+  const response = await api.get<V2ApiResponse<{ applications: V2Application[] }>>(BASE_PATH, { params })
   return response.data
 }
 
@@ -90,8 +89,8 @@ export async function respondToCounterOffer(
 /**
  * Get application status history.
  */
-export async function getHistory(id: string): Promise<V2ApiResponse<V2StatusHistoryEntry[]>> {
-  const response = await api.get<V2ApiResponse<V2StatusHistoryEntry[]>>(`${BASE_PATH}/${id}/history`)
+export async function getHistory(id: string): Promise<V2ApiResponse<{ history: V2StatusHistoryEntry[] }>> {
+  const response = await api.get<V2ApiResponse<{ history: V2StatusHistoryEntry[] }>>(`${BASE_PATH}/${id}/history`)
   return response.data
 }
 

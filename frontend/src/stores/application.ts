@@ -1,18 +1,48 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
 import type {
   Application,
   SimulationResult,
   SimulationParams,
   CreateApplicationParams,
-  Product
+  Product,
+  PaymentFrequency
 } from '@/types'
+import type { V2PaymentFrequency } from '@/types/v2'
 import { logger } from '@/utils/logger'
 import { storage, STORAGE_KEYS } from '@/utils/storage'
 import { useAsyncAction } from '@/composables'
 
 const log = logger.child('ApplicationStore')
+
+// Flag to use V2 API (matches auth.ts)
+const USE_V2_API = true
+
+// Simulator only supports these frequencies (not 'OTHER')
+type SimulatorPaymentFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'
+
+// Convert V1 payment frequency format (Spanish) to V2 format (English)
+const toV2PaymentFrequency = (freq: PaymentFrequency): V2PaymentFrequency => {
+  const map: Record<PaymentFrequency, V2PaymentFrequency> = {
+    'SEMANAL': 'WEEKLY',
+    'WEEKLY': 'WEEKLY',
+    'BIWEEKLY': 'BIWEEKLY',
+    'QUINCENAL': 'BIWEEKLY',
+    'MONTHLY': 'MONTHLY',
+    'MENSUAL': 'MONTHLY'
+  }
+  return map[freq] || 'MONTHLY'
+}
+
+// Convert to simulator-specific frequency (excludes 'OTHER')
+const toSimulatorFrequency = (freq: PaymentFrequency): SimulatorPaymentFrequency => {
+  const result = toV2PaymentFrequency(freq)
+  // Simulator doesn't support 'OTHER', default to MONTHLY
+  if (result === 'OTHER') return 'MONTHLY'
+  return result
+}
 
 // Type-safe Axios error interface
 interface ApiError extends Error {
@@ -22,24 +52,7 @@ interface ApiError extends Error {
   }
 }
 
-interface SimulatorResponse {
-  simulation: {
-    product_id: string
-    product_name: string
-    requested_amount: number
-    term_months: number
-    payment_frequency: string
-    annual_rate: number
-    opening_commission_rate: number
-    payment_amount: number
-    total_periods: number
-    total_to_pay: number
-    total_interest: number
-    opening_commission: number
-    net_amount: number
-    cat: number
-  }
-}
+// SimulatorResponse removed - now using V2 types from v2.simulator.calculate
 
 interface ApplicationResponse {
   data: Application
@@ -57,29 +70,66 @@ export const useApplicationStore = defineStore('application', () => {
   const currentStep = ref(1)
   const totalSteps = ref(8)
 
+  // Helper to convert unknown values to numbers (JSON may return strings)
+  const toNum = (val: unknown): number => {
+    if (typeof val === 'number') return val
+    if (typeof val === 'string') return parseFloat(val) || 0
+    return 0
+  }
+
+  // Helper to restore simulation from application data
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const restoreSimulationFromApp = (app: any) => {
+    if (app?.requested_amount) {
+      const termMonths = toNum(app.requested_term_months) || toNum(app.term_months) || 12
+      const paymentFreq = app.payment_frequency || 'MONTHLY'
+      const interestRate = toNum(app.interest_rate)
+      simulation.value = {
+        requested_amount: toNum(app.requested_amount),
+        term_months: termMonths,
+        payment_frequency: paymentFreq as 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY',
+        total_periods: termMonths,
+        annual_rate: interestRate,
+        periodic_rate: interestRate / 12,
+        opening_commission: toNum(app.opening_commission),
+        periodic_payment: toNum(app.monthly_payment),
+        total_interest: toNum(app.total_interest),
+        total_amount: toNum(app.total_amount) || toNum(app.total_to_pay),
+        cat: toNum(app.cat),
+        amortization_table: []
+      }
+      log.debug('Simulation restored from application data', { simulation: simulation.value })
+    }
+  }
+
   // Async actions with shared loading states
   const { execute: executeSimulation, isLoading: isSimulating } = useAsyncAction(
     async (params: SimulationParams) => {
-      const response = await api.post<SimulatorResponse>('/simulator/calculate', {
+      // Use V2 API for simulator
+      const response = await v2.simulator.calculate({
         product_id: params.product_id,
         amount: params.amount,
         term_months: params.term_months,
-        payment_frequency: params.payment_frequency
+        payment_frequency: toSimulatorFrequency(params.payment_frequency)
       })
+
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Error en simulación')
+      }
 
       const data = response.data.simulation
 
       simulation.value = {
-        requested_amount: data.requested_amount,
+        requested_amount: data.amount,
         term_months: data.term_months,
         payment_frequency: data.payment_frequency as 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY',
-        total_periods: data.total_periods,
+        total_periods: data.term_months, // V2 uses term_months
         annual_rate: data.annual_rate,
-        periodic_rate: data.annual_rate / (data.payment_frequency === 'WEEKLY' ? 52 : data.payment_frequency === 'BIWEEKLY' ? 26 : 12),
-        opening_commission: data.opening_commission,
+        periodic_rate: data.monthly_rate,
+        opening_commission: data.opening_commission_amount,
         periodic_payment: data.payment_amount,
         total_interest: data.total_interest,
-        total_amount: data.total_to_pay,
+        total_amount: data.total_amount,
         cat: data.cat,
         amortization_table: []
       }
@@ -91,6 +141,15 @@ export const useApplicationStore = defineStore('application', () => {
 
   const { execute: executeLoadApplications, isLoading: isLoadingList } = useAsyncAction(
     async () => {
+      if (USE_V2_API) {
+        const response = await v2.applicant.application.list()
+        // V2 returns V2ApiResponse<{applications: V2Application[]}>
+        if (response.success && response.data) {
+          return (response.data.applications || []) as unknown as Application[]
+        }
+        return []
+      }
+      // V1 API (legacy)
       const response = await api.get<ApplicationListResponse>('/applications')
       return response.data.data
     },
@@ -106,8 +165,19 @@ export const useApplicationStore = defineStore('application', () => {
         return null
       }
 
-      const response = await api.get<ApplicationResponse>(`/applications/${id}`)
-      const app = response.data.data
+      let app: Application | null = null
+
+      if (USE_V2_API) {
+        const response = await v2.applicant.application.get(id)
+        // V2 returns V2ApiResponse with application data directly in response.data
+        if (response.success && response.data) {
+          app = response.data as unknown as Application
+        }
+      } else {
+        // V1 API (legacy)
+        const response = await api.get<ApplicationResponse>(`/applications/${id}`)
+        app = response.data.data
+      }
 
       if (!app?.id || app.id === 'null') {
         log.error('loadApplication: API returned invalid application ID')
@@ -115,6 +185,10 @@ export const useApplicationStore = defineStore('application', () => {
       }
 
       currentApplication.value = app
+
+      // Restore simulation from application data
+      restoreSimulationFromApp(app)
+
       return app
     },
     {
@@ -132,17 +206,39 @@ export const useApplicationStore = defineStore('application', () => {
   const { execute: executeCreateApplication, isLoading: isCreating } = useAsyncAction(
     async (params: CreateApplicationParams) => {
       log.debug('POST /applications', { productId: params.product_id })
-      const response = await api.post<ApplicationResponse>('/applications', {
-        product_id: params.product_id,
-        requested_amount: params.requested_amount,
-        term_months: params.term_months,
-        payment_frequency: params.payment_frequency,
-        simulation_data: simulation.value
-      })
 
-      log.debug('Response received', { status: response.status, appId: response.data.data?.id })
+      let app: Application | null = null
 
-      currentApplication.value = response.data.data
+      if (USE_V2_API) {
+        const response = await v2.applicant.application.create({
+          product_id: params.product_id,
+          requested_amount: params.requested_amount,
+          term_months: params.term_months,
+          payment_frequency: toV2PaymentFrequency(params.payment_frequency),
+          simulation_data: simulation.value || undefined
+        })
+        // V2 returns V2ApiResponse with application data directly in response.data
+        if (response.success && response.data) {
+          app = response.data as unknown as Application
+        }
+        log.debug('V2 Response received', { appId: app?.id })
+      } else {
+        // V1 API (legacy)
+        const response = await api.post<ApplicationResponse>('/applications', {
+          product_id: params.product_id,
+          requested_amount: params.requested_amount,
+          term_months: params.term_months,
+          payment_frequency: params.payment_frequency,
+          simulation_data: simulation.value
+        })
+        app = response.data.data
+        log.debug('Response received', { appId: app?.id })
+      }
+
+      currentApplication.value = app
+
+      // Restore simulation from created application data (backend returns calculated values)
+      restoreSimulationFromApp(app)
 
       if (currentApplication.value?.id) {
         storage.set(STORAGE_KEYS.CURRENT_APPLICATION_ID, currentApplication.value.id)
@@ -182,13 +278,35 @@ export const useApplicationStore = defineStore('application', () => {
         }
       }
 
-      log.debug('PUT /applications/' + currentApplication.value!.id)
-      const response = await api.put<ApplicationResponse>(
-        `/applications/${currentApplication.value!.id}`,
-        data
-      )
+      log.debug('PATCH /applications/' + currentApplication.value!.id)
 
-      currentApplication.value = response.data.data
+      let app: Application | null = null
+
+      if (USE_V2_API) {
+        // Convert payment_frequency to V2 format if present
+        const v2Data = { ...data } as Record<string, unknown>
+        if (data.payment_frequency) {
+          v2Data.payment_frequency = toV2PaymentFrequency(data.payment_frequency as PaymentFrequency)
+        }
+        const response = await v2.applicant.application.update(currentApplication.value!.id, v2Data)
+        // V2 returns V2ApiResponse with application data directly in response.data
+        if (response.success && response.data) {
+          app = response.data as unknown as Application
+        }
+      } else {
+        // V1 API (legacy)
+        const response = await api.put<ApplicationResponse>(
+          `/applications/${currentApplication.value!.id}`,
+          data
+        )
+        app = response.data.data
+      }
+
+      currentApplication.value = app
+
+      // Restore simulation from updated application data
+      restoreSimulationFromApp(app)
+
       log.debug('Application updated', { appId: currentApplication.value?.id })
       return currentApplication.value
     },
@@ -224,11 +342,23 @@ export const useApplicationStore = defineStore('application', () => {
         throw new Error('Cannot submit application')
       }
 
-      const response = await api.post<ApplicationResponse>(
-        `/applications/${currentApplication.value.id}/submit`
-      )
+      let app: Application | null = null
 
-      currentApplication.value = response.data.data
+      if (USE_V2_API) {
+        const response = await v2.applicant.application.submit(currentApplication.value.id)
+        // V2 returns V2ApiResponse with application data directly in response.data
+        if (response.success && response.data) {
+          app = response.data as unknown as Application
+        }
+      } else {
+        // V1 API (legacy)
+        const response = await api.post<ApplicationResponse>(
+          `/applications/${currentApplication.value.id}/submit`
+        )
+        app = response.data.data
+      }
+
+      currentApplication.value = app
       return currentApplication.value
     },
     { rethrow: true }
@@ -240,11 +370,23 @@ export const useApplicationStore = defineStore('application', () => {
         throw new Error('No application to cancel')
       }
 
-      const response = await api.post<ApplicationResponse>(
-        `/applications/${currentApplication.value.id}/cancel`
-      )
+      let app: Application | null = null
 
-      currentApplication.value = response.data.data
+      if (USE_V2_API) {
+        const response = await v2.applicant.application.cancel(currentApplication.value.id)
+        // V2 returns V2ApiResponse with application data directly in response.data
+        if (response.success && response.data) {
+          app = response.data as unknown as Application
+        }
+      } else {
+        // V1 API (legacy)
+        const response = await api.post<ApplicationResponse>(
+          `/applications/${currentApplication.value.id}/cancel`
+        )
+        app = response.data.data
+      }
+
+      currentApplication.value = app
       return currentApplication.value
     },
     { rethrow: true }

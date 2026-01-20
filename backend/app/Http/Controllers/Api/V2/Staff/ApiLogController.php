@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V2\Staff;
 
+use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\ApiLog;
 use App\Models\StaffAccount;
@@ -15,6 +16,7 @@ use Illuminate\Http\Request;
  */
 class ApiLogController extends Controller
 {
+    use ApiResponses;
     /**
      * List API logs with filtering and pagination.
      *
@@ -56,8 +58,8 @@ class ApiLogController extends Controller
         $perPage = min($request->get('per_page', 20), 100);
         $logs = $query->paginate($perPage);
 
-        return response()->json([
-            'data' => $logs->items(),
+        return $this->success([
+            'logs' => $logs->items(),
             'meta' => [
                 'current_page' => $logs->currentPage(),
                 'from' => $logs->firstItem(),
@@ -84,8 +86,8 @@ class ApiLogController extends Controller
             ->where('id', $id)
             ->firstOrFail();
 
-        return response()->json([
-            'data' => $apiLog
+        return $this->success([
+            'log' => $apiLog
         ]);
     }
 
@@ -106,8 +108,8 @@ class ApiLogController extends Controller
             ->filter()
             ->values();
 
-        return response()->json([
-            'data' => $providers
+        return $this->success([
+            'providers' => $providers
         ]);
     }
 
@@ -165,17 +167,15 @@ class ApiLogController extends Controller
             ->where('created_at', '>=', $thisMonth)
             ->sum('cost');
 
-        return response()->json([
-            'data' => [
-                'today' => [
-                    'total' => $totalToday,
-                    'successful' => $successfulToday,
-                    'failed' => $failedToday,
-                ],
-                'by_provider' => $byProvider,
-                'avg_duration_ms' => round($avgDuration ?? 0),
-                'total_cost_this_month' => (float) $totalCost,
-            ]
+        return $this->success([
+            'today' => [
+                'total' => $totalToday,
+                'successful' => $successfulToday,
+                'failed' => $failedToday,
+            ],
+            'by_provider' => $byProvider,
+            'avg_duration_ms' => round($avgDuration ?? 0),
+            'total_cost_this_month' => (float) $totalCost,
         ]);
     }
 }

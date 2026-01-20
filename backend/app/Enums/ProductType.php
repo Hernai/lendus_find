@@ -2,8 +2,12 @@
 
 namespace App\Enums;
 
+use App\Enums\Traits\HasOptions;
+
 enum ProductType: string
 {
+    use HasOptions;
+
     case PERSONAL = 'PERSONAL';
     case AUTO = 'AUTO';
     case HIPOTECARIO = 'HIPOTECARIO';

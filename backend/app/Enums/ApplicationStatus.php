@@ -2,6 +2,8 @@
 
 namespace App\Enums;
 
+use App\Enums\Traits\HasOptions;
+
 /**
  * Application status enum.
  *
@@ -10,6 +12,8 @@ namespace App\Enums;
  */
 enum ApplicationStatus: string
 {
+    use HasOptions;
+
     case DRAFT = 'DRAFT';
     case SUBMITTED = 'SUBMITTED';
     case IN_REVIEW = 'IN_REVIEW';

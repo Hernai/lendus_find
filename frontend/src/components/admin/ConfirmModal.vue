@@ -240,7 +240,7 @@ const confirm = () => {
               </label>
               <select
                 v-model="selectValue"
-                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:border-transparent transition-colors"
+                class="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:border-primary-500 transition-colors"
                 :class="focusRingClass"
               >
                 <option value="">{{ selectPlaceholder }}</option>
@@ -263,7 +263,7 @@ const confirm = () => {
               <textarea
                 v-model="comment"
                 :rows="commentRows"
-                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:border-transparent transition-colors resize-none"
+                class="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:border-primary-500 transition-colors resize-none"
                 :class="focusRingClass"
                 :placeholder="commentPlaceholder"
               />
@@ -273,14 +273,14 @@ const confirm = () => {
           <!-- Actions -->
           <div class="flex gap-3">
             <button
-              class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              class="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
               :disabled="loading"
               @click="close"
             >
               {{ cancelText }}
             </button>
             <button
-              class="flex-1 px-4 py-2 text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="flex-1 px-4 py-2.5 text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               :class="confirmBtnClass"
               :disabled="loading || !isValid"
               @click="confirm"

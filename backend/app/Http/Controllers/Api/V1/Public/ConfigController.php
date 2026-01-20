@@ -158,29 +158,33 @@ class ConfigController extends Controller
     /**
      * Format required docs for frontend.
      */
+    /**
+     * Format required docs for frontend.
+     * Uses DocumentType enum for descriptions to stay in sync with backend.
+     */
     private function formatRequiredDocs(?array $docs): array
     {
         if (!$docs) {
             return [];
         }
 
-        $docDescriptions = [
-            'INE_FRONT' => 'Identificación oficial (frente)',
-            'INE_BACK' => 'Identificación oficial (reverso)',
-            'PROOF_ADDRESS' => 'Comprobante de domicilio',
-            'PROOF_INCOME' => 'Comprobante de ingresos',
-            'PAYSLIP_1' => 'Recibo de nómina 1',
-            'PAYSLIP_2' => 'Recibo de nómina 2',
-            'PAYSLIP_3' => 'Recibo de nómina 3',
-            'BANK_STATEMENTS' => 'Estados de cuenta bancarios',
-            'VEHICLE_INVOICE' => 'Factura del vehículo',
-            'RFC_CSF' => 'Constancia de Situación Fiscal',
-        ];
+        return array_map(function ($doc) {
+            // Try to get description from DocumentType enum
+            $description = $doc;
+            try {
+                $docType = \App\Enums\DocumentType::tryFrom($doc);
+                if ($docType) {
+                    $description = $docType->description();
+                }
+            } catch (\Throwable) {
+                // Fallback to raw type if enum doesn't have this value
+            }
 
-        return array_map(fn ($doc) => [
-            'type' => $doc,
-            'required' => true,
-            'description' => $docDescriptions[$doc] ?? $doc,
-        ], $docs);
+            return [
+                'type' => $doc,
+                'required' => true,
+                'description' => $description,
+            ];
+        }, $docs);
     }
 }

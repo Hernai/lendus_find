@@ -8,8 +8,8 @@
 import { api } from '../api'
 import type {
   V2ApiResponse,
-  V2PaginatedResponse,
   V2Application,
+  V2ApplicationDetail,
   V2ApplicationFilters,
   V2AssignApplicationPayload,
   V2ChangeStatusPayload,
@@ -30,10 +30,25 @@ const BASE_PATH = '/v2/staff/applications'
 // =====================================================
 
 /**
+ * Response structure for paginated application list.
+ */
+export interface V2ApplicationListResponse {
+  applications: V2Application[]
+  meta: {
+    current_page: number
+    from: number | null
+    last_page: number
+    per_page: number
+    to: number | null
+    total: number
+  }
+}
+
+/**
  * List all applications with filters.
  */
-export async function list(filters?: V2ApplicationFilters): Promise<V2PaginatedResponse<V2Application>> {
-  const response = await api.get<V2PaginatedResponse<V2Application>>(BASE_PATH, { params: filters })
+export async function list(filters?: V2ApplicationFilters): Promise<V2ApiResponse<V2ApplicationListResponse>> {
+  const response = await api.get<V2ApiResponse<V2ApplicationListResponse>>(BASE_PATH, { params: filters })
   return response.data
 }
 
@@ -107,11 +122,8 @@ export async function getBoard(params?: {
 /**
  * Get unassigned applications.
  */
-export async function getUnassigned(params?: {
-  page?: number
-  per_page?: number
-}): Promise<V2PaginatedResponse<V2Application>> {
-  const response = await api.get<V2PaginatedResponse<V2Application>>(`${BASE_PATH}/unassigned`, { params })
+export async function getUnassigned(): Promise<V2ApiResponse<{ applications: V2Application[] }>> {
+  const response = await api.get<V2ApiResponse<{ applications: V2Application[] }>>(`${BASE_PATH}/unassigned`)
   return response.data
 }
 
@@ -120,26 +132,25 @@ export async function getUnassigned(params?: {
  */
 export async function getMyQueue(params?: {
   status?: string
-  page?: number
-  per_page?: number
-}): Promise<V2PaginatedResponse<V2Application>> {
-  const response = await api.get<V2PaginatedResponse<V2Application>>(`${BASE_PATH}/my-queue`, { params })
+}): Promise<V2ApiResponse<{ applications: V2Application[] }>> {
+  const response = await api.get<V2ApiResponse<{ applications: V2Application[] }>>(`${BASE_PATH}/my-queue`, { params })
   return response.data
 }
 
 /**
  * Get application details by ID.
+ * Returns the new structured format with loan, applicant, verification, workflow sections.
  */
-export async function get(id: string): Promise<V2ApiResponse<V2Application>> {
-  const response = await api.get<V2ApiResponse<V2Application>>(`${BASE_PATH}/${id}`)
+export async function get(id: string): Promise<V2ApiResponse<V2ApplicationDetail>> {
+  const response = await api.get<V2ApiResponse<V2ApplicationDetail>>(`${BASE_PATH}/${id}`)
   return response.data
 }
 
 /**
  * Get application status history.
  */
-export async function getHistory(id: string): Promise<V2ApiResponse<V2StatusHistoryEntry[]>> {
-  const response = await api.get<V2ApiResponse<V2StatusHistoryEntry[]>>(`${BASE_PATH}/${id}/history`)
+export async function getHistory(id: string): Promise<V2ApiResponse<{ history: V2StatusHistoryEntry[] }>> {
+  const response = await api.get<V2ApiResponse<{ history: V2StatusHistoryEntry[] }>>(`${BASE_PATH}/${id}/history`)
   return response.data
 }
 
@@ -151,8 +162,8 @@ export async function getHistory(id: string): Promise<V2ApiResponse<V2StatusHist
  * Assign application to a staff member.
  * Requires: canAssignApplications permission.
  */
-export async function assign(id: string, payload: V2AssignApplicationPayload): Promise<V2ApiResponse<V2Application>> {
-  const response = await api.post<V2ApiResponse<V2Application>>(`${BASE_PATH}/${id}/assign`, payload)
+export async function assign(id: string, payload: V2AssignApplicationPayload): Promise<V2ApiResponse<{ application: V2Application }>> {
+  const response = await api.post<V2ApiResponse<{ application: V2Application }>>(`${BASE_PATH}/${id}/assign`, payload)
   return response.data
 }
 
@@ -160,8 +171,8 @@ export async function assign(id: string, payload: V2AssignApplicationPayload): P
  * Change application status.
  * Requires: canChangeApplicationStatus permission.
  */
-export async function changeStatus(id: string, payload: V2ChangeStatusPayload): Promise<V2ApiResponse<V2Application>> {
-  const response = await api.post<V2ApiResponse<V2Application>>(`${BASE_PATH}/${id}/status`, payload)
+export async function changeStatus(id: string, payload: V2ChangeStatusPayload): Promise<V2ApiResponse<{ application: V2Application }>> {
+  const response = await api.post<V2ApiResponse<{ application: V2Application }>>(`${BASE_PATH}/${id}/status`, payload)
   return response.data
 }
 
@@ -170,8 +181,8 @@ export async function changeStatus(id: string, payload: V2ChangeStatusPayload): 
  * Requires: canApproveRejectApplications permission.
  * Rate limited: 30 requests per minute.
  */
-export async function approve(id: string, payload: V2ApprovePayload): Promise<V2ApiResponse<V2Application>> {
-  const response = await api.post<V2ApiResponse<V2Application>>(`${BASE_PATH}/${id}/approve`, payload)
+export async function approve(id: string, payload: V2ApprovePayload): Promise<V2ApiResponse<{ application: V2Application }>> {
+  const response = await api.post<V2ApiResponse<{ application: V2Application }>>(`${BASE_PATH}/${id}/approve`, payload)
   return response.data
 }
 
@@ -180,8 +191,8 @@ export async function approve(id: string, payload: V2ApprovePayload): Promise<V2
  * Requires: canApproveRejectApplications permission.
  * Rate limited: 30 requests per minute.
  */
-export async function reject(id: string, payload: V2RejectPayload): Promise<V2ApiResponse<V2Application>> {
-  const response = await api.post<V2ApiResponse<V2Application>>(`${BASE_PATH}/${id}/reject`, payload)
+export async function reject(id: string, payload: V2RejectPayload): Promise<V2ApiResponse<{ application: V2Application }>> {
+  const response = await api.post<V2ApiResponse<{ application: V2Application }>>(`${BASE_PATH}/${id}/reject`, payload)
   return response.data
 }
 
@@ -193,24 +204,23 @@ export async function reject(id: string, payload: V2RejectPayload): Promise<V2Ap
 export async function createCounterOffer(
   id: string,
   payload: V2CounterOfferCreatePayload
-): Promise<V2ApiResponse<V2Application>> {
-  const response = await api.post<V2ApiResponse<V2Application>>(`${BASE_PATH}/${id}/counter-offer`, payload)
+): Promise<V2ApiResponse<{ application: V2Application }>> {
+  const response = await api.post<V2ApiResponse<{ application: V2Application }>>(`${BASE_PATH}/${id}/counter-offer`, payload)
   return response.data
 }
 
 /**
- * Update verification status.
+ * Update verification checklist.
  * Requires: canVerifyReferences permission.
+ *
+ * @param checks - Object with check field names as keys and boolean values
+ * @example updateVerification(id, { identity_verified: true, address_verified: false })
  */
 export async function updateVerification(
   id: string,
-  payload: {
-    field: string
-    verified: boolean
-    notes?: string
-  }
-): Promise<V2ApiResponse<V2Application>> {
-  const response = await api.patch<V2ApiResponse<V2Application>>(`${BASE_PATH}/${id}/verification`, payload)
+  checks: Record<string, boolean>
+): Promise<V2ApiResponse<{ verification_checklist: Record<string, unknown> }>> {
+  const response = await api.patch<V2ApiResponse<{ verification_checklist: Record<string, unknown> }>>(`${BASE_PATH}/${id}/verification`, { checks })
   return response.data
 }
 
@@ -221,8 +231,8 @@ export async function updateVerification(
 export async function setRiskAssessment(
   id: string,
   payload: V2RiskAssessmentPayload
-): Promise<V2ApiResponse<V2Application>> {
-  const response = await api.post<V2ApiResponse<V2Application>>(`${BASE_PATH}/${id}/risk-assessment`, payload)
+): Promise<V2ApiResponse<{ risk_level: string; risk_data: Record<string, unknown> }>> {
+  const response = await api.post<V2ApiResponse<{ risk_level: string; risk_data: Record<string, unknown> }>>(`${BASE_PATH}/${id}/risk-assessment`, payload)
   return response.data
 }
 
@@ -233,8 +243,8 @@ export async function setRiskAssessment(
 /**
  * Get application notes.
  */
-export async function getNotes(id: string): Promise<V2ApiResponse<V2ApplicationNote[]>> {
-  const response = await api.get<V2ApiResponse<V2ApplicationNote[]>>(`${BASE_PATH}/${id}/notes`)
+export async function getNotes(id: string): Promise<V2ApiResponse<{ notes: V2ApplicationNote[] }>> {
+  const response = await api.get<V2ApiResponse<{ notes: V2ApplicationNote[] }>>(`${BASE_PATH}/${id}/notes`)
   return response.data
 }
 
@@ -422,8 +432,8 @@ export interface V2ApiLogEntry {
 /**
  * Get API logs for application.
  */
-export async function getApiLogs(applicationId: string): Promise<V2ApiResponse<V2ApiLogEntry[]>> {
-  const response = await api.get<V2ApiResponse<V2ApiLogEntry[]>>(
+export async function getApiLogs(applicationId: string): Promise<V2ApiResponse<{ logs: V2ApiLogEntry[] }>> {
+  const response = await api.get<V2ApiResponse<{ logs: V2ApiLogEntry[] }>>(
     `${BASE_PATH}/${applicationId}/api-logs`
   )
   return response.data

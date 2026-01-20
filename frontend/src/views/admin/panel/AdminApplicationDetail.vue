@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onBeforeMount, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AppButton } from '@/components/common'
 import AdminDocumentGallery from '@/components/admin/AdminDocumentGallery.vue'
@@ -13,15 +13,22 @@ import {
   ApplicantDataSection,
 } from '@/components/admin/application-detail'
 import { v2, type V2ApiLogEntry } from '@/services/v2'
-import { useWebSocket, useToast } from '@/composables'
+import { useWebSocket, useToast, useDocumentTypes } from '@/composables'
 import { useTenantStore } from '@/stores/tenant'
 import { useAuthStore } from '@/stores/auth'
 import { logger } from '@/utils/logger'
 import { formatMoney, formatDate, formatDateTime, formatPhone } from '@/utils/formatters'
+import { getStatusBadge } from '@/utils/admin-styles'
 import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent, DocumentDeletedEvent, DocumentUploadedEvent, ReferenceVerifiedEvent, BankAccountVerifiedEvent } from '@/types/realtime'
 
 const log = logger.child('AdminApplicationDetail')
 const toast = useToast()
+const { loadDocumentTypes, getDocumentTypeLabel } = useDocumentTypes()
+
+// Load document types from backend on mount
+onBeforeMount(async () => {
+  await loadDocumentTypes()
+})
 
 const route = useRoute()
 const router = useRouter()
@@ -188,13 +195,14 @@ interface Application {
   field_verifications?: Record<string, {
     verified: boolean
     method: string | null
-    method_label?: string
+    method_label?: string | null
     verified_at?: string | null
     verified_by?: string | null
     notes?: string | null
     rejection_reason?: string | null
     status?: string
     is_locked?: boolean
+    metadata?: Record<string, unknown>
   }>
 }
 
@@ -299,14 +307,11 @@ interface StaffUser {
   role: string
 }
 
-const roleLabels: Record<string, string> = {
-  SUPER_ADMIN: 'Super Admin',
-  ADMIN: 'Administrador',
-  ANALYST: 'Analista',
-  SUPERVISOR: 'Supervisor'
+// Get role label from backend enum options
+const getRoleLabel = (role: string) => {
+  const option = tenantStore.options.userType.find(o => o.value === role)
+  return option?.label || role
 }
-
-const getRoleLabel = (role: string) => roleLabels[role] || role
 const showAssignModal = ref(false)
 const staffUsers = ref<StaffUser[]>([])
 const selectedUserId = ref('')
@@ -352,23 +357,34 @@ const tabs = [
   { id: 'api_logs', label: 'Logs API' }
 ]
 
-const allStatusOptions = [
-  { value: 'SUBMITTED', label: 'Nueva', color: 'blue' },
-  { value: 'IN_REVIEW', label: 'En Revisión', color: 'yellow' },
-  { value: 'DOCS_PENDING', label: 'Docs Pendientes', color: 'orange' },
-  { value: 'CORRECTIONS_PENDING', label: 'Correcciones Pendientes', color: 'orange' },
-  { value: 'COUNTER_OFFERED', label: 'Contraoferta', color: 'indigo' },
-  { value: 'APPROVED', label: 'Aprobada', color: 'green' },
-  { value: 'REJECTED', label: 'Rechazada', color: 'red' },
-  { value: 'CANCELLED', label: 'Cancelada', color: 'gray' },
-  { value: 'DISBURSED', label: 'Desembolsada', color: 'purple' }
-]
+// Status colors for UI display
+const statusColors: Record<string, string> = {
+  DRAFT: 'gray',
+  SUBMITTED: 'blue',
+  IN_REVIEW: 'yellow',
+  DOCS_PENDING: 'orange',
+  CORRECTIONS_PENDING: 'orange',
+  COUNTER_OFFERED: 'indigo',
+  APPROVED: 'green',
+  REJECTED: 'red',
+  CANCELLED: 'gray',
+  DISBURSED: 'purple'
+}
+
+// Build status options from backend enum with local colors
+const allStatusOptions = computed(() => {
+  return tenantStore.options.applicationStatus.map(opt => ({
+    value: opt.value,
+    label: opt.label,
+    color: statusColors[opt.value] || 'gray'
+  }))
+})
 
 // Status options come from backend based on user permissions
 const statusOptions = computed(() => {
   // Use backend-provided allowed statuses, adding colors from local definitions
   return allowedStatuses.value.map(status => {
-    const local = allStatusOptions.find(opt => opt.value === status.value)
+    const local = allStatusOptions.value.find(opt => opt.value === status.value)
     return {
       value: status.value,
       label: status.label,
@@ -422,24 +438,29 @@ const fetchApplication = async () => {
     const appId = route.params.id as string
     const response = await v2.staff.application.get(appId)
 
-    // V2 response structure - data is directly in response.data
+    // V2 response structure with new format
     const data = response.data!
 
     // Store allowed statuses from backend (based on user permissions)
-    // Note: V2 API may include allowed_statuses differently - using defaults for now
-    allowedStatuses.value = (response as { allowed_statuses?: { value: string; label: string }[] }).allowed_statuses || allStatusOptions.map(s => ({ value: s.value, label: s.label }))
+    allowedStatuses.value = (response as { allowed_statuses?: { value: string; label: string }[] }).allowed_statuses || allStatusOptions.value.map(s => ({ value: s.value, label: s.label }))
 
-    // Map V2 application data to local interface
-    const person = data.applicant
-    const product = data.product
-    const personAddress = person?.current_home_address
-    const personEmployment = person?.current_employment
-    const personReferences = person?.references || []
-    const personBankAccounts = person?.bank_accounts || []
+    // Extract data from new structured response
+    const applicantData = data.applicant
+    const person = applicantData?.person
+    const company = applicantData?.company
+    const loan = data.loan
+    const verification = data.verification
+    const workflow = data.workflow
     const docs = data.documents || []
 
+    // Get person sub-entities
+    const personAddress = person?.address
+    const personEmployment = person?.employment
+    const personReferences = person?.references || []
+    const personBankAccounts = person?.bank_accounts || []
+
     // Calculate approved documents that are in the required list
-    const requiredDocTypes = product?.required_documents || []
+    const requiredDocTypes = data.required_documents || []
     const requiredTypes = new Set(requiredDocTypes)
     const approvedRequiredCount = docs.filter(d =>
       d.status === 'APPROVED' && requiredTypes.has(d.type)
@@ -447,11 +468,11 @@ const fetchApplication = async () => {
 
     application.value = {
       id: data.id,
-      folio: data.folio,
+      folio: data.folio || '',
       status: data.status,
       created_at: data.created_at,
       updated_at: data.updated_at,
-      assigned_to: data.assigned_agent?.name ?? undefined,
+      assigned_to: workflow?.assigned_to?.name ?? undefined,
       required_documents: requiredDocTypes,
       completeness: {
         personal_data: !!person,
@@ -466,21 +487,34 @@ const fetchApplication = async () => {
           count: personReferences.length,
           verified: personReferences.filter(r => r.verification_status === 'VERIFIED').length
         },
-        signature: false // TODO: add signature support to V2
+        signature: verification?.signature?.has_signed ?? false
       },
       applicant: person ? {
         id: person.id,
-        full_name: person.full_name,
-        first_name: person.first_name,
-        last_name_1: person.last_name_1,
-        last_name_2: person.last_name_2 || '',
-        email: person.email || '',
-        phone: person.phone || '',
-        curp: person.curp || '',
-        rfc: person.rfc || '',
-        birth_date: person.birth_date || '',
-        nationality: person.nationality || '',
-        gender: person.gender || ''
+        full_name: person.personal_data.full_name,
+        first_name: person.personal_data.first_name,
+        last_name_1: person.personal_data.last_name_1,
+        last_name_2: person.personal_data.last_name_2 || '',
+        email: person.contact.email || '',
+        phone: person.contact.phone || '',
+        curp: person.identifications.curp || '',
+        rfc: person.identifications.rfc || '',
+        birth_date: person.personal_data.birth_date || '',
+        nationality: person.personal_data.nationality || '',
+        gender: person.personal_data.gender || ''
+      } : company ? {
+        id: company.id,
+        full_name: company.legal_name,
+        first_name: company.legal_name,
+        last_name_1: '',
+        last_name_2: '',
+        email: company.contact.email || '',
+        phone: company.contact.phone || '',
+        curp: '',
+        rfc: company.rfc || '',
+        birth_date: '',
+        nationality: '',
+        gender: ''
       } : {
         id: '',
         full_name: '',
@@ -519,12 +553,12 @@ const fetchApplication = async () => {
       },
       employment: personEmployment ? {
         employment_type: personEmployment.employment_type,
-        company_name: personEmployment.company_name,
-        position: personEmployment.position || '',
-        monthly_income: personEmployment.monthly_income,
+        company_name: personEmployment.employer_name || '',
+        position: personEmployment.job_title || '',
+        monthly_income: personEmployment.monthly_income || 0,
         seniority_months: personEmployment.start_date
           ? Math.floor((Date.now() - new Date(personEmployment.start_date).getTime()) / (1000 * 60 * 60 * 24 * 30))
-          : 0
+          : (personEmployment.years_employed || 0) * 12 + (personEmployment.months_employed || 0)
       } : {
         employment_type: '',
         company_name: '',
@@ -533,15 +567,15 @@ const fetchApplication = async () => {
         seniority_months: 0
       },
       loan: {
-        product_name: product?.name || '',
-        requested_amount: data.requested_amount,
-        approved_amount: data.approved_amount || undefined,
-        term_months: data.term_months,
-        payment_frequency: data.payment_frequency,
-        interest_rate: data.interest_rate || 0,
-        monthly_payment: data.monthly_payment || 0,
-        total_to_pay: (data.monthly_payment || 0) * data.term_months,
-        purpose: '' // TODO: add purpose to V2 application
+        product_name: loan?.product_name || '',
+        requested_amount: loan?.requested_amount || 0,
+        approved_amount: loan?.approved_amount || undefined,
+        term_months: loan?.requested_term_months || 12,
+        payment_frequency: 'MENSUAL', // Default, could be added to loan structure
+        interest_rate: loan?.interest_rate || 0,
+        monthly_payment: loan?.monthly_payment || 0,
+        total_to_pay: loan?.total_amount || 0,
+        purpose: loan?.purpose || ''
       },
       documents: docs.map(d => ({
         id: d.id,
@@ -549,12 +583,12 @@ const fetchApplication = async () => {
         name: getDocTypeName(d.type),
         status: d.status as 'PENDING' | 'APPROVED' | 'REJECTED',
         rejection_reason: d.rejection_reason || undefined,
-        rejection_comment: undefined, // V2 uses rejection_reason only
-        uploaded_at: d.created_at,
+        rejection_comment: undefined,
+        uploaded_at: d.created_at || undefined,
         reviewed_at: d.reviewed_at || undefined,
         mime_type: d.mime_type,
         metadata: d.ocr_data ?? undefined,
-        is_kyc_locked: false // TODO: add kyc lock to V2
+        is_kyc_locked: d.is_kyc_locked ?? false
       })),
       references: personReferences.map(r => ({
         id: r.id,
@@ -566,31 +600,31 @@ const fetchApplication = async () => {
           : r.verification_status === 'REJECTED' ? 'NOT_VERIFIED' as const
           : r.verification_status === 'UNREACHABLE' ? 'NO_ANSWER' as const
           : undefined,
-        verification_notes: r.notes || undefined,
+        verification_notes: r.verification_notes || undefined,
         verified_at: r.verified_at || undefined
       })),
       bank_accounts: personBankAccounts.map(ba => ({
         id: ba.id,
-        type: ba.account_type,
+        type: ba.account_type || '',
         bank_name: ba.bank_name,
-        bank_code: ba.bank_code,
+        bank_code: ba.bank_code || '',
         clabe: ba.clabe,
-        account_type: ba.account_type,
-        account_type_label: ba.account_type,
-        holder_name: ba.account_holder_name,
+        account_type: ba.account_type || '',
+        account_type_label: ba.account_type || '',
+        holder_name: ba.holder_name || '',
         holder_rfc: undefined,
         is_primary: ba.is_primary,
-        is_own_account: true, // TODO: add is_own_account to V2
+        is_own_account: true,
         is_verified: ba.is_verified,
-        created_at: ba.created_at
+        created_at: ba.created_at || undefined
       })),
-      notes: (data.notes || []).map(n => ({
+      notes: (workflow?.notes || []).map(n => ({
         id: n.id,
         text: n.content,
         author: n.author?.name || 'Sistema',
         created_at: n.created_at
       })),
-      timeline: data.status_history?.map((h, idx) => {
+      timeline: workflow?.status_history?.map((h, idx) => {
         // Map special action types
         const actionTypes = [
           'DATA_VERIFICATION',
@@ -625,22 +659,22 @@ const fetchApplication = async () => {
         }
       }) || [],
       signature: {
-        has_signed: false,
-        signature_base64: undefined,
-        signature_date: undefined,
-        signature_ip: undefined
+        has_signed: verification?.signature?.has_signed ?? false,
+        signature_base64: verification?.signature?.signature_base64 ?? undefined,
+        signature_date: verification?.signature?.signature_date ?? undefined,
+        signature_ip: verification?.signature?.signature_ip ?? undefined
       },
       verification: {
         phone_verified: false,
         phone_verified_at: undefined,
         email_verified: false,
         email_verified_at: undefined,
-        identity_verified: person?.kyc_status === 'VERIFIED',
-        identity_verified_at: person?.kyc_verified_at || undefined,
+        identity_verified: verification?.kyc_status === 'VERIFIED',
+        identity_verified_at: verification?.kyc_verified_at || undefined,
         address_verified: personAddress?.verification_status === 'VERIFIED',
         employment_verified: personEmployment?.verification_status === 'VERIFIED'
       },
-      field_verifications: data.field_verifications || {}
+      field_verifications: verification?.fields || {}
     }
   } catch (e) {
     log.error('Error al cargar solicitud', { error: e })
@@ -658,7 +692,7 @@ const loadApiLogs = async () => {
   try {
     const appId = route.params.id as string
     const response = await v2.staff.application.getApiLogs(appId)
-    apiLogs.value = response.data || []
+    apiLogs.value = response.data?.logs || []
   } catch (e) {
     log.error('Error al cargar logs de API', { error: e })
     apiLogs.value = []
@@ -971,28 +1005,9 @@ const unverifyBankAccount = async () => {
   }
 }
 
-// Get document type display name
+// Get document type display name (from backend enum)
 const getDocTypeName = (type: string): string => {
-  const names: Record<string, string> = {
-    'INE_FRONT': 'INE Frente',
-    'INE_BACK': 'INE Reverso',
-    'PROOF_OF_ADDRESS': 'Comprobante de Domicilio',
-    'PROOF_ADDRESS': 'Comprobante de Domicilio',
-    'PROOF_OF_INCOME': 'Comprobante de Ingresos',
-    'PROOF_INCOME': 'Comprobante de Ingresos',
-    'BANK_STATEMENT': 'Estado de Cuenta',
-    'PAYROLL_STUB': 'Recibo de Nómina',
-    'PAYSLIP_1': 'Recibo de Nómina 1',
-    'PAYSLIP_2': 'Recibo de Nómina 2',
-    'PAYSLIP_3': 'Recibo de Nómina 3',
-    'TAX_RETURN': 'Declaración de Impuestos',
-    'SELFIE': 'Selfie',
-    'SIGNATURE': 'Firma',
-    'VEHICLE_INVOICE': 'Factura del Vehículo',
-    'RFC_CONSTANCIA': 'Constancia RFC',
-    'CURP': 'CURP'
-  }
-  return names[type] || type
+  return getDocumentTypeLabel(type)
 }
 
 onMounted(async () => {
@@ -1032,37 +1047,13 @@ const parseChangeValue = (change: string, part: 'old' | 'new'): string => {
   return part === 'old' ? (parts[0] ?? '') : (parts[1] ?? '')
 }
 
-const getStatusBadge = (status: string) => {
-  const badges: Record<string, { bg: string; text: string; label: string }> = {
-    SUBMITTED: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Nueva' },
-    IN_REVIEW: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'En Revisión' },
-    DOCS_PENDING: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Docs Pendientes' },
-    CORRECTIONS_PENDING: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Correcciones Pendientes' },
-    COUNTER_OFFERED: { bg: 'bg-indigo-100', text: 'text-indigo-800', label: 'Contraoferta' },
-    APPROVED: { bg: 'bg-green-100', text: 'text-green-800', label: 'Aprobada' },
-    REJECTED: { bg: 'bg-red-100', text: 'text-red-800', label: 'Rechazada' },
-    CANCELLED: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Cancelada' },
-    DISBURSED: { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Desembolsada' }
-  }
-  return badges[status] || { bg: 'bg-gray-100', text: 'text-gray-800', label: status }
-}
-
-const getDocStatusBadge = (status: string) => {
-  const badges: Record<string, { bg: string; text: string; label: string }> = {
-    PENDING: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Pendiente' },
-    APPROVED: { bg: 'bg-green-100', text: 'text-green-800', label: 'Aprobado' },
-    REJECTED: { bg: 'bg-red-100', text: 'text-red-800', label: 'Rechazado' }
-  }
-  return badges[status] || { bg: 'bg-gray-100', text: 'text-gray-800', label: status }
-}
-
 const getEmploymentType = (type: string) => {
-  const option = tenantStore.options.employment_type.find(o => o.value === type)
+  const option = tenantStore.options.employmentType.find(o => o.value === type)
   return option?.label || type
 }
 
 const getHousingType = (type: string) => {
-  const option = tenantStore.options.housing_type.find(o => o.value === type)
+  const option = tenantStore.options.housingType.find(o => o.value === type)
   return option?.label || type
 }
 
@@ -1211,7 +1202,7 @@ const updateStatus = async () => {
     // Make actual API call to update status
     await v2.staff.application.changeStatus(application.value.id, {
       status: newStatus.value as import('@/types/v2').V2ApplicationStatus,
-      reason: statusNote.value || undefined
+      notes: statusNote.value || undefined
     })
 
     await fetchApplication()
@@ -1234,7 +1225,7 @@ const openAssignModal = async () => {
 
   try {
     const response = await v2.staff.user.list({ active: true, role: 'ANALYST' })
-    staffUsers.value = response.data.map(u => ({
+    staffUsers.value = (response.data?.users ?? []).map(u => ({
       id: u.id,
       name: u.name,
       email: u.email,
@@ -1585,7 +1576,6 @@ const submitCounterOffer = async () => {
       amount: counterOffer.value.amount,
       term_months: counterOffer.value.term_months,
       interest_rate: counterOffer.value.interest_rate,
-      payment_frequency: counterOffer.value.payment_frequency as import('@/types/v2').V2PaymentFrequency,
       reason: counterOffer.value.reason
     })
 

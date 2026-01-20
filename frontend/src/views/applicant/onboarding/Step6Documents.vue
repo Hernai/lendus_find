@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, watch } from 'vue'
+import { reactive, ref, computed, onMounted, watch, onBeforeMount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOnboardingStore, useApplicationStore, useTenantStore, useKycStore } from '@/stores'
 import { AppButton } from '@/components/common'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
 import { logger } from '@/utils/logger'
 import type { Product } from '@/types'
 
@@ -26,43 +26,48 @@ interface DocumentUpload {
   fromKyc?: boolean // Flag to indicate document was captured during KYC verification
 }
 
-// Document labels for display (maps type codes to human-readable names)
-const documentLabels: Record<string, { name: string; description: string }> = {
-  'INE_FRONT': { name: 'INE Frente', description: 'Foto clara del frente de tu INE/IFE' },
-  'INE_BACK': { name: 'INE Reverso', description: 'Foto clara del reverso de tu INE/IFE' },
-  'PROOF_ADDRESS': { name: 'Comprobante de domicilio', description: 'Recibo de luz, agua, teléfono (máximo 3 meses)' },
-  'PROOF_INCOME': { name: 'Comprobante de ingresos', description: 'Recibo de nómina, estado de cuenta o declaración fiscal' },
-  'PAYSLIP_1': { name: 'Recibo de nómina 1', description: 'Recibo de nómina reciente (mes actual)' },
-  'PAYSLIP_2': { name: 'Recibo de nómina 2', description: 'Recibo de nómina (mes anterior)' },
-  'PAYSLIP_3': { name: 'Recibo de nómina 3', description: 'Recibo de nómina (hace 2 meses)' },
-  'BANK_STATEMENT': { name: 'Estado de cuenta', description: 'Estado de cuenta bancario (máximo 3 meses)' },
-  'VEHICLE_INVOICE': { name: 'Factura del vehículo', description: 'Factura original del vehículo' },
-  'RFC_CONSTANCIA': { name: 'Constancia RFC', description: 'Constancia de situación fiscal' },
-  'CURP': { name: 'CURP', description: 'Clave Única de Registro de Población' },
-  'SELFIE': { name: 'Selfie con INE', description: 'Foto tuya sosteniendo tu INE' },
+// Document types loaded from backend
+const documentTypeLabels = ref<Record<string, string>>({})
+
+// Load document types from backend
+const loadDocumentTypes = async () => {
+  try {
+    const response = await v2.applicant.document.getTypes()
+    if (response.success && response.data?.types) {
+      documentTypeLabels.value = response.data.types
+    }
+  } catch (err) {
+    log.error('Failed to load document types from backend', err)
+  }
 }
 
-// Get document list from product, fallback to defaults
+// Get label for a document type (from backend or fallback)
+const getDocumentLabel = (type: string): string => {
+  return documentTypeLabels.value[type] || type.replace(/_/g, ' ')
+}
+
+// Get document list from product - types come from backend enum
 const getRequiredDocuments = (): DocumentUpload[] => {
   const product = applicationStore.selectedProduct
+  // Always prefer fresh data from tenant config (loaded from API) over cached application data
   const productFromConfig = tenantStore.products.find(
     (p: Product) => p.id === product?.id
   )
 
-  // Get required_documents from product (either selected or from config)
-  const requiredDocs = productFromConfig?.required_documents ?? product?.required_documents ??
-                       productFromConfig?.required_docs ?? product?.required_docs ?? []
+  // Priority: fresh config data > cached application data
+  const requiredDocs = productFromConfig?.required_documents ?? productFromConfig?.required_docs ??
+                       product?.required_documents ?? product?.required_docs ?? []
 
   if (requiredDocs.length > 0) {
     return requiredDocs.map((doc: { type: string; required: boolean; description?: string } | string) => {
       const docType = typeof doc === 'string' ? doc : doc.type
       const isRequired = typeof doc === 'string' ? true : (doc.required ?? true)
-      const docInfo = documentLabels[docType] || { name: docType, description: '' }
+      const label = getDocumentLabel(docType)
 
       return {
-        id: docType.toLowerCase(),
-        name: docInfo.name,
-        description: typeof doc === 'object' && doc.description ? doc.description : docInfo.description,
+        id: docType,
+        name: label,
+        description: typeof doc === 'object' && doc.description ? doc.description : '',
         required: isRequired,
         file: null,
         preview: null,
@@ -73,9 +78,9 @@ const getRequiredDocuments = (): DocumentUpload[] => {
 
   // Fallback to basic documents if no product info available
   return [
-    { id: 'ine_front', name: 'INE Frente', description: 'Foto clara del frente de tu INE/IFE', required: true, file: null, preview: null, status: 'pending' as const },
-    { id: 'ine_back', name: 'INE Reverso', description: 'Foto clara del reverso de tu INE/IFE', required: true, file: null, preview: null, status: 'pending' as const },
-    { id: 'proof_address', name: 'Comprobante de domicilio', description: 'Recibo de luz, agua, teléfono (máximo 3 meses)', required: true, file: null, preview: null, status: 'pending' as const },
+    { id: 'INE_FRONT', name: getDocumentLabel('INE_FRONT'), description: '', required: true, file: null, preview: null, status: 'pending' as const },
+    { id: 'INE_BACK', name: getDocumentLabel('INE_BACK'), description: '', required: true, file: null, preview: null, status: 'pending' as const },
+    { id: 'PROOF_OF_ADDRESS', name: getDocumentLabel('PROOF_OF_ADDRESS'), description: '', required: true, file: null, preview: null, status: 'pending' as const },
   ]
 }
 
@@ -170,8 +175,8 @@ const uploadKycDocuments = async () => {
   for (const { type, image } of kycImages) {
     if (!image) continue
 
-    // Find the document in our list (by type, case-insensitive)
-    const doc = documents.find(d => d.id.toUpperCase() === type)
+    // Find the document in our list (doc.id is already uppercase)
+    const doc = documents.find(d => d.id === type)
     if (!doc) continue
 
     // Only upload if it's a KYC document that hasn't been uploaded yet
@@ -224,13 +229,8 @@ const uploadKycDocuments = async () => {
             ocr_data: kycStore.lockedData
           }
 
-      // Upload to backend with KYC metadata
-      const formData = new FormData()
-      formData.append('type', type)
-      formData.append('file', file)
-      formData.append('metadata', JSON.stringify(kycMetadata))
-
-      await api.post(`/applications/${applicationId}/documents`, formData)
+      // Upload to backend with KYC metadata using V2 API
+      await v2.applicant.document.upload(file, type, { metadata: kycMetadata })
 
       doc.status = 'uploaded'
       doc.fromKyc = true
@@ -244,8 +244,17 @@ const uploadKycDocuments = async () => {
   }
 }
 
+// Load document types before mount so labels are available
+onBeforeMount(async () => {
+  await loadDocumentTypes()
+})
+
 // Sync from store on mount
 onMounted(async () => {
+  // Ensure tenant config is loaded (with fresh product data from API)
+  if (!tenantStore.isLoaded) {
+    await tenantStore.loadConfig()
+  }
   await onboardingStore.init()
   initDocuments()
   // Auto-upload KYC documents to backend
@@ -313,12 +322,8 @@ const handleFileSelect = async (doc: DocumentUpload, event: Event) => {
       throw new Error('No hay solicitud activa')
     }
 
-    // Create FormData for file upload
-    const formData = new FormData()
-    formData.append('type', doc.id.toUpperCase())
-    formData.append('file', file)
-
-    await api.post(`/applications/${applicationId}/documents`, formData)
+    // Upload using V2 API (doc.id is already uppercase from backend)
+    await v2.applicant.document.upload(file, doc.id)
     doc.status = 'uploaded'
   } catch (e: unknown) {
     log.error('Error uploading document', { error: e })

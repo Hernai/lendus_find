@@ -3,58 +3,40 @@
  *
  * This service extracts the API interaction logic from the KYC store
  * to improve testability and reduce store complexity.
+ *
+ * Uses V2 API endpoints for applicant KYC operations.
  */
 
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
 import { logger } from '@/utils/logger'
 
 const log = logger.child('KycService')
 
-// Types
-export interface KycServicesResponse {
-  data: {
-    nubarium: {
-      configured: boolean
-      services: string[]
-    }
-  }
-  birth_states: Record<string, string>
-}
+// Re-export types from V2 service for backwards compatibility
+export type {
+  KycServicesData,
+  IneOcrData,
+  IneValidationData,
+  RfcValidationData,
+  BiometricTokenData,
+  FaceMatchData,
+  LivenessData,
+  VerifiedField,
+  VerificationRecord,
+  VerificationsData,
+  RecordVerificationPayload,
+} from '@/services/v2/kyc.applicant.service'
 
-export interface IneOcrData {
-  nombres: string
-  apellido_paterno: string
-  apellido_materno: string
-  curp: string
-  fecha_nacimiento: string
-  sexo: string
-  calle: string
-  colonia: string
-  cp?: string
-  localidad?: string
-  ciudad?: string
-  municipio?: string
-  estado?: string
-  clave_elector: string
-  vigencia: string
-  ocr?: string
-  cic?: string
-  identificador_ciudadano?: string
-  subtipo?: string
-}
+// Aliased exports for backwards compatibility
+export type { KycServicesData as KycServicesResponse } from '@/services/v2/kyc.applicant.service'
+export type { IneValidationData as IneValidationResponse } from '@/services/v2/kyc.applicant.service'
+export type { RfcValidationData as RfcValidationResponse } from '@/services/v2/kyc.applicant.service'
+export type { BiometricTokenData as BiometricTokenResponse } from '@/services/v2/kyc.applicant.service'
+export type { FaceMatchData as FaceMatchResponse } from '@/services/v2/kyc.applicant.service'
+export type { LivenessData as LivenessResponse } from '@/services/v2/kyc.applicant.service'
+export type { VerificationsData as VerificationsResponse } from '@/services/v2/kyc.applicant.service'
 
-export interface IneValidationResponse {
-  message: string
-  ocr_data?: IneOcrData
-  list_validation?: {
-    valid: boolean
-    code: string
-    message: string
-  }
-  is_valid?: boolean
-  validation_code?: string
-}
-
+// Legacy types that map to V2
 export interface CurpValidationResponse {
   valid: boolean
   data?: {
@@ -63,47 +45,6 @@ export interface CurpValidationResponse {
     apellido_materno?: string
     fecha_nacimiento?: string
     sexo?: string
-  }
-}
-
-export interface RfcValidationResponse {
-  message: string
-  valid: boolean
-  data: {
-    rfc: string
-    mensaje?: string
-    informacion_adicional?: string
-    razon_social?: string
-    tipo_persona: 'M' | 'F'
-    tipo_persona_label: string
-  }
-}
-
-export interface BiometricTokenResponse {
-  message: string
-  data: {
-    token: string
-    expires_in: number
-    transaction_id: string
-  }
-}
-
-export interface FaceMatchResponse {
-  message: string
-  data: {
-    match: boolean
-    score: number
-    transaction_id: string
-  }
-}
-
-export interface LivenessResponse {
-  message: string
-  data: {
-    passed: boolean
-    score: number
-    confidence: number
-    transaction_id: string
   }
 }
 
@@ -126,6 +67,38 @@ export interface ComplianceCheckResponse {
   }
 }
 
+export interface LoadVerificationsResponse {
+  verifications: Array<{
+    field: string
+    field_label: string
+    value: string
+    method: string
+    method_label: string
+    is_verified: boolean
+    is_locked: boolean
+    status: string
+    verified_at: string
+    metadata?: Record<string, unknown> | null
+    notes?: string | null
+  }>
+  verified_fields: Record<string, {
+    value: string
+    method: string
+    method_label: string
+    verified_at: string
+    metadata?: Record<string, unknown> | null
+    is_locked?: boolean
+  }>
+  summary: {
+    personal_data: Record<string, unknown>
+    contact: Record<string, unknown>
+    address: Record<string, unknown>
+    kyc: Record<string, unknown>
+  }
+  kyc_verified: boolean
+  kyc_verified_at: string | null
+}
+
 /**
  * Check available KYC services configuration.
  */
@@ -135,11 +108,12 @@ export async function checkServices(): Promise<{
   birthStates: Record<string, string>
 }> {
   try {
-    const response = await api.get<KycServicesResponse>('/kyc/services')
+    // V2 service now returns unwrapped data: { services: { nubarium: {...} }, birth_states: {...} }
+    const data = await v2.applicant.kyc.getServices()
     return {
-      configured: response.data.data.nubarium?.configured || false,
-      services: response.data.data.nubarium?.services || [],
-      birthStates: response.data.birth_states || {}
+      configured: data.services?.nubarium?.configured || false,
+      services: data.services?.nubarium?.services || [],
+      birthStates: data.birth_states || {}
     }
   } catch (err) {
     log.error('Failed to check KYC services', { error: err })
@@ -156,11 +130,7 @@ export async function checkServices(): Promise<{
  */
 export async function testConnection(): Promise<{ success: boolean; message: string }> {
   try {
-    const response = await api.post<{ success: boolean; message: string }>('/kyc/test-connection')
-    return {
-      success: response.data.success,
-      message: response.data.message
-    }
+    return await v2.applicant.kyc.testConnection()
   } catch (err: unknown) {
     log.error('Failed to test KYC connection', { error: err })
     const errorResponse = err as { response?: { data?: { message?: string } } }
@@ -176,11 +146,7 @@ export async function testConnection(): Promise<{ success: boolean; message: str
  */
 export async function refreshToken(): Promise<{ success: boolean; message: string }> {
   try {
-    const response = await api.post<{ success: boolean; message: string }>('/kyc/refresh-token')
-    return {
-      success: response.data.success,
-      message: response.data.message
-    }
+    return await v2.applicant.kyc.refreshToken()
   } catch (err: unknown) {
     log.error('Failed to refresh KYC token', { error: err })
     const errorResponse = err as { response?: { data?: { message?: string } } }
@@ -197,21 +163,20 @@ export async function refreshToken(): Promise<{ success: boolean; message: strin
 export async function validateIne(
   frontImage: string,
   backImage?: string | null
-): Promise<IneValidationResponse> {
-  const response = await api.post<IneValidationResponse>('/kyc/ine/validate', {
-    front_image: frontImage,
-    back_image: backImage,
-    validate_list: true
-  })
-  return response.data
+) {
+  return await v2.applicant.kyc.validateIne(frontImage, backImage, true)
 }
 
 /**
  * Validate CURP with RENAPO.
  */
 export async function validateCurp(curp: string): Promise<CurpValidationResponse> {
-  const response = await api.post<CurpValidationResponse>('/kyc/curp/validate', { curp })
-  return response.data
+  // V2 service returns unwrapped data: { curp_data: {...}, valid: boolean }
+  const data = await v2.applicant.kyc.validateCurp(curp)
+  return {
+    valid: data.valid,
+    data: data.curp_data
+  }
 }
 
 /**
@@ -219,21 +184,16 @@ export async function validateCurp(curp: string): Promise<CurpValidationResponse
  */
 export async function validateRfc(
   rfc: string,
-  applicantId?: string
-): Promise<RfcValidationResponse> {
-  const response = await api.post<RfcValidationResponse>('/kyc/rfc/validate', {
-    rfc,
-    applicant_id: applicantId
-  })
-  return response.data
+  _applicantId?: string // Kept for backwards compatibility but V2 doesn't need it
+) {
+  return await v2.applicant.kyc.validateRfc(rfc)
 }
 
 /**
  * Get biometric token for face match/liveness.
  */
-export async function getBiometricToken(): Promise<BiometricTokenResponse['data']> {
-  const response = await api.post<BiometricTokenResponse>('/kyc/biometric/token')
-  return response.data.data
+export async function getBiometricToken(applicationId?: string) {
+  return await v2.applicant.kyc.getBiometricToken(applicationId)
 }
 
 /**
@@ -242,12 +202,12 @@ export async function getBiometricToken(): Promise<BiometricTokenResponse['data'
 export async function performFaceMatch(
   ineImage: string,
   selfieImage: string
-): Promise<FaceMatchResponse['data']> {
-  const response = await api.post<FaceMatchResponse>('/kyc/biometric/face-match', {
-    ine_image: ineImage,
-    selfie_image: selfieImage
-  })
-  return response.data.data
+): Promise<{ match: boolean; score: number }> {
+  const response = await v2.applicant.kyc.validateFaceMatch(selfieImage, ineImage)
+  return {
+    match: response.match,
+    score: response.score
+  }
 }
 
 /**
@@ -255,11 +215,12 @@ export async function performFaceMatch(
  */
 export async function performLivenessCheck(
   selfieImage: string
-): Promise<LivenessResponse['data']> {
-  const response = await api.post<LivenessResponse>('/kyc/biometric/liveness', {
-    selfie_image: selfieImage
-  })
-  return response.data.data
+): Promise<{ passed: boolean; score: number }> {
+  const response = await v2.applicant.kyc.validateLiveness(selfieImage)
+  return {
+    passed: response.passed,
+    score: response.score
+  }
 }
 
 /**
@@ -272,57 +233,48 @@ export async function performComplianceCheck(data: {
   curp?: string
   birth_date?: string
 }): Promise<ComplianceCheckResponse['data']> {
-  const response = await api.post<ComplianceCheckResponse>('/kyc/compliance/check', data)
-  return response.data.data
-}
+  // Build full name for OFAC check
+  const fullName = [data.first_name, data.last_name_1, data.last_name_2]
+    .filter(Boolean)
+    .join(' ')
 
-export interface VerifiedField {
-  value: string
-  method: string
-  method_label: string
-  verified_at: string
-  metadata?: Record<string, unknown> | null
-  is_locked?: boolean
-}
+  // Call both OFAC and PLD checks
+  // V2 services now return unwrapped data directly
+  const [ofacData, pldData] = await Promise.all([
+    v2.applicant.kyc.checkOfac(fullName),
+    v2.applicant.kyc.checkPldBlacklists(fullName, data.curp)
+  ])
 
-export interface LoadVerificationsResponse {
-  verifications: Array<{
-    field: string
-    field_label: string
-    value: string
-    method: string
-    method_label: string
-    is_verified: boolean
-    is_locked: boolean
-    status: string
-    verified_at: string
-    metadata?: Record<string, unknown> | null
-    notes?: string | null
-  }>
-  verified_fields: Record<string, VerifiedField>
-  summary: {
-    personal_data: Record<string, VerifiedField>
-    contact: Record<string, VerifiedField>
-    address: Record<string, VerifiedField>
-    kyc: Record<string, VerifiedField>
+  return {
+    ofac: {
+      found: ofacData.found,
+      matches: ofacData.matches,
+      score: ofacData.matches.length > 0
+        ? Math.max(...ofacData.matches.map(m => m.score))
+        : 0
+    },
+    pld: {
+      found: pldData.found,
+      matches: pldData.matches
+    }
   }
-  kyc_verified: boolean
-  kyc_verified_at: string | null
 }
 
 /**
  * Load applicant verifications from backend.
+ * V2 doesn't need applicantId - it uses the authenticated user's applicant.
  */
-export async function loadVerifications(applicantId: string): Promise<LoadVerificationsResponse> {
-  const response = await api.get<{ data: LoadVerificationsResponse }>(`/applicants/${applicantId}/verifications`)
-  return response.data.data
+export async function loadVerifications(_applicantId?: string): Promise<LoadVerificationsResponse> {
+  // V2 getVerifications() returns the data directly (already unwrapped from response.data.data)
+  return await v2.applicant.kyc.getVerifications()
 }
 
 /**
  * Record verifications for an applicant.
+ * V2 doesn't need applicantId - it uses the authenticated user's applicant.
  */
 export async function recordVerifications(
-  applicantId: string,
+  _applicantId: string,
   verifications: Array<{
     field: string
     value: string
@@ -330,20 +282,19 @@ export async function recordVerifications(
     metadata?: Record<string, unknown>
   }>
 ): Promise<void> {
-  await api.post(`/applicants/${applicantId}/verifications`, { verifications })
+  await v2.applicant.kyc.recordVerifications(verifications)
 }
 
 /**
  * Record a single verification.
+ * V2 doesn't need applicantId - it uses the authenticated user's applicant.
  */
 export async function recordSingleVerification(
-  applicantId: string,
+  _applicantId: string,
   field: string,
   value: string,
   method: string,
   metadata?: Record<string, unknown>
 ): Promise<void> {
-  await api.post(`/applicants/${applicantId}/verifications`, {
-    verifications: [{ field, value, method, metadata }]
-  })
+  await v2.applicant.kyc.recordVerifications([{ field, value, method, metadata }])
 }

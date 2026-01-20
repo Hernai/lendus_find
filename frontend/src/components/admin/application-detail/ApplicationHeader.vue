@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { AppButton } from '@/components/common'
+import { formatDateShort } from '@/utils/formatters'
 
 interface Props {
   folio: string
@@ -35,13 +36,6 @@ const statusBadge = computed(() => {
   return badges[props.status] || { bg: 'bg-gray-100', text: 'text-gray-600', label: props.status }
 })
 
-const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleDateString('es-MX', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })
-}
 </script>
 
 <template>
@@ -64,7 +58,7 @@ const formatDate = (dateStr: string) => {
             </span>
           </div>
           <p class="text-sm text-gray-500">
-            Creada el {{ formatDate(createdAt) }}
+            Creada el {{ formatDateShort(createdAt) }}
             <span v-if="assignedTo" class="ml-2">
               · Asignada a <span class="font-medium">{{ assignedTo }}</span>
             </span>

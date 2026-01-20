@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted, onBeforeMount } from 'vue'
 import { api } from '@/services/api'
+import { useDocumentTypes } from '@/composables'
 import ImageViewer from './ImageViewer.vue'
+
+const { loadDocumentTypes, getDocumentTypeLabel } = useDocumentTypes()
 
 interface Document {
   id: string
@@ -63,22 +66,13 @@ const documentName = computed(() => {
   return props.document.name || props.document.original_name || props.document.type
 })
 
+// Load document types on mount
+onBeforeMount(async () => {
+  await loadDocumentTypes()
+})
+
 const typeLabel = computed(() => {
-  const typeMap: Record<string, string> = {
-    'INE_FRONT': 'INE (Frente)',
-    'INE_BACK': 'INE (Reverso)',
-    'PROOF_ADDRESS': 'Comprobante de domicilio',
-    'PROOF_INCOME': 'Comprobante de ingresos',
-    'BANK_STATEMENT': 'Estado de cuenta',
-    'RFC_CONSTANCIA': 'Constancia RFC',
-    'SIGNATURE': 'Firma',
-    'SELFIE': 'Foto de perfil',
-    'PAYSLIP_1': 'Recibo nomina 1',
-    'PAYSLIP_2': 'Recibo nomina 2',
-    'PAYSLIP_3': 'Recibo nomina 3',
-    'VEHICLE_INVOICE': 'Factura vehiculo'
-  }
-  return typeMap[props.document.type] || props.document.type
+  return getDocumentTypeLabel(props.document.type)
 })
 
 const loadImage = async () => {

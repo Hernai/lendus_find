@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers\Api\V2\Staff;
 
+use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\ApplicationStatusHistory;
 use App\Models\ApplicationV2;
+use App\Models\DataVerification;
+use App\Models\Person;
 use App\Models\StaffAccount;
 use App\Services\ApplicationV2Service;
 use Illuminate\Http\JsonResponse;
@@ -18,6 +21,7 @@ use Illuminate\Http\Request;
  */
 class ApplicationController extends Controller
 {
+    use ApiResponses;
     public function __construct(
         private ApplicationV2Service $service
     ) {}
@@ -68,8 +72,8 @@ class ApplicationController extends Controller
             $validated['per_page'] ?? 20
         );
 
-        return response()->json([
-            'data' => $applications->map(fn($app) => $this->formatApplication($app)),
+        return $this->success([
+            'applications' => $applications->map(fn($app) => $this->formatApplication($app)),
             'meta' => [
                 'current_page' => $applications->currentPage(),
                 'from' => $applications->firstItem(),
@@ -127,7 +131,7 @@ class ApplicationController extends Controller
             $validated['sort_dir'] ?? 'desc'
         );
 
-        return response()->json(['data' => $boardData]);
+        return $this->success($boardData);
     }
 
     /**
@@ -151,7 +155,7 @@ class ApplicationController extends Controller
             $validated['date_to'] ?? null
         );
 
-        return response()->json(['data' => $stats]);
+        return $this->success($stats);
     }
 
     /**
@@ -166,7 +170,7 @@ class ApplicationController extends Controller
 
         $applications = $this->service->getUnassigned($staff->tenant);
 
-        return response()->json([
+        return $this->success([
             'applications' => $applications->map(fn($app) => $this->formatApplication($app)),
         ]);
     }
@@ -185,7 +189,7 @@ class ApplicationController extends Controller
 
         $applications = $this->service->getAssignedTo($staff, $status);
 
-        return response()->json([
+        return $this->success([
             'applications' => $applications->map(fn($app) => $this->formatApplication($app)),
         ]);
     }
@@ -209,6 +213,8 @@ class ApplicationController extends Controller
                 'person.employments' => fn($q) => $q->where('is_current', true),
                 'person.references',
                 'person.bankAccounts',
+                'person.documents' => fn($q) => $q->whereNull('replaced_at')->orderByDesc('created_at'),
+                'person.account',
                 'company',
                 'assignedTo',
                 'statusHistory',
@@ -217,15 +223,10 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
-        return response()->json([
-            'data' => $this->formatApplicationDetail($application),
-        ]);
+        return $this->success($this->formatApplicationDetail($application));
     }
 
     /**
@@ -247,10 +248,7 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         $assignee = StaffAccount::where('id', $validated['user_id'])
@@ -258,18 +256,14 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$assignee) {
-            return response()->json([
-                'error' => 'STAFF_NOT_FOUND',
-                'message' => 'El analista seleccionado no existe.',
-            ], 404);
+            return $this->notFound('El analista seleccionado no existe.');
         }
 
         $application = $this->service->assign($application, $assignee, $staff);
 
-        return response()->json([
-            'message' => 'Solicitud asignada exitosamente.',
+        return $this->success([
             'application' => $this->formatApplication($application),
-        ]);
+        ], 'Solicitud asignada exitosamente.');
     }
 
     /**
@@ -292,10 +286,7 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         try {
@@ -306,15 +297,11 @@ class ApplicationController extends Controller
                 $validated['notes'] ?? null
             );
 
-            return response()->json([
-                'message' => 'Estado actualizado exitosamente.',
+            return $this->success([
                 'application' => $this->formatApplication($application),
-            ]);
+            ], 'Estado actualizado exitosamente.');
         } catch (\InvalidArgumentException $e) {
-            return response()->json([
-                'error' => 'STATUS_CHANGE_FAILED',
-                'message' => $e->getMessage(),
-            ], 400);
+            return $this->badRequest('STATUS_CHANGE_FAILED', $e->getMessage());
         }
     }
 
@@ -340,17 +327,11 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         if (!$application->canBeApproved()) {
-            return response()->json([
-                'error' => 'NOT_APPROVABLE',
-                'message' => 'Esta solicitud no puede ser aprobada en su estado actual.',
-            ], 400);
+            return $this->badRequest('NOT_APPROVABLE', 'Esta solicitud no puede ser aprobada en su estado actual.');
         }
 
         $application = $this->service->approve(
@@ -362,10 +343,9 @@ class ApplicationController extends Controller
             $validated['notes'] ?? null
         );
 
-        return response()->json([
-            'message' => 'Solicitud aprobada exitosamente.',
+        return $this->success([
             'application' => $this->formatApplication($application),
-        ]);
+        ], 'Solicitud aprobada exitosamente.');
     }
 
     /**
@@ -388,17 +368,11 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         if (!$application->canBeRejected()) {
-            return response()->json([
-                'error' => 'NOT_REJECTABLE',
-                'message' => 'Esta solicitud no puede ser rechazada en su estado actual.',
-            ], 400);
+            return $this->badRequest('NOT_REJECTABLE', 'Esta solicitud no puede ser rechazada en su estado actual.');
         }
 
         $application = $this->service->reject(
@@ -408,10 +382,9 @@ class ApplicationController extends Controller
             $validated['notes'] ?? null
         );
 
-        return response()->json([
-            'message' => 'Solicitud rechazada.',
+        return $this->success([
             'application' => $this->formatApplication($application),
-        ]);
+        ], 'Solicitud rechazada.');
     }
 
     /**
@@ -436,10 +409,7 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         $application = $this->service->sendCounterOffer(
@@ -453,10 +423,9 @@ class ApplicationController extends Controller
             $validated['reason'] ?? null
         );
 
-        return response()->json([
-            'message' => 'Contraoferta enviada al solicitante.',
+        return $this->success([
             'application' => $this->formatApplication($application),
-        ]);
+        ], 'Contraoferta enviada al solicitante.');
     }
 
     /**
@@ -479,18 +448,14 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         $application = $this->service->updateVerification($application, $validated['checks']);
 
-        return response()->json([
-            'message' => 'Checklist actualizado.',
+        return $this->success([
             'verification_checklist' => $application->verification_checklist,
-        ]);
+        ], 'Checklist actualizado.');
     }
 
     /**
@@ -518,10 +483,7 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         $application = $this->service->setRiskAssessment(
@@ -530,11 +492,10 @@ class ApplicationController extends Controller
             $validated['data'] ?? null
         );
 
-        return response()->json([
-            'message' => 'Evaluación de riesgo actualizada.',
+        return $this->success([
             'risk_level' => $application->risk_level,
             'risk_data' => $application->risk_data,
-        ]);
+        ], 'Evaluación de riesgo actualizada.');
     }
 
     /**
@@ -552,15 +513,12 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         $history = $this->service->getStatusHistory($application);
 
-        return response()->json([
+        return $this->success([
             'history' => $history->map(fn($h) => [
                 'from_status' => $h->from_status,
                 'from_status_label' => $h->from_status_label,
@@ -578,14 +536,21 @@ class ApplicationController extends Controller
      */
     private function formatApplication(ApplicationV2 $app): array
     {
+        // Generate folio from created_at date + short UUID
+        // Format: YYYYMMDD-XXXX (e.g., 20260119-ABC1)
+        $folio = $app->created_at?->format('Ymd') . '-' . strtoupper(substr($app->id, 0, 4));
+
         return [
             'id' => $app->id,
+            'folio' => $folio,
             'status' => $app->status,
             'status_label' => $app->status_label,
             'applicant_type' => $app->applicant_type,
-            'applicant_name' => $app->is_individual
-                ? $app->person?->full_name
-                : $app->company?->legal_name,
+            // Uses model's applicant_name accessor which handles person/company
+            'applicant_name' => $app->applicant_name,
+            'applicant_phone' => $app->is_individual
+                ? $app->person?->account?->primary_phone
+                : $app->company?->phone,
             'applicant_rfc' => $app->is_individual
                 ? $app->person?->rfc
                 : $app->company?->rfc,
@@ -593,6 +558,7 @@ class ApplicationController extends Controller
                 'id' => $app->product_id,
                 'name' => $app->product?->name,
                 'type' => $app->product?->type,
+                'required_documents' => $app->product?->required_documents ?? [],
             ],
             'requested_amount' => $app->requested_amount,
             'requested_term_months' => $app->requested_term_months,
@@ -603,198 +569,193 @@ class ApplicationController extends Controller
                 'name' => $app->assignedTo->profile?->full_name ?? $app->assignedTo->email,
             ] : null,
             'created_at' => $app->created_at?->toIso8601String(),
+            'updated_at' => $app->updated_at?->toIso8601String(),
             'submitted_at' => $app->submitted_at?->toIso8601String(),
         ];
     }
 
     /**
      * Format application for detail view.
+     *
+     * Response structure:
+     * - id, folio, status: Basic identifiers
+     * - loan: Financial details (product, amounts, terms, rates)
+     * - applicant: Person/Company with address, employment, references, bank_accounts
+     * - verification: KYC status and field verifications
+     * - documents: All documents with status
+     * - workflow: Status history, notes, assignment
+     * - integration: External system sync info
      */
     private function formatApplicationDetail(ApplicationV2 $app): array
     {
-        $data = $this->formatApplication($app);
+        $person = $app->person;
+        $company = $app->company;
+        $folio = $app->created_at?->format('Ymd') . '-' . strtoupper(substr($app->id, 0, 4));
 
-        $data['interest_rate'] = $app->interest_rate;
-        $data['total_interest'] = $app->total_interest;
-        $data['total_amount'] = $app->total_amount;
-        $data['cat'] = $app->cat;
-        $data['purpose'] = $app->purpose;
-        $data['purpose_description'] = $app->purpose_description;
+        // =========================================================
+        // HEADER - Basic application info
+        // =========================================================
+        $data = [
+            'id' => $app->id,
+            'folio' => $folio,
+            'status' => $app->status,
+            'status_label' => $app->status_label,
+            'applicant_type' => $app->applicant_type,
+            'created_at' => $app->created_at?->toIso8601String(),
+            'updated_at' => $app->updated_at?->toIso8601String(),
+            'submitted_at' => $app->submitted_at?->toIso8601String(),
+        ];
 
-        $data['approved_amount'] = $app->approved_amount;
-        $data['approved_term_months'] = $app->approved_term_months;
-        $data['approved_interest_rate'] = $app->approved_interest_rate;
-        $data['rejection_reason'] = $app->rejection_reason;
-        $data['decision_notes'] = $app->decision_notes;
-        $data['decision_at'] = $app->decision_at?->toIso8601String();
-        $data['decision_by'] = $app->decision_by;
+        // =========================================================
+        // LOAN - Financial details (all stored in application)
+        // =========================================================
+        $data['loan'] = [
+            // Product reference (only name/type for display)
+            'product_id' => $app->product_id,
+            'product_name' => $app->product?->name,
+            'product_type' => $app->product?->type,
 
-        $data['has_counter_offer'] = $app->has_counter_offer;
-        $data['counter_offer'] = $app->counter_offer;
-        $data['counter_offer_accepted'] = $app->counter_offer_accepted;
+            // Requested by applicant
+            'requested_amount' => $app->requested_amount,
+            'requested_term_months' => $app->requested_term_months,
+            'purpose' => $app->purpose,
+            'purpose_description' => $app->purpose_description,
 
-        $data['verification_checklist'] = $app->verification_checklist;
+            // Calculated values (stored at application creation)
+            'interest_rate' => $app->interest_rate,
+            'monthly_payment' => $app->monthly_payment,
+            'total_interest' => $app->total_interest,
+            'total_amount' => $app->total_amount,
+            'cat' => $app->cat,
 
-        // Map verification_checklist to field_verifications for frontend compatibility
-        $checklist = $app->verification_checklist ?? [];
-        $fieldVerifications = [];
-        foreach ($checklist as $field => $info) {
-            $fieldVerifications[$field] = [
-                'status' => strtoupper($info['status'] ?? 'pending'),
-                'verified' => ($info['status'] ?? '') === 'verified',
-                'method' => $info['method'] ?? null,
-                'rejection_reason' => $info['rejection_reason'] ?? null,
-                'notes' => $info['notes'] ?? null,
-                'verified_at' => $info['verified_at'] ?? null,
-                'verified_by' => $info['verified_by'] ?? null,
+            // Approved values (set when approved)
+            'approved_amount' => $app->approved_amount,
+            'approved_term_months' => $app->approved_term_months,
+            'approved_interest_rate' => $app->approved_interest_rate,
+
+            // Counter offer
+            'has_counter_offer' => $app->has_counter_offer ?? false,
+            'counter_offer' => $app->counter_offer,
+            'counter_offer_accepted' => $app->counter_offer_accepted,
+
+            // Risk assessment
+            'risk_level' => $app->risk_level,
+            'risk_data' => $app->risk_data,
+        ];
+
+        // Required documents from product (for document checklist)
+        $data['required_documents'] = $app->product?->required_documents ?? [];
+
+        // =========================================================
+        // APPLICANT - Person or Company with all related data
+        // Structure mirrors profile API response
+        // =========================================================
+        if ($person) {
+            $data['applicant'] = [
+                'type' => 'INDIVIDUAL',
+                'person' => [
+                    'id' => $person->id,
+                    'personal_data' => [
+                        'first_name' => $person->first_name,
+                        'last_name_1' => $person->last_name_1,
+                        'last_name_2' => $person->last_name_2,
+                        'full_name' => $person->full_name,
+                        'birth_date' => $person->birth_date?->format('Y-m-d'),
+                        'birth_state' => $person->birth_state,
+                        'gender' => $person->gender,
+                        'nationality' => $person->nationality,
+                        'marital_status' => $person->marital_status,
+                        'education_level' => $person->education_level,
+                        'dependents_count' => $person->dependents_count ?? 0,
+                    ],
+                    'identifications' => [
+                        'curp' => $person->curp,
+                        'rfc' => $person->rfc,
+                    ],
+                    'contact' => [
+                        'email' => $person->account?->identities?->where('type', 'email')->first()?->identifier,
+                        'phone' => $person->account?->primary_phone,
+                    ],
+                    'address' => $this->formatAddress($person->addresses?->where('is_current', true)->first()),
+                    'employment' => $this->formatEmployment($person->employments?->where('is_current', true)->first()),
+                    'references' => $person->references?->map(fn($r) => $this->formatReference($r))->values()->toArray() ?? [],
+                    'bank_accounts' => $person->bankAccounts?->map(fn($ba) => $this->formatBankAccount($ba))->values()->toArray() ?? [],
+                    'kyc_status' => $person->kyc_status,
+                    'kyc_verified_at' => $person->kyc_verified_at?->toIso8601String(),
+                    'profile_completeness' => $person->profile_completeness,
+                ],
             ];
+        } elseif ($company) {
+            $data['applicant'] = [
+                'type' => 'COMPANY',
+                'company' => [
+                    'id' => $company->id,
+                    'legal_name' => $company->legal_name,
+                    'trade_name' => $company->trade_name,
+                    'rfc' => $company->rfc,
+                    'contact' => [
+                        'email' => $company->email,
+                        'phone' => $company->phone,
+                    ],
+                ],
+            ];
+        } else {
+            $data['applicant'] = null;
         }
-        $data['field_verifications'] = $fieldVerifications;
 
-        $data['risk_data'] = $app->risk_data;
-        $data['snapshot_data'] = $app->snapshot_data;
+        // =========================================================
+        // VERIFICATION - KYC and field verifications
+        // =========================================================
+        $data['verification'] = [
+            'kyc_status' => $person?->kyc_status ?? $company?->kyc_status ?? 'PENDING',
+            'kyc_verified_at' => $person?->kyc_verified_at?->toIso8601String() ?? $company?->kyc_verified_at?->toIso8601String(),
+            'fields' => $this->getFieldVerifications($app),
+            'signature' => $this->getSignatureData($app),
+            'checklist' => $app->verification_checklist ?? [],
+        ];
 
-        $data['external_id'] = $app->external_id;
-        $data['external_system'] = $app->external_system;
-        $data['synced_at'] = $app->synced_at?->toIso8601String();
+        // =========================================================
+        // DOCUMENTS - All documents with status
+        // =========================================================
+        $data['documents'] = $this->getDocuments($app);
 
-        // Full applicant data with all relations (for detail view)
-        $data['applicant'] = $app->person ? $this->formatPerson($app->person) : null;
+        // =========================================================
+        // WORKFLOW - Status history, notes, assignment
+        // =========================================================
+        $data['workflow'] = [
+            'assigned_to' => $app->assignedTo ? [
+                'id' => $app->assignedTo->id,
+                'name' => $app->assignedTo->name,
+                'email' => $app->assignedTo->email,
+            ] : null,
+            'status_history' => $app->statusHistory->map(fn($h) => [
+                'from_status' => $h->from_status,
+                'from_status_label' => $h->from_status_label,
+                'to_status' => $h->to_status,
+                'to_status_label' => $h->to_status_label,
+                'changed_by' => $h->changed_by_name,
+                'notes' => $h->notes,
+                'created_at' => $h->created_at->toIso8601String(),
+            ])->values()->toArray(),
+            'notes' => collect($app->notes ?? [])->map(fn($n) => [
+                'id' => $n['id'] ?? uniqid(),
+                'content' => $n['content'] ?? $n['text'] ?? '',
+                'author' => $n['author'] ?? ['name' => 'Sistema'],
+                'created_at' => $n['created_at'] ?? now()->toIso8601String(),
+            ])->values()->toArray(),
+        ];
 
-        // Keep simplified person for backward compatibility
-        $data['person'] = $app->person ? [
-            'id' => $app->person->id,
-            'full_name' => $app->person->full_name,
-            'curp' => $app->person->curp,
-            'rfc' => $app->person->rfc,
-            'email' => $app->person->email,
-            'phone' => $app->person->phone,
-        ] : null;
-
-        $data['company'] = $app->company ? [
-            'id' => $app->company->id,
-            'legal_name' => $app->company->legal_name,
-            'trade_name' => $app->company->trade_name,
-            'rfc' => $app->company->rfc,
-        ] : null;
-
-        $data['status_history'] = $app->statusHistory->map(fn($h) => [
-            'from_status' => $h->from_status,
-            'to_status' => $h->to_status,
-            'changed_by' => $h->changed_by_name,
-            'notes' => $h->notes,
-            'created_at' => $h->created_at->toIso8601String(),
-        ]);
-
-        // Documents attached to the application
-        $data['documents'] = $app->documents->map(fn($d) => [
-            'id' => $d->id,
-            'type' => $d->type,
-            'category' => $d->category,
-            'file_name' => $d->file_name,
-            'mime_type' => $d->mime_type,
-            'file_size' => $d->file_size,
-            'status' => $d->status,
-            'rejection_reason' => $d->rejection_reason,
-            'reviewed_at' => $d->reviewed_at?->toIso8601String(),
-            'ocr_data' => $d->ocr_data,
-            'created_at' => $d->created_at?->toIso8601String(),
-        ]);
-
-        // Application notes (stored as JSON array)
-        $data['notes'] = collect($app->notes ?? [])->map(fn($n) => [
-            'id' => $n['id'] ?? uniqid(),
-            'content' => $n['content'] ?? $n['text'] ?? '',
-            'author' => $n['author'] ?? ['name' => 'Sistema'],
-            'created_at' => $n['created_at'] ?? now()->toIso8601String(),
-        ])->values();
+        // =========================================================
+        // INTEGRATION - External system sync info
+        // =========================================================
+        $data['integration'] = [
+            'external_id' => $app->external_id,
+            'external_system' => $app->external_system,
+            'synced_at' => $app->synced_at?->toIso8601String(),
+            'snapshot_data' => $app->snapshot_data,
+        ];
 
         return $data;
-    }
-
-    /**
-     * Format person with all relations for detail view.
-     */
-    private function formatPerson($person): array
-    {
-        $currentAddress = $person->addresses->first();
-        $currentEmployment = $person->employments->first();
-
-        return [
-            'id' => $person->id,
-            'full_name' => $person->full_name,
-            'first_name' => $person->first_name,
-            'last_name_1' => $person->last_name_1,
-            'last_name_2' => $person->last_name_2,
-            'email' => $person->email,
-            'phone' => $person->phone,
-            'curp' => $person->curp,
-            'rfc' => $person->rfc,
-            'birth_date' => $person->birth_date?->format('Y-m-d'),
-            'nationality' => $person->nationality,
-            'gender' => $person->gender,
-            'marital_status' => $person->marital_status,
-            'education_level' => $person->education_level,
-            'dependents_count' => $person->dependents_count,
-            'kyc_status' => $person->kyc_status,
-            'kyc_verified_at' => $person->kyc_verified_at?->toIso8601String(),
-            'current_home_address' => $currentAddress ? [
-                'id' => $currentAddress->id,
-                'street' => $currentAddress->street,
-                'exterior_number' => $currentAddress->exterior_number,
-                'interior_number' => $currentAddress->interior_number,
-                'neighborhood' => $currentAddress->neighborhood,
-                'municipality' => $currentAddress->municipality,
-                'state' => $currentAddress->state,
-                'postal_code' => $currentAddress->postal_code,
-                'housing_type' => $currentAddress->housing_type,
-                'years_at_address' => $currentAddress->years_at_address,
-                'months_at_address' => $currentAddress->months_at_address,
-                'verification_status' => $currentAddress->status,
-            ] : null,
-            'current_employment' => $currentEmployment ? [
-                'id' => $currentEmployment->id,
-                'employment_type' => $currentEmployment->employment_type,
-                'company_name' => $currentEmployment->employer_name,
-                'employer_name' => $currentEmployment->employer_name,
-                'employer_rfc' => $currentEmployment->employer_rfc,
-                'job_title' => $currentEmployment->job_title,
-                'position' => $currentEmployment->job_title,
-                'department' => $currentEmployment->department,
-                'monthly_income' => $currentEmployment->monthly_income,
-                'additional_income' => $currentEmployment->additional_income,
-                'start_date' => $currentEmployment->start_date?->format('Y-m-d'),
-                'years_employed' => $currentEmployment->years_employed,
-                'months_employed' => $currentEmployment->months_employed,
-                'verification_status' => $currentEmployment->status,
-            ] : null,
-            'references' => $person->references->map(fn($r) => [
-                'id' => $r->id,
-                'full_name' => $r->full_name,
-                'first_name' => $r->first_name,
-                'last_name_1' => $r->last_name_1,
-                'last_name_2' => $r->last_name_2,
-                'phone' => $r->phone,
-                'email' => $r->email,
-                'relationship' => $r->relationship,
-                'type' => $r->type,
-                'years_known' => $r->years_known,
-                'verification_status' => $r->status,
-                'verified_at' => $r->verified_at?->toIso8601String(),
-                'notes' => $r->verification_notes,
-            ]),
-            'bank_accounts' => $person->bankAccounts->map(fn($ba) => [
-                'id' => $ba->id,
-                'bank_name' => $ba->bank_name,
-                'bank_code' => $ba->bank_code,
-                'clabe' => $ba->clabe,
-                'account_type' => $ba->account_type,
-                'account_holder_name' => $ba->holder_name,
-                'is_primary' => $ba->is_primary,
-                'is_verified' => $ba->is_verified,
-                'created_at' => $ba->created_at?->toIso8601String(),
-            ]),
-        ];
     }
 
     // =========================================================================
@@ -816,16 +777,13 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         $notes = $application->notes ?? [];
 
-        return response()->json([
-            'data' => collect($notes)->map(fn($n) => [
+        return $this->success([
+            'notes' => collect($notes)->map(fn($n) => [
                 'id' => $n['id'] ?? uniqid(),
                 'content' => $n['content'] ?? $n['text'] ?? '',
                 'author' => $n['author'] ?? 'Sistema',
@@ -853,10 +811,7 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         $notes = $application->notes ?? [];
@@ -892,10 +847,7 @@ class ApplicationController extends Controller
             ],
         ]);
 
-        return response()->json([
-            'data' => $newNote,
-            'message' => 'Nota agregada exitosamente.',
-        ], 201);
+        return $this->created($newNote, 'Nota agregada exitosamente.');
     }
 
     // =========================================================================
@@ -917,13 +869,13 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Solicitud no encontrada.'], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         $document = $application->documents()->where('id', $docId)->first();
 
         if (!$document) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Documento no encontrado.'], 404);
+            return $this->notFound('Documento no encontrado.');
         }
 
         /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
@@ -933,12 +885,60 @@ class ApplicationController extends Controller
             now()->addMinutes(15)
         );
 
-        return response()->json([
-            'data' => [
-                'url' => $url,
-                'mime_type' => $document->mime_type,
-                'original_name' => $document->file_name,
-            ],
+        return $this->success([
+            'url' => $url,
+            'mime_type' => $document->mime_type,
+            'original_name' => $document->file_name,
+        ]);
+    }
+
+    /**
+     * Get document history (all versions).
+     *
+     * GET /v2/staff/applications/{appId}/documents/{docId}/history
+     */
+    public function getDocumentHistory(Request $request, string $appId, string $docId): JsonResponse
+    {
+        /** @var StaffAccount $staff */
+        $staff = $request->user();
+
+        $application = ApplicationV2::where('id', $appId)
+            ->where('tenant_id', $staff->tenant_id)
+            ->with('person')
+            ->first();
+
+        if (!$application) {
+            return $this->notFound('Solicitud no encontrada.');
+        }
+
+        $document = $this->findApplicationDocument($application, $docId);
+
+        if (!$document) {
+            return $this->notFound('Documento no encontrado.');
+        }
+
+        // Get all versions of this document type for the same entity
+        $history = \App\Models\DocumentV2::where('documentable_type', $document->documentable_type)
+            ->where('documentable_id', $document->documentable_id)
+            ->where('type', $document->type)
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($doc) {
+                return [
+                    'id' => $doc->id,
+                    'file_name' => $doc->file_name,
+                    'status' => $doc->status,
+                    'rejection_reason' => $doc->rejection_reason,
+                    'replaced_at' => $doc->replaced_at?->toIso8601String(),
+                    'created_at' => $doc->created_at?->toIso8601String(),
+                    'is_current' => $doc->replaced_at === null,
+                ];
+            });
+
+        return $this->success([
+            'document_type' => $document->type,
+            'history' => $history,
+            'total_versions' => $history->count(),
         ]);
     }
 
@@ -954,20 +954,21 @@ class ApplicationController extends Controller
 
         $application = ApplicationV2::where('id', $appId)
             ->where('tenant_id', $staff->tenant_id)
+            ->with('person')
             ->first();
 
         if (!$application) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Solicitud no encontrada.'], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
-        $document = $application->documents()->where('id', $docId)->first();
+        $document = $this->findApplicationDocument($application, $docId);
 
         if (!$document) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Documento no encontrado.'], 404);
+            return $this->notFound('Documento no encontrado.');
         }
 
         /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
-        $disk = \Illuminate\Support\Facades\Storage::disk('s3');
+        $disk = \Illuminate\Support\Facades\Storage::disk($document->storage_disk ?? 'local');
 
         return $disk->download(
             $document->file_path,
@@ -987,16 +988,17 @@ class ApplicationController extends Controller
 
         $application = ApplicationV2::where('id', $appId)
             ->where('tenant_id', $staff->tenant_id)
+            ->with('person')
             ->first();
 
         if (!$application) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Solicitud no encontrada.'], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
-        $document = $application->documents()->where('id', $docId)->first();
+        $document = $this->findApplicationDocument($application, $docId);
 
         if (!$document) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Documento no encontrado.'], 404);
+            return $this->notFound('Documento no encontrado.');
         }
 
         $oldStatus = $document->status;
@@ -1022,10 +1024,7 @@ class ApplicationController extends Controller
             ],
         ]);
 
-        return response()->json([
-            'data' => null,
-            'message' => 'Documento aprobado.',
-        ]);
+        return $this->success(null, 'Documento aprobado.');
     }
 
     /**
@@ -1045,16 +1044,17 @@ class ApplicationController extends Controller
 
         $application = ApplicationV2::where('id', $appId)
             ->where('tenant_id', $staff->tenant_id)
+            ->with('person')
             ->first();
 
         if (!$application) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Solicitud no encontrada.'], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
-        $document = $application->documents()->where('id', $docId)->first();
+        $document = $this->findApplicationDocument($application, $docId);
 
         if (!$document) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Documento no encontrado.'], 404);
+            return $this->notFound('Documento no encontrado.');
         }
 
         $oldStatus = $document->status;
@@ -1083,10 +1083,7 @@ class ApplicationController extends Controller
             ],
         ]);
 
-        return response()->json([
-            'data' => null,
-            'message' => 'Documento rechazado.',
-        ]);
+        return $this->success(null, 'Documento rechazado.');
     }
 
     /**
@@ -1101,16 +1098,17 @@ class ApplicationController extends Controller
 
         $application = ApplicationV2::where('id', $appId)
             ->where('tenant_id', $staff->tenant_id)
+            ->with('person')
             ->first();
 
         if (!$application) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Solicitud no encontrada.'], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
-        $document = $application->documents()->where('id', $docId)->first();
+        $document = $this->findApplicationDocument($application, $docId);
 
         if (!$document) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Documento no encontrado.'], 404);
+            return $this->notFound('Documento no encontrado.');
         }
 
         $oldStatus = $document->status;
@@ -1137,10 +1135,7 @@ class ApplicationController extends Controller
             ],
         ]);
 
-        return response()->json([
-            'data' => null,
-            'message' => 'Documento regresado a pendiente.',
-        ]);
+        return $this->success(null, 'Documento regresado a pendiente.');
     }
 
     // =========================================================================
@@ -1168,13 +1163,13 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application || !$application->person) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Solicitud no encontrada.'], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         $reference = $application->person->references->firstWhere('id', $refId);
 
         if (!$reference) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Referencia no encontrada.'], 404);
+            return $this->notFound('Referencia no encontrada.');
         }
 
         $statusMap = [
@@ -1214,10 +1209,7 @@ class ApplicationController extends Controller
             ],
         ]);
 
-        return response()->json([
-            'data' => null,
-            'message' => 'Referencia verificada.',
-        ]);
+        return $this->success(null, 'Referencia verificada.');
     }
 
     // =========================================================================
@@ -1240,13 +1232,13 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application || !$application->person) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Solicitud no encontrada.'], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         $bankAccount = $application->person->bankAccounts->firstWhere('id', $baId);
 
         if (!$bankAccount) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Cuenta bancaria no encontrada.'], 404);
+            return $this->notFound('Cuenta bancaria no encontrada.');
         }
 
         $wasVerified = $bankAccount->is_verified;
@@ -1271,10 +1263,7 @@ class ApplicationController extends Controller
             ],
         ]);
 
-        return response()->json([
-            'data' => null,
-            'message' => 'Cuenta bancaria verificada.',
-        ]);
+        return $this->success(null, 'Cuenta bancaria verificada.');
     }
 
     /**
@@ -1293,13 +1282,13 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application || !$application->person) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Solicitud no encontrada.'], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         $bankAccount = $application->person->bankAccounts->firstWhere('id', $baId);
 
         if (!$bankAccount) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Cuenta bancaria no encontrada.'], 404);
+            return $this->notFound('Cuenta bancaria no encontrada.');
         }
 
         $wasVerified = $bankAccount->is_verified;
@@ -1324,10 +1313,7 @@ class ApplicationController extends Controller
             ],
         ]);
 
-        return response()->json([
-            'data' => null,
-            'message' => 'Verificación de cuenta bancaria removida.',
-        ]);
+        return $this->success(null, 'Verificación de cuenta bancaria removida.');
     }
 
     /**
@@ -1339,6 +1325,352 @@ class ApplicationController extends Controller
             return '****';
         }
         return substr($clabe, -4);
+    }
+
+    /**
+     * Get human-readable label for verification method.
+     */
+    private function getMethodLabel(?string $method): ?string
+    {
+        if (!$method) {
+            return null;
+        }
+
+        $labels = [
+            'MANUAL' => 'Manual',
+            'KYC' => 'KYC Automático',
+            'OCR' => 'OCR Automático',
+            'FACE_MATCH' => 'Face Match',
+            'LIVENESS' => 'Prueba de vida',
+            'INE_VALIDATION' => 'Validación INE',
+            'CURP_VALIDATION' => 'Validación CURP',
+            'RFC_VALIDATION' => 'Validación RFC',
+            'BANK_VALIDATION' => 'Validación bancaria',
+            'PHONE_CALL' => 'Llamada telefónica',
+            'EMAIL' => 'Email',
+            'DOCUMENT' => 'Documento',
+        ];
+
+        return $labels[strtoupper($method)] ?? $method;
+    }
+
+    // =========================================================================
+    // Formatting Helper Methods
+    // =========================================================================
+
+    /**
+     * Format address for detail view.
+     */
+    private function formatAddress($address): ?array
+    {
+        if (!$address) {
+            return null;
+        }
+
+        return [
+            'id' => $address->id,
+            'type' => $address->type,
+            'street' => $address->street,
+            'exterior_number' => $address->exterior_number,
+            'interior_number' => $address->interior_number,
+            'neighborhood' => $address->neighborhood,
+            'municipality' => $address->municipality,
+            'state' => $address->state,
+            'postal_code' => $address->postal_code,
+            'country' => $address->country ?? 'México',
+            'housing_type' => $address->housing_type,
+            'years_at_address' => $address->years_at_address,
+            'months_at_address' => $address->months_at_address,
+            'is_current' => $address->is_current,
+            'verification_status' => $address->status,
+        ];
+    }
+
+    /**
+     * Format employment for detail view.
+     */
+    private function formatEmployment($employment): ?array
+    {
+        if (!$employment) {
+            return null;
+        }
+
+        return [
+            'id' => $employment->id,
+            'employment_type' => $employment->employment_type,
+            'employer_name' => $employment->employer_name,
+            'employer_rfc' => $employment->employer_rfc,
+            'employer_phone' => $employment->employer_phone,
+            'job_title' => $employment->job_title,
+            'department' => $employment->department,
+            'monthly_income' => $employment->monthly_income,
+            'additional_income' => $employment->additional_income,
+            'payment_frequency' => $employment->payment_frequency,
+            'start_date' => $employment->start_date?->format('Y-m-d'),
+            'years_employed' => $employment->years_employed,
+            'months_employed' => $employment->months_employed,
+            'is_current' => $employment->is_current,
+            'verification_status' => $employment->status,
+        ];
+    }
+
+    /**
+     * Format reference for detail view.
+     */
+    private function formatReference($reference): array
+    {
+        return [
+            'id' => $reference->id,
+            'full_name' => $reference->full_name,
+            'first_name' => $reference->first_name,
+            'last_name_1' => $reference->last_name_1,
+            'last_name_2' => $reference->last_name_2,
+            'phone' => $reference->phone,
+            'email' => $reference->email,
+            'relationship' => $reference->relationship,
+            'type' => $reference->type,
+            'years_known' => $reference->years_known,
+            'verification_status' => $reference->status,
+            'verified_at' => $reference->verified_at?->toIso8601String(),
+            'verification_notes' => $reference->verification_notes,
+        ];
+    }
+
+    /**
+     * Format bank account for detail view.
+     */
+    private function formatBankAccount($bankAccount): array
+    {
+        return [
+            'id' => $bankAccount->id,
+            'bank_name' => $bankAccount->bank_name,
+            'bank_code' => $bankAccount->bank_code,
+            'clabe' => $bankAccount->clabe,
+            'account_number' => $bankAccount->account_number,
+            'account_type' => $bankAccount->account_type,
+            'holder_name' => $bankAccount->holder_name,
+            'is_primary' => $bankAccount->is_primary,
+            'is_verified' => $bankAccount->is_verified,
+            'verified_at' => $bankAccount->verified_at?->toIso8601String(),
+            'created_at' => $bankAccount->created_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * Get field verifications for an application.
+     *
+     * Combines DataVerification records and verification_checklist fallback.
+     */
+    private function getFieldVerifications(ApplicationV2 $app): array
+    {
+        $fieldVerifications = [];
+        $lockedMethods = ['KYC', 'OCR', 'FACE_MATCH', 'LIVENESS', 'INE_VALIDATION', 'CURP_VALIDATION', 'RFC_VALIDATION'];
+
+        // Try to get verifications by entity (Person or Company)
+        $verifications = collect();
+        if ($app->person) {
+            // First try new entity_id/entity_type columns
+            $verifications = \App\Models\DataVerification::forEntity($app->person)
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            // Fallback to legacy applicant_id if no results
+            if ($verifications->isEmpty()) {
+                $applicant = $app->person->account?->applicant;
+                if ($applicant) {
+                    $verifications = \App\Models\DataVerification::where('applicant_id', $applicant->id)
+                        ->orderBy('created_at', 'desc')
+                        ->get();
+                }
+            }
+        } elseif ($app->company) {
+            $verifications = \App\Models\DataVerification::forEntity($app->company)
+                ->orderBy('created_at', 'desc')
+                ->get();
+        }
+
+        // Group by field_name and take the most recent
+        $verifications = $verifications->groupBy('field_name')
+            ->map(fn($group) => $group->first());
+
+        foreach ($verifications as $fieldName => $v) {
+            $method = $v->method?->value ?? $v->method;
+            $fieldVerifications[$fieldName] = [
+                'status' => $v->is_verified ? 'VERIFIED' : 'PENDING',
+                'verified' => $v->is_verified,
+                'method' => $method,
+                'method_label' => $this->getMethodLabel($method),
+                'rejection_reason' => $v->rejection_reason,
+                'notes' => $v->notes,
+                'verified_at' => $v->created_at?->toIso8601String(),
+                'verified_by' => $v->verified_by,
+                'is_locked' => $v->is_locked ?? ($v->is_verified && $method && in_array(strtoupper($method), $lockedMethods)),
+                'metadata' => $v->metadata,
+            ];
+        }
+
+        // Fallback to verification_checklist if no DataVerification records
+        if (empty($fieldVerifications)) {
+            $checklist = $app->verification_checklist ?? [];
+            foreach ($checklist as $field => $info) {
+                $method = $info['method'] ?? null;
+                $isVerified = ($info['status'] ?? '') === 'verified';
+                $fieldVerifications[$field] = [
+                    'status' => strtoupper($info['status'] ?? 'pending'),
+                    'verified' => $isVerified,
+                    'method' => $method,
+                    'method_label' => $this->getMethodLabel($method),
+                    'rejection_reason' => $info['rejection_reason'] ?? null,
+                    'notes' => $info['notes'] ?? null,
+                    'verified_at' => $info['verified_at'] ?? null,
+                    'verified_by' => $info['verified_by'] ?? null,
+                    'is_locked' => $isVerified && $method && in_array(strtoupper($method), $lockedMethods),
+                ];
+            }
+        }
+
+        return $fieldVerifications;
+    }
+
+    /**
+     * Get signature data for an application.
+     */
+    private function getSignatureData(ApplicationV2 $app): array
+    {
+        $person = $app->person;
+        $signatureDoc = $person?->documents?->where('type', 'SIGNATURE')->first();
+
+        if ($signatureDoc) {
+            // Load signature from document
+            $signatureBase64 = null;
+            try {
+                $disk = \Illuminate\Support\Facades\Storage::disk($signatureDoc->storage_disk ?? 'local');
+                if ($disk->exists($signatureDoc->file_path)) {
+                    $signatureBase64 = 'data:image/png;base64,' . base64_encode($disk->get($signatureDoc->file_path));
+                }
+            } catch (\Exception $e) {
+                // Ignore storage errors
+            }
+
+            return [
+                'has_signed' => true,
+                'signature_base64' => $signatureBase64,
+                'signature_date' => $signatureDoc->ocr_data['signed_at'] ?? $signatureDoc->created_at?->toIso8601String(),
+                'signature_ip' => $signatureDoc->ocr_data['ip_address'] ?? null,
+                'document_id' => $signatureDoc->id,
+            ];
+        } elseif ($person && $person->signature_date) {
+            // Fallback to legacy person record
+            return [
+                'has_signed' => true,
+                'signature_base64' => $person->signature_base64,
+                'signature_date' => $person->signature_date?->toIso8601String(),
+                'signature_ip' => $person->signature_ip,
+            ];
+        }
+
+        return [
+            'has_signed' => false,
+            'signature_base64' => null,
+            'signature_date' => null,
+            'signature_ip' => null,
+        ];
+    }
+
+    /**
+     * Get all documents for an application.
+     *
+     * Combines documents from application and person (avoiding duplicates).
+     */
+    private function getDocuments(ApplicationV2 $app): array
+    {
+        $allDocuments = collect();
+        $seenTypes = [];
+
+        // First add application documents (direct uploads to application)
+        foreach ($app->documents ?? [] as $d) {
+            $allDocuments->push($d);
+            $seenTypes[$d->type] = true;
+        }
+
+        // Then add person's documents (from onboarding/profile)
+        if ($app->person && $app->person->documents) {
+            foreach ($app->person->documents as $d) {
+                // Only add if we don't already have a document of this type
+                if (!isset($seenTypes[$d->type])) {
+                    $allDocuments->push($d);
+                    $seenTypes[$d->type] = true;
+                }
+            }
+        }
+
+        // Get KYC verification methods that should lock documents
+        $kycMethods = [
+            \App\Enums\VerificationMethod::KYC_INE_OCR->value,
+            \App\Enums\VerificationMethod::KYC_INE_LIST->value,
+            \App\Enums\VerificationMethod::KYC_FACE_MATCH->value,
+            \App\Enums\VerificationMethod::KYC_LIVENESS->value,
+            \App\Enums\VerificationMethod::NUBARIUM->value,
+        ];
+
+        // Map document types to field names for DataVerification lookup
+        $docTypeToFieldMap = [
+            'INE_FRONT' => ['ine_front', 'curp', 'rfc', 'first_name', 'last_name_1'],
+            'INE_BACK' => ['ine_back', 'address'],
+            'SELFIE' => ['selfie', 'face_match', 'liveness'],
+        ];
+
+        // Get all KYC-verified fields for this person
+        $kycVerifiedFields = [];
+        if ($app->person) {
+            $verifications = DataVerification::where('entity_type', Person::class)
+                ->where('entity_id', $app->person->id)
+                ->where('is_verified', true)
+                ->whereIn('method', $kycMethods)
+                ->pluck('field_name')
+                ->toArray();
+            $kycVerifiedFields = array_flip($verifications);
+        }
+
+        return $allDocuments->map(function ($d) use ($kycVerifiedFields, $docTypeToFieldMap, $kycMethods) {
+            $ocrData = $d->ocr_data ?? [];
+
+            // Check if document was verified by KYC from ocr_data metadata
+            $isKycFromMetadata = $d->status === 'APPROVED' && (
+                ($ocrData['kyc_validated'] ?? false) ||
+                ($ocrData['face_match_passed'] ?? false) ||
+                ($ocrData['liveness_passed'] ?? false) ||
+                ($ocrData['nubarium_validated'] ?? false) ||
+                in_array($ocrData['validation_method'] ?? '', ['KYC', 'KYC_INE_OCR', 'KYC_FACE_MATCH', 'KYC_LIVENESS', 'FACE_MATCH', 'LIVENESS', 'INE_VALIDATION', 'NUBARIUM'])
+            );
+
+            // Check if document type has associated KYC-verified fields in DataVerification
+            $isKycFromVerification = false;
+            $relatedFields = $docTypeToFieldMap[$d->type] ?? [];
+            foreach ($relatedFields as $field) {
+                if (isset($kycVerifiedFields[$field])) {
+                    $isKycFromVerification = true;
+                    break;
+                }
+            }
+
+            $isKycLocked = $isKycFromMetadata || $isKycFromVerification;
+
+            return [
+                'id' => $d->id,
+                'type' => $d->type,
+                'category' => $d->category,
+                'file_name' => $d->file_name,
+                'mime_type' => $d->mime_type,
+                'file_size' => $d->file_size,
+                'status' => $d->status,
+                'rejection_reason' => $d->rejection_reason,
+                'reviewed_at' => $d->reviewed_at?->toIso8601String(),
+                'ocr_data' => $ocrData,
+                'created_at' => $d->created_at?->toIso8601String(),
+                'is_kyc_locked' => $isKycLocked,
+            ];
+        })->values()->toArray();
     }
 
     // =========================================================================
@@ -1368,7 +1700,7 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Solicitud no encontrada.'], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         $checklist = $application->verification_checklist ?? [];
@@ -1415,10 +1747,7 @@ class ApplicationController extends Controller
             ],
         ]);
 
-        return response()->json([
-            'data' => null,
-            'message' => 'Dato verificado.',
-        ]);
+        return $this->success(null, 'Dato verificado.');
     }
 
     // =========================================================================
@@ -1437,27 +1766,44 @@ class ApplicationController extends Controller
 
         $application = ApplicationV2::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
+            ->with('person.account')
             ->first();
 
         if (!$application) {
-            return response()->json(['error' => 'NOT_FOUND', 'message' => 'Solicitud no encontrada.'], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
-        // Get API logs related to this application or its person (applicant)
+        // Get API logs related to this application or its entity (Person/Company)
+        $applicantId = $application->person?->account?->applicant?->id;
+
         $logs = \App\Models\ApiLog::where('tenant_id', $staff->tenant_id)
-            ->where(function ($q) use ($application) {
+            ->where(function ($q) use ($application, $applicantId) {
                 $q->where('application_id', $application->id);
 
-                if ($application->person_id) {
-                    $q->orWhere('applicant_id', $application->person_id);
+                // Search by entity_id (new V2 logs with polymorphic entity)
+                if ($application->person) {
+                    $q->orWhere(function ($q2) use ($application) {
+                        $q2->where('entity_type', \App\Models\Person::class)
+                            ->where('entity_id', $application->person_id);
+                    });
+                } elseif ($application->company) {
+                    $q->orWhere(function ($q2) use ($application) {
+                        $q2->where('entity_type', \App\Models\Company::class)
+                            ->where('entity_id', $application->company_id);
+                    });
+                }
+
+                // Fallback: Search by legacy applicant_id
+                if ($applicantId) {
+                    $q->orWhere('applicant_id', $applicantId);
                 }
             })
             ->orderBy('created_at', 'desc')
             ->limit(100)
             ->get();
 
-        return response()->json([
-            'data' => $logs->map(fn($log) => [
+        return $this->success([
+            'logs' => $logs->map(fn($log) => [
                 'id' => $log->id,
                 'provider' => $log->provider,
                 'service' => $log->service,
@@ -1475,5 +1821,34 @@ class ApplicationController extends Controller
                 'created_at' => $log->created_at?->toIso8601String(),
             ]),
         ]);
+    }
+
+    // =========================================================================
+    // Helper Methods
+    // =========================================================================
+
+    /**
+     * Find a document by ID within an application's scope.
+     *
+     * Searches in both application documents and person's documents.
+     */
+    private function findApplicationDocument(ApplicationV2 $application, string $documentId): ?\App\Models\DocumentV2
+    {
+        // First, try to find in application's direct documents
+        $document = $application->documents()->where('id', $documentId)->first();
+
+        if ($document) {
+            return $document;
+        }
+
+        // If not found, try to find in person's documents
+        if ($application->person) {
+            $document = $application->person->documents()
+                ->where('id', $documentId)
+                ->whereNull('replaced_at')
+                ->first();
+        }
+
+        return $document;
     }
 }

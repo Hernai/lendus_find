@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/formatters'
+
 interface TimelineEvent {
   id: string
   action: string
@@ -25,15 +27,6 @@ const emit = defineEmits<{
   (e: 'view-details', event: TimelineEvent): void
 }>()
 
-const formatDateTime = (date: string) => {
-  return new Date(date).toLocaleString('es-MX', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 </script>
 
 <template>

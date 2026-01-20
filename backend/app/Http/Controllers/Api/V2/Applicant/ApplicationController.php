@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V2\Applicant;
 
+use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\ApplicantAccount;
 use App\Models\ApplicationV2;
@@ -18,6 +19,8 @@ use Illuminate\Http\Request;
  */
 class ApplicationController extends Controller
 {
+    use ApiResponses;
+
     public function __construct(
         private ApplicationV2Service $service
     ) {}
@@ -33,16 +36,13 @@ class ApplicationController extends Controller
         $account = $request->user();
 
         if (!$account->person) {
-            return response()->json([
-                'error' => 'PROFILE_INCOMPLETE',
-                'message' => 'Debes completar tu perfil antes de ver solicitudes.',
-            ], 400);
+            return $this->badRequest('PROFILE_INCOMPLETE', 'Debes completar tu perfil antes de ver solicitudes.');
         }
 
         $status = $request->query('status');
         $applications = $this->service->getForPerson($account->person, $status);
 
-        return response()->json([
+        return $this->success([
             'applications' => $applications->map(fn($app) => $this->formatApplication($app)),
         ]);
     }
@@ -56,21 +56,30 @@ class ApplicationController extends Controller
     {
         $validated = $request->validate([
             'product_id' => 'required|uuid|exists:products,id',
-            'amount' => 'required|numeric|min:1000',
+            // Accept both 'amount' and 'requested_amount' for compatibility
+            'amount' => 'required_without:requested_amount|numeric|min:1000',
+            'requested_amount' => 'required_without:amount|numeric|min:1000',
             'term_months' => 'required|integer|min:1|max:120',
-            'purpose' => 'required|string|max:50',
+            // Purpose is optional, defaults to 'PERSONAL'
+            'purpose' => 'nullable|string|max:50',
             'purpose_description' => 'nullable|string|max:500',
+            // Accept both 'frequency' and 'payment_frequency' for compatibility
             'frequency' => 'nullable|string|in:WEEKLY,BIWEEKLY,MONTHLY',
+            'payment_frequency' => 'nullable|string|in:WEEKLY,BIWEEKLY,MONTHLY',
+            // Allow passing simulation data for reference
+            'simulation_data' => 'nullable|array',
         ]);
+
+        // Normalize field names (frontend uses requested_amount/payment_frequency)
+        $validated['amount'] = $validated['amount'] ?? $validated['requested_amount'];
+        $validated['frequency'] = $validated['frequency'] ?? $validated['payment_frequency'] ?? 'MONTHLY';
+        $validated['purpose'] = $validated['purpose'] ?? 'PERSONAL';
 
         /** @var ApplicantAccount $account */
         $account = $request->user();
 
         if (!$account->person) {
-            return response()->json([
-                'error' => 'PROFILE_INCOMPLETE',
-                'message' => 'Debes completar tu perfil antes de solicitar un crédito.',
-            ], 400);
+            return $this->badRequest('PROFILE_INCOMPLETE', 'Debes completar tu perfil antes de solicitar un crédito.');
         }
 
         $tenant = $account->tenant;
@@ -78,25 +87,16 @@ class ApplicationController extends Controller
 
         // Verify product belongs to tenant
         if ($product->tenant_id !== $tenant->id) {
-            return response()->json([
-                'error' => 'PRODUCT_NOT_FOUND',
-                'message' => 'El producto seleccionado no está disponible.',
-            ], 404);
+            return $this->notFound('El producto seleccionado no está disponible.');
         }
 
         // Verify product limits
         if (!$product->isAmountValid($validated['amount'])) {
-            return response()->json([
-                'error' => 'INVALID_AMOUNT',
-                'message' => "El monto debe estar entre {$product->min_amount} y {$product->max_amount}.",
-            ], 422);
+            return $this->error('INVALID_AMOUNT', "El monto debe estar entre {$product->min_amount} y {$product->max_amount}.", 422);
         }
 
         if (!$product->isTermValid($validated['term_months'])) {
-            return response()->json([
-                'error' => 'INVALID_TERM',
-                'message' => "El plazo debe estar entre {$product->min_term_months} y {$product->max_term_months} meses.",
-            ], 422);
+            return $this->error('INVALID_TERM', "El plazo debe estar entre {$product->min_term_months} y {$product->max_term_months} meses.", 422);
         }
 
         $application = $this->service->createForPerson(
@@ -113,10 +113,7 @@ class ApplicationController extends Controller
             $account
         );
 
-        return response()->json([
-            'message' => 'Solicitud creada exitosamente.',
-            'application' => $this->formatApplication($application),
-        ], 201);
+        return $this->created($this->formatApplication($application), 'Solicitud creada exitosamente.');
     }
 
     /**
@@ -136,15 +133,10 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
-        return response()->json([
-            'application' => $this->formatApplicationDetail($application),
-        ]);
+        return $this->success($this->formatApplicationDetail($application));
     }
 
     /**
@@ -171,17 +163,11 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         if (!$application->canBeEdited()) {
-            return response()->json([
-                'error' => 'NOT_EDITABLE',
-                'message' => 'Esta solicitud no puede ser modificada.',
-            ], 400);
+            return $this->badRequest('NOT_EDITABLE', 'Esta solicitud no puede ser modificada.');
         }
 
         // Verify product limits if amount/term changed
@@ -190,25 +176,16 @@ class ApplicationController extends Controller
         $newTerm = $validated['term_months'] ?? $application->requested_term_months;
 
         if (!$product->isAmountValid($newAmount)) {
-            return response()->json([
-                'error' => 'INVALID_AMOUNT',
-                'message' => "El monto debe estar entre {$product->min_amount} y {$product->max_amount}.",
-            ], 422);
+            return $this->error('INVALID_AMOUNT', "El monto debe estar entre {$product->min_amount} y {$product->max_amount}.", 422);
         }
 
         if (!$product->isTermValid($newTerm)) {
-            return response()->json([
-                'error' => 'INVALID_TERM',
-                'message' => "El plazo debe estar entre {$product->min_term_months} y {$product->max_term_months} meses.",
-            ], 422);
+            return $this->error('INVALID_TERM', "El plazo debe estar entre {$product->min_term_months} y {$product->max_term_months} meses.", 422);
         }
 
         $application = $this->service->updateLoanTerms($application, $validated);
 
-        return response()->json([
-            'message' => 'Solicitud actualizada exitosamente.',
-            'application' => $this->formatApplication($application),
-        ]);
+        return $this->success($this->formatApplication($application), 'Solicitud actualizada exitosamente.');
     }
 
     /**
@@ -227,20 +204,13 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         // Validate before submission
         $errors = $this->service->validateForSubmission($application);
         if (!empty($errors)) {
-            return response()->json([
-                'error' => 'VALIDATION_FAILED',
-                'message' => 'La solicitud está incompleta.',
-                'errors' => $errors,
-            ], 422);
+            return $this->validationError('La solicitud está incompleta.', $errors);
         }
 
         try {
@@ -251,15 +221,9 @@ class ApplicationController extends Controller
                 $request->userAgent()
             );
 
-            return response()->json([
-                'message' => 'Solicitud enviada exitosamente.',
-                'application' => $this->formatApplication($application),
-            ]);
+            return $this->success($this->formatApplication($application), 'Solicitud enviada exitosamente.');
         } catch (\InvalidArgumentException $e) {
-            return response()->json([
-                'error' => 'SUBMISSION_FAILED',
-                'message' => $e->getMessage(),
-            ], 400);
+            return $this->badRequest('SUBMISSION_FAILED', $e->getMessage());
         }
     }
 
@@ -283,17 +247,11 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         if (!$application->canBeCancelled()) {
-            return response()->json([
-                'error' => 'NOT_CANCELLABLE',
-                'message' => 'Esta solicitud no puede ser cancelada.',
-            ], 400);
+            return $this->badRequest('NOT_CANCELLABLE', 'Esta solicitud no puede ser cancelada.');
         }
 
         $application = $this->service->cancel(
@@ -303,10 +261,7 @@ class ApplicationController extends Controller
             $validated['reason'] ?? 'Cancelado por el solicitante'
         );
 
-        return response()->json([
-            'message' => 'Solicitud cancelada exitosamente.',
-            'application' => $this->formatApplication($application),
-        ]);
+        return $this->success($this->formatApplication($application), 'Solicitud cancelada exitosamente.');
     }
 
     /**
@@ -329,17 +284,11 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         if (!$application->has_counter_offer) {
-            return response()->json([
-                'error' => 'NO_COUNTER_OFFER',
-                'message' => 'No hay una contraoferta pendiente.',
-            ], 400);
+            return $this->badRequest('NO_COUNTER_OFFER', 'No hay una contraoferta pendiente.');
         }
 
         $application = $this->service->respondToCounterOffer(
@@ -352,10 +301,7 @@ class ApplicationController extends Controller
             ? 'Contraoferta aceptada. Tu crédito ha sido aprobado.'
             : 'Contraoferta rechazada. Tu solicitud ha sido cancelada.';
 
-        return response()->json([
-            'message' => $message,
-            'application' => $this->formatApplication($application),
-        ]);
+        return $this->success($this->formatApplication($application), $message);
     }
 
     /**
@@ -374,15 +320,12 @@ class ApplicationController extends Controller
             ->first();
 
         if (!$application) {
-            return response()->json([
-                'error' => 'NOT_FOUND',
-                'message' => 'Solicitud no encontrada.',
-            ], 404);
+            return $this->notFound('Solicitud no encontrada.');
         }
 
         $history = $this->service->getStatusHistory($application);
 
-        return response()->json([
+        return $this->success([
             'history' => $history->map(fn($h) => [
                 'from_status' => $h->from_status,
                 'from_status_label' => $h->from_status_label,
@@ -399,6 +342,13 @@ class ApplicationController extends Controller
      */
     private function formatApplication(ApplicationV2 $app): array
     {
+        // Get opening commission from product (percentage * requested amount)
+        $openingCommissionRate = $app->product?->opening_commission ?? 0;
+        $openingCommissionAmount = $app->requested_amount * ($openingCommissionRate / 100);
+
+        // Get default payment frequency from product
+        $defaultFrequency = $app->product?->payment_frequencies[0] ?? 'MONTHLY';
+
         return [
             'id' => $app->id,
             'status' => $app->status,
@@ -410,8 +360,13 @@ class ApplicationController extends Controller
             ],
             'requested_amount' => $app->requested_amount,
             'requested_term_months' => $app->requested_term_months,
+            'payment_frequency' => $defaultFrequency,
             'monthly_payment' => $app->monthly_payment,
             'interest_rate' => $app->interest_rate,
+            'opening_commission' => $openingCommissionAmount,
+            'total_interest' => $app->total_interest ?? 0,
+            'total_amount' => $app->total_amount ?? 0,
+            'cat' => $app->cat ?? 0,
             'purpose' => $app->purpose,
             'has_counter_offer' => $app->has_counter_offer,
             'counter_offer' => $app->counter_offer,
@@ -430,10 +385,8 @@ class ApplicationController extends Controller
     {
         $data = $this->formatApplication($app);
 
+        // Additional detail fields
         $data['purpose_description'] = $app->purpose_description;
-        $data['total_interest'] = $app->total_interest;
-        $data['total_amount'] = $app->total_amount;
-        $data['cat'] = $app->cat;
         $data['rejection_reason'] = $app->rejection_reason;
         $data['decision_notes'] = $app->decision_notes;
         $data['expires_at'] = $app->expires_at?->toIso8601String();

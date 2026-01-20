@@ -41,6 +41,9 @@ export { useKycValidation } from './useKycValidation'
 export { useKycBiometrics, type BiometricTokenData, type FaceMatchResult, type LivenessResult } from './useKycBiometrics'
 export { useKycCompliance, type ComplianceMatch, type ComplianceResult } from './useKycCompliance'
 
+// Document types (from backend enum)
+export { useDocumentTypes } from './useDocumentTypes'
+
 // Toast notifications
 export { useToast, useToastState, type Toast, type ToastType, type ToastOptions } from './useToast'
 

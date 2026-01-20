@@ -81,6 +81,7 @@ class ApplicantProfileService
             'currentHomeAddress',
             'currentEmployment',
             'primaryBankAccount',
+            'bankAccounts',
             'references',
         ]);
 
@@ -91,6 +92,7 @@ class ApplicantProfileService
             'address' => $this->formatAddress($person->currentHomeAddress),
             'employment' => $this->formatEmployment($person->currentEmployment),
             'bank_account' => $this->formatBankAccount($person->primaryBankAccount),
+            'bank_accounts' => $this->formatBankAccounts($person->bankAccounts),
             'references' => $this->formatReferences($person->references),
             'profile_completeness' => $person->profile_completeness,
             'missing_data' => $person->missing_data ?? [],
@@ -192,12 +194,28 @@ class ApplicantProfileService
             }
 
             if (isset($data['ine_clave']) || isset($data['ine_ocr']) || isset($data['ine_folio'])) {
-                $this->identificationService->setIne($person, [
+                // CIC can come as ine_folio or ine_cic
+                $cic = $data['ine_folio'] ?? $data['ine_cic'] ?? '';
+                $ocr = $data['ine_ocr'] ?? '';
+
+                // Parse expiration date if provided
+                $expiresAt = null;
+                if (!empty($data['ine_expiration'])) {
+                    $expiresAt = \Carbon\Carbon::parse($data['ine_expiration']);
+                }
+
+                // Additional document data (clave_elector)
+                $documentData = array_filter([
                     'clave_elector' => $data['ine_clave'] ?? null,
-                    'ocr' => $data['ine_ocr'] ?? null,
-                    'folio' => $data['ine_folio'] ?? null,
-                    'expiration_date' => $data['ine_expiration'] ?? null,
                 ]);
+
+                $this->identificationService->setIne(
+                    $person,
+                    $cic,
+                    $ocr,
+                    $expiresAt,
+                    !empty($documentData) ? $documentData : null
+                );
             }
 
             if (isset($data['passport_number'])) {
@@ -268,6 +286,12 @@ class ApplicantProfileService
      */
     public function updateEmployment(Person $person, array $data): PersonEmployment
     {
+        \Log::info('ApplicantProfileService::updateEmployment input', [
+            'seniority_years' => $data['seniority_years'] ?? 'NOT_SET',
+            'seniority_months' => $data['seniority_months'] ?? 'NOT_SET',
+            'data_keys' => array_keys($data),
+        ]);
+
         return DB::transaction(function () use ($person, $data) {
             $employmentData = [
                 'employment_type' => $data['employment_type'] ?? $data['type'] ?? 'EMPLOYEE',
@@ -478,12 +502,38 @@ class ApplicantProfileService
             'work_phone' => $employment->employer_phone,
             'monthly_income' => $employment->monthly_income,
             'payment_frequency' => $employment->payment_frequency,
-            'seniority_months' => $employment->months_employed ??
-                (($employment->years_employed ?? 0) * 12 + ($employment->months_employed ?? 0)),
+            'years_employed' => $employment->years_employed,
+            'months_employed' => $employment->months_employed,
+            'seniority_months' => $this->calculateSeniorityMonths($employment),
             'start_date' => $employment->start_date?->format('Y-m-d'),
             'is_verified' => $employment->is_verified ?? false,
             'income_verified' => $employment->income_verified ?? false,
         ];
+    }
+
+    /**
+     * Calculate seniority months from stored values or start_date.
+     */
+    private function calculateSeniorityMonths(PersonEmployment $employment): int
+    {
+        // First priority: use explicit years/months if set
+        if ($employment->years_employed !== null || $employment->months_employed !== null) {
+            return (($employment->years_employed ?? 0) * 12) + ($employment->months_employed ?? 0);
+        }
+
+        // Second priority: calculate from start_date
+        if ($employment->start_date) {
+            $start = $employment->start_date;
+            $now = now();
+            $months = ($now->year - $start->year) * 12 + ($now->month - $start->month);
+            // Adjust if current day is before start day in the month
+            if ($now->day < $start->day) {
+                $months--;
+            }
+            return max(0, $months);
+        }
+
+        return 0;
     }
 
     private function formatBankAccount(?PersonBankAccount $account): ?array
@@ -501,8 +551,19 @@ class ApplicantProfileService
             'account_number' => $account->account_number,
             'holder_name' => $account->holder_name,
             'account_type' => $account->account_type,
+            'is_primary' => $account->is_primary ?? false,
             'is_verified' => $account->is_verified ?? false,
         ];
+    }
+
+    private function formatBankAccounts($bankAccounts): array
+    {
+        return $bankAccounts
+            ->sortByDesc('is_primary')
+            ->sortByDesc('created_at')
+            ->map(fn($account) => $this->formatBankAccount($account))
+            ->values()
+            ->toArray();
     }
 
     private function formatReferences($references): array
