@@ -458,6 +458,7 @@ export interface V2ApplicationLoan {
   requested_amount: number
   requested_term_months: number
   purpose: string | null
+  purpose_label: string | null
   purpose_description: string | null
   interest_rate: number | null
   monthly_payment: number | null

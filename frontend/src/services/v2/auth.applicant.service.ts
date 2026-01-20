@@ -125,6 +125,52 @@ export async function changePin(payload: V2PinChangePayload): Promise<V2ApiRespo
   return response.data
 }
 
+/**
+ * Reset PIN using OTP code.
+ * Note: Uses V1 endpoint as V2 equivalent doesn't exist yet.
+ */
+export interface V2PinResetPayload {
+  type: 'phone' | 'email'
+  identifier: string
+  code: string
+  new_pin: string
+  new_pin_confirmation: string
+}
+
+export async function resetPinWithOtp(payload: V2PinResetPayload): Promise<V2ApiResponse<{ token: string; user: V2ApplicantUser }>> {
+  // Uses V1 endpoint format until V2 is available
+  const legacyPayload = payload.type === 'phone'
+    ? { phone: payload.identifier, code: payload.code, new_pin: payload.new_pin, new_pin_confirmation: payload.new_pin_confirmation }
+    : { email: payload.identifier, code: payload.code, new_pin: payload.new_pin, new_pin_confirmation: payload.new_pin_confirmation }
+
+  const response = await api.post<{ success: boolean; token: string; user: { id: string; phone: string | null; email: string | null; type: string; is_admin: boolean; has_pin: boolean } }>(
+    '/auth/pin/reset',
+    legacyPayload
+  )
+
+  // Map V1 response to V2 format
+  const v1User = response.data.user
+  return {
+    success: response.data.success,
+    data: {
+      token: response.data.token,
+      user: {
+        id: v1User.id,
+        tenant_id: '',
+        phone: v1User.phone || '',
+        email: v1User.email,
+        person_id: null,
+        has_pin: v1User.has_pin,
+        is_active: true,
+        onboarding_step: 0,
+        onboarding_completed: false,
+        preferences: null,
+        created_at: new Date().toISOString(),
+      }
+    }
+  }
+}
+
 // Export as default object for consistency with other services
 export default {
   requestOtp,
@@ -136,4 +182,5 @@ export default {
   refreshToken,
   setupPin,
   changePin,
+  resetPinWithOtp,
 }

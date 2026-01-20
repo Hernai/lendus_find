@@ -33,6 +33,7 @@ interface ReviewHistoryEntry {
   action_label: string
   status: string | null
   previous_status: string | null
+  previous_status_label: string | null
   rejection_reason: string | null
   rejection_comment: string | null
   reviewer_name: string | null

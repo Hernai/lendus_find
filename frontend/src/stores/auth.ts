@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { api } from '@/services/api'
 import { v2 } from '@/services/v2'
 import type { User, OtpMethod, SendOtpResponse, VerifyOtpResponse } from '@/types'
 import { initializeEcho, disconnectEcho } from '@/plugins/echo'
@@ -8,9 +7,6 @@ import { logger } from '@/utils/logger'
 import { storage, STORAGE_KEYS } from '@/utils/storage'
 
 const authLogger = logger.child('Auth')
-
-// Flag to use V2 API (can be toggled for gradual migration)
-const USE_V2_API = true
 
 /**
  * Legacy storage migration helper.
@@ -40,44 +36,11 @@ function getWithLegacyFallback<T>(storageKey: string, legacyKey: string): T | nu
   return null
 }
 
-interface RequestOtpApiResponse {
-  success: boolean
-  message: string
-  channel: string
-  code?: string // Only in dev mode
-}
-
-interface VerifyOtpApiResponse {
-  success: boolean
-  token: string
-  user: {
-    id: string
-    phone: string | null
-    email: string | null
-    type: string
-    is_admin: boolean
-    has_pin?: boolean
-  }
-}
-
 interface CheckUserApiResponse {
   exists: boolean
   has_pin: boolean
   is_locked: boolean
   lockout_minutes: number
-}
-
-interface PinLoginApiResponse {
-  success: boolean
-  token: string
-  user: {
-    id: string
-    phone: string | null
-    email: string | null
-    type: string
-    is_admin: boolean
-    has_pin: boolean
-  }
 }
 
 interface UserPermissions {
@@ -187,58 +150,22 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       // Clean phone number (remove formatting)
       const cleanPhone = destination.replace(/\D/g, '')
+      const identifierType = method === 'email' ? 'email' : 'phone'
+      const identifierValue = method === 'email' ? destination : cleanPhone
+      const channel = method === 'whatsapp' ? 'whatsapp' : method === 'email' ? 'email' : 'sms'
 
-      if (USE_V2_API) {
-        // V2 API
-        const identifierType = method === 'email' ? 'email' : 'phone'
-        const identifierValue = method === 'email' ? destination : cleanPhone
-        const channel = method === 'whatsapp' ? 'whatsapp' : method === 'email' ? 'email' : 'sms'
+      const response = await v2.applicant.auth.requestOtp({
+        type: identifierType,
+        identifier: identifierValue,
+        channel: channel,
+      })
 
-        const response = await v2.applicant.auth.requestOtp({
-          type: identifierType,
-          identifier: identifierValue,
-          channel: channel,
-        })
-
-        if (response.success || response.data) {
-          otpDestination.value = identifierValue
-          otpMethod.value = method
-          otpExpiresAt.value = response.data?.expires_at
-            ? new Date(response.data.expires_at)
-            : new Date(Date.now() + 10 * 60 * 1000)
-
-          return {
-            success: true,
-            expires_at: otpExpiresAt.value.toISOString(),
-            method
-          }
-        }
-
-        throw new Error('Failed to send OTP')
-      }
-
-      // V1 API (legacy)
-      const channelMap: Record<OtpMethod, string> = {
-        sms: 'SMS',
-        whatsapp: 'WHATSAPP',
-        email: 'EMAIL'
-      }
-
-      const payload = method === 'email'
-        ? { email: destination, channel: channelMap[method] }
-        : { phone: cleanPhone, channel: channelMap[method] }
-
-      const response = await api.post<RequestOtpApiResponse>('/auth/otp/request', payload)
-
-      if (response.data.success) {
-        otpDestination.value = method === 'email' ? destination : cleanPhone
+      if (response.success || response.data) {
+        otpDestination.value = identifierValue
         otpMethod.value = method
-        otpExpiresAt.value = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
-
-        // Log dev code if available
-        if (response.data.code) {
-          authLogger.debug('Dev OTP Code', { code: response.data.code })
-        }
+        otpExpiresAt.value = response.data?.expires_at
+          ? new Date(response.data.expires_at)
+          : new Date(Date.now() + 10 * 60 * 1000)
 
         return {
           success: true,
@@ -264,91 +191,29 @@ export const useAuthStore = defineStore('auth', () => {
     isLoading.value = true
 
     try {
-      if (USE_V2_API) {
-        // V2 API
-        const identifierType = otpMethod.value === 'email' ? 'email' : 'phone'
+      const identifierType = otpMethod.value === 'email' ? 'email' : 'phone'
 
-        const response = await v2.applicant.auth.verifyOtp({
-          type: identifierType,
-          identifier: otpDestination.value,
-          code,
-        })
+      const response = await v2.applicant.auth.verifyOtp({
+        type: identifierType,
+        identifier: otpDestination.value,
+        code,
+      })
 
-        // Handle both response formats:
-        // - Standard V2: { success: true, data: { token, user } }
-        // - Legacy/Direct: { success: true, token, user }
-        const rawResponse = response as unknown as {
-          success: boolean
-          data?: { token: string; user: import('@/types/v2').V2ApplicantUser }
-          token?: string
-          user?: import('@/types/v2').V2ApplicantUser
-        }
-
-        const authData = rawResponse.data || (rawResponse.token && rawResponse.user ? { token: rawResponse.token, user: rawResponse.user } : null)
-
-        if (response.success && authData) {
-          // Cast to V2ApplicantUser since we're using applicant auth
-          const apiUser = authData.user as import('@/types/v2').V2ApplicantUser
-
-          // Check if user changed (different user_id)
-          const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
-          if (previousUserId && previousUserId !== apiUser.id) {
-            authLogger.info('User changed, clearing onboarding cache')
-            clearOnboardingCache()
-          }
-
-          // Map V2 user to frontend User type
-          const mappedUser: User = {
-            id: apiUser.id,
-            tenant_id: apiUser.tenant_id,
-            phone: apiUser.phone || '',
-            email: apiUser.email || null,
-            role: 'APPLICANT',
-            phone_verified_at: apiUser.phone ? new Date().toISOString() : null,
-            created_at: apiUser.created_at,
-            updated_at: new Date().toISOString()
-          }
-
-          user.value = mappedUser
-          token.value = authData.token
-          storage.set(STORAGE_KEYS.AUTH_TOKEN, authData.token)
-          storage.set(STORAGE_KEYS.CURRENT_USER_ID, apiUser.id)
-          storage.set(STORAGE_KEYS.CURRENT_USER_TYPE, 'applicant')
-
-          // Set PIN state (only for phone-based authentication, not email)
-          const isPhoneAuth = otpMethod.value === 'sms' || otpMethod.value === 'whatsapp'
-          // V2 doesn't return has_pin directly, check person existence
-          hasPin.value = false // Will be updated on checkUser
-          needsPinSetup.value = isPhoneAuth
-
-          // Clear OTP state
-          otpDestination.value = null
-          otpMethod.value = null
-          otpExpiresAt.value = null
-
-          // Initialize WebSocket
-          initializeEcho(authData.token)
-
-          return {
-            success: true,
-            token: authData.token,
-            user: mappedUser,
-            needsPinSetup: isPhoneAuth
-          }
-        }
-
-        return { success: false, error: 'INVALID_CODE' }
+      // Handle both response formats:
+      // - Standard V2: { success: true, data: { token, user } }
+      // - Legacy/Direct: { success: true, token, user }
+      const rawResponse = response as unknown as {
+        success: boolean
+        data?: { token: string; user: import('@/types/v2').V2ApplicantUser }
+        token?: string
+        user?: import('@/types/v2').V2ApplicantUser
       }
 
-      // V1 API (legacy)
-      const payload = otpMethod.value === 'email'
-        ? { email: otpDestination.value, code }
-        : { phone: otpDestination.value, code }
+      const authData = rawResponse.data || (rawResponse.token && rawResponse.user ? { token: rawResponse.token, user: rawResponse.user } : null)
 
-      const response = await api.post<VerifyOtpApiResponse>('/auth/otp/verify', payload)
-
-      if (response.data.success) {
-        const apiUser = response.data.user
+      if (response.success && authData) {
+        // Cast to V2ApplicantUser since we're using applicant auth
+        const apiUser = authData.user as import('@/types/v2').V2ApplicantUser
 
         // Check if user changed (different user_id)
         const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
@@ -357,39 +222,43 @@ export const useAuthStore = defineStore('auth', () => {
           clearOnboardingCache()
         }
 
-        // Map backend user to frontend User type
+        // Map V2 user to frontend User type
         const mappedUser: User = {
           id: apiUser.id,
-          tenant_id: '', // Will be set by backend context
+          tenant_id: apiUser.tenant_id,
           phone: apiUser.phone || '',
-          email: apiUser.email,
-          role: mapUserType(apiUser.type, apiUser.is_admin),
+          email: apiUser.email || null,
+          role: 'APPLICANT',
           phone_verified_at: apiUser.phone ? new Date().toISOString() : null,
-          created_at: new Date().toISOString(),
+          created_at: apiUser.created_at,
           updated_at: new Date().toISOString()
         }
 
         user.value = mappedUser
-        token.value = response.data.token
-        storage.set(STORAGE_KEYS.AUTH_TOKEN, response.data.token)
+        token.value = authData.token
+        storage.set(STORAGE_KEYS.AUTH_TOKEN, authData.token)
         storage.set(STORAGE_KEYS.CURRENT_USER_ID, apiUser.id)
         storage.set(STORAGE_KEYS.CURRENT_USER_TYPE, 'applicant')
 
         // Set PIN state (only for phone-based authentication, not email)
         const isPhoneAuth = otpMethod.value === 'sms' || otpMethod.value === 'whatsapp'
-        hasPin.value = apiUser.has_pin ?? false
-        needsPinSetup.value = isPhoneAuth && !apiUser.has_pin
+        // V2 doesn't return has_pin directly, check person existence
+        hasPin.value = false // Will be updated on checkUser
+        needsPinSetup.value = isPhoneAuth
 
         // Clear OTP state
         otpDestination.value = null
         otpMethod.value = null
         otpExpiresAt.value = null
 
+        // Initialize WebSocket
+        initializeEcho(authData.token)
+
         return {
           success: true,
-          token: response.data.token,
+          token: authData.token,
           user: mappedUser,
-          needsPinSetup: isPhoneAuth && !apiUser.has_pin
+          needsPinSetup: isPhoneAuth
         }
       }
 
@@ -442,11 +311,7 @@ export const useAuthStore = defineStore('auth', () => {
   const logout = async () => {
     try {
       if (token.value) {
-        if (USE_V2_API) {
-          await v2.applicant.auth.logout()
-        } else {
-          await api.post('/auth/logout')
-        }
+        await v2.applicant.auth.logout()
       }
     } catch (error) {
       authLogger.error('Logout API error', error)
@@ -648,37 +513,25 @@ export const useAuthStore = defineStore('auth', () => {
       const cleanPhone = phone.replace(/\D/g, '')
       authLogger.debug('checkUser called', { rawPhone: phone.slice(0, 4) + '***', cleanPhone: cleanPhone.slice(0, 4) + '***' })
 
-      if (USE_V2_API) {
-        // V2 API
-        const response = await v2.applicant.auth.checkUser({ type: 'phone', identifier: cleanPhone })
+      const response = await v2.applicant.auth.checkUser({ type: 'phone', identifier: cleanPhone })
 
-        if (response.success && response.data) {
-          const checkData = response.data
-          authLogger.debug('checkUser V2 response', { exists: checkData.exists, hasPin: checkData.has_pin })
+      if (response.success && response.data) {
+        const checkData = response.data
+        authLogger.debug('checkUser V2 response', { exists: checkData.exists, hasPin: checkData.has_pin })
 
-          hasPin.value = checkData.has_pin
-          // V2 doesn't return lockout_minutes in checkUser, only in login errors
-          pinLockoutMinutes.value = 0
+        hasPin.value = checkData.has_pin
+        // V2 doesn't return lockout_minutes in checkUser, only in login errors
+        pinLockoutMinutes.value = 0
 
-          return {
-            exists: checkData.exists,
-            has_pin: checkData.has_pin,
-            is_locked: false,
-            lockout_minutes: 0
-          }
+        return {
+          exists: checkData.exists,
+          has_pin: checkData.has_pin,
+          is_locked: false,
+          lockout_minutes: 0
         }
-
-        return { exists: false, has_pin: false, is_locked: false, lockout_minutes: 0 }
       }
 
-      // V1 API (legacy)
-      const response = await api.post<CheckUserApiResponse>('/auth/check-user', { phone: cleanPhone })
-
-      authLogger.debug('checkUser response', { exists: response.data.exists, hasPin: response.data.has_pin })
-
-      hasPin.value = response.data.has_pin
-      pinLockoutMinutes.value = response.data.lockout_minutes
-      return response.data
+      return { exists: false, has_pin: false, is_locked: false, lockout_minutes: 0 }
     } finally {
       isLoading.value = false
     }
@@ -690,62 +543,14 @@ export const useAuthStore = defineStore('auth', () => {
       const cleanPhone = phone.replace(/\D/g, '')
       authLogger.debug('loginWithPin called', { phonePrefix: cleanPhone.slice(0, 4) + '***' })
 
-      if (USE_V2_API) {
-        // V2 API
-        const response = await v2.applicant.auth.loginWithPin({ type: 'phone', identifier: cleanPhone, pin })
+      const response = await v2.applicant.auth.loginWithPin({ type: 'phone', identifier: cleanPhone, pin })
 
-        if (response.success && response.data) {
-          const authData = response.data
-          // Cast to V2ApplicantUser since we're using applicant auth
-          const apiUser = authData.user as import('@/types/v2').V2ApplicantUser
+      if (response.success && response.data) {
+        const authData = response.data
+        // Cast to V2ApplicantUser since we're using applicant auth
+        const apiUser = authData.user as import('@/types/v2').V2ApplicantUser
 
-          authLogger.debug('loginWithPin V2 user', { userId: apiUser.id })
-
-          // Check if user changed (different user_id)
-          const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
-          if (previousUserId && previousUserId !== apiUser.id) {
-            authLogger.info('User changed, clearing onboarding cache')
-            clearOnboardingCache()
-          }
-
-          user.value = {
-            id: apiUser.id,
-            tenant_id: apiUser.tenant_id,
-            phone: apiUser.phone || '',
-            email: apiUser.email || null,
-            role: 'APPLICANT',
-            phone_verified_at: apiUser.phone ? new Date().toISOString() : null,
-            created_at: apiUser.created_at,
-            updated_at: new Date().toISOString()
-          }
-
-          authLogger.debug('loginWithPin user set in store', { userId: user.value?.id })
-
-          token.value = authData.token
-          storage.set(STORAGE_KEYS.AUTH_TOKEN, authData.token)
-          storage.set(STORAGE_KEYS.CURRENT_USER_ID, apiUser.id)
-          storage.set(STORAGE_KEYS.CURRENT_USER_TYPE, 'applicant')
-          hasPin.value = true
-          needsPinSetup.value = false
-
-          // Initialize WebSocket
-          initializeEcho(authData.token)
-
-          return { success: true }
-        }
-
-        return { success: false, error: 'LOGIN_FAILED' }
-      }
-
-      // V1 API (legacy)
-      const response = await api.post<PinLoginApiResponse>('/auth/pin/login', { phone: cleanPhone, pin })
-
-      authLogger.debug('loginWithPin response', { success: response.data.success })
-
-      if (response.data.success) {
-        const apiUser = response.data.user
-
-        authLogger.debug('loginWithPin user', { userId: apiUser.id, type: apiUser.type })
+        authLogger.debug('loginWithPin V2 user', { userId: apiUser.id })
 
         // Check if user changed (different user_id)
         const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
@@ -756,26 +561,26 @@ export const useAuthStore = defineStore('auth', () => {
 
         user.value = {
           id: apiUser.id,
-          tenant_id: '',
+          tenant_id: apiUser.tenant_id,
           phone: apiUser.phone || '',
-          email: apiUser.email,
-          role: mapUserType(apiUser.type, apiUser.is_admin),
+          email: apiUser.email || null,
+          role: 'APPLICANT',
           phone_verified_at: apiUser.phone ? new Date().toISOString() : null,
-          created_at: new Date().toISOString(),
+          created_at: apiUser.created_at,
           updated_at: new Date().toISOString()
         }
 
         authLogger.debug('loginWithPin user set in store', { userId: user.value?.id })
 
-        token.value = response.data.token
-        storage.set(STORAGE_KEYS.AUTH_TOKEN, response.data.token)
+        token.value = authData.token
+        storage.set(STORAGE_KEYS.AUTH_TOKEN, authData.token)
         storage.set(STORAGE_KEYS.CURRENT_USER_ID, apiUser.id)
         storage.set(STORAGE_KEYS.CURRENT_USER_TYPE, 'applicant')
         hasPin.value = true
         needsPinSetup.value = false
 
-        // Inicializar WebSocket
-        initializeEcho(response.data.token)
+        // Initialize WebSocket
+        initializeEcho(authData.token)
 
         return { success: true }
       }
@@ -810,35 +615,18 @@ export const useAuthStore = defineStore('auth', () => {
   const setupPin = async (pin: string): Promise<{ success: boolean; error?: string }> => {
     isLoading.value = true
     try {
-      if (USE_V2_API) {
-        // V2 API
-        const response = await v2.applicant.auth.setupPin({
-          pin,
-          pin_confirmation: pin
-        })
-
-        if (response.success) {
-          hasPin.value = true
-          needsPinSetup.value = false
-          return { success: true }
-        }
-
-        return { success: false, error: response.error || 'SETUP_FAILED' }
-      }
-
-      // V1 API (legacy)
-      const response = await api.post<{ success: boolean; message: string }>('/auth/pin/setup', {
+      const response = await v2.applicant.auth.setupPin({
         pin,
         pin_confirmation: pin
       })
 
-      if (response.data.success) {
+      if (response.success) {
         hasPin.value = true
         needsPinSetup.value = false
         return { success: true }
       }
 
-      return { success: false, error: 'SETUP_FAILED' }
+      return { success: false, error: response.error || 'SETUP_FAILED' }
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { message?: string } } }
       return { success: false, error: axiosError.response?.data?.message || 'SETUP_FAILED' }
@@ -850,25 +638,13 @@ export const useAuthStore = defineStore('auth', () => {
   const changePin = async (currentPin: string, newPin: string): Promise<{ success: boolean; error?: string }> => {
     isLoading.value = true
     try {
-      if (USE_V2_API) {
-        // V2 API
-        const response = await v2.applicant.auth.changePin({
-          current_pin: currentPin,
-          new_pin: newPin,
-          new_pin_confirmation: newPin
-        })
-
-        return { success: response.success }
-      }
-
-      // V1 API (legacy)
-      const response = await api.post<{ success: boolean; message: string }>('/auth/pin/change', {
+      const response = await v2.applicant.auth.changePin({
         current_pin: currentPin,
         new_pin: newPin,
         new_pin_confirmation: newPin
       })
 
-      return { success: response.data.success }
+      return { success: response.success }
     } catch (error: unknown) {
       const axiosError = error as { response?: { status?: number; data?: { message?: string } } }
 
@@ -885,66 +661,21 @@ export const useAuthStore = defineStore('auth', () => {
   const loginWithPassword = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     isLoading.value = true
     try {
-      if (USE_V2_API) {
-        // V2 API - uses StaffAccount model
-        const response = await v2.staff.auth.login({ email, password })
+      const response = await v2.staff.auth.login({ email, password })
 
-        // V2 response wraps data in { success, data: { token, user } }
-        if (response.success && response.data) {
-          const apiUser = response.data.user as {
-            id: string
-            email: string
-            role: string
-            tenant_id?: string
-            is_active: boolean
-            profile?: { full_name: string; phone?: string }
-            permissions: Record<string, boolean>
-            created_at?: string
-          }
-          const apiToken = response.data.token
-
-          // Check if user changed (different user_id)
-          const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
-          if (previousUserId && previousUserId !== apiUser.id) {
-            authLogger.info('User changed, clearing onboarding cache')
-            clearOnboardingCache()
-          }
-
-          user.value = {
-            id: apiUser.id,
-            tenant_id: apiUser.tenant_id || '',
-            phone: apiUser.profile?.phone || '',
-            email: apiUser.email,
-            role: apiUser.role as User['role'],
-            phone_verified_at: null,
-            created_at: apiUser.created_at || new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-
-          // Store permissions for staff users (V2 returns object, map to our format)
-          if (apiUser.permissions) {
-            permissions.value = apiUser.permissions as unknown as UserPermissions
-          }
-
-          token.value = apiToken
-          storage.set(STORAGE_KEYS.AUTH_TOKEN, apiToken)
-          storage.set(STORAGE_KEYS.CURRENT_USER_ID, apiUser.id)
-          storage.set(STORAGE_KEYS.CURRENT_USER_TYPE, 'staff')
-
-          // Initialize WebSocket
-          initializeEcho(apiToken)
-
-          return { success: true }
+      // V2 response wraps data in { success, data: { token, user } }
+      if (response.success && response.data) {
+        const apiUser = response.data.user as {
+          id: string
+          email: string
+          role: string
+          tenant_id?: string
+          is_active: boolean
+          profile?: { full_name: string; phone?: string }
+          permissions: Record<string, boolean>
+          created_at?: string
         }
-
-        return { success: false, error: response.message || 'LOGIN_FAILED' }
-      }
-
-      // V1 API (legacy)
-      const response = await api.post<PasswordLoginApiResponse>('/admin/auth/login', { email, password })
-
-      if (response.data.success) {
-        const apiUser = response.data.user
+        const apiToken = response.data.token
 
         // Check if user changed (different user_id)
         const previousUserId = getWithLegacyFallback<string>(STORAGE_KEYS.CURRENT_USER_ID, 'current_user_id')
@@ -955,32 +686,32 @@ export const useAuthStore = defineStore('auth', () => {
 
         user.value = {
           id: apiUser.id,
-          tenant_id: '',
-          phone: '',  // Staff users may not have phone
+          tenant_id: apiUser.tenant_id || '',
+          phone: apiUser.profile?.phone || '',
           email: apiUser.email,
           role: apiUser.role as User['role'],
           phone_verified_at: null,
-          created_at: new Date().toISOString(),
+          created_at: apiUser.created_at || new Date().toISOString(),
           updated_at: new Date().toISOString()
         }
 
-        // Store permissions for staff users
+        // Store permissions for staff users (V2 returns object, map to our format)
         if (apiUser.permissions) {
-          permissions.value = apiUser.permissions
+          permissions.value = apiUser.permissions as unknown as UserPermissions
         }
 
-        token.value = response.data.token
-        storage.set(STORAGE_KEYS.AUTH_TOKEN, response.data.token)
+        token.value = apiToken
+        storage.set(STORAGE_KEYS.AUTH_TOKEN, apiToken)
         storage.set(STORAGE_KEYS.CURRENT_USER_ID, apiUser.id)
         storage.set(STORAGE_KEYS.CURRENT_USER_TYPE, 'staff')
 
-        // Inicializar WebSocket
-        initializeEcho(response.data.token)
+        // Initialize WebSocket
+        initializeEcho(apiToken)
 
         return { success: true }
       }
 
-      return { success: false, error: 'LOGIN_FAILED' }
+      return { success: false, error: response.message || 'LOGIN_FAILED' }
     } catch (error: unknown) {
       const axiosError = error as { response?: { status?: number; data?: { message?: string; error?: string } } }
 
@@ -1006,14 +737,15 @@ export const useAuthStore = defineStore('auth', () => {
     isLoading.value = true
     try {
       const cleanPhone = phone.replace(/\D/g, '')
-      const response = await api.post<PinLoginApiResponse>('/auth/pin/reset', {
-        phone: cleanPhone,
+      const response = await v2.applicant.auth.resetPinWithOtp({
+        type: 'phone',
+        identifier: cleanPhone,
         code,
         new_pin: newPin,
         new_pin_confirmation: newPin
       })
 
-      if (response.data.success) {
+      if (response.success && response.data) {
         const apiUser = response.data.user
 
         // Check if user changed (different user_id)
@@ -1025,12 +757,12 @@ export const useAuthStore = defineStore('auth', () => {
 
         user.value = {
           id: apiUser.id,
-          tenant_id: '',
+          tenant_id: apiUser.tenant_id || '',
           phone: apiUser.phone || '',
-          email: apiUser.email,
-          role: mapUserType(apiUser.type, apiUser.is_admin),
+          email: apiUser.email || null,
+          role: 'APPLICANT',
           phone_verified_at: apiUser.phone ? new Date().toISOString() : null,
-          created_at: new Date().toISOString(),
+          created_at: apiUser.created_at,
           updated_at: new Date().toISOString()
         }
 

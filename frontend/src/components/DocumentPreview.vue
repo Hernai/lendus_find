@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted, onBeforeMount } from 'vue'
-import { api } from '@/services/api'
+import { v2 } from '@/services/v2'
 import { useDocumentTypes } from '@/composables'
 import ImageViewer from './ImageViewer.vue'
 
@@ -82,10 +82,7 @@ const loadImage = async () => {
   error.value = null
 
   try {
-    const response = await api.get(`/documents/${props.document.id}/download`, {
-      responseType: 'blob'
-    })
-    const blob = new Blob([response.data as BlobPart], { type: response.headers['content-type'] || 'image/jpeg' })
+    const blob = await v2.applicant.document.stream(props.document.id)
     imageUrl.value = URL.createObjectURL(blob)
   } catch (e) {
     console.error('Failed to load document image:', e)
@@ -97,8 +94,15 @@ const loadImage = async () => {
 
 const openPreview = async () => {
   if (isPdf.value) {
-    // For PDFs, open in new tab using download URL
-    window.open(`/api/documents/${props.document.id}/download`, '_blank')
+    // For PDFs, get signed URL and open in new tab
+    try {
+      const response = await v2.applicant.document.download(props.document.id)
+      if (response.success && response.data?.url) {
+        window.open(response.data.url, '_blank')
+      }
+    } catch (e) {
+      console.error('Failed to get PDF download URL:', e)
+    }
     return
   }
 
