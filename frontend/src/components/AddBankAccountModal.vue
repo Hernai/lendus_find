@@ -113,7 +113,9 @@ const handleSubmit = async () => {
     emit('saved')
   } catch (e: unknown) {
     console.error('Failed to create bank account:', e)
-    error.value = (e as Error)?.message || 'Error al agregar la cuenta'
+    // Extract error message from Axios response or fallback to generic message
+    const axiosError = e as { response?: { data?: { message?: string } } }
+    error.value = axiosError.response?.data?.message || (e as Error)?.message || 'Error al agregar la cuenta'
   } finally {
     isSubmitting.value = false
   }

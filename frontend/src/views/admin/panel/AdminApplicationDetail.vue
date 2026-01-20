@@ -155,6 +155,7 @@ interface Application {
     monthly_payment: number
     total_to_pay: number
     purpose: string
+    purpose_label?: string
   }
   documents: Document[]
   references: Reference[]
@@ -575,7 +576,8 @@ const fetchApplication = async () => {
         interest_rate: loan?.interest_rate || 0,
         monthly_payment: loan?.monthly_payment || 0,
         total_to_pay: loan?.total_amount || 0,
-        purpose: loan?.purpose || ''
+        purpose: loan?.purpose || '',
+        purpose_label: loan?.purpose_label || undefined
       },
       documents: docs.map(d => ({
         id: d.id,
@@ -2642,7 +2644,7 @@ onUnmounted(() => {
                   </div>
                   <div>
                     <p class="text-xs text-gray-500">Destino</p>
-                    <p class="font-medium text-gray-900">{{ getPurpose(application.loan.purpose) || '—' }}</p>
+                    <p class="font-medium text-gray-900">{{ application.loan.purpose_label || application.loan.purpose || '—' }}</p>
                   </div>
                 </div>
               </div>

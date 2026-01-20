@@ -619,6 +619,7 @@ class ApplicationController extends Controller
             'requested_amount' => $app->requested_amount,
             'requested_term_months' => $app->requested_term_months,
             'purpose' => $app->purpose,
+            'purpose_label' => $app->purpose ? (\App\Enums\LoanPurpose::tryFrom($app->purpose)?->label() ?? $app->purpose) : null,
             'purpose_description' => $app->purpose_description,
 
             // Calculated values (stored at application creation)
@@ -917,28 +918,96 @@ class ApplicationController extends Controller
             return $this->notFound('Documento no encontrado.');
         }
 
-        // Get all versions of this document type for the same entity
-        $history = \App\Models\DocumentV2::where('documentable_type', $document->documentable_type)
+        // Get all document versions of this type
+        $documentVersions = \App\Models\DocumentV2::where('documentable_type', $document->documentable_type)
             ->where('documentable_id', $document->documentable_id)
             ->where('type', $document->type)
+            ->get();
+
+        $documentIds = $documentVersions->pluck('id')->toArray();
+
+        // Get review actions from ApplicationStatusHistory
+        $reviewActions = ApplicationStatusHistory::where('application_id', $application->id)
+            ->whereJsonContains('metadata->document_type', $document->type)
             ->orderBy('created_at', 'desc')
             ->get()
-            ->map(function ($doc) {
+            ->filter(function ($action) {
+                $metadata = $action->metadata ?? [];
+                $actionType = $metadata['action'] ?? '';
+                return in_array($actionType, ['document_approved', 'document_rejected', 'document_unapproved']);
+            })
+            ->map(function ($action) {
+                $metadata = $action->metadata ?? [];
+                $actionType = $metadata['action'] ?? '';
+
+                $actionLabel = match ($actionType) {
+                    'document_approved' => 'Aprobado',
+                    'document_rejected' => 'Rechazado',
+                    'document_unapproved' => 'Desaprobado',
+                    default => 'Actualizado',
+                };
+
+                $status = match ($actionType) {
+                    'document_approved' => 'APPROVED',
+                    'document_rejected' => 'REJECTED',
+                    'document_unapproved' => 'PENDING',
+                    default => 'PENDING',
+                };
+
+                // Get previous status label
+                $previousStatus = $metadata['old_status'] ?? null;
+                $previousStatusLabel = match ($previousStatus) {
+                    'APPROVED' => 'Aprobado',
+                    'REJECTED' => 'Rechazado',
+                    'PENDING' => 'Pendiente',
+                    default => $previousStatus,
+                };
+
                 return [
-                    'id' => $doc->id,
-                    'file_name' => $doc->file_name,
-                    'status' => $doc->status,
-                    'rejection_reason' => $doc->rejection_reason,
-                    'replaced_at' => $doc->replaced_at?->toIso8601String(),
-                    'created_at' => $doc->created_at?->toIso8601String(),
-                    'is_current' => $doc->replaced_at === null,
+                    'id' => $action->id,
+                    'file_name' => null,
+                    'status' => $status,
+                    'action_label' => $actionLabel,
+                    'rejection_reason' => $metadata['reason'] ?? null,
+                    'rejection_comment' => $metadata['comment'] ?? null,
+                    'reviewer_name' => $action->changed_by_name,
+                    'reviewed_at' => null,
+                    'replaced_at' => null,
+                    'created_at' => $action->created_at?->toIso8601String(),
+                    'is_current' => false,
+                    'previous_status' => $previousStatus,
+                    'previous_status_label' => $previousStatusLabel,
                 ];
             });
+
+        // Get document upload entries
+        $uploadEntries = $documentVersions->map(function ($doc) {
+            return [
+                'id' => $doc->id,
+                'file_name' => $doc->file_name,
+                'status' => 'PENDING',
+                'action_label' => $doc->replaced_at ? 'Reemplazado' : 'Subido',
+                'rejection_reason' => null,
+                'rejection_comment' => null,
+                'reviewer_name' => null,
+                'reviewed_at' => null,
+                'replaced_at' => $doc->replaced_at?->toIso8601String(),
+                'created_at' => $doc->created_at?->toIso8601String(),
+                'is_current' => $doc->replaced_at === null,
+                'previous_status' => null,
+                'previous_status_label' => null,
+            ];
+        });
+
+        // Merge and sort by created_at descending
+        $history = $reviewActions->concat($uploadEntries)
+            ->sortByDesc('created_at')
+            ->values();
 
         return $this->success([
             'document_type' => $document->type,
             'history' => $history,
-            'total_versions' => $history->count(),
+            'total_versions' => $documentVersions->count(),
         ]);
     }
 
@@ -1197,7 +1266,7 @@ class ApplicationController extends Controller
             'to_status' => 'REFERENCE_VERIFICATION',
             'changed_by' => $staff->id,
             'changed_by_type' => StaffAccount::class,
-            'notes' => "Referencia '{$reference->full_name}' {$resultLabels[$validated['result']]}" . ($validated['notes'] ? ": {$validated['notes']}" : ''),
+            'notes' => "Referencia '{$reference->full_name}' {$resultLabels[$validated['result']]}" . (($validated['notes'] ?? null) ? ": {$validated['notes']}" : ''),
             'metadata' => [
                 'action' => 'reference_verified',
                 'reference_id' => $reference->id,
@@ -1441,12 +1510,20 @@ class ApplicationController extends Controller
      */
     private function formatBankAccount($bankAccount): array
     {
+        // Mask sensitive data
+        $maskedClabe = $bankAccount->clabe
+            ? substr($bankAccount->clabe, 0, 4) . '****' . substr($bankAccount->clabe, -4)
+            : null;
+        $maskedAccountNumber = $bankAccount->account_number
+            ? '****' . substr($bankAccount->account_number, -4)
+            : null;
+
         return [
             'id' => $bankAccount->id,
             'bank_name' => $bankAccount->bank_name,
             'bank_code' => $bankAccount->bank_code,
-            'clabe' => $bankAccount->clabe,
-            'account_number' => $bankAccount->account_number,
+            'clabe' => $maskedClabe,
+            'account_number' => $maskedAccountNumber,
             'account_type' => $bankAccount->account_type,
             'holder_name' => $bankAccount->holder_name,
             'is_primary' => $bankAccount->is_primary,

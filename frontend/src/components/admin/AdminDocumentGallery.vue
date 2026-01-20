@@ -1069,8 +1069,8 @@ const formatHistoryDate = formatDateTime
                   </div>
 
                   <!-- Previous status for unapprove -->
-                  <p v-if="entry.previous_status && entry.status === 'PENDING'" class="text-xs text-gray-500 mt-1">
-                    Estado anterior: {{ entry.previous_status }}
+                  <p v-if="entry.previous_status_label && entry.status === 'PENDING'" class="text-xs text-gray-500 mt-1">
+                    Estado anterior: {{ entry.previous_status_label }}
                   </p>
                 </div>
               </div>
