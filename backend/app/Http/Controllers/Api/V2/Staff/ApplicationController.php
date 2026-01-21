@@ -2251,7 +2251,7 @@ class ApplicationController extends Controller
             'notes' => match ($validated['action']) {
                 'verify' => "Campo '{$validated['field']}' verificado",
                 'reject' => "Campo '{$validated['field']}' rechazado: " . ($validated['rejection_reason'] ?? ''),
-                'unverify' => "Verificación removida del campo '{$validated['field']}'" . ($validated['notes'] ? ": {$validated['notes']}" : ''),
+                'unverify' => "Verificación removida del campo '{$validated['field']}'" . (($validated['notes'] ?? null) ? ": {$validated['notes']}" : ''),
             },
             'metadata' => [
                 'action' => 'data_verification',
