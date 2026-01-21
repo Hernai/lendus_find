@@ -2618,7 +2618,7 @@ onUnmounted(() => {
                       <span>Verificado</span>
                     </button>
                     <button
-                      v-if="!isFieldRejected('address')"
+                      v-if="!isFieldVerified('address') && !isFieldRejected('address')"
                       class="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors text-gray-500 hover:bg-red-100 hover:text-red-700"
                       :disabled="isVerifyingData"
                       title="Rechazar domicilio"
@@ -2715,7 +2715,7 @@ onUnmounted(() => {
                       <span>Verificado</span>
                     </button>
                     <button
-                      v-if="!isFieldRejected('employment')"
+                      v-if="!isFieldVerified('employment') && !isFieldRejected('employment')"
                       class="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors text-gray-500 hover:bg-red-100 hover:text-red-700"
                       :disabled="isVerifyingData"
                       title="Rechazar empleo"
