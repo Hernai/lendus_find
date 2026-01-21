@@ -49,3 +49,12 @@ export { useToast, useToastState, type Toast, type ToastType, type ToastOptions 
 
 // Modal management
 export { useModal, useConfirmModal, type UseModalOptions, type UseModalReturn, type UseConfirmModalReturn } from './useModal'
+
+// Input formatting
+export {
+  usePhoneInput,
+  formatPhoneValue,
+  stripPhoneFormatting,
+  type UsePhoneInputOptions,
+  type UsePhoneInputReturn,
+} from './usePhoneInput'

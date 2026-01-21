@@ -11,7 +11,7 @@ import type {
 } from '@/services/v2/tenant.staff.service'
 import { AppInput, AppConfirmModal } from '@/components/common'
 import TenantBrandingEditor, { type Branding } from '@/components/admin/TenantBrandingEditor.vue'
-import { useToast } from '@/composables'
+import { useToast, formatPhoneValue, stripPhoneFormatting } from '@/composables'
 import { getErrorMessage } from '@/types/api'
 import { logger } from '@/utils/logger'
 import { formatDate } from '@/utils/formatters'
@@ -228,6 +228,22 @@ const formErrors = ref({
   name: '',
   slug: '',
   email: ''
+})
+
+// Phone formatting - computed for display with formatting
+const formattedPhone = computed({
+  get: () => formatPhoneValue(form.value.phone),
+  set: (value: string) => {
+    form.value.phone = stripPhoneFormatting(value)
+  }
+})
+
+// Phone formatting for test form
+const formattedTestPhone = computed({
+  get: () => formatPhoneValue(testForm.value.test_phone),
+  set: (value: string) => {
+    testForm.value.test_phone = stripPhoneFormatting(value)
+  }
 })
 
 // Options
@@ -1139,9 +1155,11 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
               <div>
                 <label class="block text-xs font-medium text-gray-700 mb-1.5">Teléfono</label>
                 <input
-                  v-model="form.phone"
-                  placeholder="5555555555"
+                  v-model="formattedPhone"
+                  placeholder="55 1234 5678"
                   type="tel"
+                  inputmode="numeric"
+                  maxlength="14"
                   class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-colors"
                 />
               </div>
@@ -1787,9 +1805,11 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                   +52
                 </div>
                 <input
-                  v-model="testForm.test_phone"
+                  v-model="formattedTestPhone"
                   type="tel"
-                  placeholder="9611234567"
+                  inputmode="numeric"
+                  maxlength="14"
+                  placeholder="55 1234 5678"
                   class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                   :disabled="isTesting"
                 />
