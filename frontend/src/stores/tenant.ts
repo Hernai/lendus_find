@@ -186,6 +186,7 @@ export const useTenantStore = defineStore('tenant', () => {
   const slug = computed(() => tenant.value?.slug ?? '')
   const isActive = computed(() => tenant.value?.is_active ?? false)
   const settings = computed(() => tenant.value?.settings ?? null)
+  const contact = computed(() => tenant.value?.contact ?? null)
 
   const activeProducts = computed(() =>
     products.value.filter(p => p.is_active)
@@ -459,6 +460,7 @@ export const useTenantStore = defineStore('tenant', () => {
     slug,
     isActive,
     settings,
+    contact,
     activeProducts,
     getProductById,
     // Actions

@@ -56,6 +56,12 @@ class ConfigController extends Controller
                 'branding' => $branding,
                 'webhook_config' => $tenant->webhook_config,
                 'settings' => $this->formatSettings($tenant->settings),
+                'contact' => [
+                    'email' => $tenant->email,
+                    'phone' => $tenant->phone,
+                    'website' => $tenant->website,
+                    'whatsapp' => $tenant->settings['whatsapp'] ?? $tenant->phone,
+                ],
                 'is_active' => $tenant->is_active,
                 'created_at' => $tenant->created_at?->toIso8601String(),
                 'updated_at' => $tenant->updated_at?->toIso8601String(),

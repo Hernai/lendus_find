@@ -34,6 +34,13 @@ export interface TenantSettings {
   timezone: string
 }
 
+export interface TenantContact {
+  email: string | null
+  phone: string | null
+  website: string | null
+  whatsapp: string | null
+}
+
 export interface Tenant {
   id: string
   name: string
@@ -41,6 +48,7 @@ export interface Tenant {
   branding: Branding
   webhook_config: WebhookConfig
   settings: TenantSettings
+  contact?: TenantContact
   is_active: boolean
   created_at: string
   updated_at: string
