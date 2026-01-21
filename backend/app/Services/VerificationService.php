@@ -77,7 +77,7 @@ class VerificationService
         }
 
         // Create or update verification record
-        return DataVerification::updateOrCreate(
+        $verification = DataVerification::updateOrCreate(
             [
                 'applicant_id' => $person->id,
                 'field_name' => $fieldName,
@@ -93,6 +93,11 @@ class VerificationService
                 'notes' => $notes,
             ]
         );
+
+        // Sync verification status to related model (identification, etc.)
+        $this->syncToRelatedModel($person, $fieldName, $methodEnum?->value ?? $method);
+
+        return $verification;
     }
 
     /**
@@ -261,6 +266,54 @@ class VerificationService
     // =========================================================================
     // PRIVATE HELPERS
     // =========================================================================
+
+    /**
+     * Sync verification status to related models (identifications, etc.).
+     *
+     * When KYC verifies a field, also update the corresponding model's status
+     * so all data remains consistent across tables.
+     */
+    private function syncToRelatedModel(Person $person, string $fieldName, ?string $method): void
+    {
+        // Map field names to identification types
+        $identificationMap = [
+            'curp' => 'CURP',
+            'rfc' => 'RFC',
+            'ine_document_front' => 'INE',
+            'ine_document_back' => 'INE',
+            'ine_cic' => 'INE',
+            'ine_clave' => 'INE',
+        ];
+
+        // Check if this field maps to an identification
+        if (isset($identificationMap[$fieldName])) {
+            $identType = $identificationMap[$fieldName];
+            $identification = $person->identifications()
+                ->where('type', $identType)
+                ->where('is_current', true)
+                ->first();
+
+            if ($identification && $identification->status !== 'VERIFIED') {
+                $identification->update([
+                    'status' => 'VERIFIED',
+                    'verified_at' => now(),
+                    'verification_method' => $method,
+                ]);
+            }
+        }
+
+        // Person data fields - check if KYC should be marked complete
+        $personFields = ['first_name', 'last_name_1', 'last_name_2', 'birth_date', 'gender', 'nationality', 'birth_state', 'birth_country'];
+        $kycRelatedFields = array_merge(array_keys($identificationMap), $personFields);
+
+        if (in_array($fieldName, $kycRelatedFields)) {
+            // Check and update KYC status if all critical fields are verified
+            $this->updateKycStatus($person);
+        }
+
+        // Handle face_match -> update selfie verification status if needed
+        // (Documents are handled separately via DocumentController auto-approve)
+    }
 
     /**
      * Resolve person from entity.

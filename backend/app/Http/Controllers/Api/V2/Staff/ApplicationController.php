@@ -1644,6 +1644,306 @@ class ApplicationController extends Controller
     }
 
     /**
+     * Sync verification status from checklist to the related model.
+     *
+     * When verifying/rejecting data from the checklist, also update
+     * the status field on the related model (employment, address, etc.)
+     * so the frontend shows consistent data.
+     *
+     * Also records an ApplicationStatusHistory entry to maintain audit trail.
+     */
+    private function syncVerificationStatusToRelatedModel(
+        Application $application,
+        string $field,
+        string $checklistStatus,
+        ?string $method,
+        ?string $rejectionReason,
+        string $staffId
+    ): void {
+        $person = $application->person;
+        if (!$person) {
+            return;
+        }
+
+        // Map checklist status to model status
+        $modelStatus = match ($checklistStatus) {
+            'verified' => 'VERIFIED',
+            'rejected' => 'REJECTED',
+            'pending' => 'PENDING',
+            default => 'PENDING',
+        };
+
+        $entityUpdated = false;
+        $entityType = null;
+        $entityId = null;
+        $oldStatus = null;
+
+        // Handle different field types
+        switch ($field) {
+            case 'employment':
+                $employment = $person->employments?->where('is_current', true)->first();
+                if ($employment) {
+                    $oldStatus = $employment->status;
+                    $employment->update([
+                        'status' => $modelStatus,
+                        'verified_at' => $checklistStatus === 'verified' ? now() : null,
+                        'verified_by' => $checklistStatus === 'verified' ? $staffId : null,
+                        'verification_method' => $method,
+                        'verification_notes' => $rejectionReason,
+                    ]);
+                    $entityUpdated = true;
+                    $entityType = 'employment';
+                    $entityId = $employment->id;
+                }
+                break;
+
+            case 'address':
+                $address = $person->addresses?->where('is_current', true)->first();
+                if ($address) {
+                    $oldStatus = $address->status;
+                    $address->update([
+                        'status' => $modelStatus,
+                        'verified_at' => $checklistStatus === 'verified' ? now() : null,
+                        'verified_by' => $checklistStatus === 'verified' ? $staffId : null,
+                        'verification_method' => $method,
+                    ]);
+                    $entityUpdated = true;
+                    $entityType = 'address';
+                    $entityId = $address->id;
+                }
+                break;
+
+            case 'income':
+                // Income verification updates the employment record's income fields
+                $employment = $person->employments?->where('is_current', true)->first();
+                if ($employment) {
+                    $oldStatus = $employment->income_verified ? 'VERIFIED' : 'PENDING';
+                    if ($checklistStatus === 'verified') {
+                        $employment->update([
+                            'income_verified' => true,
+                            'income_verified_at' => now(),
+                            'income_verified_by' => $staffId,
+                            'income_verification_method' => $method,
+                        ]);
+                    } else {
+                        $employment->update([
+                            'income_verified' => false,
+                            'income_verified_at' => null,
+                            'income_verified_by' => null,
+                        ]);
+                    }
+                    $entityUpdated = true;
+                    $entityType = 'income';
+                    $entityId = $employment->id;
+                }
+                break;
+
+            // Identification documents (CURP, RFC, INE)
+            case 'curp':
+            case 'rfc':
+            case 'ine':
+            case 'ine_clave':
+                $identType = match ($field) {
+                    'curp' => 'CURP',
+                    'rfc' => 'RFC',
+                    'ine', 'ine_clave' => 'INE',
+                    default => strtoupper($field),
+                };
+                $identification = $person->identifications?->where('type', $identType)->where('is_current', true)->first();
+                if ($identification) {
+                    $oldStatus = $identification->status;
+                    $identification->update([
+                        'status' => $modelStatus,
+                        'verified_at' => $checklistStatus === 'verified' ? now() : null,
+                        'verified_by' => $checklistStatus === 'verified' ? $staffId : null,
+                        'verification_method' => $method,
+                    ]);
+                    $entityUpdated = true;
+                    $entityType = 'identification';
+                    $entityId = $identification->id;
+                }
+                // Also check if we should update Person KYC status
+                $this->updatePersonKycStatusIfNeeded($person, $checklistStatus, $staffId);
+                break;
+
+            // Person data fields (name, birth_date) - these update Person KYC status
+            case 'first_name':
+            case 'last_name_1':
+            case 'last_name_2':
+            case 'birth_date':
+            case 'gender':
+            case 'nationality':
+            case 'birth_state':
+            case 'birth_country':
+                // Person fields don't have individual status columns,
+                // but we track via DataVerification and update Person KYC status
+                $oldStatus = $person->kyc_status;
+                $this->updatePersonKycStatusIfNeeded($person, $checklistStatus, $staffId);
+                if ($person->kyc_status !== $oldStatus) {
+                    $entityUpdated = true;
+                    $entityType = 'person';
+                    $entityId = $person->id;
+                }
+                break;
+
+            // References are handled by their individual IDs (reference_<uuid>)
+            default:
+                // Check if it's a reference verification (format: reference_<uuid>)
+                if (str_starts_with($field, 'reference_')) {
+                    $referenceId = str_replace('reference_', '', $field);
+                    $reference = $person->references?->where('id', $referenceId)->first();
+                    if ($reference) {
+                        $oldStatus = $reference->status;
+                        $reference->update([
+                            'status' => $modelStatus,
+                            'verified_at' => $checklistStatus === 'verified' ? now() : null,
+                            'verified_by' => $checklistStatus === 'verified' ? $staffId : null,
+                            'verification_notes' => $rejectionReason,
+                        ]);
+                        $entityUpdated = true;
+                        $entityType = 'reference';
+                        $entityId = $reference->id;
+                    }
+                }
+                // Check if it's a bank account verification (format: bank_account_<uuid>)
+                elseif (str_starts_with($field, 'bank_account_')) {
+                    $bankAccountId = str_replace('bank_account_', '', $field);
+                    $bankAccount = $person->bankAccounts?->where('id', $bankAccountId)->first();
+                    if ($bankAccount) {
+                        $oldStatus = $bankAccount->is_verified ? 'VERIFIED' : 'PENDING';
+                        $bankAccount->update([
+                            'is_verified' => $checklistStatus === 'verified',
+                            'verified_at' => $checklistStatus === 'verified' ? now() : null,
+                            'verified_by' => $checklistStatus === 'verified' ? $staffId : null,
+                        ]);
+                        $entityUpdated = true;
+                        $entityType = 'bank_account';
+                        $entityId = $bankAccount->id;
+                    }
+                }
+                // Check if it's an identification by type (format: identification_<TYPE>)
+                elseif (str_starts_with($field, 'identification_')) {
+                    $identType = str_replace('identification_', '', $field);
+                    $identification = $person->identifications?->where('type', strtoupper($identType))->where('is_current', true)->first();
+                    if ($identification) {
+                        $oldStatus = $identification->status;
+                        $identification->update([
+                            'status' => $modelStatus,
+                            'verified_at' => $checklistStatus === 'verified' ? now() : null,
+                            'verified_by' => $checklistStatus === 'verified' ? $staffId : null,
+                            'verification_method' => $method,
+                        ]);
+                        $entityUpdated = true;
+                        $entityType = 'identification';
+                        $entityId = $identification->id;
+                    }
+                }
+                break;
+        }
+
+        // Record history entry if entity was updated
+        if ($entityUpdated && $oldStatus !== $modelStatus) {
+            $actionLabel = match ($checklistStatus) {
+                'verified' => 'verificado',
+                'rejected' => 'rechazado',
+                'pending' => 'pendiente',
+                default => 'actualizado',
+            };
+
+            $fieldLabel = match ($entityType) {
+                'employment' => 'Información laboral',
+                'address' => 'Dirección',
+                'income' => 'Ingresos',
+                'reference' => 'Referencia',
+                'bank_account' => 'Cuenta bancaria',
+                'identification' => match ($field) {
+                    'curp' => 'CURP',
+                    'rfc' => 'RFC',
+                    'ine', 'ine_clave' => 'INE',
+                    default => 'Identificación',
+                },
+                'person' => match ($field) {
+                    'first_name' => 'Nombre',
+                    'last_name_1' => 'Apellido paterno',
+                    'last_name_2' => 'Apellido materno',
+                    'birth_date' => 'Fecha de nacimiento',
+                    'gender' => 'Género',
+                    'nationality' => 'Nacionalidad',
+                    'birth_state' => 'Estado de nacimiento',
+                    'birth_country' => 'País de nacimiento',
+                    default => 'Datos personales',
+                },
+                default => ucfirst($field),
+            };
+
+            ApplicationStatusHistory::create([
+                'application_id' => $application->id,
+                'from_status' => 'ENTITY_VERIFICATION',
+                'to_status' => 'ENTITY_VERIFICATION',
+                'changed_by' => $staffId,
+                'changed_by_type' => StaffAccount::class,
+                'notes' => "{$fieldLabel} {$actionLabel}" . ($rejectionReason ? ": {$rejectionReason}" : ''),
+                'metadata' => [
+                    'action' => 'entity_verification',
+                    'entity_type' => $entityType,
+                    'entity_id' => $entityId,
+                    'field' => $field,
+                    'old_status' => $oldStatus,
+                    'new_status' => $modelStatus,
+                    'method' => $method,
+                    'rejection_reason' => $rejectionReason,
+                ],
+                'created_at' => now(),
+            ]);
+        }
+    }
+
+    /**
+     * Update Person KYC status based on verification state.
+     *
+     * Checks if all critical fields are verified (via DataVerification table)
+     * and updates Person.kyc_status accordingly.
+     */
+    private function updatePersonKycStatusIfNeeded(Person $person, string $checklistStatus, string $staffId): void
+    {
+        // If rejecting any field, mark KYC as rejected
+        if ($checklistStatus === 'rejected') {
+            if ($person->kyc_status !== Person::KYC_REJECTED) {
+                $person->updateKycStatus(Person::KYC_REJECTED, [
+                    'rejection_reason' => 'Manual rejection by staff',
+                    'rejected_at' => now()->toIso8601String(),
+                ], $staffId);
+            }
+            return;
+        }
+
+        // If verifying, check if all critical fields are now verified
+        if ($checklistStatus === 'verified') {
+            $criticalFields = ['curp', 'first_name', 'last_name_1', 'birth_date'];
+
+            $verifiedCount = DataVerification::where('applicant_id', $person->id)
+                ->whereIn('field_name', $criticalFields)
+                ->where('is_verified', true)
+                ->count();
+
+            // If all critical fields are verified, mark KYC as verified
+            if ($verifiedCount >= count($criticalFields)) {
+                if ($person->kyc_status !== Person::KYC_VERIFIED) {
+                    $person->updateKycStatus(Person::KYC_VERIFIED, [
+                        'verified_at' => now()->toIso8601String(),
+                        'method' => 'manual_staff_verification',
+                    ], $staffId);
+                }
+            } else {
+                // Some fields verified but not all - mark as in progress
+                if ($person->kyc_status === Person::KYC_PENDING) {
+                    $person->updateKycStatus(Person::KYC_IN_PROGRESS);
+                }
+            }
+        }
+    }
+
+    /**
      * Get field verifications for an application.
      *
      * Combines DataVerification records and verification_checklist fallback.
@@ -1693,24 +1993,31 @@ class ApplicationController extends Controller
             ];
         }
 
-        // Fallback to verification_checklist if no DataVerification records
-        if (empty($fieldVerifications)) {
-            $checklist = $app->verification_checklist ?? [];
-            foreach ($checklist as $field => $info) {
-                $method = $info['method'] ?? null;
-                $isVerified = ($info['status'] ?? '') === 'verified';
-                $fieldVerifications[$field] = [
-                    'status' => strtoupper($info['status'] ?? 'pending'),
-                    'verified' => $isVerified,
-                    'method' => $method,
-                    'method_label' => $this->getMethodLabel($method),
-                    'rejection_reason' => $info['rejection_reason'] ?? null,
-                    'notes' => $info['notes'] ?? null,
-                    'verified_at' => $info['verified_at'] ?? null,
-                    'verified_by' => $info['verified_by'] ?? null,
-                    'is_locked' => $isVerified && $method && in_array(strtoupper($method), $lockedMethods),
-                ];
+        // Also include verification_checklist entries for fields NOT in DataVerification
+        // This handles manual verifications (employment, address, references, bank_accounts)
+        $checklist = $app->verification_checklist ?? [];
+        foreach ($checklist as $field => $info) {
+            // Skip if already have a DataVerification record for this field
+            if (isset($fieldVerifications[$field])) {
+                continue;
             }
+
+            $method = $info['method'] ?? null;
+            $status = strtolower($info['status'] ?? 'pending');
+            $isVerified = $status === 'verified';
+            $isRejected = $status === 'rejected';
+
+            $fieldVerifications[$field] = [
+                'status' => strtoupper($status),
+                'verified' => $isVerified,
+                'method' => $method,
+                'method_label' => $this->getMethodLabel($method),
+                'rejection_reason' => $info['rejection_reason'] ?? null,
+                'notes' => $info['notes'] ?? null,
+                'verified_at' => $info['verified_at'] ?? null,
+                'verified_by' => $info['verified_by'] ?? null,
+                'is_locked' => $isVerified && $method && in_array(strtoupper($method), $lockedMethods),
+            ];
         }
 
         return $fieldVerifications;
@@ -1885,6 +2192,7 @@ class ApplicationController extends Controller
 
         $application = Application::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
+            ->with(['person.employments', 'person.addresses', 'person.references', 'person.bankAccounts', 'person.identifications'])
             ->first();
 
         if (!$application) {
@@ -1910,6 +2218,16 @@ class ApplicationController extends Controller
 
         $application->verification_checklist = $checklist;
         $application->save();
+
+        // Sync verification status to related model (employment, address, references, bank_accounts)
+        $this->syncVerificationStatusToRelatedModel(
+            $application,
+            $validated['field'],
+            $newStatus,
+            $validated['method'] ?? null,
+            $validated['rejection_reason'] ?? null,
+            $staff->id
+        );
 
         // Change application status to CORRECTIONS_PENDING if data was rejected
         $oldAppStatus = $application->status;
