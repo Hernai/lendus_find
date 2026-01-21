@@ -1164,7 +1164,13 @@ class ApplicationController extends Controller
             'created_at' => now(),
         ]);
 
-        return $this->success(null, 'Documento aprobado.');
+        // Check if all verifications are complete to auto-advance status
+        $statusChanged = $this->checkAndAdvanceStatus($application, $staff);
+
+        return $this->success([
+            'application_status_changed' => $statusChanged,
+            'new_application_status' => $application->status,
+        ], 'Documento aprobado.');
     }
 
     /**
@@ -2069,6 +2075,118 @@ class ApplicationController extends Controller
     }
 
     /**
+     * Check if all verifications are complete and update status if needed.
+     *
+     * When all data fields are verified (not rejected/pending) and all documents
+     * are approved (not rejected/pending), automatically move the application
+     * from CORRECTIONS_PENDING or DOCS_PENDING back to IN_REVIEW.
+     *
+     * @param Application $app
+     * @param StaffAccount $staff
+     * @return bool True if status was changed
+     */
+    private function checkAndAdvanceStatus(Application $app, StaffAccount $staff): bool
+    {
+        // Only auto-advance from these statuses
+        $autoAdvanceFrom = [
+            Application::STATUS_CORRECTIONS_PENDING,
+            Application::STATUS_DOCS_PENDING,
+        ];
+
+        if (!in_array($app->status, $autoAdvanceFrom)) {
+            return false;
+        }
+
+        // Check for rejected fields in verification_checklist
+        $checklist = $app->verification_checklist ?? [];
+        $hasRejectedFields = false;
+        $hasPendingFields = false;
+
+        foreach ($checklist as $fieldData) {
+            $status = strtolower($fieldData['status'] ?? 'pending');
+            if ($status === 'rejected') {
+                $hasRejectedFields = true;
+                break;
+            }
+            if ($status === 'pending') {
+                $hasPendingFields = true;
+            }
+        }
+
+        if ($hasRejectedFields) {
+            return false;
+        }
+
+        // Check for rejected/pending documents (both from application and person)
+        $hasRejectedDocs = Document::where(function ($q) use ($app) {
+                $q->where(function ($q2) use ($app) {
+                    $q2->where('documentable_type', Application::class)
+                        ->where('documentable_id', $app->id);
+                })->orWhere(function ($q2) use ($app) {
+                    if ($app->person_id) {
+                        $q2->where('documentable_type', Person::class)
+                            ->where('documentable_id', $app->person_id);
+                    }
+                });
+            })
+            ->where('status', \App\Enums\DocumentStatus::REJECTED)
+            ->whereNull('replaced_at')
+            ->exists();
+
+        if ($hasRejectedDocs) {
+            return false;
+        }
+
+        // Check for pending documents (not approved yet)
+        $hasPendingDocs = Document::where(function ($q) use ($app) {
+                $q->where(function ($q2) use ($app) {
+                    $q2->where('documentable_type', Application::class)
+                        ->where('documentable_id', $app->id);
+                })->orWhere(function ($q2) use ($app) {
+                    if ($app->person_id) {
+                        $q2->where('documentable_type', Person::class)
+                            ->where('documentable_id', $app->person_id);
+                    }
+                });
+            })
+            ->where('status', \App\Enums\DocumentStatus::PENDING)
+            ->whereNull('replaced_at')
+            ->exists();
+
+        // If there are no rejected items and no pending documents, advance the status
+        // Note: We allow pending fields (fields that haven't been manually verified yet)
+        // because not all fields are required to be manually verified
+        if (!$hasRejectedDocs && !$hasPendingDocs) {
+            $oldStatus = $app->status;
+
+            // Move to IN_REVIEW
+            if ($app->canTransitionTo(Application::STATUS_IN_REVIEW)) {
+                $app->status = Application::STATUS_IN_REVIEW;
+                $app->save();
+
+                // Record status change
+                ApplicationStatusHistory::create([
+                    'application_id' => $app->id,
+                    'from_status' => $oldStatus,
+                    'to_status' => Application::STATUS_IN_REVIEW,
+                    'changed_by' => $staff->id,
+                    'changed_by_type' => StaffAccount::class,
+                    'notes' => 'Verificaciones completadas, solicitud lista para revisión',
+                    'metadata' => [
+                        'action' => 'auto_status_advance',
+                        'trigger' => 'verifications_complete',
+                    ],
+                    'created_at' => now(),
+                ]);
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Get all documents for an application.
      *
      * Combines documents from application and person (avoiding duplicates).
@@ -2266,7 +2384,7 @@ class ApplicationController extends Controller
             'created_at' => now(),
         ]);
 
-        // Record application status change if it happened
+        // Record application status change if it happened (rejection)
         if ($statusChanged) {
             ApplicationStatusHistory::create([
                 'application_id' => $application->id,
@@ -2282,6 +2400,15 @@ class ApplicationController extends Controller
                 ],
                 'created_at' => now(),
             ]);
+        }
+
+        // If verifying (not rejecting), check if all verifications are complete
+        // to auto-advance status from CORRECTIONS_PENDING/DOCS_PENDING to IN_REVIEW
+        if ($validated['action'] === 'verify') {
+            $autoAdvanced = $this->checkAndAdvanceStatus($application, $staff);
+            if ($autoAdvanced) {
+                $statusChanged = true;
+            }
         }
 
         return $this->success([
