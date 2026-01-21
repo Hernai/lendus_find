@@ -94,6 +94,11 @@ class CorrectionController extends Controller
         $validated = $request->validate([
             'field_name' => 'required|string|max:100',
             'new_value' => 'required',
+            'geolocation' => 'nullable|array',
+            'geolocation.latitude' => 'nullable|numeric|between:-90,90',
+            'geolocation.longitude' => 'nullable|numeric|between:-180,180',
+            'geolocation.accuracy' => 'nullable|numeric|min:0',
+            'geolocation.timestamp' => 'nullable|numeric',
         ]);
 
         $account = $request->user();
@@ -131,6 +136,29 @@ class CorrectionController extends Controller
             foreach ($pendingApplications as $application) {
                 $this->addCorrectionToHistory($application, $fieldName, $oldValue, $newValue, $account);
 
+                // Build metadata with geolocation if available
+                $geolocation = $validated['geolocation'] ?? null;
+                $metadata = [
+                    'action' => 'data_corrected',
+                    'event_type' => 'DATA_CORRECTED',
+                    'field_name' => $fieldName,
+                    'field_label' => $this->getFieldLabel($fieldName),
+                    'old_value' => $this->formatValueForDisplay($oldValue),
+                    'new_value' => $this->formatValueForDisplay($newValue),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ];
+
+                // Add geolocation if provided
+                if ($geolocation) {
+                    $metadata['geolocation'] = [
+                        'latitude' => $geolocation['latitude'] ?? null,
+                        'longitude' => $geolocation['longitude'] ?? null,
+                        'accuracy' => $geolocation['accuracy'] ?? null,
+                        'timestamp' => $geolocation['timestamp'] ?? null,
+                    ];
+                }
+
                 // Add timeline entry via ApplicationStatusHistory
                 ApplicationStatusHistory::create([
                     'application_id' => $application->id,
@@ -139,16 +167,7 @@ class CorrectionController extends Controller
                     'changed_by' => $account->id,
                     'changed_by_type' => ApplicantAccount::class,
                     'notes' => "Dato corregido: {$this->getFieldLabel($fieldName)}",
-                    'metadata' => [
-                        'action' => 'data_corrected',
-                        'event_type' => 'DATA_CORRECTED',
-                        'field_name' => $fieldName,
-                        'field_label' => $this->getFieldLabel($fieldName),
-                        'old_value' => $this->formatValueForDisplay($oldValue),
-                        'new_value' => $this->formatValueForDisplay($newValue),
-                        'ip_address' => $request->ip(),
-                        'user_agent' => $request->userAgent(),
-                    ],
+                    'metadata' => $metadata,
                     'created_at' => now(),
                 ]);
             }

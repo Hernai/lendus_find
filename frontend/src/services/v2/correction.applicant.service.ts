@@ -102,9 +102,17 @@ export interface CorrectionDetailResponse {
   rejected_by: string | null
 }
 
+export interface Geolocation {
+  latitude: number
+  longitude: number
+  accuracy?: number
+  timestamp?: number
+}
+
 export interface SubmitCorrectionPayload {
   field_name: string
   new_value: unknown
+  geolocation?: Geolocation
 }
 
 export interface SubmitCorrectionResponse {

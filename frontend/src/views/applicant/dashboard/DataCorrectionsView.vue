@@ -15,6 +15,44 @@ const router = useRouter()
 const tenantStore = useTenantStore()
 const profileStore = useProfileStore()
 
+// Geolocation helper
+interface GeoPosition {
+  latitude: number
+  longitude: number
+  accuracy?: number
+  timestamp?: number
+}
+
+const getCurrentPosition = (): Promise<GeoPosition | null> => {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      log.warn('Geolocation not supported by browser')
+      resolve(null)
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          timestamp: position.timestamp
+        })
+      },
+      (error) => {
+        log.warn('Geolocation error:', error.message)
+        resolve(null) // Don't fail if geolocation is denied
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000
+      }
+    )
+  })
+}
+
 interface RejectedField {
   id: string
   field_name: string
@@ -359,6 +397,9 @@ const submitSectionCorrection = async (sectionId: string) => {
     const section = groupedSections.value.find(s => s.id === sectionId)
     if (!section) return
 
+    // Get geolocation before submitting (non-blocking)
+    const geolocation = await getCurrentPosition()
+
     // Get the form data for this section
     const sectionFormData = formData[sectionId as keyof typeof formData]
 
@@ -370,7 +411,8 @@ const submitSectionCorrection = async (sectionId: string) => {
       if (rejectedField) {
         await v2.applicant.correction.submit({
           field_name: rejectedField.field_name,
-          new_value: formData.nombre // Enviar todos los campos de nombre
+          new_value: formData.nombre, // Enviar todos los campos de nombre
+          geolocation: geolocation || undefined
         })
       }
     } else if (sectionId === 'identidad') {
@@ -380,7 +422,8 @@ const submitSectionCorrection = async (sectionId: string) => {
         const newValue = formData.identidad[fieldKey]
         await v2.applicant.correction.submit({
           field_name: field.field_name,
-          new_value: newValue
+          new_value: newValue,
+          geolocation: geolocation || undefined
         })
       }
     } else if (sectionId === 'contacto') {
@@ -390,18 +433,21 @@ const submitSectionCorrection = async (sectionId: string) => {
         const newValue = formData.contacto[fieldKey]
         await v2.applicant.correction.submit({
           field_name: field.field_name,
-          new_value: newValue
+          new_value: newValue,
+          geolocation: geolocation || undefined
         })
       }
     } else if (sectionId === 'direccion') {
       await v2.applicant.correction.submit({
         field_name: 'address',
-        new_value: formData.direccion
+        new_value: formData.direccion,
+        geolocation: geolocation || undefined
       })
     } else if (sectionId === 'empleo') {
       await v2.applicant.correction.submit({
         field_name: 'employment',
-        new_value: formData.empleo
+        new_value: formData.empleo,
+        geolocation: geolocation || undefined
       })
     }
 

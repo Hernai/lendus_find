@@ -175,6 +175,29 @@ interface Application {
       new_value?: string
       changes?: Record<string, string>
       reason?: string
+      field_name?: string
+      field_label?: string
+      event_type?: string
+      action?: string
+      document_type?: string
+      document_type_label?: string
+      step_number?: number
+      step_label?: string
+      changed_fields?: string[]
+      bank_name?: string
+      reference_type?: string
+      employment_type?: string
+      postal_code?: string
+      score?: number
+      is_valid?: boolean
+      matched?: boolean
+      geolocation?: {
+        latitude?: number
+        longitude?: number
+        accuracy?: number
+        timestamp?: number
+      }
+      [key: string]: unknown
     }
   }[]
   signature?: {
@@ -654,7 +677,8 @@ const fetchApplication = async () => {
           'BANK_ACCOUNT_VERIFICATION',
           'NOTE_ADDED',
           'ASSIGNMENT',
-          'COUNTER_OFFER'
+          'COUNTER_OFFER',
+          'DATA_CORRECTED'
         ]
 
         // Handle special action entries (non-status changes)
@@ -667,7 +691,8 @@ const fetchApplication = async () => {
             created_at: h.created_at || h.timestamp || new Date().toISOString(),
             metadata: {
               ip_address: h.ip_address,
-              user_agent: h.user_agent
+              user_agent: h.user_agent,
+              ...h.metadata
             }
           }
         }
@@ -683,7 +708,8 @@ const fetchApplication = async () => {
           created_at: h.created_at || h.timestamp || new Date().toISOString(),
           metadata: {
             ip_address: h.ip_address,
-            user_agent: h.user_agent
+            user_agent: h.user_agent,
+            ...h.metadata
           }
         }
       }) || [],
@@ -3680,7 +3706,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Technical Details -->
-          <div v-if="selectedTimelineEvent.metadata?.ip_address || selectedTimelineEvent.metadata?.user_agent" class="border border-gray-200 rounded-xl overflow-hidden">
+          <div v-if="selectedTimelineEvent.metadata?.ip_address || selectedTimelineEvent.metadata?.user_agent || selectedTimelineEvent.metadata?.geolocation" class="border border-gray-200 rounded-xl overflow-hidden">
             <div class="bg-gray-100 px-4 py-2 border-b border-gray-200">
               <div class="flex items-center gap-2">
                 <svg class="h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3697,6 +3723,26 @@ onUnmounted(() => {
               <div v-if="selectedTimelineEvent.metadata?.location" class="flex items-center justify-between">
                 <span class="text-xs text-gray-500">Ubicación</span>
                 <span class="text-sm text-gray-700">{{ selectedTimelineEvent.metadata.location }}</span>
+              </div>
+              <div v-if="selectedTimelineEvent.metadata?.geolocation" class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs text-gray-500">Coordenadas GPS</span>
+                  <a
+                    :href="`https://www.google.com/maps?q=${selectedTimelineEvent.metadata.geolocation.latitude},${selectedTimelineEvent.metadata.geolocation.longitude}`"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-sm font-mono text-primary-600 hover:text-primary-800 bg-primary-50 px-2 py-0.5 rounded flex items-center gap-1"
+                  >
+                    {{ selectedTimelineEvent.metadata.geolocation.latitude?.toFixed(6) }}, {{ selectedTimelineEvent.metadata.geolocation.longitude?.toFixed(6) }}
+                    <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                </div>
+                <div v-if="selectedTimelineEvent.metadata.geolocation.accuracy" class="flex items-center justify-between">
+                  <span class="text-xs text-gray-500">Precisión</span>
+                  <span class="text-sm text-gray-700">± {{ Math.round(selectedTimelineEvent.metadata.geolocation.accuracy) }} metros</span>
+                </div>
               </div>
               <div v-if="selectedTimelineEvent.metadata?.user_agent" class="flex items-center justify-between">
                 <span class="text-xs text-gray-500">Dispositivo</span>
