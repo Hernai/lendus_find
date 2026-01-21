@@ -1197,14 +1197,26 @@ class ApplicationController extends Controller
             return $this->notFound('Documento no encontrado.');
         }
 
-        $oldStatus = $document->status;
+        $oldDocStatus = $document->status;
         $document->status = 'REJECTED';
         $document->rejection_reason = $validated['reason'];
         $document->reviewed_at = now();
         $document->reviewed_by = $staff->id;
         $document->save();
 
-        // Record history
+        // Change application status to DOCS_PENDING if not already
+        $oldAppStatus = $application->status;
+        $statusChanged = false;
+        if ($application->status !== Application::STATUS_DOCS_PENDING) {
+            // Only change status if transition is allowed
+            if ($application->canTransitionTo(Application::STATUS_DOCS_PENDING)) {
+                $application->status = Application::STATUS_DOCS_PENDING;
+                $application->save();
+                $statusChanged = true;
+            }
+        }
+
+        // Record document rejection history
         ApplicationStatusHistory::create([
             'application_id' => $application->id,
             'from_status' => 'DOCUMENT_REVIEW',
@@ -1216,7 +1228,7 @@ class ApplicationController extends Controller
                 'action' => 'document_rejected',
                 'document_id' => $document->id,
                 'document_type' => $document->type,
-                'old_status' => $oldStatus,
+                'old_status' => $oldDocStatus,
                 'new_status' => 'REJECTED',
                 'reason' => $validated['reason'],
                 'comment' => $validated['comment'] ?? null,
@@ -1224,7 +1236,29 @@ class ApplicationController extends Controller
             'created_at' => now(),
         ]);
 
-        return $this->success(null, 'Documento rechazado.');
+        // Record application status change if it happened
+        if ($statusChanged) {
+            ApplicationStatusHistory::create([
+                'application_id' => $application->id,
+                'from_status' => $oldAppStatus,
+                'to_status' => Application::STATUS_DOCS_PENDING,
+                'changed_by' => $staff->id,
+                'changed_by_type' => StaffAccount::class,
+                'notes' => "Solicitud movida a documentos pendientes por rechazo de documento '{$document->type}'",
+                'metadata' => [
+                    'action' => 'status_change',
+                    'trigger' => 'document_rejected',
+                    'document_id' => $document->id,
+                    'document_type' => $document->type,
+                ],
+                'created_at' => now(),
+            ]);
+        }
+
+        return $this->success([
+            'application_status_changed' => $statusChanged,
+            'new_application_status' => $application->status,
+        ], 'Documento rechazado.');
     }
 
     /**
@@ -1877,6 +1911,18 @@ class ApplicationController extends Controller
         $application->verification_checklist = $checklist;
         $application->save();
 
+        // Change application status to CORRECTIONS_PENDING if data was rejected
+        $oldAppStatus = $application->status;
+        $statusChanged = false;
+        if ($validated['action'] === 'reject' && $application->status !== Application::STATUS_CORRECTIONS_PENDING) {
+            // Only change status if transition is allowed
+            if ($application->canTransitionTo(Application::STATUS_CORRECTIONS_PENDING)) {
+                $application->status = Application::STATUS_CORRECTIONS_PENDING;
+                $application->save();
+                $statusChanged = true;
+            }
+        }
+
         // Record history entry for verification change
         ApplicationStatusHistory::create([
             'application_id' => $application->id,
@@ -1902,7 +1948,28 @@ class ApplicationController extends Controller
             'created_at' => now(),
         ]);
 
-        return $this->success(null, 'Dato verificado.');
+        // Record application status change if it happened
+        if ($statusChanged) {
+            ApplicationStatusHistory::create([
+                'application_id' => $application->id,
+                'from_status' => $oldAppStatus,
+                'to_status' => Application::STATUS_CORRECTIONS_PENDING,
+                'changed_by' => $staff->id,
+                'changed_by_type' => StaffAccount::class,
+                'notes' => "Solicitud movida a correcciones pendientes por rechazo de campo '{$validated['field']}'",
+                'metadata' => [
+                    'action' => 'status_change',
+                    'trigger' => 'data_rejected',
+                    'field' => $validated['field'],
+                ],
+                'created_at' => now(),
+            ]);
+        }
+
+        return $this->success([
+            'application_status_changed' => $statusChanged,
+            'new_application_status' => $application->status,
+        ], 'Dato ' . ($validated['action'] === 'verify' ? 'verificado' : ($validated['action'] === 'reject' ? 'rechazado' : 'actualizado')) . '.');
     }
 
     // =========================================================================
