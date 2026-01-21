@@ -6,6 +6,9 @@ enum VerificationMethod: string
 {
     case MANUAL = 'MANUAL';
     case OTP = 'OTP';
+    case OTP_SMS = 'OTP_SMS';
+    case OTP_WHATSAPP = 'OTP_WHATSAPP';
+    case OTP_EMAIL = 'OTP_EMAIL';
     case API = 'API';
     case DOCUMENT = 'DOCUMENT';
     case BUREAU = 'BUREAU';
@@ -26,6 +29,9 @@ enum VerificationMethod: string
         return match ($this) {
             self::MANUAL => 'Manual',
             self::OTP => 'OTP',
+            self::OTP_SMS => 'OTP SMS',
+            self::OTP_WHATSAPP => 'OTP WhatsApp',
+            self::OTP_EMAIL => 'OTP Email',
             self::API => 'API',
             self::DOCUMENT => 'Documento',
             self::BUREAU => 'Buró de crédito',
@@ -50,6 +56,9 @@ enum VerificationMethod: string
     {
         return in_array($this, [
             self::OTP, // Phone verified by OTP should be locked
+            self::OTP_SMS,
+            self::OTP_WHATSAPP,
+            self::OTP_EMAIL,
             self::KYC_INE_OCR,
             self::KYC_INE_LIST,
             self::KYC_CURP_RENAPO,

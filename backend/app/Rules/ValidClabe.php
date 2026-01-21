@@ -4,7 +4,6 @@ namespace App\Rules;
 
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
-use App\Models\BankAccount;
 
 /**
  * Custom validation rule for Mexican CLABE (Clave Bancaria Estandarizada).
@@ -14,6 +13,11 @@ use App\Models\BankAccount;
  */
 class ValidClabe implements ValidationRule
 {
+    /**
+     * CLABE validation weights.
+     */
+    private const WEIGHTS = [3, 7, 1, 3, 7, 1, 3, 7, 1, 3, 7, 1, 3, 7, 1, 3, 7];
+
     /**
      * Run the validation rule.
      *
@@ -27,9 +31,25 @@ class ValidClabe implements ValidationRule
             return;
         }
 
-        // Validate using model's method
-        if (!BankAccount::validateClabe($value)) {
+        // Validate check digit
+        if (!$this->validateCheckDigit($value)) {
             $fail('La :attribute tiene un dígito verificador inválido.');
         }
+    }
+
+    /**
+     * Validate CLABE check digit using the weighted sum algorithm.
+     */
+    private function validateCheckDigit(string $clabe): bool
+    {
+        $sum = 0;
+        for ($i = 0; $i < 17; $i++) {
+            $digit = (int) $clabe[$i];
+            $product = ($digit * self::WEIGHTS[$i]) % 10;
+            $sum += $product;
+        }
+
+        $checkDigit = (10 - ($sum % 10)) % 10;
+        return $checkDigit === (int) $clabe[17];
     }
 }

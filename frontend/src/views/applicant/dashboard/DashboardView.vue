@@ -269,6 +269,10 @@ const startNewApplication = () => {
   localStorage.removeItem('current_application_id')
   localStorage.removeItem('pending_application')
 
+  // Set flag to indicate this is intentionally a new application
+  // This prevents OnboardingLayout from loading existing drafts
+  localStorage.setItem('start_new_application', 'true')
+
   // Reset onboarding store data
   onboardingStore.reset()
 

@@ -293,10 +293,10 @@ class PersonService
         return DB::transaction(function () use ($primary, $secondary) {
             // Move all related records from secondary to primary
             $secondary->identifications()->update(['person_id' => $primary->id]);
-            $secondary->addresses()->update(['person_id' => $primary->id]);
+            $secondary->addresses()->update(['entity_id' => $primary->id]);
             $secondary->employments()->update(['person_id' => $primary->id]);
             $secondary->references()->update(['person_id' => $primary->id]);
-            $secondary->bankAccounts()->update(['owner_id' => $primary->id]);
+            $secondary->bankAccounts()->update(['entity_id' => $primary->id]);
 
             // If secondary has account and primary doesn't, transfer it
             if ($secondary->account_id && !$primary->account_id) {

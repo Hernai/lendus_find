@@ -2,7 +2,6 @@
 import { ref, computed, onMounted, onUnmounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { AppButton } from '@/components/common'
-import { api } from '@/services/api'
 import { v2 } from '@/services/v2'
 import { useTenantStore } from '@/stores/tenant'
 import { useProfileStore } from '@/stores/profile'
@@ -21,29 +20,29 @@ interface RejectedField {
   field_name: string
   field_label: string
   current_value: string
-  rejection_reason: string
-  rejected_at: string
+  rejection_reason: string | null
+  rejected_at: string | null
 }
 
 interface ApplicantData {
   first_name: string
   last_name_1: string
-  last_name_2: string
-  curp: string
-  rfc: string
-  ine_clave: string
-  birth_date: string
-  phone: string
-  email: string
+  last_name_2: string | null
+  curp: string | null
+  rfc: string | null
+  ine_clave: string | null
+  birth_date: string | null
+  phone: string | null
+  email: string | null
   address: {
     street: string
     ext_number: string
-    int_number: string
+    int_number: string | null
     neighborhood: string
     postal_code: string
     municipality: string
     state: string
-  }
+  } | null
   employment: {
     type: string
     company_name: string
@@ -63,23 +62,23 @@ interface Section {
 }
 
 interface CorrectionHistoryEntry {
-  field_name: string
+  field_name: string | null
   field_label: string
   old_value: unknown
   new_value: unknown
   rejection_reason: string | null
   corrected_by: { id: string; name: string } | null
-  corrected_at: string
+  corrected_at: string | null
 }
 
 interface RejectedDocument {
   id: string
-  application_id: string
+  application_id: string | null
   type: string
   type_label: string
   name: string
-  rejection_reason: string
-  rejected_at: string
+  rejection_reason: string | null
+  rejected_at: string | null
   isUploading?: boolean
   uploadError?: string
   uploadSuccess?: boolean
@@ -208,8 +207,20 @@ const loadCorrections = async () => {
   error.value = null
 
   try {
-    const response = await api.get<{ data: CorrectionsData }>('/corrections')
-    correctionsData.value = response.data.data
+    const response = await v2.applicant.correction.index()
+    if (response.success && response.data) {
+      correctionsData.value = response.data
+    } else {
+      // Handle empty response
+      correctionsData.value = {
+        rejected_fields: [],
+        rejected_documents: [],
+        correction_history: [],
+        applicant_data: undefined,
+        pending_applications: [],
+        has_corrections_pending: false,
+      }
+    }
 
     // Initialize form data with current values
     if (correctionsData.value?.applicant_data) {
@@ -337,7 +348,7 @@ const submitSectionCorrection = async (sectionId: string) => {
       // El backend identificará qué campo específico fue rechazado y actualizará todos
       const rejectedField = section.rejectedFields[0]
       if (rejectedField) {
-        await api.post('/corrections', {
+        await v2.applicant.correction.submit({
           field_name: rejectedField.field_name,
           new_value: formData.nombre // Enviar todos los campos de nombre
         })
@@ -347,7 +358,7 @@ const submitSectionCorrection = async (sectionId: string) => {
       for (const field of section.rejectedFields) {
         const fieldKey = field.field_name as keyof typeof formData.identidad
         const newValue = formData.identidad[fieldKey]
-        await api.post('/corrections', {
+        await v2.applicant.correction.submit({
           field_name: field.field_name,
           new_value: newValue
         })
@@ -357,18 +368,18 @@ const submitSectionCorrection = async (sectionId: string) => {
       for (const field of section.rejectedFields) {
         const fieldKey = field.field_name as keyof typeof formData.contacto
         const newValue = formData.contacto[fieldKey]
-        await api.post('/corrections', {
+        await v2.applicant.correction.submit({
           field_name: field.field_name,
           new_value: newValue
         })
       }
     } else if (sectionId === 'direccion') {
-      await api.post('/corrections', {
+      await v2.applicant.correction.submit({
         field_name: 'address',
         new_value: formData.direccion
       })
     } else if (sectionId === 'empleo') {
-      await api.post('/corrections', {
+      await v2.applicant.correction.submit({
         field_name: 'employment',
         new_value: formData.empleo
       })

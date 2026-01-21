@@ -59,16 +59,6 @@ class NubariumService extends BaseExternalApiService
     }
 
     /**
-     * Set the applicant context for API logging.
-     */
-    public function forApplicant(?string $applicantId): static
-    {
-        parent::forApplicant($applicantId);
-        $this->facade->forApplicant($applicantId);
-        return $this;
-    }
-
-    /**
      * Set the application context for API logging.
      */
     public function forApplication(?string $applicationId): static
@@ -85,6 +75,16 @@ class NubariumService extends BaseExternalApiService
     {
         parent::forUser($userId);
         $this->facade->forUser($userId);
+        return $this;
+    }
+
+    /**
+     * Set the entity context for API logging (Person or Company).
+     */
+    public function forEntity($entity): static
+    {
+        parent::forEntity($entity);
+        $this->facade->forEntity($entity);
         return $this;
     }
 

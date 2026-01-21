@@ -2,18 +2,16 @@
 
 namespace App\Traits;
 
-use App\Models\User;
+use App\Models\StaffAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Auth;
 
 /**
  * Trait to automatically populate audit fields (created_by, updated_by, deleted_by)
- * based on the currently authenticated user.
+ * based on the currently authenticated staff user.
  *
- * Note: Audit fields reference the `users` table. When a StaffAccount is authenticated
- * (via sanctum guard), we skip setting these fields since StaffAccount IDs are not
- * in the users table.
+ * Note: Audit fields reference the `staff_accounts` table.
  *
  * Usage: Add this trait to any model that has audit fields.
  *
@@ -28,8 +26,7 @@ use Illuminate\Support\Facades\Auth;
 trait HasAuditFields
 {
     /**
-     * Check if the authenticated user is from the users table.
-     * Staff accounts use a different table so we cannot use their IDs.
+     * Get the authenticated staff account ID for audit fields.
      */
     protected static function getAuditUserId(): ?string
     {
@@ -39,9 +36,8 @@ trait HasAuditFields
 
         $user = Auth::user();
 
-        // Only set audit fields if user is from the User model
-        // StaffAccount, ApplicantAccount are different tables
-        if ($user instanceof User) {
+        // Only set audit fields if user is a StaffAccount
+        if ($user instanceof StaffAccount) {
             return $user->id;
         }
 
@@ -82,27 +78,27 @@ trait HasAuditFields
     }
 
     /**
-     * Get the user who created this record.
+     * Get the staff who created this record.
      */
     public function creator(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'created_by');
+        return $this->belongsTo(StaffAccount::class, 'created_by');
     }
 
     /**
-     * Get the user who last updated this record.
+     * Get the staff who last updated this record.
      */
     public function updater(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'updated_by');
+        return $this->belongsTo(StaffAccount::class, 'updated_by');
     }
 
     /**
-     * Get the user who deleted this record.
+     * Get the staff who deleted this record.
      */
     public function deleter(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'deleted_by');
+        return $this->belongsTo(StaffAccount::class, 'deleted_by');
     }
 
     /**

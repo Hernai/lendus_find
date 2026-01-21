@@ -25,6 +25,7 @@ interface Applicant {
   phone: string
   curp: string
   rfc: string
+  ine_clave?: string
   birth_date: string
   nationality: string
   gender: string
@@ -96,7 +97,8 @@ const personalFields = computed(() => [
   { key: 'phone', label: 'Teléfono', value: formatPhone(props.applicant.phone) },
   { key: 'curp', label: 'CURP', value: props.applicant.curp },
   { key: 'rfc', label: 'RFC', value: props.applicant.rfc },
-  { key: 'birth_date', label: 'Nacimiento', value: formatDate(props.applicant.birth_date) },
+  { key: 'ine_clave', label: 'Clave INE', value: props.applicant.ine_clave || '' },
+  { key: 'birth_date', label: 'Fecha Nacimiento', value: formatDate(props.applicant.birth_date) },
 ])
 
 // Address display

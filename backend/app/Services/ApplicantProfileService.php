@@ -7,12 +7,12 @@ use App\Enums\Gender;
 use App\Enums\MaritalStatus;
 use App\Models\ApplicantAccount;
 use App\Models\Person;
-use App\Models\PersonAddress;
-use App\Models\PersonBankAccount;
+use App\Models\Address;
+use App\Models\BankAccount;
 use App\Models\PersonEmployment;
 use App\Models\PersonReference;
-use App\Services\Person\PersonAddressService;
-use App\Services\Person\PersonBankAccountService;
+use App\Services\Person\AddressService;
+use App\Services\Person\BankAccountService;
 use App\Services\Person\PersonEmploymentService;
 use App\Services\Person\PersonIdentificationService;
 use App\Services\Person\PersonReferenceService;
@@ -35,9 +35,9 @@ class ApplicantProfileService
     public function __construct(
         protected PersonService $personService,
         protected PersonIdentificationService $identificationService,
-        protected PersonAddressService $addressService,
+        protected AddressService $addressService,
         protected PersonEmploymentService $employmentService,
-        protected PersonBankAccountService $bankAccountService,
+        protected BankAccountService $bankAccountService,
         protected PersonReferenceService $referenceService
     ) {}
 
@@ -50,8 +50,20 @@ class ApplicantProfileService
      */
     public function getOrCreatePerson(ApplicantAccount $account): Person
     {
+        // First try the direct relationship (person_id on account)
         if ($account->person) {
             return $account->person;
+        }
+
+        // Fallback: check if there's a Person with this account_id
+        // (handles case where person_id wasn't properly synced back)
+        $existingPerson = Person::where('account_id', $account->id)->first();
+        if ($existingPerson) {
+            // Sync the person_id back to account if missing
+            if (!$account->person_id) {
+                $account->update(['person_id' => $existingPerson->id]);
+            }
+            return $existingPerson;
         }
 
         return DB::transaction(function () use ($account) {
@@ -240,7 +252,7 @@ class ApplicantProfileService
     /**
      * Update or create home address.
      */
-    public function updateAddress(Person $person, array $data): PersonAddress
+    public function updateAddress(Person $person, array $data): Address
     {
         return DB::transaction(function () use ($person, $data) {
             $addressData = [
@@ -272,7 +284,7 @@ class ApplicantProfileService
     /**
      * Get current home address.
      */
-    public function getAddress(Person $person): ?PersonAddress
+    public function getAddress(Person $person): ?Address
     {
         return $this->addressService->getCurrentHome($person->id);
     }
@@ -331,7 +343,7 @@ class ApplicantProfileService
     /**
      * Update or create primary bank account.
      */
-    public function updateBankAccount(Person $person, array $data): PersonBankAccount
+    public function updateBankAccount(Person $person, array $data): BankAccount
     {
         return DB::transaction(function () use ($person, $data) {
             $bankData = [
@@ -351,7 +363,7 @@ class ApplicantProfileService
     /**
      * Get primary bank account.
      */
-    public function getBankAccount(Person $person): ?PersonBankAccount
+    public function getBankAccount(Person $person): ?BankAccount
     {
         return $this->bankAccountService->getPrimary($person->id);
     }
@@ -462,7 +474,7 @@ class ApplicantProfileService
         ];
     }
 
-    private function formatAddress(?PersonAddress $address): ?array
+    private function formatAddress(?Address $address): ?array
     {
         if (!$address) {
             return null;
@@ -536,7 +548,7 @@ class ApplicantProfileService
         return 0;
     }
 
-    private function formatBankAccount(?PersonBankAccount $account): ?array
+    private function formatBankAccount(?BankAccount $account): ?array
     {
         if (!$account) {
             return null;

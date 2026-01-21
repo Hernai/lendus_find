@@ -3,18 +3,17 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Application status history model.
  *
- * Tracks all status changes for an application with who made the change.
+ * Tracks all status changes for Application records.
  */
 class ApplicationStatusHistory extends Model
 {
-    use HasFactory, HasUuids;
+    use HasUuids;
 
     protected $table = 'application_status_history';
 
@@ -36,56 +35,91 @@ class ApplicationStatusHistory extends Model
         'created_at' => 'datetime',
     ];
 
-    protected static function boot()
-    {
-        parent::boot();
-
-        static::creating(function ($model) {
-            if (!$model->created_at) {
-                $model->created_at = now();
-            }
-        });
-    }
-
-    // =====================================================
-    // Relationships
-    // =====================================================
-
+    /**
+     * Get the application this history belongs to.
+     */
     public function application(): BelongsTo
     {
-        return $this->belongsTo(ApplicationV2::class, 'application_id');
+        return $this->belongsTo(Application::class, 'application_id');
     }
 
-    // =====================================================
-    // Accessors
-    // =====================================================
-
-    public function getFromStatusLabelAttribute(): ?string
+    /**
+     * Get the user who made this change (polymorphic).
+     */
+    public function changedBy(): BelongsTo
     {
-        return $this->from_status ? (ApplicationV2::statuses()[$this->from_status] ?? $this->from_status) : null;
+        if ($this->changed_by_type === StaffAccount::class || $this->changed_by_type === 'staff_accounts') {
+            return $this->belongsTo(StaffAccount::class, 'changed_by');
+        }
+
+        if ($this->changed_by_type === ApplicantAccount::class || $this->changed_by_type === 'applicant_accounts') {
+            return $this->belongsTo(ApplicantAccount::class, 'changed_by');
+        }
+
+        // Fallback to staff
+        return $this->belongsTo(StaffAccount::class, 'changed_by');
     }
 
-    public function getToStatusLabelAttribute(): string
-    {
-        return ApplicationV2::statuses()[$this->to_status] ?? $this->to_status;
-    }
-
+    /**
+     * Get the name of who made the change.
+     */
     public function getChangedByNameAttribute(): ?string
     {
         if (!$this->changed_by) {
             return 'Sistema';
         }
 
-        if ($this->changed_by_type === StaffAccount::class) {
-            $staff = StaffAccount::find($this->changed_by);
-            return $staff?->profile?->full_name ?? $staff?->email;
+        $user = $this->changedBy;
+        if ($user instanceof StaffAccount) {
+            return $user->profile?->full_name ?? $user->email;
+        }
+        if ($user instanceof ApplicantAccount) {
+            return $user->person?->full_name ?? $user->email;
         }
 
-        if ($this->changed_by_type === ApplicantAccount::class) {
-            $account = ApplicantAccount::find($this->changed_by);
-            return $account?->person?->full_name ?? 'Solicitante';
-        }
+        return 'Usuario';
+    }
 
-        return null;
+    /**
+     * Get status label for from_status.
+     */
+    public function getFromStatusLabelAttribute(): ?string
+    {
+        if (!$this->from_status) {
+            return null;
+        }
+        return Application::statuses()[$this->from_status] ?? $this->from_status;
+    }
+
+    /**
+     * Get status label for to_status.
+     */
+    public function getToStatusLabelAttribute(): string
+    {
+        return Application::statuses()[$this->to_status] ?? $this->to_status;
+    }
+
+    /**
+     * Create a history entry for a status change.
+     */
+    public static function record(
+        Application $application,
+        ?string $fromStatus,
+        string $toStatus,
+        ?string $changedById = null,
+        ?string $changedByType = null,
+        ?string $notes = null,
+        ?array $metadata = null
+    ): self {
+        return static::create([
+            'application_id' => $application->id,
+            'from_status' => $fromStatus,
+            'to_status' => $toStatus,
+            'changed_by' => $changedById,
+            'changed_by_type' => $changedByType,
+            'notes' => $notes,
+            'metadata' => $metadata,
+            'created_at' => now(),
+        ]);
     }
 }

@@ -500,6 +500,7 @@ const fetchApplication = async () => {
         phone: person.contact.phone || '',
         curp: person.identifications.curp || '',
         rfc: person.identifications.rfc || '',
+        ine_clave: person.identifications.ine_clave || '',
         birth_date: person.personal_data.birth_date || '',
         nationality: person.personal_data.nationality || '',
         gender: person.personal_data.gender || ''
@@ -513,6 +514,7 @@ const fetchApplication = async () => {
         phone: company.contact.phone || '',
         curp: '',
         rfc: company.rfc || '',
+        ine_clave: '',
         birth_date: '',
         nationality: '',
         gender: ''
@@ -526,6 +528,7 @@ const fetchApplication = async () => {
         phone: '',
         curp: '',
         rfc: '',
+        ine_clave: '',
         birth_date: '',
         nationality: '',
         gender: ''
@@ -627,7 +630,23 @@ const fetchApplication = async () => {
         created_at: n.created_at
       })),
       timeline: workflow?.status_history?.map((h, idx) => {
-        // Map special action types
+        // Check if this is a lifecycle event (new format from backend)
+        if (h.is_lifecycle_event) {
+          return {
+            id: String(idx),
+            action: h.event_type || 'LIFECYCLE_EVENT',
+            description: h.notes || h.event_label || h.event_type || 'Evento',
+            author: h.changed_by || 'Sistema',
+            created_at: h.created_at || new Date().toISOString(),
+            metadata: {
+              ip_address: h.ip_address,
+              user_agent: h.user_agent,
+              ...h.metadata
+            }
+          }
+        }
+
+        // Map special action types (legacy format)
         const actionTypes = [
           'DATA_VERIFICATION',
           'DOCUMENT_REVIEW',
@@ -645,7 +664,11 @@ const fetchApplication = async () => {
             action: h.from_status,
             description: h.notes || h.from_status,
             author: h.changed_by || 'Sistema',
-            created_at: h.created_at || h.timestamp || new Date().toISOString()
+            created_at: h.created_at || h.timestamp || new Date().toISOString(),
+            metadata: {
+              ip_address: h.ip_address,
+              user_agent: h.user_agent
+            }
           }
         }
 
@@ -654,10 +677,14 @@ const fetchApplication = async () => {
           id: String(idx),
           action: 'STATUS_CHANGE',
           description: h.to_status
-            ? `Estado cambiado de ${h.from_status || 'N/A'} a ${h.to_status}${h.notes ? `: ${h.notes}` : ''}`
+            ? `Estado cambiado de ${h.from_status_label || h.from_status || 'N/A'} a ${h.to_status_label || h.to_status}${h.notes ? `: ${h.notes}` : ''}`
             : `Estado cambiado a ${h.status}${h.reason ? `: ${h.reason}` : ''}`,
           author: h.changed_by || 'Sistema',
-          created_at: h.created_at || h.timestamp || new Date().toISOString()
+          created_at: h.created_at || h.timestamp || new Date().toISOString(),
+          metadata: {
+            ip_address: h.ip_address,
+            user_agent: h.user_agent
+          }
         }
       }) || [],
       signature: {
@@ -676,7 +703,14 @@ const fetchApplication = async () => {
         address_verified: personAddress?.verification_status === 'VERIFIED',
         employment_verified: personEmployment?.verification_status === 'VERIFIED'
       },
-      field_verifications: verification?.fields || {}
+      field_verifications: (() => {
+        const fields = verification?.fields || {}
+        // Map ine_document_front verification to ine_clave for display
+        if (fields.ine_document_front && !fields.ine_clave) {
+          fields.ine_clave = fields.ine_document_front
+        }
+        return fields
+      })()
     }
   } catch (e) {
     log.error('Error al cargar solicitud', { error: e })
@@ -1134,12 +1168,21 @@ const allDocuments = computed(() => {
   return result
 })
 
+// Check if product requires signature
+const requiresSignature = computed(() => {
+  const requiredDocs = application.value?.required_documents ?? []
+  return requiredDocs.some((doc: { type: string } | string) => {
+    const docType = typeof doc === 'string' ? doc : doc.type
+    return docType === 'SIGNATURE'
+  })
+})
+
 // Completeness calculation
 const completenessItems = computed(() => {
   if (!application.value) return []
 
   const c = application.value.completeness
-  return [
+  const items = [
     { label: 'Datos personales', complete: c.personal_data, icon: 'user' },
     { label: 'Domicilio', complete: c.address, icon: 'home' },
     { label: 'Empleo', complete: c.employment, icon: 'briefcase' },
@@ -1155,8 +1198,14 @@ const completenessItems = computed(() => {
       partial: c.references.count >= 2 && c.references.verified < 2,
       icon: 'users'
     },
-    { label: 'Firma digital', complete: c.signature, icon: 'pencil' }
   ]
+
+  // Only add signature if product requires it
+  if (requiresSignature.value) {
+    items.push({ label: 'Firma digital', complete: c.signature, icon: 'pencil' })
+  }
+
+  return items
 })
 
 const completenessPercent = computed(() => {
@@ -1164,15 +1213,21 @@ const completenessPercent = computed(() => {
 
   const c = application.value.completeness
   let completed = 0
+  let total = 5 // Base: personal_data, address, employment, documents, references
 
   if (c.personal_data) completed++
   if (c.address) completed++
   if (c.employment) completed++
   if (c.documents.approved >= c.documents.required) completed++
   if (c.references.verified >= 2) completed++
-  if (c.signature) completed++
 
-  return Math.round((completed / 6) * 100)
+  // Only count signature if product requires it
+  if (requiresSignature.value) {
+    total++
+    if (c.signature) completed++
+  }
+
+  return Math.round((completed / total) * 100)
 })
 
 const completenessColor = computed(() => {
@@ -2342,6 +2397,77 @@ onUnmounted(() => {
                       Verificado automáticamente - No modificable
                     </p>
                   </div>
+                  <!-- Clave INE -->
+                  <div class="group relative">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span
+                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
+                        :class="isFieldRejected('ine_clave') ? 'bg-red-500' : isFieldVerified('ine_clave') ? 'bg-green-500' : isFieldPending('ine_clave') ? 'bg-yellow-500' : application.applicant.ine_clave ? 'bg-blue-500' : 'bg-gray-300'"
+                      ></span>
+                      <span class="text-xs text-gray-500">Clave INE</span>
+                      <svg v-if="isFieldLocked('ine_clave')" class="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20" title="Verificado por KYC - No modificable">
+                        <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
+                      </svg>
+                      <div v-if="application.applicant.ine_clave && !isFieldLocked('ine_clave')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
+                        <button
+                          v-if="!isFieldVerified('ine_clave') && !isFieldRejected('ine_clave')"
+                          class="p-0.5 rounded hover:bg-green-100 text-gray-400 hover:text-green-600"
+                          :disabled="isVerifyingData"
+                          title="Verificar dato"
+                          @click="verifyData('ine_clave', 'verify')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <button
+                          v-if="isFieldVerified('ine_clave')"
+                          class="p-0.5 rounded hover:bg-gray-100 text-green-600"
+                          :disabled="isVerifyingData"
+                          title="Quitar verificación"
+                          @click="verifyData('ine_clave', 'unverify')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                          </svg>
+                        </button>
+                        <button
+                          v-if="!isFieldRejected('ine_clave')"
+                          class="p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600"
+                          :disabled="isVerifyingData"
+                          title="Rechazar dato"
+                          @click="openRejectDataModal('ine_clave')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <button
+                          v-if="isFieldRejected('ine_clave')"
+                          class="p-0.5 rounded hover:bg-gray-100 text-red-600"
+                          :disabled="isVerifyingData"
+                          title="Quitar rechazo"
+                          @click="openUnverifyModal('ine_clave')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div v-if="isFieldLocked('ine_clave')" class="ml-auto">
+                        <span class="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                          {{ getFieldVerification('ine_clave')?.method_label || 'KYC' }}
+                        </span>
+                      </div>
+                    </div>
+                    <p class="font-mono text-sm text-gray-900">{{ application.applicant.ine_clave || '—' }}</p>
+                    <p v-if="isFieldRejected('ine_clave')" class="text-xs text-red-600 mt-0.5">
+                      ⚠ {{ getFieldVerification('ine_clave')?.rejection_reason }}
+                    </p>
+                    <p v-if="isFieldLocked('ine_clave')" class="text-[10px] text-gray-500 mt-0.5">
+                      Verificado automáticamente - No modificable
+                    </p>
+                  </div>
                   <!-- Fecha Nacimiento -->
                   <div class="group relative">
                     <div class="flex items-center gap-1.5 mb-0.5">
@@ -2650,8 +2776,8 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <!-- Signature -->
-            <div class="border border-gray-200 rounded-lg">
+            <!-- Signature - only show if product requires it or if user already signed -->
+            <div v-if="requiresSignature || application.signature?.has_signed" class="border border-gray-200 rounded-lg">
               <div class="bg-gray-50 px-3 py-2 border-b border-gray-200">
                 <h3 class="text-sm font-semibold text-gray-900">Firma Digital</h3>
               </div>
@@ -3492,6 +3618,64 @@ onUnmounted(() => {
                 <span class="text-xs font-medium text-gray-500 uppercase">Fecha y Hora</span>
               </div>
               <p class="text-sm font-medium text-gray-900">{{ formatDateTime(selectedTimelineEvent.created_at) }}</p>
+            </div>
+          </div>
+
+          <!-- Event-Specific Details -->
+          <div v-if="selectedTimelineEvent.metadata?.document_type || selectedTimelineEvent.metadata?.step_number || selectedTimelineEvent.metadata?.changed_fields || selectedTimelineEvent.metadata?.bank_name || selectedTimelineEvent.metadata?.reference_type || selectedTimelineEvent.metadata?.employment_type || selectedTimelineEvent.metadata?.postal_code || selectedTimelineEvent.metadata?.score !== undefined" class="border border-blue-200 rounded-xl overflow-hidden">
+            <div class="bg-blue-50 px-4 py-2 border-b border-blue-200">
+              <div class="flex items-center gap-2">
+                <svg class="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="text-xs font-semibold text-blue-600 uppercase">Detalles del Evento</span>
+              </div>
+            </div>
+            <div class="p-4 space-y-3">
+              <div v-if="selectedTimelineEvent.metadata?.document_type" class="flex items-center justify-between">
+                <span class="text-xs text-gray-500">Tipo de Documento</span>
+                <span class="text-sm text-gray-700">{{ selectedTimelineEvent.metadata.document_type_label || selectedTimelineEvent.metadata.document_type }}</span>
+              </div>
+              <div v-if="selectedTimelineEvent.metadata?.step_number" class="flex items-center justify-between">
+                <span class="text-xs text-gray-500">Paso</span>
+                <span class="text-sm text-gray-700">{{ selectedTimelineEvent.metadata.step_number }}{{ selectedTimelineEvent.metadata.step_label ? ` - ${selectedTimelineEvent.metadata.step_label}` : '' }}</span>
+              </div>
+              <div v-if="selectedTimelineEvent.metadata?.changed_fields?.length" class="flex items-start justify-between">
+                <span class="text-xs text-gray-500">Campos Actualizados</span>
+                <span class="text-sm text-gray-700 text-right">{{ selectedTimelineEvent.metadata.changed_fields.join(', ') }}</span>
+              </div>
+              <div v-if="selectedTimelineEvent.metadata?.bank_name" class="flex items-center justify-between">
+                <span class="text-xs text-gray-500">Banco</span>
+                <span class="text-sm text-gray-700">{{ selectedTimelineEvent.metadata.bank_name }}</span>
+              </div>
+              <div v-if="selectedTimelineEvent.metadata?.reference_type" class="flex items-center justify-between">
+                <span class="text-xs text-gray-500">Tipo de Referencia</span>
+                <span class="text-sm text-gray-700">{{ selectedTimelineEvent.metadata.reference_type }}</span>
+              </div>
+              <div v-if="selectedTimelineEvent.metadata?.employment_type" class="flex items-center justify-between">
+                <span class="text-xs text-gray-500">Tipo de Empleo</span>
+                <span class="text-sm text-gray-700">{{ selectedTimelineEvent.metadata.employment_type }}</span>
+              </div>
+              <div v-if="selectedTimelineEvent.metadata?.postal_code" class="flex items-center justify-between">
+                <span class="text-xs text-gray-500">Código Postal</span>
+                <span class="text-sm font-mono text-gray-700">{{ selectedTimelineEvent.metadata.postal_code }}</span>
+              </div>
+              <div v-if="selectedTimelineEvent.metadata?.is_valid !== undefined" class="flex items-center justify-between">
+                <span class="text-xs text-gray-500">Validación</span>
+                <span :class="['text-sm font-medium', selectedTimelineEvent.metadata.is_valid ? 'text-green-600' : 'text-red-600']">
+                  {{ selectedTimelineEvent.metadata.is_valid ? 'Válido' : 'Inválido' }}
+                </span>
+              </div>
+              <div v-if="selectedTimelineEvent.metadata?.matched !== undefined" class="flex items-center justify-between">
+                <span class="text-xs text-gray-500">Coincidencia</span>
+                <span :class="['text-sm font-medium', selectedTimelineEvent.metadata.matched ? 'text-green-600' : 'text-red-600']">
+                  {{ selectedTimelineEvent.metadata.matched ? 'Sí' : 'No' }}
+                </span>
+              </div>
+              <div v-if="selectedTimelineEvent.metadata?.score !== undefined" class="flex items-center justify-between">
+                <span class="text-xs text-gray-500">Score</span>
+                <span class="text-sm font-medium text-gray-700">{{ selectedTimelineEvent.metadata.score }}%</span>
+              </div>
             </div>
           </div>
 

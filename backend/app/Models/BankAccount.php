@@ -3,219 +3,153 @@
 namespace App\Models;
 
 use App\Enums\BankAccountType;
-use App\Enums\BankAccountUsageType;
-use App\Enums\BankVerificationMethod;
-use App\Traits\HasAuditFields;
 use App\Traits\HasTenant;
-use App\Traits\HasUuid;
-use App\Traits\NormalizesText;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
+/**
+ * Bank account for disbursement/collection.
+ *
+ * Bank accounts are used for loan disbursement and payment collection.
+ * Supports polymorphic ownership (person or company) via entity_type/entity_id.
+ *
+ * @property string $id
+ * @property string $tenant_id
+ * @property string $entity_type
+ * @property string $entity_id
+ * @property string $bank_name
+ * @property string|null $bank_code
+ * @property string $clabe
+ * @property string|null $account_number_last4
+ * @property string|null $card_number_last4
+ * @property string $account_type
+ * @property string $currency
+ * @property string $holder_name
+ * @property string|null $holder_rfc
+ * @property bool $is_primary
+ * @property bool $is_for_disbursement
+ * @property bool $is_for_collection
+ * @property bool $is_verified
+ * @property \Carbon\Carbon|null $verified_at
+ * @property string|null $verified_by
+ * @property string|null $verification_method
+ * @property array|null $verification_data
+ * @property string $status
+ * @property string|null $notes
+ * @property array|null $metadata
+ * @property \Carbon\Carbon|null $created_at
+ * @property \Carbon\Carbon|null $updated_at
+ * @property \Carbon\Carbon|null $deleted_at
+ * @property string|null $created_by
+ * @property string|null $updated_by
+ *
+ * @property-read string $masked_clabe
+ * @property-read string $account_type_label
+ * @property-read string $status_label
+ *
+ * @property-read Tenant $tenant
+ * @property-read Person|Company $entity
+ * @property-read StaffAccount|null $verifier
+ */
 class BankAccount extends Model
 {
-    use HasFactory, HasUuid, HasTenant, SoftDeletes, HasAuditFields, NormalizesText;
+    use HasFactory, HasUuids, SoftDeletes, HasTenant;
 
-    /**
-     * Fields to convert to uppercase on save.
-     */
-    protected array $uppercaseFields = [
-        'holder_name',
-        'holder_rfc',
-    ];
+    protected $table = 'bank_accounts';
+
+    public const STATUS_ACTIVE = 'ACTIVE';
+    public const STATUS_INACTIVE = 'INACTIVE';
+    public const STATUS_CLOSED = 'CLOSED';
+    public const STATUS_FROZEN = 'FROZEN';
 
     protected $fillable = [
         'tenant_id',
-        'applicant_id',
-        'type',
-        'is_primary',
-        // Bank Info
+        'entity_type',
+        'entity_id',
         'bank_name',
         'bank_code',
-        // Account Details
         'clabe',
-        'account_number',
+        'account_number_last4',
         'card_number_last4',
         'account_type',
-        // Account Holder
+        'currency',
         'holder_name',
         'holder_rfc',
-        'is_own_account',
-        // Verification
+        'is_primary',
+        'is_for_disbursement',
+        'is_for_collection',
         'is_verified',
         'verified_at',
+        'verified_by',
         'verification_method',
-        'verification_reference',
-        // Status
-        'is_active',
-        'deactivated_at',
-        'deactivation_reason',
+        'verification_data',
+        'status',
+        'notes',
+        'metadata',
+        'created_by',
+        'updated_by',
     ];
 
-    protected $casts = [
-        'type' => BankAccountUsageType::class,
-        'account_type' => BankAccountType::class,
-        'verification_method' => BankVerificationMethod::class,
-        'is_primary' => 'boolean',
-        'is_own_account' => 'boolean',
-        'is_verified' => 'boolean',
-        'verified_at' => 'datetime',
-        'is_active' => 'boolean',
-        'deactivated_at' => 'datetime',
-    ];
-
-    /**
-     * Hidden attributes for serialization.
-     */
-    protected $hidden = [
-        'clabe',
-        'account_number',
-    ];
-
-    /**
-     * Mexican bank codes (SPEI).
-     */
-    public const BANKS = [
-        '002' => 'BANAMEX',
-        '012' => 'BBVA MEXICO',
-        '014' => 'SANTANDER',
-        '021' => 'HSBC',
-        '030' => 'BAJIO',
-        '036' => 'INBURSA',
-        '042' => 'MIFEL',
-        '044' => 'SCOTIABANK',
-        '058' => 'BANREGIO',
-        '059' => 'INVEX',
-        '060' => 'BANSI',
-        '062' => 'AFIRME',
-        '072' => 'BANORTE',
-        '106' => 'BANK OF AMERICA',
-        '108' => 'MUFG',
-        '110' => 'JP MORGAN',
-        '112' => 'BMONEX',
-        '113' => 'VE POR MAS',
-        '127' => 'AZTECA',
-        '128' => 'AUTOFIN',
-        '129' => 'BARCLAYS',
-        '130' => 'COMPARTAMOS',
-        '131' => 'BANCO FAMSA',
-        '132' => 'MULTIVA BANCO',
-        '133' => 'ACTINVER',
-        '134' => 'WAL-MART',
-        '135' => 'NAFIN',
-        '136' => 'INTERBANCO',
-        '137' => 'BANCOPPEL',
-        '138' => 'ABC CAPITAL',
-        '139' => 'UBS BANK',
-        '140' => 'CONSUBANCO',
-        '141' => 'VOLKSWAGEN',
-        '143' => 'CIBANCO',
-        '145' => 'BBASE',
-        '147' => 'BANKAOOL',
-        '148' => 'PAGATODO',
-        '150' => 'INMOBILIARIO',
-        '152' => 'BANCREA',
-        '156' => 'SABADELL',
-        '157' => 'SHINHAN',
-        '158' => 'MIZUHO BANK',
-        '159' => 'BANK OF CHINA',
-        '160' => 'BANCO S3',
-        '166' => 'BANSEFI',
-        '168' => 'HIPOTECARIA FEDERAL',
-        '600' => 'MONEXCB',
-        '601' => 'GBM',
-        '602' => 'MASARI',
-        '605' => 'VALUE',
-        '606' => 'ESTRUCTURADORES',
-        '607' => 'TIBER',
-        '608' => 'VECTOR',
-        '610' => 'B&B',
-        '614' => 'ACCIVAL',
-        '615' => 'MERRILL LYNCH',
-        '616' => 'FINAMEX',
-        '617' => 'VALMEX',
-        '618' => 'UNICA',
-        '619' => 'MAPFRE',
-        '620' => 'PROFUTURO',
-        '621' => 'CB ACTINVER',
-        '622' => 'OACTIN',
-        '623' => 'SKANDIA',
-        '626' => 'CBDEUTSCHE',
-        '627' => 'ZURICH',
-        '628' => 'ZURICHVI',
-        '629' => 'SU CASITA',
-        '630' => 'CB INTERCAM',
-        '631' => 'CI BOLSA',
-        '632' => 'BULLTICK CB',
-        '633' => 'STERLING',
-        '634' => 'FINCOMUN',
-        '636' => 'HDI SEGUROS',
-        '637' => 'ORDER',
-        '638' => 'AKALA',
-        '640' => 'CB JPMORGAN',
-        '642' => 'REFORMA',
-        '646' => 'STP',
-        '647' => 'TELECOMM',
-        '648' => 'EVERCORE',
-        '649' => 'SKANDIA',
-        '651' => 'SEGMTY',
-        '652' => 'ASEA',
-        '653' => 'KUSPIT',
-        '655' => 'UNAGRA',
-        '656' => 'SOFIEXPRESS',
-        '659' => 'ASP INTEGRA OPC',
-        '670' => 'LIBERTAD',
-        '901' => 'CLS',
-        '902' => 'INDEVAL',
-        '903' => 'CoDi Valida',
-    ];
-
-    // =========================================================================
-    // RELATIONSHIPS
-    // =========================================================================
-
-    /**
-     * Get the applicant that owns this bank account.
-     */
-    public function applicant(): BelongsTo
+    protected function casts(): array
     {
-        return $this->belongsTo(Applicant::class);
+        return [
+            'verified_at' => 'datetime',
+            'is_primary' => 'boolean',
+            'is_for_disbursement' => 'boolean',
+            'is_for_collection' => 'boolean',
+            'is_verified' => 'boolean',
+            'verification_data' => 'array',
+            'metadata' => 'array',
+        ];
+    }
+
+    // =====================================================
+    // Relationships
+    // =====================================================
+
+    /**
+     * Get the entity that owns this bank account (polymorphic).
+     */
+    public function entity(): MorphTo
+    {
+        return $this->morphTo('entity', 'entity_type', 'entity_id');
     }
 
     /**
-     * Get the tenant.
+     * Get the person if entity is a person.
      */
-    public function tenant(): BelongsTo
+    public function person(): BelongsTo
     {
-        return $this->belongsTo(Tenant::class);
+        return $this->belongsTo(Person::class, 'entity_id');
     }
 
-    // =========================================================================
-    // ACCESSORS
-    // =========================================================================
+    /**
+     * Get the staff who verified this account.
+     */
+    public function verifier(): BelongsTo
+    {
+        return $this->belongsTo(StaffAccount::class, 'verified_by');
+    }
+
+    // =====================================================
+    // Accessors
+    // =====================================================
 
     /**
-     * Get masked CLABE (show only last 4 digits).
+     * Get masked CLABE for display.
      */
     public function getMaskedClabeAttribute(): string
     {
-        if (!$this->clabe) {
-            return '';
+        if (strlen($this->clabe) !== 18) {
+            return $this->clabe;
         }
-        return str_repeat('*', 14) . substr($this->clabe, -4);
-    }
 
-    /**
-     * Get bank name from code.
-     */
-    public function getBankNameFromCodeAttribute(): ?string
-    {
-        if (!$this->bank_code) {
-            return null;
-        }
-        return self::BANKS[$this->bank_code] ?? null;
+        return substr($this->clabe, 0, 4) . '**********' . substr($this->clabe, -4);
     }
 
     /**
@@ -223,42 +157,192 @@ class BankAccount extends Model
      */
     public function getAccountTypeLabelAttribute(): string
     {
-        return $this->account_type?->label() ?? '';
+        $enum = BankAccountType::tryFrom($this->account_type);
+        return $enum?->label() ?? $this->account_type;
+    }
+
+    /**
+     * Get status label.
+     */
+    public function getStatusLabelAttribute(): string
+    {
+        return match ($this->status) {
+            self::STATUS_ACTIVE => 'Activa',
+            self::STATUS_INACTIVE => 'Inactiva',
+            self::STATUS_CLOSED => 'Cerrada',
+            self::STATUS_FROZEN => 'Congelada',
+            default => $this->status,
+        };
+    }
+
+    // =====================================================
+    // Verification Methods
+    // =====================================================
+
+    /**
+     * Mark as verified.
+     */
+    public function markAsVerified(
+        string $method,
+        ?string $verifiedBy = null,
+        ?array $verificationData = null
+    ): void {
+        $this->update([
+            'is_verified' => true,
+            'verified_at' => now(),
+            'verified_by' => $verifiedBy,
+            'verification_method' => $method,
+            'verification_data' => $verificationData,
+        ]);
+    }
+
+    /**
+     * Mark as unverified.
+     */
+    public function markAsUnverified(): void
+    {
+        $this->update([
+            'is_verified' => false,
+            'verified_at' => null,
+            'verified_by' => null,
+            'verification_method' => null,
+            'verification_data' => null,
+        ]);
+    }
+
+    // =====================================================
+    // Status Methods
+    // =====================================================
+
+    /**
+     * Set as primary account.
+     *
+     * Uses a transaction to ensure atomic update of all accounts.
+     */
+    public function setAsPrimary(): void
+    {
+        DB::transaction(function () {
+            // Remove primary from other accounts of same entity
+            self::where('entity_type', $this->entity_type)
+                ->where('entity_id', $this->entity_id)
+                ->where('id', '!=', $this->id)
+                ->update(['is_primary' => false]);
+
+            $this->update(['is_primary' => true]);
+        });
+    }
+
+    /**
+     * Deactivate account.
+     */
+    public function deactivate(): void
+    {
+        $this->update(['status' => self::STATUS_INACTIVE]);
+    }
+
+    /**
+     * Close account.
+     */
+    public function close(): void
+    {
+        $this->update([
+            'status' => self::STATUS_CLOSED,
+            'is_primary' => false,
+        ]);
+    }
+
+    /**
+     * Freeze account.
+     */
+    public function freeze(): void
+    {
+        $this->update(['status' => self::STATUS_FROZEN]);
+    }
+
+    /**
+     * Reactivate account.
+     */
+    public function reactivate(): void
+    {
+        $this->update(['status' => self::STATUS_ACTIVE]);
+    }
+
+    // =====================================================
+    // Status Checks
+    // =====================================================
+
+    /**
+     * Check if account is active.
+     */
+    public function isActive(): bool
+    {
+        return $this->status === self::STATUS_ACTIVE;
+    }
+
+    /**
+     * Check if account can receive disbursement.
+     */
+    public function canReceiveDisbursement(): bool
+    {
+        return $this->is_for_disbursement
+            && $this->isActive()
+            && $this->is_verified;
+    }
+
+    /**
+     * Check if account can be used for collection.
+     */
+    public function canBeUsedForCollection(): bool
+    {
+        return $this->is_for_collection
+            && $this->isActive()
+            && $this->is_verified;
+    }
+
+    // =====================================================
+    // CLABE Validation
+    // =====================================================
+
+    /**
+     * Validate CLABE format and check digit.
+     */
+    public static function isValidClabe(string $clabe): bool
+    {
+        // CLABE must be 18 digits
+        if (!preg_match('/^\d{18}$/', $clabe)) {
+            return false;
+        }
+
+        // Validate check digit (algorithm)
+        $weights = [3, 7, 1, 3, 7, 1, 3, 7, 1, 3, 7, 1, 3, 7, 1, 3, 7];
+        $sum = 0;
+
+        for ($i = 0; $i < 17; $i++) {
+            $sum += ((int) $clabe[$i] * $weights[$i]) % 10;
+        }
+
+        $checkDigit = (10 - ($sum % 10)) % 10;
+
+        return $checkDigit === (int) $clabe[17];
     }
 
     /**
      * Extract bank code from CLABE.
      */
-    public function getBankCodeFromClabeAttribute(): ?string
+    public static function extractBankCode(string $clabe): string
     {
-        if (!$this->clabe || strlen($this->clabe) < 3) {
-            return null;
-        }
-        return substr($this->clabe, 0, 3);
+        return substr($clabe, 0, 3);
     }
 
-    // =========================================================================
-    // SCOPES
-    // =========================================================================
+    // =====================================================
+    // Scopes
+    // =====================================================
 
     /**
-     * Scope to get primary accounts.
-     */
-    public function scopePrimary($query)
-    {
-        return $query->where('is_primary', true);
-    }
-
-    /**
-     * Scope to get active accounts.
-     */
-    public function scopeActive($query)
-    {
-        return $query->where('is_active', true);
-    }
-
-    /**
-     * Scope to get verified accounts.
+     * Scope to verified accounts.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder<BankAccount> $query
+     * @return \Illuminate\Database\Eloquent\Builder<BankAccount>
      */
     public function scopeVerified($query)
     {
@@ -266,70 +350,108 @@ class BankAccount extends Model
     }
 
     /**
-     * Scope by type.
+     * Scope to primary accounts.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder<BankAccount> $query
+     * @return \Illuminate\Database\Eloquent\Builder<BankAccount>
      */
-    public function scopeOfType($query, string $type)
+    public function scopePrimary($query)
     {
-        return $query->where('type', $type);
+        return $query->where('is_primary', true);
     }
 
     /**
-     * Scope for disbursement accounts.
+     * Scope to active accounts.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder<BankAccount> $query
+     * @return \Illuminate\Database\Eloquent\Builder<BankAccount>
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('status', self::STATUS_ACTIVE);
+    }
+
+    /**
+     * Scope to disbursement accounts.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder<BankAccount> $query
+     * @return \Illuminate\Database\Eloquent\Builder<BankAccount>
      */
     public function scopeForDisbursement($query)
     {
-        return $query->whereIn('type', [
-            BankAccountUsageType::DISBURSEMENT->value,
-            BankAccountUsageType::BOTH->value,
-        ]);
+        return $query->where('is_for_disbursement', true);
     }
 
     /**
-     * Scope for payment accounts.
+     * Scope to collection accounts.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder<BankAccount> $query
+     * @return \Illuminate\Database\Eloquent\Builder<BankAccount>
      */
-    public function scopeForPayment($query)
+    public function scopeForCollection($query)
     {
-        return $query->whereIn('type', [
-            BankAccountUsageType::PAYMENT->value,
-            BankAccountUsageType::BOTH->value,
-        ]);
-    }
-
-    // =========================================================================
-    // HELPER METHODS
-    // =========================================================================
-
-    /**
-     * Validate CLABE checksum.
-     */
-    public static function validateClabe(string $clabe): bool
-    {
-        if (strlen($clabe) !== 18 || !ctype_digit($clabe)) {
-            return false;
-        }
-
-        $weights = [3, 7, 1, 3, 7, 1, 3, 7, 1, 3, 7, 1, 3, 7, 1, 3, 7];
-        $sum = 0;
-
-        for ($i = 0; $i < 17; $i++) {
-            $product = (int)$clabe[$i] * $weights[$i];
-            $sum += $product % 10;
-        }
-
-        $checkDigit = (10 - ($sum % 10)) % 10;
-
-        return (int)$clabe[17] === $checkDigit;
+        return $query->where('is_for_collection', true);
     }
 
     /**
-     * Get bank name from CLABE.
+     * Scope by entity.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder<BankAccount> $query
+     * @param string $entityType
+     * @param string $entityId
+     * @return \Illuminate\Database\Eloquent\Builder<BankAccount>
      */
-    public static function getBankFromClabe(string $clabe): ?string
+    public function scopeForEntity($query, string $entityType, string $entityId)
     {
-        if (strlen($clabe) < 3) {
-            return null;
-        }
-        $code = substr($clabe, 0, 3);
-        return self::BANKS[$code] ?? null;
+        return $query->where('entity_type', $entityType)
+            ->where('entity_id', $entityId);
+    }
+
+    // =====================================================
+    // Static Finders
+    // =====================================================
+
+    /**
+     * Find primary account for a person.
+     */
+    public static function findPrimaryForPerson(string $personId): ?self
+    {
+        return self::where('entity_type', 'persons')
+            ->where('entity_id', $personId)
+            ->where('is_primary', true)
+            ->first();
+    }
+
+    /**
+     * Find by CLABE.
+     */
+    public static function findByClabe(string $clabe, string $tenantId): ?self
+    {
+        return self::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenantId)
+            ->where('clabe', $clabe)
+            ->first();
+    }
+
+    /**
+     * Get all accounts for a person.
+     */
+    public static function getForPerson(string $personId): \Illuminate\Database\Eloquent\Collection
+    {
+        return self::where('entity_type', 'persons')
+            ->where('entity_id', $personId)
+            ->orderBy('is_primary', 'desc')
+            ->get();
+    }
+
+    /**
+     * Get all accounts for any entity.
+     */
+    public static function getForEntity(string $entityType, string $entityId): \Illuminate\Database\Eloquent\Collection
+    {
+        return self::where('entity_type', $entityType)
+            ->where('entity_id', $entityId)
+            ->orderBy('is_primary', 'desc')
+            ->get();
     }
 }

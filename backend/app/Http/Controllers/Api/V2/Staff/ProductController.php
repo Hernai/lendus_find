@@ -133,22 +133,6 @@ class ProductController extends Controller
     }
 
     /**
-     * Get a specific product by ID.
-     */
-    public function show(string $id): JsonResponse
-    {
-        $product = Product::withCount('applications')->find($id);
-
-        if (!$product) {
-            return $this->notFound('Producto no encontrado');
-        }
-
-        return $this->success([
-            'product' => $this->formatProduct($product),
-        ]);
-    }
-
-    /**
      * Update a product.
      */
     public function update(Request $request, string $id): JsonResponse

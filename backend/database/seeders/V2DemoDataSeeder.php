@@ -6,8 +6,8 @@ use App\Models\ApplicationStatusHistory;
 use App\Models\ApplicationV2;
 use App\Models\DocumentV2;
 use App\Models\Person;
-use App\Models\PersonAddress;
-use App\Models\PersonBankAccount;
+use App\Models\Address;
+use App\Models\BankAccount;
 use App\Models\PersonEmployment;
 use App\Models\PersonIdentification;
 use App\Models\PersonReference;
@@ -493,7 +493,7 @@ class V2DemoDataSeeder extends Seeder
         // Create home address
         $addressData = $data['address'];
         $yearsAtAddress = $addressData['years_at_address'];
-        PersonAddress::create([
+        Address::create([
             'tenant_id' => $this->tenant->id,
             'person_id' => $person->id,
             'type' => 'HOME',
@@ -550,7 +550,7 @@ class V2DemoDataSeeder extends Seeder
         $clabeBase = $bank['code'] . '180' . str_pad((string) ($index + 1), 11, '0', STR_PAD_LEFT);
         $clabe = $this->calculateClabe($clabeBase);
 
-        PersonBankAccount::create([
+        BankAccount::create([
             'tenant_id' => $this->tenant->id,
             'owner_type' => 'persons',
             'owner_id' => $person->id,

@@ -42,12 +42,12 @@ class PersonResource extends JsonResource
             'current_rfc' => new PersonIdentificationResource($this->whenLoaded('currentRfc')),
             'current_ine' => new PersonIdentificationResource($this->whenLoaded('currentIne')),
             'identifications' => PersonIdentificationResource::collection($this->whenLoaded('identifications')),
-            'current_home_address' => new PersonAddressResource($this->whenLoaded('currentHomeAddress')),
-            'addresses' => PersonAddressResource::collection($this->whenLoaded('addresses')),
+            'current_home_address' => new AddressResource($this->whenLoaded('currentHomeAddress')),
+            'addresses' => AddressResource::collection($this->whenLoaded('addresses')),
             'current_employment' => new PersonEmploymentResource($this->whenLoaded('currentEmployment')),
             'employments' => PersonEmploymentResource::collection($this->whenLoaded('employments')),
-            'primary_bank_account' => new PersonBankAccountResource($this->whenLoaded('primaryBankAccount')),
-            'bank_accounts' => PersonBankAccountResource::collection($this->whenLoaded('bankAccounts')),
+            'primary_bank_account' => new BankAccountResource($this->whenLoaded('primaryBankAccount')),
+            'bank_accounts' => BankAccountResource::collection($this->whenLoaded('bankAccounts')),
             'references' => PersonReferenceResource::collection($this->whenLoaded('references')),
         ];
     }

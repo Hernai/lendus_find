@@ -19,7 +19,6 @@ export {
   applicantDocument as v2ApplicantDocument,
   staffDocument as v2StaffDocument,
   person as v2Person,
-  company as v2Company,
 } from './v2'
 
 // =====================================================

@@ -27,33 +27,6 @@ class SimulatorController extends Controller
     ) {}
 
     /**
-     * Get available products for simulation.
-     *
-     * GET /v2/simulator/products
-     */
-    public function products(): JsonResponse
-    {
-        $products = Product::active()->get()->map(fn($p) => [
-            'id' => $p->id,
-            'name' => $p->name,
-            'type' => $p->type,
-            'description' => $p->description,
-            'icon' => $p->icon,
-            'min_amount' => $p->min_amount,
-            'max_amount' => $p->max_amount,
-            'min_term_months' => $p->min_term_months,
-            'max_term_months' => $p->max_term_months,
-            'annual_rate' => $p->annual_rate,
-            'opening_commission' => $p->opening_commission_rate,
-            'payment_frequencies' => $p->rules['payment_frequencies'] ?? ['MONTHLY'],
-        ]);
-
-        return $this->success([
-            'products' => $products,
-        ]);
-    }
-
-    /**
      * Calculate loan simulation.
      *
      * POST /v2/simulator/calculate
@@ -112,33 +85,4 @@ class SimulatorController extends Controller
         ]);
     }
 
-    /**
-     * Get amortization table.
-     *
-     * POST /v2/simulator/amortization
-     */
-    public function amortization(Request $request): JsonResponse
-    {
-        $validator = Validator::make($request->all(), [
-            'amount' => 'required|numeric|min:1000',
-            'annual_rate' => 'required|numeric|min:0|max:100',
-            'term_months' => 'required|integer|min:1',
-            'payment_frequency' => ['required', Rule::in(PaymentFrequency::values())],
-        ]);
-
-        if ($validator->fails()) {
-            return $this->validationError('Error de validación', $validator->errors()->toArray());
-        }
-
-        $table = $this->loanCalculator->generateAmortizationTable(
-            $request->amount,
-            $request->annual_rate,
-            $request->term_months,
-            $request->payment_frequency
-        );
-
-        return $this->success([
-            'amortization' => $table,
-        ]);
-    }
 }

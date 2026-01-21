@@ -180,6 +180,13 @@ export function useDeviceCapture(options: CaptureOptions = {}): UseCaptureReturn
       canvas.width = width
       canvas.height = height
 
+      // For front camera (selfie), mirror the image horizontally
+      // This matches what the user sees in the preview
+      if (facingMode === 'user') {
+        ctx.translate(width, 0)
+        ctx.scale(-1, 1)
+      }
+
       // Draw video frame to canvas
       ctx.drawImage(videoElement, 0, 0, width, height)
 
@@ -197,6 +204,7 @@ export function useDeviceCapture(options: CaptureOptions = {}): UseCaptureReturn
 
   /**
    * Convert File/Blob to base64 with optional resizing
+   * For selfie mode (facingMode === 'user'), mirrors the image horizontally
    */
   const imageToBase64 = (file: File | Blob): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -229,6 +237,12 @@ export function useDeviceCapture(options: CaptureOptions = {}): UseCaptureReturn
 
           canvas.width = width
           canvas.height = height
+
+          // For front camera (selfie), mirror the image horizontally
+          if (facingMode === 'user') {
+            ctx.translate(width, 0)
+            ctx.scale(-1, 1)
+          }
 
           // Draw image to canvas
           ctx.drawImage(img, 0, 0, width, height)

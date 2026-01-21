@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Helpers\PhoneNormalizer;
+use App\Traits\HasAuditFields;
 use App\Traits\HasTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,7 +11,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -24,7 +23,7 @@ use Laravel\Sanctum\HasApiTokens;
  */
 class ApplicantAccount extends Authenticatable
 {
-    use HasApiTokens, HasFactory, HasUuids, SoftDeletes, HasTenant;
+    use HasApiTokens, HasFactory, HasUuids, SoftDeletes, HasTenant, HasAuditFields;
 
     protected $fillable = [
         'tenant_id',
@@ -83,89 +82,27 @@ class ApplicantAccount extends Authenticatable
     }
 
     /**
-     * Get the legacy Applicant model linked to this account.
+     * Get person with fallback to account_id lookup.
      *
-     * This bridges V2 (ApplicantAccount) with V1 (Applicant) for KYC operations.
-     * Looks up Applicant by phone number from the primary identity, handling
-     * different phone formats (with/without country code).
-     *
-     * Results are cached for 5 minutes to avoid repeated queries.
+     * Use this when you need to reliably get the person, even if
+     * person_id wasn't properly synced back to the account.
      */
-    public function getApplicantAttribute(): ?Applicant
+    public function getPersonOrFind(): ?Person
     {
-        // Use cache to avoid repeated queries during a request
-        $cacheKey = "applicant_account:{$this->id}:applicant";
-
-        return Cache::remember($cacheKey, 300, function () {
-            return $this->findLinkedApplicant();
-        });
-    }
-
-    /**
-     * Find the linked Applicant by phone, email, or CURP.
-     */
-    protected function findLinkedApplicant(): ?Applicant
-    {
-        // First try to find by phone from phone identity
-        $phoneIdentity = $this->phoneIdentity;
-        if ($phoneIdentity) {
-            $normalizedPhone = PhoneNormalizer::normalize($phoneIdentity->identifier);
-
-            if ($normalizedPhone) {
-                $applicant = Applicant::where('tenant_id', $this->tenant_id)
-                    ->where(function ($query) use ($normalizedPhone) {
-                        $query->where('phone', $normalizedPhone)
-                            ->orWhere('phone', '52' . $normalizedPhone)
-                            ->orWhere('phone', '+52' . $normalizedPhone)
-                            ->orWhereRaw("RIGHT(phone, 10) = ?", [$normalizedPhone]);
-                    })
-                    ->first();
-
-                if ($applicant) {
-                    return $applicant;
-                }
-            }
-        }
-
-        // Try email identity
-        $emailIdentity = $this->emailIdentity;
-        if ($emailIdentity) {
-            $applicant = Applicant::where('tenant_id', $this->tenant_id)
-                ->whereRaw('LOWER(email) = ?', [strtolower($emailIdentity->identifier)])
-                ->first();
-
-            if ($applicant) {
-                return $applicant;
-            }
-        }
-
-        // If person is linked, try to find by CURP
+        // First try the direct relationship
         if ($this->person) {
-            $curpIdentification = $this->person->identifications()
-                ->where('type', 'CURP')
-                ->first();
-
-            if ($curpIdentification) {
-                $applicant = Applicant::where('tenant_id', $this->tenant_id)
-                    ->where('curp', $curpIdentification->value)
-                    ->first();
-
-                if ($applicant) {
-                    return $applicant;
-                }
-            }
+            return $this->person;
         }
 
-        return null;
-    }
+        // Fallback: check if there's a Person with this account_id
+        $person = Person::where('account_id', $this->id)->first();
 
-    /**
-     * Clear the cached applicant lookup.
-     * Call this when the applicant relationship may have changed.
-     */
-    public function clearApplicantCache(): void
-    {
-        Cache::forget("applicant_account:{$this->id}:applicant");
+        // Sync the person_id back if found
+        if ($person && !$this->person_id) {
+            $this->update(['person_id' => $person->id]);
+        }
+
+        return $person;
     }
 
     /**

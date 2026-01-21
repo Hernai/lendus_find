@@ -5,13 +5,10 @@ namespace App\Http\Controllers\Api\V2\Applicant;
 use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\V2\Applicant\StoreReferenceRequest;
-use App\Http\Requests\V2\Applicant\UpdateAddressRequest;
-use App\Http\Requests\V2\Applicant\UpdateBankAccountRequest;
-use App\Http\Requests\V2\Applicant\UpdateEmploymentRequest;
-use App\Http\Requests\V2\Applicant\UpdateIdentificationsRequest;
-use App\Http\Requests\V2\Applicant\UpdatePersonalDataRequest;
 use App\Enums\BankAccountType;
-use App\Models\PersonReference;
+use App\Enums\HousingType;
+use App\Models\Application;
+use App\Services\ApplicationEventService;
 use App\Services\ApplicantProfileService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,26 +18,34 @@ use Illuminate\Http\Request;
  *
  * Manages the authenticated applicant's profile data using the Person model.
  * All endpoints are under /api/v2/applicant/profile
- *
- * Design Principles:
- * - Single Responsibility: Only handles HTTP layer, delegates to service
- * - Dependency Inversion: Depends on ApplicantProfileService abstraction
- * - Clean responses: Consistent JSON structure via ApiResponses trait
  */
 class ProfileController extends Controller
 {
     use ApiResponses;
 
     public function __construct(
-        protected ApplicantProfileService $profileService
+        protected ApplicantProfileService $profileService,
+        protected ApplicationEventService $eventService
     ) {}
 
+    /**
+     * Get the current (active) application for the person.
+     * Returns DRAFT or active application if exists.
+     */
+    private function getCurrentApplication($person): ?Application
+    {
+        return Application::where('person_id', $person->id)
+            ->active()
+            ->orderByDesc('created_at')
+            ->first();
+    }
+
     // =========================================================================
-    // Profile Overview
+    // Profile
     // =========================================================================
 
     /**
-     * Get complete profile.
+     * Get applicant profile.
      *
      * GET /api/v2/applicant/profile
      */
@@ -48,23 +53,278 @@ class ProfileController extends Controller
     {
         $account = $request->user();
         $person = $this->profileService->getOrCreatePerson($account);
-        $profile = $this->profileService->getCompleteProfile($person);
 
-        return $this->success($profile);
+        // Load relationships
+        $person->load([
+            'currentHomeAddress',
+            'currentEmployment',
+            'bankAccounts' => fn($q) => $q->orderByDesc('is_primary'),
+            'references',
+            'identifications',
+        ]);
+
+        // Calculate seniority in total months for frontend display
+        $seniorityMonths = null;
+        if ($person->currentEmployment) {
+            $years = $person->currentEmployment->years_employed ?? 0;
+            $months = $person->currentEmployment->months_employed ?? 0;
+            $seniorityMonths = ($years * 12) + $months;
+        }
+
+        // Get primary bank account
+        $primaryBankAccount = $person->bankAccounts->firstWhere('is_primary', true)
+            ?? $person->bankAccounts->first();
+
+        // Calculate profile completeness and missing data
+        $completeness = $this->calculateCompleteness($person);
+        $missingData = $this->getMissingData($person);
+
+        // Get CURP and RFC from person_identifications table
+        $identifications = $person->identifications ?? collect();
+        $curp = $identifications->firstWhere('type', 'CURP')?->identifier_value;
+        $rfc = $identifications->firstWhere('type', 'RFC')?->identifier_value;
+        $ineData = $identifications->firstWhere('type', 'INE');
+
+        return $this->success([
+            'id' => $person->id,
+
+            // Personal data section
+            'personal_data' => [
+                'first_name' => $person->first_name,
+                'last_name_1' => $person->last_name_1,
+                'last_name_2' => $person->last_name_2,
+                'full_name' => $person->full_name,
+                'birth_date' => $person->birth_date?->format('Y-m-d'),
+                'birth_state' => $person->birth_state,
+                'birth_country' => $person->birth_country ?? 'México',
+                'age' => $person->birth_date?->age,
+                'gender' => $person->gender,
+                'gender_label' => $this->getGenderLabel($person->gender),
+                'nationality' => $person->nationality,
+                'marital_status' => $person->marital_status,
+                'marital_status_label' => $this->getMaritalStatusLabel($person->marital_status),
+                'education_level' => $person->education_level,
+                'education_level_label' => $this->getEducationLevelLabel($person->education_level),
+                'dependents_count' => $person->dependents_count,
+            ],
+
+            // Identifications section (from person_identifications table)
+            'identifications' => [
+                'curp' => $curp,
+                'rfc' => $rfc,
+                'ine_clave' => $ineData?->identifier_value,
+                'ine_verified' => $ineData?->verified_at !== null,
+            ],
+
+            // Contact info
+            'contact' => [
+                'email' => $account->email,
+                'phone' => $account->phone,
+            ],
+
+            // Address section
+            'address' => $person->currentHomeAddress ? [
+                'id' => $person->currentHomeAddress->id,
+                'street' => $person->currentHomeAddress->street,
+                'ext_number' => $person->currentHomeAddress->exterior_number,
+                'int_number' => $person->currentHomeAddress->interior_number,
+                'neighborhood' => $person->currentHomeAddress->neighborhood,
+                'municipality' => $person->currentHomeAddress->municipality,
+                'city' => $person->currentHomeAddress->city,
+                'state' => $person->currentHomeAddress->state,
+                'postal_code' => $person->currentHomeAddress->postal_code,
+                'country' => 'México',
+                'housing_type' => $person->currentHomeAddress->housing_type,
+                'years_at_address' => $person->currentHomeAddress->years_at_address,
+                'months_at_address' => $person->currentHomeAddress->months_at_address,
+                'full_address' => $this->formatFullAddress($person->currentHomeAddress),
+                'is_verified' => (bool) $person->currentHomeAddress->verified_at,
+            ] : null,
+
+            // Employment section
+            'employment' => $person->currentEmployment ? [
+                'id' => $person->currentEmployment->id,
+                'employment_type' => $person->currentEmployment->employment_type,
+                'company_name' => $person->currentEmployment->employer_name,
+                'position' => $person->currentEmployment->job_title,
+                'department' => $person->currentEmployment->department,
+                'work_phone' => $person->currentEmployment->employer_phone,
+                'monthly_income' => $person->currentEmployment->monthly_income,
+                'payment_frequency' => $person->currentEmployment->payment_frequency,
+                'years_employed' => $person->currentEmployment->years_employed,
+                'months_employed' => $person->currentEmployment->months_employed,
+                'seniority_months' => $seniorityMonths,
+                'start_date' => $person->currentEmployment->start_date?->format('Y-m-d'),
+                'is_verified' => (bool) $person->currentEmployment->verified_at,
+                'income_verified' => (bool) $person->currentEmployment->income_verified,
+            ] : null,
+
+            // Bank account (primary one for backward compatibility)
+            'bank_account' => $primaryBankAccount ? [
+                'id' => $primaryBankAccount->id,
+                'bank_name' => $primaryBankAccount->bank_name,
+                'bank_code' => $primaryBankAccount->bank_code,
+                'clabe' => $primaryBankAccount->clabe,
+                'clabe_masked' => $this->maskClabe($primaryBankAccount->clabe),
+                'account_number' => null,
+                'holder_name' => $primaryBankAccount->holder_name,
+                'account_type' => $primaryBankAccount->account_type,
+                'is_primary' => (bool) $primaryBankAccount->is_primary,
+                'is_verified' => (bool) ($primaryBankAccount->is_verified ?? false),
+            ] : null,
+
+            // All bank accounts
+            'bank_accounts' => $person->bankAccounts->map(fn($ba) => [
+                'id' => $ba->id,
+                'bank_name' => $ba->bank_name,
+                'bank_code' => $ba->bank_code,
+                'clabe' => $ba->clabe,
+                'clabe_masked' => $this->maskClabe($ba->clabe),
+                'account_number' => null,
+                'holder_name' => $ba->holder_name,
+                'account_type' => $ba->account_type,
+                'is_primary' => (bool) $ba->is_primary,
+                'is_verified' => (bool) ($ba->is_verified ?? false),
+            ])->values(),
+
+            // References
+            'references' => $person->references->map(fn($ref) => [
+                'id' => $ref->id,
+                'type' => $ref->type,
+                'first_name' => $ref->first_name,
+                'last_name_1' => $ref->last_name_1,
+                'last_name_2' => $ref->last_name_2,
+                'full_name' => trim("{$ref->first_name} {$ref->last_name_1} {$ref->last_name_2}"),
+                'phone' => $ref->phone,
+                'relationship' => $ref->relationship,
+                'years_known' => $ref->years_known,
+                'is_verified' => (bool) $ref->verified_at,
+                'verification_status' => $ref->verification_status ?? 'PENDING',
+            ])->values(),
+
+            // Summary and status
+            'profile_completeness' => $completeness,
+            'missing_data' => $missingData,
+            'kyc_status' => $this->getKycStatusString($person),
+            'is_kyc_verified' => $person->isKycVerified(),
+            'has_signature' => $person->signature_date !== null,
+        ]);
     }
 
     /**
-     * Get profile summary (minimal data).
-     *
-     * GET /api/v2/applicant/profile/summary
+     * Get gender label.
      */
-    public function summary(Request $request): JsonResponse
+    private function getGenderLabel(?string $gender): ?string
     {
-        $account = $request->user();
-        $person = $this->profileService->getOrCreatePerson($account);
-        $summary = $this->profileService->getProfileSummary($person);
+        if (!$gender) return null;
+        return match ($gender) {
+            'M' => 'Masculino',
+            'F' => 'Femenino',
+            default => $gender,
+        };
+    }
 
-        return $this->success($summary);
+    /**
+     * Get marital status label.
+     */
+    private function getMaritalStatusLabel(?string $status): ?string
+    {
+        if (!$status) return null;
+        return match ($status) {
+            'SINGLE' => 'Soltero/a',
+            'MARRIED' => 'Casado/a',
+            'DIVORCED' => 'Divorciado/a',
+            'WIDOWED' => 'Viudo/a',
+            'FREE_UNION' => 'Unión libre',
+            'SEPARATED' => 'Separado/a',
+            default => $status,
+        };
+    }
+
+    /**
+     * Get education level label.
+     */
+    private function getEducationLevelLabel(?string $level): ?string
+    {
+        if (!$level) return null;
+        return match ($level) {
+            'NONE' => 'Sin estudios',
+            'PRIMARY' => 'Primaria',
+            'SECONDARY' => 'Secundaria',
+            'HIGH_SCHOOL' => 'Preparatoria',
+            'TECHNICAL' => 'Carrera técnica',
+            'BACHELOR' => 'Licenciatura',
+            'MASTER' => 'Maestría',
+            'DOCTORATE' => 'Doctorado',
+            default => $level,
+        };
+    }
+
+    /**
+     * Format full address string.
+     */
+    private function formatFullAddress($address): string
+    {
+        $parts = [];
+        if ($address->street) {
+            $street = $address->street;
+            if ($address->exterior_number) $street .= ' ' . $address->exterior_number;
+            if ($address->interior_number) $street .= ', Int ' . $address->interior_number;
+            $parts[] = $street;
+        }
+        if ($address->neighborhood) $parts[] = 'Col. ' . $address->neighborhood;
+        if ($address->postal_code) $parts[] = 'CP ' . $address->postal_code;
+        $cityState = trim(($address->municipality ?? $address->city ?? '') . ', ' . ($address->state ?? ''), ', ');
+        if ($cityState) $parts[] = $cityState;
+        return implode(', ', $parts);
+    }
+
+    /**
+     * Get KYC status as string for frontend.
+     */
+    private function getKycStatusString($person): string
+    {
+        if ($person->isKycVerified()) {
+            return 'VERIFIED';
+        }
+        $identifications = $person->identifications ?? collect();
+        if ($identifications->where('is_verified', true)->isNotEmpty()) {
+            return 'PARTIAL';
+        }
+        return 'PENDING';
+    }
+
+    /**
+     * Get list of missing data fields.
+     */
+    private function getMissingData($person): array
+    {
+        $missing = [];
+        if (!$person->first_name) $missing[] = 'first_name';
+        if (!$person->last_name_1) $missing[] = 'last_name_1';
+        if (!$person->birth_date) $missing[] = 'birth_date';
+
+        // Check CURP from identifications
+        $identifications = $person->identifications ?? collect();
+        if (!$identifications->firstWhere('type', 'CURP')?->identifier_value) {
+            $missing[] = 'curp';
+        }
+
+        if (!$person->currentHomeAddress) $missing[] = 'address';
+        if (!$person->currentEmployment) $missing[] = 'employment';
+        if ($person->bankAccounts->isEmpty()) $missing[] = 'bank_account';
+        return $missing;
+    }
+
+    /**
+     * Mask CLABE for display (show only last 4 digits).
+     */
+    private function maskClabe(?string $clabe): ?string
+    {
+        if (!$clabe || strlen($clabe) < 4) {
+            return $clabe;
+        }
+        return str_repeat('*', strlen($clabe) - 4) . substr($clabe, -4);
     }
 
     // =========================================================================
@@ -76,11 +336,42 @@ class ProfileController extends Controller
      *
      * PATCH /api/v2/applicant/profile/personal-data
      */
-    public function updatePersonalData(UpdatePersonalDataRequest $request): JsonResponse
+    public function updatePersonalData(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'first_name' => 'sometimes|string|max:100',
+            'last_name_1' => 'sometimes|string|max:100',
+            'last_name_2' => 'nullable|string|max:100',
+            'birth_date' => 'sometimes|date|before:today',
+            'birth_state' => 'nullable|string|max:50',
+            'birth_country' => 'nullable|string|max:50',
+            'gender' => 'nullable|in:M,F',
+            'nationality' => 'nullable|string|max:50',
+            'marital_status' => 'nullable|string|max:30',
+            'education_level' => 'nullable|string|max:50',
+            'dependents_count' => 'nullable|integer|min:0|max:20',
+        ]);
+
         $account = $request->user();
         $person = $this->profileService->getOrCreatePerson($account);
-        $person = $this->profileService->updatePersonalData($person, $request->validated());
+
+        // Track which fields were changed
+        $changedFields = array_keys(array_filter($validated, fn($value, $key) =>
+            $person->$key !== $value, ARRAY_FILTER_USE_BOTH
+        ));
+
+        $person->update($validated);
+
+        // Record event if there's an active application
+        $application = $this->getCurrentApplication($person);
+        if ($application && !empty($changedFields)) {
+            $this->eventService->recordProfileUpdated(
+                $application,
+                $account->id,
+                $changedFields,
+                $request
+            );
+        }
 
         return $this->success([
             'personal_data' => [
@@ -89,57 +380,143 @@ class ProfileController extends Controller
                 'last_name_2' => $person->last_name_2,
                 'full_name' => $person->full_name,
                 'birth_date' => $person->birth_date?->format('Y-m-d'),
+                'birth_state' => $person->birth_state,
                 'gender' => $person->gender,
+                'nationality' => $person->nationality,
                 'marital_status' => $person->marital_status,
                 'education_level' => $person->education_level,
+                'dependents_count' => $person->dependents_count,
             ],
-            'profile_completeness' => $person->profile_completeness,
-        ], 'Datos personales actualizados');
+            'profile_completeness' => $this->calculateCompleteness($person),
+        ], 'Datos actualizados');
     }
 
-    // =========================================================================
-    // Identifications
-    // =========================================================================
-
     /**
-     * Update identifications (CURP, RFC, INE, Passport).
+     * Update identifications (CURP, RFC, INE).
      *
      * PATCH /api/v2/applicant/profile/identifications
+     *
+     * Saves to person_identifications table instead of persons table.
      */
-    public function updateIdentifications(UpdateIdentificationsRequest $request): JsonResponse
+    public function updateIdentifications(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'curp' => 'sometimes|string|size:18',
+            'rfc' => 'sometimes|string|min:12|max:13',
+            'ine_clave' => 'sometimes|string|max:20',
+            'ine_ocr' => 'sometimes|string|max:20',
+            'ine_folio' => 'sometimes|string|max:20',
+        ]);
+
         $account = $request->user();
         $person = $this->profileService->getOrCreatePerson($account);
 
-        try {
-            $person = $this->profileService->updateIdentifications($person, $request->validated());
-        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
-            $message = $e->getMessage();
+        // Save CURP to person_identifications (preserve verified status if already verified)
+        if (isset($validated['curp'])) {
+            $existingCurp = $person->identifications()->where('type', 'CURP')->first();
+            $isVerified = $existingCurp && $existingCurp->status === 'VERIFIED';
 
-            if (str_contains(strtolower($message), 'curp')) {
-                return $this->validationError('El CURP ya está registrado con otra cuenta', [
-                    'curp' => ['Este CURP ya existe en el sistema'],
-                ]);
-            }
-
-            if (str_contains(strtolower($message), 'rfc')) {
-                return $this->validationError('El RFC ya está registrado con otra cuenta', [
-                    'rfc' => ['Este RFC ya existe en el sistema'],
-                ]);
-            }
-
-            throw $e;
+            $person->identifications()->updateOrCreate(
+                ['type' => 'CURP'],
+                [
+                    'tenant_id' => $account->tenant_id,
+                    'identifier_value' => strtoupper($validated['curp']),
+                    'is_current' => true,
+                    'status' => $isVerified ? 'VERIFIED' : 'PENDING',
+                    'verified_at' => $isVerified ? ($existingCurp->verified_at ?? now()) : null,
+                    'verification_method' => $isVerified ? ($existingCurp->verification_method ?? 'MANUAL') : null,
+                ]
+            );
         }
+
+        // Save RFC to person_identifications (preserve verified status if already verified)
+        if (isset($validated['rfc'])) {
+            $existingRfc = $person->identifications()->where('type', 'RFC')->first();
+            $isVerified = $existingRfc && $existingRfc->status === 'VERIFIED';
+
+            $person->identifications()->updateOrCreate(
+                ['type' => 'RFC'],
+                [
+                    'tenant_id' => $account->tenant_id,
+                    'identifier_value' => strtoupper($validated['rfc']),
+                    'is_current' => true,
+                    'status' => $isVerified ? 'VERIFIED' : 'PENDING',
+                    'verified_at' => $isVerified ? ($existingRfc->verified_at ?? now()) : null,
+                    'verification_method' => $isVerified ? ($existingRfc->verification_method ?? 'MANUAL') : null,
+                ]
+            );
+        }
+
+        // Save INE to person_identifications (preserve verified status if already verified)
+        if (isset($validated['ine_clave'])) {
+            $existingIne = $person->identifications()->where('type', 'INE')->first();
+            $isVerified = $existingIne && $existingIne->status === 'VERIFIED';
+
+            $ineData = [
+                'ocr' => $validated['ine_ocr'] ?? ($existingIne?->document_data['ocr'] ?? null),
+                'folio' => $validated['ine_folio'] ?? ($existingIne?->document_data['folio'] ?? null),
+            ];
+            $person->identifications()->updateOrCreate(
+                ['type' => 'INE'],
+                [
+                    'tenant_id' => $account->tenant_id,
+                    'identifier_value' => strtoupper($validated['ine_clave']),
+                    'document_data' => $ineData,
+                    'is_current' => true,
+                    'status' => $isVerified ? 'VERIFIED' : 'PENDING',
+                    'verified_at' => $isVerified ? ($existingIne->verified_at ?? now()) : null,
+                    'verification_method' => $isVerified ? ($existingIne->verification_method ?? 'MANUAL') : null,
+                ]
+            );
+        }
+
+        // Reload identifications
+        $person->load('identifications');
+        $identifications = $person->identifications;
+        $curp = $identifications->firstWhere('type', 'CURP')?->identifier_value;
+        $rfc = $identifications->firstWhere('type', 'RFC')?->identifier_value;
 
         return $this->success([
             'identifications' => [
-                'curp' => $person->curp,
-                'curp_verified' => $person->currentCurp?->is_verified ?? false,
-                'rfc' => $person->rfc,
-                'rfc_verified' => $person->currentRfc?->is_verified ?? false,
+                'curp' => $curp,
+                'rfc' => $rfc,
             ],
-            'profile_completeness' => $person->profile_completeness,
+            'profile_completeness' => $this->calculateCompleteness($person),
         ], 'Identificaciones actualizadas');
+    }
+
+    /**
+     * Calculate profile completeness percentage.
+     */
+    private function calculateCompleteness($person): int
+    {
+        $total = 8;
+        $filled = 0;
+
+        // Personal data fields
+        if (!empty($person->first_name)) $filled++;
+        if (!empty($person->last_name_1)) $filled++;
+        if (!empty($person->birth_date)) $filled++;
+        if (!empty($person->gender)) $filled++;
+        if (!empty($person->nationality)) $filled++;
+        if (!empty($person->marital_status)) $filled++;
+
+        // Check CURP and RFC from identifications
+        $identifications = $person->identifications ?? collect();
+        if ($identifications->firstWhere('type', 'CURP')?->identifier_value) $filled++;
+        if ($identifications->firstWhere('type', 'RFC')?->identifier_value) $filled++;
+
+        return (int) round(($filled / $total) * 100);
+    }
+
+    /**
+     * Normalize housing type from frontend to database values.
+     * Uses the HousingType enum's normalize method for consistency.
+     */
+    private function normalizeHousingType(string $type): string
+    {
+        $normalized = HousingType::normalize($type);
+        return $normalized?->value ?? $type;
     }
 
     // =========================================================================
@@ -155,17 +532,16 @@ class ProfileController extends Controller
     {
         $account = $request->user();
         $person = $this->profileService->getOrCreatePerson($account);
-        $address = $this->profileService->getAddress($person);
+        $address = $person->currentHomeAddress;
 
         if (!$address) {
-            return $this->success(null, 'No hay dirección registrada');
+            return $this->success(null);
         }
 
         return $this->success([
-            'id' => $address->id,
             'street' => $address->street,
-            'ext_number' => $address->exterior_number,
-            'int_number' => $address->interior_number,
+            'exterior_number' => $address->exterior_number,
+            'interior_number' => $address->interior_number,
             'neighborhood' => $address->neighborhood,
             'municipality' => $address->municipality,
             'city' => $address->city,
@@ -182,22 +558,80 @@ class ProfileController extends Controller
      *
      * PUT /api/v2/applicant/profile/address
      */
-    public function updateAddress(UpdateAddressRequest $request): JsonResponse
+    public function updateAddress(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'street' => 'required|string|max:200',
+            'ext_number' => 'required|string|max:20',
+            'int_number' => 'nullable|string|max:20',
+            'neighborhood' => 'required|string|max:100',
+            'municipality' => 'nullable|string|max:100',
+            'city' => 'nullable|string|max:100',
+            'state' => 'required|string|max:50',
+            'postal_code' => 'required|string|size:5',
+            'housing_type' => 'required|string',
+            'years_at_address' => 'nullable|integer|min:0|max:99',
+            'months_at_address' => 'nullable|integer|min:0|max:11',
+        ]);
+
+        // Map frontend field names to database column names
+        $data = [
+            'street' => $validated['street'],
+            'exterior_number' => $validated['ext_number'],
+            'interior_number' => $validated['int_number'] ?? null,
+            'neighborhood' => $validated['neighborhood'],
+            'municipality' => $validated['municipality'] ?? null,
+            'city' => $validated['city'] ?? null,
+            'state' => $validated['state'],
+            'postal_code' => $validated['postal_code'],
+            'housing_type' => $this->normalizeHousingType($validated['housing_type']),
+            'years_at_address' => $validated['years_at_address'] ?? null,
+            'months_at_address' => $validated['months_at_address'] ?? null,
+        ];
+
         $account = $request->user();
         $person = $this->profileService->getOrCreatePerson($account);
-        $address = $this->profileService->updateAddress($person, $request->validated());
+
+        $address = $person->currentHomeAddress;
+
+        if ($address) {
+            $address->update($data);
+        } else {
+            $address = $person->addresses()->create(array_merge($data, [
+                'tenant_id' => $account->tenant_id,
+                'entity_type' => 'persons',
+                'type' => 'HOME',
+                'is_current' => true,
+                'valid_from' => now(),
+            ]));
+        }
+
+        // Record event if there's an active application
+        $application = $this->getCurrentApplication($person);
+        if ($application) {
+            $this->eventService->recordAddressSaved(
+                $application,
+                $account->id,
+                $validated['postal_code'],
+                $request
+            );
+        }
 
         return $this->success([
             'address' => [
-                'id' => $address->id,
                 'street' => $address->street,
-                'ext_number' => $address->exterior_number,
+                'exterior_number' => $address->exterior_number,
+                'interior_number' => $address->interior_number,
                 'neighborhood' => $address->neighborhood,
+                'municipality' => $address->municipality,
+                'city' => $address->city,
                 'state' => $address->state,
                 'postal_code' => $address->postal_code,
+                'housing_type' => $address->housing_type,
+                'years_at_address' => $address->years_at_address,
+                'months_at_address' => $address->months_at_address,
             ],
-            'profile_completeness' => $person->fresh()->profile_completeness,
+            'profile_completeness' => $this->calculateCompleteness($person),
         ], 'Dirección actualizada');
     }
 
@@ -214,20 +648,22 @@ class ProfileController extends Controller
     {
         $account = $request->user();
         $person = $this->profileService->getOrCreatePerson($account);
-        $employment = $this->profileService->getEmployment($person);
+        $employment = $person->currentEmployment;
 
         if (!$employment) {
-            return $this->success(null, 'No hay empleo registrado');
+            return $this->success(null);
         }
 
         return $this->success([
-            'id' => $employment->id,
             'employment_type' => $employment->employment_type,
             'company_name' => $employment->employer_name,
             'position' => $employment->job_title,
+            'department' => $employment->department,
             'monthly_income' => $employment->monthly_income,
-            'seniority_months' => $employment->months_employed ??
-                (($employment->years_employed ?? 0) * 12),
+            'payment_frequency' => $employment->payment_frequency,
+            'seniority_years' => $employment->years_employed,
+            'seniority_months' => $employment->months_employed,
+            'start_date' => $employment->start_date?->format('Y-m-d'),
             'work_phone' => $employment->employer_phone,
         ]);
     }
@@ -237,38 +673,89 @@ class ProfileController extends Controller
      *
      * PUT /api/v2/applicant/profile/employment
      */
-    public function updateEmployment(UpdateEmploymentRequest $request): JsonResponse
+    public function updateEmployment(Request $request): JsonResponse
     {
-        $validated = $request->validated();
-        \Log::info('Employment update request', [
-            'seniority_years' => $validated['seniority_years'] ?? 'NOT_SET',
-            'seniority_months' => $validated['seniority_months'] ?? 'NOT_SET',
-            'all_data' => $validated
+        $validated = $request->validate([
+            'employment_type' => 'required|string|max:50',
+            'company_name' => 'nullable|string|max:200',
+            'position' => 'nullable|string|max:100',
+            'department' => 'nullable|string|max:100',
+            'monthly_income' => 'required|numeric|min:0',
+            'payment_frequency' => 'nullable|string|max:20',
+            'contract_type' => 'nullable|string|max:50',
+            'start_date' => 'nullable|date',
+            'seniority_years' => 'nullable|integer|min:0|max:99',
+            'seniority_months' => 'nullable|integer|min:0|max:11',
+            'work_phone' => 'nullable|string|max:20',
+            'company_address' => 'nullable|string|max:300',
+            'employer_rfc' => 'nullable|string|max:13',
         ]);
+
+        // Map frontend field names to database column names (person_employments table)
+        $data = [
+            'employment_type' => $validated['employment_type'],
+            'employer_name' => $validated['company_name'] ?? null,
+            'job_title' => $validated['position'] ?? null,
+            'department' => $validated['department'] ?? null,
+            'monthly_income' => $validated['monthly_income'],
+            'payment_frequency' => $validated['payment_frequency'] ?? null,
+            'contract_type' => $validated['contract_type'] ?? null,
+            'years_employed' => $validated['seniority_years'] ?? null,
+            'months_employed' => $validated['seniority_months'] ?? null,
+            'employer_phone' => $validated['work_phone'] ?? null,
+            'employer_address' => $validated['company_address'] ?? null,
+            'employer_rfc' => $validated['employer_rfc'] ?? null,
+        ];
+
+        // Calculate start_date from seniority if not provided directly
+        if (empty($validated['start_date']) && ($data['years_employed'] || $data['months_employed'])) {
+            $years = $data['years_employed'] ?? 0;
+            $months = $data['months_employed'] ?? 0;
+            $data['start_date'] = now()->subYears($years)->subMonths($months)->startOfMonth();
+        } elseif (!empty($validated['start_date'])) {
+            $data['start_date'] = $validated['start_date'];
+        }
 
         $account = $request->user();
         $person = $this->profileService->getOrCreatePerson($account);
-        $employment = $this->profileService->updateEmployment($person, $validated);
 
-        \Log::info('Employment after save', [
-            'years_employed' => $employment->years_employed,
-            'months_employed' => $employment->months_employed,
-        ]);
+        $employment = $person->currentEmployment;
+
+        if ($employment) {
+            $employment->update($data);
+        } else {
+            $employment = $person->employments()->create(array_merge($data, [
+                'tenant_id' => $account->tenant_id,
+                'is_current' => true,
+            ]));
+        }
+
+        // Record event if there's an active application
+        $application = $this->getCurrentApplication($person);
+        if ($application) {
+            $this->eventService->recordEmploymentSaved(
+                $application,
+                $account->id,
+                $validated['employment_type'],
+                $request
+            );
+        }
 
         return $this->success([
             'employment' => [
-                'id' => $employment->id,
                 'employment_type' => $employment->employment_type,
                 'company_name' => $employment->employer_name,
                 'position' => $employment->job_title,
+                'department' => $employment->department,
                 'monthly_income' => $employment->monthly_income,
-                'years_employed' => $employment->years_employed,
-                'months_employed' => $employment->months_employed,
-                'seniority_months' => ($employment->years_employed ?? 0) * 12 + ($employment->months_employed ?? 0),
+                'payment_frequency' => $employment->payment_frequency,
+                'seniority_years' => $employment->years_employed,
+                'seniority_months' => $employment->months_employed,
+                'start_date' => $employment->start_date?->format('Y-m-d'),
                 'work_phone' => $employment->employer_phone,
             ],
-            'profile_completeness' => $person->fresh()->profile_completeness,
-        ], 'Información laboral actualizada');
+            'profile_completeness' => $this->calculateCompleteness($person),
+        ], 'Empleo actualizado');
     }
 
     // =========================================================================
@@ -292,24 +779,6 @@ class ProfileController extends Controller
     }
 
     /**
-     * Get primary bank account.
-     *
-     * GET /api/v2/applicant/profile/bank-account
-     */
-    public function getBankAccount(Request $request): JsonResponse
-    {
-        $account = $request->user();
-        $person = $this->profileService->getOrCreatePerson($account);
-        $bankAccount = $this->profileService->getBankAccount($person);
-
-        if (!$bankAccount) {
-            return $this->success(null, 'No hay cuenta bancaria registrada');
-        }
-
-        return $this->success($this->formatBankAccount($bankAccount));
-    }
-
-    /**
      * Create a new bank account.
      *
      * POST /api/v2/applicant/profile/bank-accounts
@@ -325,7 +794,7 @@ class ProfileController extends Controller
         $account = $request->user();
         $person = $this->profileService->getOrCreatePerson($account);
 
-        // Normalize account_type using enum (supports both English and Spanish values)
+        // Normalize account_type using enum
         $accountType = BankAccountType::DEBIT;
         if (!empty($validated['account_type'])) {
             $normalized = BankAccountType::normalize($validated['account_type']);
@@ -355,44 +824,30 @@ class ProfileController extends Controller
         $isFirst = $person->bankAccounts()->count() === 0;
         $bankAccount = $person->bankAccounts()->create([
             'tenant_id' => $account->tenant_id,
-            'owner_type' => 'persons',
+            'entity_type' => 'persons',
             'bank_code' => $clabeValidation['bank_code'],
             'bank_name' => $clabeValidation['bank_name'],
             'clabe' => $validated['clabe'],
             'holder_name' => strtoupper($validated['holder_name']),
             'account_type' => $accountType->value,
-            'is_primary' => $isFirst, // First account is automatically primary
+            'is_primary' => $isFirst,
             'status' => 'ACTIVE',
         ]);
+
+        // Record event if there's an active application
+        $application = $this->getCurrentApplication($person);
+        if ($application) {
+            $this->eventService->recordBankAccountAdded(
+                $application,
+                $clabeValidation['bank_name'],
+                $account->id,
+                $request
+            );
+        }
 
         return $this->created([
             'bank_account' => $this->formatBankAccount($bankAccount),
         ], 'Cuenta bancaria creada');
-    }
-
-    /**
-     * Update bank account.
-     *
-     * PUT /api/v2/applicant/profile/bank-account
-     */
-    public function updateBankAccount(UpdateBankAccountRequest $request): JsonResponse
-    {
-        $account = $request->user();
-        $person = $this->profileService->getOrCreatePerson($account);
-
-        // Validate CLABE first
-        $clabeValidation = $this->profileService->validateClabe($request->clabe);
-        if (!$clabeValidation['is_valid']) {
-            return $this->validationError('La CLABE no es válida', [
-                'clabe' => ['El dígito verificador de la CLABE es incorrecto'],
-            ]);
-        }
-
-        $bankAccount = $this->profileService->updateBankAccount($person, $request->validated());
-
-        return $this->success([
-            'bank_account' => $this->formatBankAccount($bankAccount),
-        ], 'Cuenta bancaria actualizada');
     }
 
     /**
@@ -504,25 +959,18 @@ class ProfileController extends Controller
         $person = $this->profileService->getOrCreatePerson($account);
         $references = $this->profileService->getReferences($person);
 
-        return $this->success([
-            'references' => $references->map(fn($ref) => [
-                'id' => $ref->id,
-                'type' => $ref->type,
-                'first_name' => $ref->first_name,
-                'last_name_1' => $ref->last_name_1,
-                'last_name_2' => $ref->last_name_2,
-                'full_name' => trim("{$ref->first_name} {$ref->last_name_1} {$ref->last_name_2}"),
-                'phone' => $ref->phone,
-                'relationship' => $ref->relationship,
-                'years_known' => $ref->years_known,
-                'verification_status' => $ref->verification_status ?? 'PENDING',
-            ]),
-            'meta' => [
-                'total' => $references->count(),
-                'personal_count' => $references->where('type', 'PERSONAL')->count(),
-                'work_count' => $references->where('type', 'WORK')->count(),
-            ],
-        ]);
+        return $this->success($references->map(fn($ref) => [
+            'id' => $ref->id,
+            'type' => $ref->type,
+            'first_name' => $ref->first_name,
+            'last_name_1' => $ref->last_name_1,
+            'last_name_2' => $ref->last_name_2,
+            'full_name' => trim("{$ref->first_name} {$ref->last_name_1} {$ref->last_name_2}"),
+            'phone' => $ref->phone,
+            'relationship' => $ref->relationship,
+            'years_known' => $ref->years_known,
+            'verification_status' => $ref->verification_status ?? 'PENDING',
+        ]));
     }
 
     /**
@@ -536,67 +984,29 @@ class ProfileController extends Controller
         $person = $this->profileService->getOrCreatePerson($account);
         $reference = $this->profileService->addReference($person, $request->validated());
 
+        // Record event if there's an active application
+        $application = $this->getCurrentApplication($person);
+        if ($application) {
+            $fullName = trim("{$reference->first_name} {$reference->last_name_1}");
+            $this->eventService->recordReferenceAdded(
+                $application,
+                $reference->type,
+                $fullName,
+                $account->id,
+                $request
+            );
+        }
+
         return $this->created([
             'id' => $reference->id,
             'type' => $reference->type,
+            'first_name' => $reference->first_name,
+            'last_name_1' => $reference->last_name_1,
+            'last_name_2' => $reference->last_name_2,
             'full_name' => trim("{$reference->first_name} {$reference->last_name_1}"),
             'phone' => $reference->phone,
             'relationship' => $reference->relationship,
         ], 'Referencia agregada');
-    }
-
-    /**
-     * Update a reference.
-     *
-     * PUT /api/v2/applicant/profile/references/{reference}
-     */
-    public function updateReference(Request $request, PersonReference $reference): JsonResponse
-    {
-        $account = $request->user();
-        $person = $this->profileService->getOrCreatePerson($account);
-
-        // Verify ownership
-        if ($reference->person_id !== $person->id) {
-            return $this->notFound('Referencia no encontrada');
-        }
-
-        $validated = $request->validate([
-            'first_name' => 'sometimes|string|max:100',
-            'last_name_1' => 'sometimes|string|max:100',
-            'last_name_2' => 'nullable|string|max:100',
-            'phone' => 'sometimes|string|max:15',
-            'email' => 'nullable|email|max:100',
-            'relationship' => 'sometimes|string|max:50',
-            'years_known' => 'nullable|integer|min:0|max:100',
-        ]);
-
-        $reference = $this->profileService->updateReference($reference, $validated);
-
-        return $this->success([
-            'id' => $reference->id,
-            'full_name' => trim("{$reference->first_name} {$reference->last_name_1}"),
-            'phone' => $reference->phone,
-        ], 'Referencia actualizada');
-    }
-
-    /**
-     * Delete a reference.
-     *
-     * DELETE /api/v2/applicant/profile/references/{reference}
-     */
-    public function deleteReference(Request $request, PersonReference $reference): JsonResponse
-    {
-        $account = $request->user();
-        $person = $this->profileService->getOrCreatePerson($account);
-
-        // Verify ownership
-        if ($reference->person_id !== $person->id) {
-            return $this->notFound('Referencia no encontrada');
-        }
-
-        $this->profileService->deleteReference($reference);
-
-        return $this->success(null, 'Referencia eliminada');
     }
 
     // =========================================================================
@@ -611,7 +1021,7 @@ class ProfileController extends Controller
     public function saveSignature(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'signature' => 'required|string', // Base64 PNG
+            'signature' => 'required|string',
         ]);
 
         $account = $request->user();
@@ -627,7 +1037,7 @@ class ProfileController extends Controller
 
         $imageData = base64_decode($base64Data);
         if (!$imageData) {
-            return $this->validationError(['signature' => 'Firma inválida']);
+            return $this->validationError('Firma inválida', ['signature' => ['La firma no es válida']]);
         }
 
         // Generate unique filename
@@ -639,25 +1049,26 @@ class ProfileController extends Controller
         \Illuminate\Support\Facades\Storage::disk($disk)->put($path, $imageData);
 
         // Mark any existing signature documents as replaced
-        \App\Models\DocumentV2::where('documentable_type', \App\Models\Person::class)
+        \App\Models\Document::where('documentable_type', \App\Models\Person::class)
             ->where('documentable_id', $person->id)
             ->where('type', 'SIGNATURE')
             ->whereNull('replaced_at')
             ->update(['replaced_at' => now()]);
 
         // Create document record
-        $document = \App\Models\DocumentV2::create([
+        $document = \App\Models\Document::create([
             'tenant_id' => $account->tenant_id,
             'documentable_type' => \App\Models\Person::class,
             'documentable_id' => $person->id,
             'type' => 'SIGNATURE',
             'category' => 'LEGAL',
             'file_name' => $filename,
+            'original_filename' => 'firma_digital.png',
             'file_path' => $path,
             'mime_type' => 'image/png',
             'file_size' => strlen($imageData),
             'storage_disk' => $disk,
-            'status' => 'APPROVED', // Signatures are auto-approved
+            'status' => 'APPROVED',
             'uploaded_by' => $account->id,
             'ocr_data' => [
                 'signed_at' => now()->toIso8601String(),
@@ -666,11 +1077,21 @@ class ProfileController extends Controller
             ],
         ]);
 
-        // Also update person record for backward compatibility
+        // Update person record
         $person->update([
             'signature_date' => now(),
             'signature_ip' => $request->ip(),
         ]);
+
+        // Record event if there's an active application
+        $application = $this->getCurrentApplication($person);
+        if ($application) {
+            $this->eventService->recordSignatureSaved(
+                $application,
+                $account->id,
+                $request
+            );
+        }
 
         return $this->success([
             'signed_at' => now()->toIso8601String(),

@@ -16,9 +16,6 @@
  * // Person management
  * await v2.person.create({ first_name: 'Juan', last_name_1: 'Perez' })
  * await v2.person.addresses.create(personId, { type: 'HOME', ... })
- *
- * // Company management
- * await v2.company.create({ legal_name: 'ACME SA de CV', rfc: 'ABC123456789' })
  */
 
 // =====================================================
@@ -29,6 +26,7 @@ import applicantAuth from './auth.applicant.service'
 import staffAuth from './auth.staff.service'
 import applicantApplication from './application.applicant.service'
 import staffApplication from './application.staff.service'
+import applicantCorrection from './correction.applicant.service'
 import applicantDocument from './document.applicant.service'
 import staffDocument from './document.staff.service'
 import applicantProfile from './profile.service'
@@ -40,7 +38,6 @@ import staffApiLog from './apilog.staff.service'
 import staffTenant from './tenant.staff.service'
 import staffIntegration from './integration.staff.service'
 import person from './person.service'
-import company from './company.service'
 import simulator from './simulator.service'
 import publicConfig from './config.public.service'
 
@@ -55,7 +52,6 @@ import publicConfig from './config.public.service'
  * - applicant: Services for applicant-facing operations
  * - staff: Services for staff/admin operations
  * - person: Person entity management (identifications, addresses, etc.)
- * - company: Company entity management (for Persona Moral)
  */
 export const v2 = {
   /**
@@ -64,6 +60,7 @@ export const v2 = {
   applicant: {
     auth: applicantAuth,
     application: applicantApplication,
+    correction: applicantCorrection,
     document: applicantDocument,
     profile: applicantProfile,
     kyc: applicantKyc,
@@ -90,11 +87,6 @@ export const v2 = {
   person,
 
   /**
-   * Company entity services (for Persona Moral)
-   */
-  company,
-
-  /**
    * Public simulator services
    */
   simulator,
@@ -114,6 +106,7 @@ export {
   staffAuth,
   applicantApplication,
   staffApplication,
+  applicantCorrection,
   applicantDocument,
   staffDocument,
   applicantProfile,
@@ -125,7 +118,6 @@ export {
   staffTenant,
   staffIntegration,
   person,
-  company,
   simulator,
   publicConfig,
 }

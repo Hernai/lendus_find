@@ -23,10 +23,10 @@ use Illuminate\Support\Facades\DB;
  *
  * Related tables store:
  * - person_identifications: CURP, RFC, INE, etc. (with history)
- * - person_addresses: Addresses (with history)
+ * - addresses: Addresses (polymorphic via entity_type/entity_id)
  * - person_employments: Employment records (with history)
  * - person_references: Personal/work references
- * - person_bank_accounts: Bank accounts for disbursement
+ * - bank_accounts: Bank accounts (polymorphic via entity_type/entity_id)
  *
  * The "applicant" concept is contextual:
  * - A person becomes an "applicant" when they submit an application
@@ -66,10 +66,10 @@ use Illuminate\Support\Facades\DB;
  * @property-read Tenant $tenant
  * @property-read ApplicantAccount|null $account
  * @property-read \Illuminate\Database\Eloquent\Collection<PersonIdentification> $identifications
- * @property-read \Illuminate\Database\Eloquent\Collection<PersonAddress> $addresses
+ * @property-read \Illuminate\Database\Eloquent\Collection<Address> $addresses
  * @property-read \Illuminate\Database\Eloquent\Collection<PersonEmployment> $employments
  * @property-read \Illuminate\Database\Eloquent\Collection<PersonReference> $references
- * @property-read \Illuminate\Database\Eloquent\Collection<PersonBankAccount> $bankAccounts
+ * @property-read \Illuminate\Database\Eloquent\Collection<BankAccount> $bankAccounts
  */
 class Person extends Model
 {
@@ -161,7 +161,8 @@ class Person extends Model
      */
     public function addresses(): HasMany
     {
-        return $this->hasMany(PersonAddress::class);
+        return $this->hasMany(Address::class, 'entity_id')
+            ->where('entity_type', 'persons');
     }
 
     /**
@@ -185,8 +186,8 @@ class Person extends Model
      */
     public function bankAccounts(): HasMany
     {
-        return $this->hasMany(PersonBankAccount::class, 'owner_id')
-            ->where('owner_type', 'persons');
+        return $this->hasMany(BankAccount::class, 'entity_id')
+            ->where('entity_type', 'persons');
     }
 
     /**
@@ -194,7 +195,7 @@ class Person extends Model
      */
     public function documents(): \Illuminate\Database\Eloquent\Relations\MorphMany
     {
-        return $this->morphMany(DocumentV2::class, 'documentable');
+        return $this->morphMany(Document::class, 'documentable');
     }
 
     // =====================================================
@@ -236,7 +237,8 @@ class Person extends Model
      */
     public function currentHomeAddress(): HasOne
     {
-        return $this->hasOne(PersonAddress::class)
+        return $this->hasOne(Address::class, 'entity_id')
+            ->where('entity_type', 'persons')
             ->where('type', 'HOME')
             ->where('is_current', true);
     }
@@ -255,8 +257,8 @@ class Person extends Model
      */
     public function primaryBankAccount(): HasOne
     {
-        return $this->hasOne(PersonBankAccount::class, 'owner_id')
-            ->where('owner_type', 'persons')
+        return $this->hasOne(BankAccount::class, 'entity_id')
+            ->where('entity_type', 'persons')
             ->where('is_primary', true);
     }
 
@@ -474,6 +476,14 @@ class Person extends Model
         }
 
         $this->update($updateData);
+    }
+
+    /**
+     * Check if person has completed KYC verification.
+     */
+    public function isKycVerified(): bool
+    {
+        return $this->kyc_status === self::KYC_VERIFIED;
     }
 
     // =====================================================

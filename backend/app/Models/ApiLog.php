@@ -59,11 +59,11 @@ class ApiLog extends Model
     public const PROVIDER_SEPOMEX = 'SEPOMEX';
 
     /**
-     * Get the applicant associated with this log (legacy).
+     * Get the person associated with this log.
      */
-    public function applicant(): BelongsTo
+    public function person(): BelongsTo
     {
-        return $this->belongsTo(Applicant::class);
+        return $this->belongsTo(Person::class);
     }
 
     /**
@@ -92,11 +92,11 @@ class ApiLog extends Model
     }
 
     /**
-     * Get the user associated with this log.
+     * Get the staff member associated with this log.
      */
-    public function user(): BelongsTo
+    public function staff(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(StaffAccount::class, 'user_id');
     }
 
     /**

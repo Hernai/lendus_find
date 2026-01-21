@@ -6,16 +6,48 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 /**
- * OTP request tracking for rate limiting and audit.
+ * OTP request for authentication.
  *
- * Tracks all OTP requests for security and rate limiting purposes.
- * Can be linked to an identity or standalone for registration flows.
+ * Tracks OTP requests for rate limiting and verification.
+ * Can be linked to an identity (existing user) or standalone (new registration).
+ *
+ * @property string $id
+ * @property string|null $identity_id
+ * @property string|null $target_type PHONE, EMAIL, WHATSAPP
+ * @property string|null $target_value
+ * @property string $code
+ * @property string $channel SMS, EMAIL, WHATSAPP
+ * @property \Carbon\Carbon $expires_at
+ * @property \Carbon\Carbon|null $verified_at
+ * @property int $attempts
+ * @property string|null $ip_address
+ * @property string|null $user_agent
+ * @property \Carbon\Carbon $created_at
+ * @property \Carbon\Carbon $updated_at
  */
 class OtpRequest extends Model
 {
     use HasFactory, HasUuids;
+
+    protected $table = 'otp_requests';
+
+    /**
+     * Maximum verification attempts allowed.
+     */
+    public const MAX_ATTEMPTS = 5;
+
+    /**
+     * OTP validity in minutes.
+     */
+    public const VALIDITY_MINUTES = 10;
+
+    /**
+     * Rate limit: max OTPs per hour.
+     */
+    public const MAX_OTP_PER_HOUR = 5;
 
     protected $fillable = [
         'identity_id',
@@ -43,7 +75,7 @@ class OtpRequest extends Model
     // =====================================================
 
     /**
-     * Get the identity this request belongs to.
+     * Get the identity this OTP request is for (if existing user).
      */
     public function identity(): BelongsTo
     {
@@ -51,8 +83,101 @@ class OtpRequest extends Model
     }
 
     // =====================================================
-    // Status Checks
+    // Factory Methods
     // =====================================================
+
+    /**
+     * Create an OTP request for a target (phone/email).
+     */
+    public static function createForTarget(
+        string $type,
+        string $identifier,
+        string $channel,
+        ?string $identityId = null
+    ): self {
+        return self::create([
+            'identity_id' => $identityId,
+            'target_type' => strtoupper($type),
+            'target_value' => $identifier,
+            'code' => self::generateCode(),
+            'channel' => strtoupper($channel),
+            'expires_at' => now()->addMinutes(self::VALIDITY_MINUTES),
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
+    }
+
+    /**
+     * Generate a 6-digit OTP code.
+     */
+    public static function generateCode(): string
+    {
+        return str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+    }
+
+    // =====================================================
+    // Query Methods
+    // =====================================================
+
+    /**
+     * Get the latest valid OTP for a target.
+     */
+    public static function getLatestValidOtp(string $type, string $identifier): ?self
+    {
+        return self::query()
+            ->where('target_type', strtoupper($type))
+            ->where('target_value', $identifier)
+            ->where('expires_at', '>', now())
+            ->whereNull('verified_at')
+            ->where('attempts', '<', self::MAX_ATTEMPTS)
+            ->latest()
+            ->first();
+    }
+
+    /**
+     * Count OTPs sent in the last hour for a target.
+     */
+    public static function countRecentOtps(string $type, string $identifier): int
+    {
+        return self::query()
+            ->where('target_type', strtoupper($type))
+            ->where('target_value', $identifier)
+            ->where('created_at', '>=', now()->subHour())
+            ->count();
+    }
+
+    // =====================================================
+    // Verification Methods
+    // =====================================================
+
+    /**
+     * Verify the OTP code.
+     */
+    public function verify(string $code): bool
+    {
+        // Increment attempts
+        $this->increment('attempts');
+
+        // Check if too many attempts
+        if ($this->hasTooManyAttempts()) {
+            return false;
+        }
+
+        // Check if expired
+        if ($this->isExpired()) {
+            return false;
+        }
+
+        // Check code
+        if ($this->code !== $code) {
+            return false;
+        }
+
+        // Mark as verified
+        $this->update(['verified_at' => now()]);
+
+        return true;
+    }
 
     /**
      * Check if OTP is expired.
@@ -63,93 +188,19 @@ class OtpRequest extends Model
     }
 
     /**
-     * Check if OTP is verified.
-     */
-    public function isVerified(): bool
-    {
-        return !is_null($this->verified_at);
-    }
-
-    /**
-     * Check if OTP is still valid (not expired and not verified).
-     */
-    public function isValid(): bool
-    {
-        return !$this->isExpired() && !$this->isVerified();
-    }
-
-    /**
-     * Check if too many attempts.
+     * Check if too many verification attempts.
      */
     public function hasTooManyAttempts(): bool
     {
-        return $this->attempts >= 5;
+        return $this->attempts >= self::MAX_ATTEMPTS;
     }
 
-    // =====================================================
-    // Verification
-    // =====================================================
-
     /**
-     * Verify the OTP code.
-     */
-    public function verify(string $code): bool
-    {
-        if ($this->isExpired()) {
-            return false;
-        }
-
-        if ($this->isVerified()) {
-            return false;
-        }
-
-        if ($this->hasTooManyAttempts()) {
-            return false;
-        }
-
-        if ($this->code !== $code) {
-            $this->increment('attempts');
-            return false;
-        }
-
-        $this->update(['verified_at' => now()]);
-        return true;
-    }
-
-    // =====================================================
-    // Accessors
-    // =====================================================
-
-    /**
-     * Get remaining attempts.
+     * Get remaining verification attempts.
      */
     public function getRemainingAttemptsAttribute(): int
     {
-        return max(0, 5 - $this->attempts);
-    }
-
-    /**
-     * Get seconds until expiry.
-     */
-    public function getSecondsUntilExpiryAttribute(): int
-    {
-        if ($this->isExpired()) {
-            return 0;
-        }
-        return (int) now()->diffInSeconds($this->expires_at, false);
-    }
-
-    /**
-     * Get channel label.
-     */
-    public function getChannelLabelAttribute(): string
-    {
-        return match ($this->channel) {
-            'SMS' => 'SMS',
-            'EMAIL' => 'Correo electrónico',
-            'WHATSAPP' => 'WhatsApp',
-            default => $this->channel,
-        };
+        return max(0, self::MAX_ATTEMPTS - $this->attempts);
     }
 
     // =====================================================
@@ -157,84 +208,23 @@ class OtpRequest extends Model
     // =====================================================
 
     /**
-     * Scope to valid (non-expired, non-verified) OTPs.
+     * Scope to valid (non-expired, not verified, under max attempts) OTPs.
      */
     public function scopeValid($query)
     {
-        return $query->where('expires_at', '>', now())
-            ->whereNull('verified_at');
+        return $query
+            ->where('expires_at', '>', now())
+            ->whereNull('verified_at')
+            ->where('attempts', '<', self::MAX_ATTEMPTS);
     }
 
     /**
-     * Scope to recent OTPs (last hour).
+     * Scope to OTPs for a specific target.
      */
-    public function scopeRecent($query)
+    public function scopeForTarget($query, string $type, string $identifier)
     {
-        return $query->where('created_at', '>=', now()->subHour());
-    }
-
-    /**
-     * Scope by target.
-     */
-    public function scopeForTarget($query, string $type, string $value)
-    {
-        return $query->where('target_type', $type)
-            ->where('target_value', $value);
-    }
-
-    // =====================================================
-    // Static Helpers
-    // =====================================================
-
-    /**
-     * Count recent OTP requests for rate limiting.
-     */
-    public static function countRecentRequests(string $type, string $value): int
-    {
-        return static::forTarget($type, $value)
-            ->recent()
-            ->count();
-    }
-
-    /**
-     * Check if can send OTP (rate limit check).
-     */
-    public static function canSendOtp(string $type, string $value): bool
-    {
-        return static::countRecentRequests($type, $value) < 3;
-    }
-
-    /**
-     * Get the latest valid OTP for a target.
-     */
-    public static function getLatestValidOtp(string $type, string $value): ?self
-    {
-        return static::forTarget($type, $value)
-            ->valid()
-            ->latest()
-            ->first();
-    }
-
-    /**
-     * Create a new OTP request.
-     */
-    public static function createForTarget(
-        string $type,
-        string $value,
-        string $channel,
-        ?string $identityId = null
-    ): self {
-        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-
-        return static::create([
-            'identity_id' => $identityId,
-            'target_type' => $type,
-            'target_value' => $value,
-            'code' => $code,
-            'channel' => $channel,
-            'expires_at' => now()->addMinutes(10),
-            'ip_address' => request()->ip(),
-            'user_agent' => request()->userAgent(),
-        ]);
+        return $query
+            ->where('target_type', strtoupper($type))
+            ->where('target_value', $identifier);
     }
 }

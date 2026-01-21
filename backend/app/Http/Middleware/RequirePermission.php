@@ -3,7 +3,6 @@
 namespace App\Http\Middleware;
 
 use App\Models\StaffAccount;
-use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -14,7 +13,7 @@ class RequirePermission
     /**
      * Allowed permission method names.
      *
-     * This whitelist prevents arbitrary method invocation on User/StaffAccount models.
+     * This whitelist prevents arbitrary method invocation on StaffAccount models.
      */
     private const ALLOWED_PERMISSIONS = [
         'canReviewDocuments',
@@ -32,7 +31,7 @@ class RequirePermission
     /**
      * Handle an incoming request.
      *
-     * Checks if user has a specific permission.
+     * Checks if staff user has a specific permission.
      *
      * Usage in routes:
      *   ->middleware('permission:canApproveRejectApplications')
@@ -40,7 +39,7 @@ class RequirePermission
      */
     public function handle(Request $request, Closure $next, string $permission): Response
     {
-        /** @var User|StaffAccount|null $user */
+        /** @var StaffAccount|null $user */
         $user = $request->user();
 
         if ($user === null) {

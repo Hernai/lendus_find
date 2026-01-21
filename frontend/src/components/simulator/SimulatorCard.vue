@@ -329,7 +329,7 @@ const paymentLabel = computed(() => {
           <p class="text-primary-200">Total a pagar</p>
           <p class="font-semibold">{{ formatMoneyDecimals(simulation.total_amount) }}</p>
         </div>
-        <div>
+        <div class="text-right">
           <p class="text-primary-200">Intereses</p>
           <p class="font-semibold">{{ formatMoneyDecimals(simulation.total_interest) }}</p>
         </div>

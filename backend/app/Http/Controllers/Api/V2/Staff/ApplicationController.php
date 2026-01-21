@@ -5,11 +5,12 @@ namespace App\Http\Controllers\Api\V2\Staff;
 use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\ApplicationStatusHistory;
-use App\Models\ApplicationV2;
+use App\Models\Application;
 use App\Models\DataVerification;
 use App\Models\Person;
 use App\Models\StaffAccount;
-use App\Services\ApplicationV2Service;
+use App\Services\ApplicationEventService;
+use App\Services\ApplicationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -17,13 +18,13 @@ use Illuminate\Http\Request;
  * Staff Application Controller (v2).
  *
  * Handles loan application management for staff members using the new
- * normalized ApplicationV2 model.
+ * normalized Application model.
  */
 class ApplicationController extends Controller
 {
     use ApiResponses;
     public function __construct(
-        private ApplicationV2Service $service
+        private ApplicationService $service
     ) {}
 
     /**
@@ -39,7 +40,7 @@ class ApplicationController extends Controller
             $request->merge(['status' => [$statusInput]]);
         }
 
-        $validStatuses = implode(',', array_keys(ApplicationV2::statuses()));
+        $validStatuses = implode(',', array_keys(Application::statuses()));
         $validated = $request->validate([
             'status' => 'nullable|array',
             'status.*' => "string|in:{$validStatuses}",
@@ -94,7 +95,7 @@ class ApplicationController extends Controller
     {
         $validated = $request->validate([
             'columns' => 'nullable|array',
-            'columns.*' => 'string|in:' . implode(',', array_keys(ApplicationV2::statuses())),
+            'columns.*' => 'string|in:' . implode(',', array_keys(Application::statuses())),
             'limit_per_column' => 'nullable|integer|min:5|max:50',
             'assigned_to' => 'nullable|uuid',
             'sort_by' => 'nullable|string|in:created_at,submitted_at,requested_amount',
@@ -106,10 +107,10 @@ class ApplicationController extends Controller
 
         // Default columns for Kanban (active workflow statuses)
         $columns = $validated['columns'] ?? [
-            ApplicationV2::STATUS_SUBMITTED,
-            ApplicationV2::STATUS_IN_REVIEW,
-            ApplicationV2::STATUS_DOCS_PENDING,
-            ApplicationV2::STATUS_APPROVED,
+            Application::STATUS_SUBMITTED,
+            Application::STATUS_IN_REVIEW,
+            Application::STATUS_DOCS_PENDING,
+            Application::STATUS_APPROVED,
         ];
 
         $limitPerColumn = $validated['limit_per_column'] ?? 15;
@@ -204,7 +205,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        $application = Application::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
             ->with([
                 'product',
@@ -243,7 +244,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        $application = Application::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
             ->first();
 
@@ -274,14 +275,14 @@ class ApplicationController extends Controller
     public function changeStatus(Request $request, string $id): JsonResponse
     {
         $validated = $request->validate([
-            'status' => 'required|string|in:' . implode(',', array_keys(ApplicationV2::statuses())),
+            'status' => 'required|string|in:' . implode(',', array_keys(Application::statuses())),
             'notes' => 'nullable|string|max:1000',
         ]);
 
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        $application = Application::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
             ->first();
 
@@ -322,7 +323,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        $application = Application::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
             ->first();
 
@@ -363,7 +364,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        $application = Application::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
             ->first();
 
@@ -404,7 +405,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        $application = Application::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
             ->first();
 
@@ -443,7 +444,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        $application = Application::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
             ->first();
 
@@ -467,10 +468,10 @@ class ApplicationController extends Controller
     {
         $validated = $request->validate([
             'level' => 'required|string|in:' . implode(',', [
-                ApplicationV2::RISK_LOW,
-                ApplicationV2::RISK_MEDIUM,
-                ApplicationV2::RISK_HIGH,
-                ApplicationV2::RISK_VERY_HIGH,
+                Application::RISK_LOW,
+                Application::RISK_MEDIUM,
+                Application::RISK_HIGH,
+                Application::RISK_VERY_HIGH,
             ]),
             'data' => 'nullable|array',
         ]);
@@ -478,7 +479,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        $application = Application::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
             ->first();
 
@@ -499,16 +500,19 @@ class ApplicationController extends Controller
     }
 
     /**
-     * Get status history.
+     * Get status history and lifecycle events.
      *
      * GET /v2/staff/applications/{id}/history
+     *
+     * Returns all events: status changes, profile updates, document uploads,
+     * KYC verifications, references, bank accounts, etc.
      */
     public function history(Request $request, string $id): JsonResponse
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        $application = Application::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
             ->first();
 
@@ -516,25 +520,65 @@ class ApplicationController extends Controller
             return $this->notFound('Solicitud no encontrada.');
         }
 
-        $history = $this->service->getStatusHistory($application);
+        // Get all history entries (both status changes and lifecycle events)
+        $history = ApplicationStatusHistory::where('application_id', $application->id)
+            ->orderByDesc('created_at')
+            ->get();
 
         return $this->success([
-            'history' => $history->map(fn($h) => [
-                'from_status' => $h->from_status,
-                'from_status_label' => $h->from_status_label,
-                'to_status' => $h->to_status,
-                'to_status_label' => $h->to_status_label,
-                'changed_by' => $h->changed_by_name,
-                'notes' => $h->notes,
-                'created_at' => $h->created_at->toIso8601String(),
-            ]),
+            'history' => $history->map(function ($h) {
+                $metadata = $h->metadata ?? [];
+                $isLifecycleEvent = ApplicationEventService::isLifecycleEvent($h->from_status);
+
+                return [
+                    // Event type info
+                    'event_type' => $isLifecycleEvent ? ($metadata['event_type'] ?? $h->from_status) : 'STATUS_CHANGE',
+                    'event_label' => $isLifecycleEvent
+                        ? ApplicationEventService::getEventLabel($h->from_status)
+                        : 'Estado cambiado',
+                    'is_lifecycle_event' => $isLifecycleEvent,
+
+                    // Status change info (for status changes)
+                    'from_status' => $isLifecycleEvent ? null : $h->from_status,
+                    'from_status_label' => $isLifecycleEvent ? null : $h->from_status_label,
+                    'to_status' => $isLifecycleEvent ? null : $h->to_status,
+                    'to_status_label' => $isLifecycleEvent ? null : $h->to_status_label,
+
+                    // Common fields
+                    'changed_by' => $h->changed_by_name,
+                    'changed_by_type' => $h->changed_by_type,
+                    'notes' => $h->notes,
+
+                    // Context (IP address, user agent)
+                    'ip_address' => $metadata['ip_address'] ?? null,
+                    'user_agent' => $metadata['user_agent'] ?? null,
+
+                    // Event-specific metadata (document type, field changes, etc.)
+                    'metadata' => array_filter([
+                        'document_type' => $metadata['document_type'] ?? null,
+                        'document_type_label' => $metadata['document_type_label'] ?? null,
+                        'changed_fields' => $metadata['changed_fields'] ?? null,
+                        'step_number' => $metadata['step_number'] ?? null,
+                        'step_label' => $metadata['step_label'] ?? null,
+                        'is_valid' => $metadata['is_valid'] ?? null,
+                        'matched' => $metadata['matched'] ?? null,
+                        'score' => $metadata['score'] ?? null,
+                        'bank_name' => $metadata['bank_name'] ?? null,
+                        'reference_type' => $metadata['reference_type'] ?? null,
+                        'postal_code' => $metadata['postal_code'] ?? null,
+                        'employment_type' => $metadata['employment_type'] ?? null,
+                    ]),
+
+                    'created_at' => $h->created_at->toIso8601String(),
+                ];
+            }),
         ]);
     }
 
     /**
      * Format application for list view.
      */
-    private function formatApplication(ApplicationV2 $app): array
+    private function formatApplication(Application $app): array
     {
         // Generate folio from created_at date + short UUID
         // Format: YYYYMMDD-XXXX (e.g., 20260119-ABC1)
@@ -586,7 +630,7 @@ class ApplicationController extends Controller
      * - workflow: Status history, notes, assignment
      * - integration: External system sync info
      */
-    private function formatApplicationDetail(ApplicationV2 $app): array
+    private function formatApplicationDetail(Application $app): array
     {
         $person = $app->person;
         $company = $app->company;
@@ -652,6 +696,12 @@ class ApplicationController extends Controller
         // Structure mirrors profile API response
         // =========================================================
         if ($person) {
+            // Get CURP and RFC from person_identifications table
+            $identifications = $person->identifications ?? collect();
+            $curp = $identifications->firstWhere('type', 'CURP')?->identifier_value;
+            $rfc = $identifications->firstWhere('type', 'RFC')?->identifier_value;
+            $ineData = $identifications->firstWhere('type', 'INE');
+
             $data['applicant'] = [
                 'type' => 'INDIVIDUAL',
                 'person' => [
@@ -670,8 +720,12 @@ class ApplicationController extends Controller
                         'dependents_count' => $person->dependents_count ?? 0,
                     ],
                     'identifications' => [
-                        'curp' => $person->curp,
-                        'rfc' => $person->rfc,
+                        'curp' => $curp,
+                        'curp_verified' => $identifications->firstWhere('type', 'CURP')?->status === 'VERIFIED',
+                        'rfc' => $rfc,
+                        'rfc_verified' => $identifications->firstWhere('type', 'RFC')?->status === 'VERIFIED',
+                        'ine_clave' => $ineData?->identifier_value,
+                        'ine_verified' => $ineData?->status === 'VERIFIED',
                     ],
                     'contact' => [
                         'email' => $person->account?->identities?->where('type', 'email')->first()?->identifier,
@@ -729,15 +783,30 @@ class ApplicationController extends Controller
                 'name' => $app->assignedTo->name,
                 'email' => $app->assignedTo->email,
             ] : null,
-            'status_history' => $app->statusHistory->map(fn($h) => [
-                'from_status' => $h->from_status,
-                'from_status_label' => $h->from_status_label,
-                'to_status' => $h->to_status,
-                'to_status_label' => $h->to_status_label,
-                'changed_by' => $h->changed_by_name,
-                'notes' => $h->notes,
-                'created_at' => $h->created_at->toIso8601String(),
-            ])->values()->toArray(),
+            'status_history' => $app->statusHistory->map(function ($h) {
+                $metadata = $h->metadata ?? [];
+                $isLifecycleEvent = ApplicationEventService::isLifecycleEvent($h->from_status ?? '');
+
+                return [
+                    'from_status' => $h->from_status,
+                    'from_status_label' => $isLifecycleEvent
+                        ? ApplicationEventService::getEventLabel($h->from_status)
+                        : $h->from_status_label,
+                    'to_status' => $h->to_status,
+                    'to_status_label' => $h->to_status_label,
+                    'changed_by' => $h->changed_by_name,
+                    'notes' => $h->notes,
+                    'created_at' => $h->created_at->toIso8601String(),
+                    // Lifecycle event fields
+                    'is_lifecycle_event' => $isLifecycleEvent,
+                    'event_type' => $isLifecycleEvent ? ($metadata['event_type'] ?? $h->from_status) : 'STATUS_CHANGE',
+                    'event_label' => $isLifecycleEvent ? ApplicationEventService::getEventLabel($h->from_status) : null,
+                    // Metadata for "Ver detalles" button
+                    'ip_address' => $metadata['ip_address'] ?? null,
+                    'user_agent' => $metadata['user_agent'] ?? null,
+                    'metadata' => $metadata,
+                ];
+            })->values()->toArray(),
             'notes' => collect($app->notes ?? [])->map(fn($n) => [
                 'id' => $n['id'] ?? uniqid(),
                 'content' => $n['content'] ?? $n['text'] ?? '',
@@ -773,7 +842,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        $application = Application::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
             ->first();
 
@@ -807,7 +876,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        $application = Application::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
             ->first();
 
@@ -865,7 +934,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $appId)
+        $application = Application::where('id', $appId)
             ->where('tenant_id', $staff->tenant_id)
             ->first();
 
@@ -903,7 +972,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $appId)
+        $application = Application::where('id', $appId)
             ->where('tenant_id', $staff->tenant_id)
             ->with('person')
             ->first();
@@ -919,7 +988,7 @@ class ApplicationController extends Controller
         }
 
         // Get all document versions of this type
-        $documentVersions = \App\Models\DocumentV2::where('documentable_type', $document->documentable_type)
+        $documentVersions = \App\Models\Document::where('documentable_type', $document->documentable_type)
             ->where('documentable_id', $document->documentable_id)
             ->where('type', $document->type)
             ->get();
@@ -1021,7 +1090,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $appId)
+        $application = Application::where('id', $appId)
             ->where('tenant_id', $staff->tenant_id)
             ->with('person')
             ->first();
@@ -1055,7 +1124,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $appId)
+        $application = Application::where('id', $appId)
             ->where('tenant_id', $staff->tenant_id)
             ->with('person')
             ->first();
@@ -1111,7 +1180,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $appId)
+        $application = Application::where('id', $appId)
             ->where('tenant_id', $staff->tenant_id)
             ->with('person')
             ->first();
@@ -1165,7 +1234,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $appId)
+        $application = Application::where('id', $appId)
             ->where('tenant_id', $staff->tenant_id)
             ->with('person')
             ->first();
@@ -1226,7 +1295,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $appId)
+        $application = Application::where('id', $appId)
             ->where('tenant_id', $staff->tenant_id)
             ->with('person.references')
             ->first();
@@ -1295,7 +1364,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $appId)
+        $application = Application::where('id', $appId)
             ->where('tenant_id', $staff->tenant_id)
             ->with('person.bankAccounts')
             ->first();
@@ -1345,7 +1414,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $appId)
+        $application = Application::where('id', $appId)
             ->where('tenant_id', $staff->tenant_id)
             ->with('person.bankAccounts')
             ->first();
@@ -1538,7 +1607,7 @@ class ApplicationController extends Controller
      *
      * Combines DataVerification records and verification_checklist fallback.
      */
-    private function getFieldVerifications(ApplicationV2 $app): array
+    private function getFieldVerifications(Application $app): array
     {
         $fieldVerifications = [];
         $lockedMethods = ['KYC', 'OCR', 'FACE_MATCH', 'LIVENESS', 'INE_VALIDATION', 'CURP_VALIDATION', 'RFC_VALIDATION'];
@@ -1546,19 +1615,16 @@ class ApplicationController extends Controller
         // Try to get verifications by entity (Person or Company)
         $verifications = collect();
         if ($app->person) {
-            // First try new entity_id/entity_type columns
-            $verifications = \App\Models\DataVerification::forEntity($app->person)
+            // First try applicant_id (which stores person_id in VerificationService)
+            $verifications = \App\Models\DataVerification::where('applicant_id', $app->person->id)
                 ->orderBy('created_at', 'desc')
                 ->get();
 
-            // Fallback to legacy applicant_id if no results
+            // Fallback to entity_type/entity_id columns if no results
             if ($verifications->isEmpty()) {
-                $applicant = $app->person->account?->applicant;
-                if ($applicant) {
-                    $verifications = \App\Models\DataVerification::where('applicant_id', $applicant->id)
-                        ->orderBy('created_at', 'desc')
-                        ->get();
-                }
+                $verifications = \App\Models\DataVerification::forEntity($app->person)
+                    ->orderBy('created_at', 'desc')
+                    ->get();
             }
         } elseif ($app->company) {
             $verifications = \App\Models\DataVerification::forEntity($app->company)
@@ -1612,7 +1678,7 @@ class ApplicationController extends Controller
     /**
      * Get signature data for an application.
      */
-    private function getSignatureData(ApplicationV2 $app): array
+    private function getSignatureData(Application $app): array
     {
         $person = $app->person;
         $signatureDoc = $person?->documents?->where('type', 'SIGNATURE')->first();
@@ -1659,7 +1725,7 @@ class ApplicationController extends Controller
      *
      * Combines documents from application and person (avoiding duplicates).
      */
-    private function getDocuments(ApplicationV2 $app): array
+    private function getDocuments(Application $app): array
     {
         $allDocuments = collect();
         $seenTypes = [];
@@ -1710,15 +1776,18 @@ class ApplicationController extends Controller
         }
 
         return $allDocuments->map(function ($d) use ($kycVerifiedFields, $docTypeToFieldMap, $kycMethods) {
+            // Check both ocr_data and metadata (KYC controller uses metadata)
             $ocrData = $d->ocr_data ?? [];
+            $metadata = $d->metadata ?? [];
+            $combinedData = array_merge($ocrData, $metadata);
 
-            // Check if document was verified by KYC from ocr_data metadata
+            // Check if document was verified by KYC from ocr_data or metadata
             $isKycFromMetadata = $d->status === 'APPROVED' && (
-                ($ocrData['kyc_validated'] ?? false) ||
-                ($ocrData['face_match_passed'] ?? false) ||
-                ($ocrData['liveness_passed'] ?? false) ||
-                ($ocrData['nubarium_validated'] ?? false) ||
-                in_array($ocrData['validation_method'] ?? '', ['KYC', 'KYC_INE_OCR', 'KYC_FACE_MATCH', 'KYC_LIVENESS', 'FACE_MATCH', 'LIVENESS', 'INE_VALIDATION', 'NUBARIUM'])
+                ($combinedData['kyc_validated'] ?? false) ||
+                ($combinedData['face_match_passed'] ?? false) ||
+                ($combinedData['liveness_passed'] ?? false) ||
+                ($combinedData['nubarium_validated'] ?? false) ||
+                in_array($combinedData['validation_method'] ?? '', ['KYC', 'KYC_INE_OCR', 'KYC_FACE_MATCH', 'KYC_LIVENESS', 'FACE_MATCH', 'LIVENESS', 'INE_VALIDATION', 'NUBARIUM'])
             );
 
             // Check if document type has associated KYC-verified fields in DataVerification
@@ -1744,6 +1813,7 @@ class ApplicationController extends Controller
                 'rejection_reason' => $d->rejection_reason,
                 'reviewed_at' => $d->reviewed_at?->toIso8601String(),
                 'ocr_data' => $ocrData,
+                'metadata' => $metadata,
                 'created_at' => $d->created_at?->toIso8601String(),
                 'is_kyc_locked' => $isKycLocked,
             ];
@@ -1772,7 +1842,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        $application = Application::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
             ->first();
 
@@ -1841,7 +1911,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        $application = Application::where('id', $id)
             ->where('tenant_id', $staff->tenant_id)
             ->with('person.account')
             ->first();
@@ -1851,28 +1921,25 @@ class ApplicationController extends Controller
         }
 
         // Get API logs related to this application or its entity (Person/Company)
-        $applicantId = $application->person?->account?->applicant?->id;
+        $personId = $application->person_id;
+        $accountId = $application->person?->account?->id;
 
         $logs = \App\Models\ApiLog::where('tenant_id', $staff->tenant_id)
-            ->where(function ($q) use ($application, $applicantId) {
+            ->where(function ($q) use ($application, $personId, $accountId) {
+                // Search by application_id
                 $q->where('application_id', $application->id);
 
-                // Search by entity_id (new V2 logs with polymorphic entity)
-                if ($application->person) {
-                    $q->orWhere(function ($q2) use ($application) {
+                // Search by entity_type/entity_id (V2 polymorphic entity)
+                if ($personId) {
+                    $q->orWhere(function ($q2) use ($personId) {
                         $q2->where('entity_type', \App\Models\Person::class)
-                            ->where('entity_id', $application->person_id);
-                    });
-                } elseif ($application->company) {
-                    $q->orWhere(function ($q2) use ($application) {
-                        $q2->where('entity_type', \App\Models\Company::class)
-                            ->where('entity_id', $application->company_id);
+                            ->where('entity_id', $personId);
                     });
                 }
 
-                // Fallback: Search by legacy applicant_id
-                if ($applicantId) {
-                    $q->orWhere('applicant_id', $applicantId);
+                // Search by user_id (ApplicantAccount ID)
+                if ($accountId) {
+                    $q->orWhere('user_id', $accountId);
                 }
             })
             ->orderBy('created_at', 'desc')
@@ -1909,7 +1976,7 @@ class ApplicationController extends Controller
      *
      * Searches in both application documents and person's documents.
      */
-    private function findApplicationDocument(ApplicationV2 $application, string $documentId): ?\App\Models\DocumentV2
+    private function findApplicationDocument(Application $application, string $documentId): ?\App\Models\Document
     {
         // First, try to find in application's direct documents
         $document = $application->documents()->where('id', $documentId)->first();

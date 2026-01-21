@@ -5,13 +5,11 @@ namespace App\Http\Controllers\Api\V2\Staff;
 use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
-use App\Models\ApplicationV2;
 use App\Models\Product;
 use App\Models\StaffAccount;
 use App\Models\Tenant;
 use App\Models\TenantApiConfig;
 use App\Models\TenantBranding;
-use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -73,20 +71,6 @@ class TenantController extends Controller
                 'to' => $tenants->lastItem(),
                 'total' => $tenants->total(),
             ]
-        ]);
-    }
-
-    /**
-     * Get a specific tenant.
-     *
-     * GET /v2/staff/tenants/{id}
-     */
-    public function show(string $id): JsonResponse
-    {
-        $tenant = Tenant::findOrFail($id);
-
-        return $this->success([
-            'tenant' => $this->formatTenantDetailed($tenant)
         ]);
     }
 
@@ -239,50 +223,6 @@ class TenantController extends Controller
     }
 
     /**
-     * Get tenant statistics.
-     *
-     * GET /v2/staff/tenants/{id}/stats
-     */
-    public function stats(string $id): JsonResponse
-    {
-        $tenant = Tenant::findOrFail($id);
-
-        $usersCount = User::withoutGlobalScope('tenant')
-            ->where('tenant_id', $tenant->id)
-            ->count();
-
-        $staffCount = StaffAccount::where('tenant_id', $tenant->id)->count();
-
-        $applicationsCount = Application::withoutGlobalScope('tenant')
-            ->where('tenant_id', $tenant->id)
-            ->count();
-
-        $applicationsByStatus = Application::withoutGlobalScope('tenant')
-            ->where('tenant_id', $tenant->id)
-            ->selectRaw('status, count(*) as count')
-            ->groupBy('status')
-            ->pluck('count', 'status');
-
-        $productsCount = Product::withoutGlobalScope('tenant')
-            ->where('tenant_id', $tenant->id)
-            ->count();
-
-        $activeProductsCount = Product::withoutGlobalScope('tenant')
-            ->where('tenant_id', $tenant->id)
-            ->where('is_active', true)
-            ->count();
-
-        return $this->success([
-            'users_count' => $usersCount,
-            'staff_count' => $staffCount,
-            'applications_count' => $applicationsCount,
-            'applications_by_status' => $applicationsByStatus,
-            'products_count' => $productsCount,
-            'active_products_count' => $activeProductsCount,
-        ]);
-    }
-
-    /**
      * Get full configuration for a specific tenant.
      *
      * GET /v2/staff/tenants/{id}/config
@@ -386,22 +326,6 @@ class TenantController extends Controller
             'url' => $url,
             'field' => $field
         ], 'Logo subido correctamente');
-    }
-
-    /**
-     * List API configurations for a specific tenant.
-     *
-     * GET /v2/staff/tenants/{id}/api-configs
-     */
-    public function listApiConfigs(string $id): JsonResponse
-    {
-        $tenant = Tenant::findOrFail($id);
-
-        return $this->success([
-            'api_configs' => $tenant->apiConfigs->map->toApiArray(),
-            'available_providers' => TenantApiConfig::PROVIDERS,
-            'available_service_types' => TenantApiConfig::SERVICE_TYPES,
-        ]);
     }
 
     /**
@@ -522,7 +446,7 @@ class TenantController extends Controller
      */
     private function formatTenant(Tenant $tenant): array
     {
-        $usersCount = User::withoutGlobalScope('tenant')
+        $usersCount = StaffAccount::withoutGlobalScope('tenant')
             ->where('tenant_id', $tenant->id)
             ->count();
 

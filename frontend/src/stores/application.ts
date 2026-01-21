@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { api } from '@/services/api'
 import { v2 } from '@/services/v2'
 import type {
   Application,
@@ -16,9 +15,6 @@ import { storage, STORAGE_KEYS } from '@/utils/storage'
 import { useAsyncAction } from '@/composables'
 
 const log = logger.child('ApplicationStore')
-
-// Flag to use V2 API (matches auth.ts)
-const USE_V2_API = true
 
 // Simulator only supports these frequencies (not 'OTHER')
 type SimulatorPaymentFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'
@@ -50,16 +46,6 @@ interface ApiError extends Error {
     status?: number
     data?: { message?: string }
   }
-}
-
-// SimulatorResponse removed - now using V2 types from v2.simulator.calculate
-
-interface ApplicationResponse {
-  data: Application
-}
-
-interface ApplicationListResponse {
-  data: Application[]
 }
 
 export const useApplicationStore = defineStore('application', () => {
@@ -105,7 +91,6 @@ export const useApplicationStore = defineStore('application', () => {
   // Async actions with shared loading states
   const { execute: executeSimulation, isLoading: isSimulating } = useAsyncAction(
     async (params: SimulationParams) => {
-      // Use V2 API for simulator
       const response = await v2.simulator.calculate({
         product_id: params.product_id,
         amount: params.amount,
@@ -120,16 +105,16 @@ export const useApplicationStore = defineStore('application', () => {
       const data = response.data.simulation
 
       simulation.value = {
-        requested_amount: data.amount,
+        requested_amount: data.requested_amount,
         term_months: data.term_months,
         payment_frequency: data.payment_frequency as 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY',
-        total_periods: data.term_months, // V2 uses term_months
+        total_periods: data.total_periods,
         annual_rate: data.annual_rate,
-        periodic_rate: data.monthly_rate,
-        opening_commission: data.opening_commission_amount,
+        periodic_rate: data.periodic_rate,
+        opening_commission: data.opening_commission,
         periodic_payment: data.payment_amount,
         total_interest: data.total_interest,
-        total_amount: data.total_amount,
+        total_amount: data.total_to_pay,
         cat: data.cat,
         amortization_table: []
       }
@@ -141,17 +126,11 @@ export const useApplicationStore = defineStore('application', () => {
 
   const { execute: executeLoadApplications, isLoading: isLoadingList } = useAsyncAction(
     async () => {
-      if (USE_V2_API) {
-        const response = await v2.applicant.application.list()
-        // V2 returns V2ApiResponse<{applications: V2Application[]}>
-        if (response.success && response.data) {
-          return (response.data.applications || []) as unknown as Application[]
-        }
-        return []
+      const response = await v2.applicant.application.list()
+      if (response.success && response.data) {
+        return (response.data.applications || []) as unknown as Application[]
       }
-      // V1 API (legacy)
-      const response = await api.get<ApplicationListResponse>('/applications')
-      return response.data.data
+      return []
     },
     {
       onError: (e) => log.error('Error loading applications', { error: e.message })
@@ -165,18 +144,11 @@ export const useApplicationStore = defineStore('application', () => {
         return null
       }
 
+      const response = await v2.applicant.application.get(id)
       let app: Application | null = null
 
-      if (USE_V2_API) {
-        const response = await v2.applicant.application.get(id)
-        // V2 returns V2ApiResponse with application data directly in response.data
-        if (response.success && response.data) {
-          app = response.data as unknown as Application
-        }
-      } else {
-        // V1 API (legacy)
-        const response = await api.get<ApplicationResponse>(`/applications/${id}`)
-        app = response.data.data
+      if (response.success && response.data) {
+        app = response.data as unknown as Application
       }
 
       if (!app?.id || app.id === 'null') {
@@ -185,8 +157,6 @@ export const useApplicationStore = defineStore('application', () => {
       }
 
       currentApplication.value = app
-
-      // Restore simulation from application data
       restoreSimulationFromApp(app)
 
       return app
@@ -207,37 +177,21 @@ export const useApplicationStore = defineStore('application', () => {
     async (params: CreateApplicationParams) => {
       log.debug('POST /applications', { productId: params.product_id })
 
-      let app: Application | null = null
+      const response = await v2.applicant.application.create({
+        product_id: params.product_id,
+        requested_amount: params.requested_amount,
+        term_months: params.term_months,
+        payment_frequency: toV2PaymentFrequency(params.payment_frequency),
+        simulation_data: simulation.value || undefined
+      })
 
-      if (USE_V2_API) {
-        const response = await v2.applicant.application.create({
-          product_id: params.product_id,
-          requested_amount: params.requested_amount,
-          term_months: params.term_months,
-          payment_frequency: toV2PaymentFrequency(params.payment_frequency),
-          simulation_data: simulation.value || undefined
-        })
-        // V2 returns V2ApiResponse with application data directly in response.data
-        if (response.success && response.data) {
-          app = response.data as unknown as Application
-        }
-        log.debug('V2 Response received', { appId: app?.id })
-      } else {
-        // V1 API (legacy)
-        const response = await api.post<ApplicationResponse>('/applications', {
-          product_id: params.product_id,
-          requested_amount: params.requested_amount,
-          term_months: params.term_months,
-          payment_frequency: params.payment_frequency,
-          simulation_data: simulation.value
-        })
-        app = response.data.data
-        log.debug('Response received', { appId: app?.id })
+      let app: Application | null = null
+      if (response.success && response.data) {
+        app = response.data as unknown as Application
       }
+      log.debug('V2 Response received', { appId: app?.id })
 
       currentApplication.value = app
-
-      // Restore simulation from created application data (backend returns calculated values)
       restoreSimulationFromApp(app)
 
       if (currentApplication.value?.id) {
@@ -251,7 +205,7 @@ export const useApplicationStore = defineStore('application', () => {
     { rethrow: true }
   )
 
-  const { execute: executeUpdateApplication, isLoading: isSaving } = useAsyncAction(
+  const { execute: executeUpdateApplication } = useAsyncAction(
     async (data: Partial<Application>) => {
       log.debug('updateApplication called', { appId: currentApplication.value?.id || 'NULL' })
 
@@ -280,31 +234,20 @@ export const useApplicationStore = defineStore('application', () => {
 
       log.debug('PATCH /applications/' + currentApplication.value!.id)
 
+      // Convert payment_frequency to V2 format if present
+      const v2Data = { ...data } as Record<string, unknown>
+      if (data.payment_frequency) {
+        v2Data.payment_frequency = toV2PaymentFrequency(data.payment_frequency as PaymentFrequency)
+      }
+
+      const response = await v2.applicant.application.update(currentApplication.value!.id, v2Data)
       let app: Application | null = null
 
-      if (USE_V2_API) {
-        // Convert payment_frequency to V2 format if present
-        const v2Data = { ...data } as Record<string, unknown>
-        if (data.payment_frequency) {
-          v2Data.payment_frequency = toV2PaymentFrequency(data.payment_frequency as PaymentFrequency)
-        }
-        const response = await v2.applicant.application.update(currentApplication.value!.id, v2Data)
-        // V2 returns V2ApiResponse with application data directly in response.data
-        if (response.success && response.data) {
-          app = response.data as unknown as Application
-        }
-      } else {
-        // V1 API (legacy)
-        const response = await api.put<ApplicationResponse>(
-          `/applications/${currentApplication.value!.id}`,
-          data
-        )
-        app = response.data.data
+      if (response.success && response.data) {
+        app = response.data as unknown as Application
       }
 
       currentApplication.value = app
-
-      // Restore simulation from updated application data
       restoreSimulationFromApp(app)
 
       log.debug('Application updated', { appId: currentApplication.value?.id })
@@ -338,24 +281,15 @@ export const useApplicationStore = defineStore('application', () => {
 
   const { execute: executeSubmitApplication, isLoading: isSubmitting } = useAsyncAction(
     async () => {
-      if (!currentApplication.value || !canSubmit.value) {
+      if (!currentApplication.value) {
         throw new Error('Cannot submit application')
       }
 
+      const response = await v2.applicant.application.submit(currentApplication.value.id)
       let app: Application | null = null
 
-      if (USE_V2_API) {
-        const response = await v2.applicant.application.submit(currentApplication.value.id)
-        // V2 returns V2ApiResponse with application data directly in response.data
-        if (response.success && response.data) {
-          app = response.data as unknown as Application
-        }
-      } else {
-        // V1 API (legacy)
-        const response = await api.post<ApplicationResponse>(
-          `/applications/${currentApplication.value.id}/submit`
-        )
-        app = response.data.data
+      if (response.success && response.data) {
+        app = response.data as unknown as Application
       }
 
       currentApplication.value = app
@@ -364,65 +298,14 @@ export const useApplicationStore = defineStore('application', () => {
     { rethrow: true }
   )
 
-  const { execute: executeCancelApplication, isLoading: isCanceling } = useAsyncAction(
-    async () => {
-      if (!currentApplication.value) {
-        throw new Error('No application to cancel')
-      }
-
-      let app: Application | null = null
-
-      if (USE_V2_API) {
-        const response = await v2.applicant.application.cancel(currentApplication.value.id)
-        // V2 returns V2ApiResponse with application data directly in response.data
-        if (response.success && response.data) {
-          app = response.data as unknown as Application
-        }
-      } else {
-        // V1 API (legacy)
-        const response = await api.post<ApplicationResponse>(
-          `/applications/${currentApplication.value.id}/cancel`
-        )
-        app = response.data.data
-      }
-
-      currentApplication.value = app
-      return currentApplication.value
-    },
-    { rethrow: true }
-  )
-
-  // Combined loading state for backwards compatibility
+  // Combined loading state
   const isLoading = computed(() =>
     isSimulating.value ||
     isLoadingList.value ||
     isLoadingOne.value ||
     isCreating.value ||
-    isSubmitting.value ||
-    isCanceling.value
+    isSubmitting.value
   )
-
-  // Getters
-  const progress = computed(() => Math.round((currentStep.value / totalSteps.value) * 100))
-
-  const canSubmit = computed(() => {
-    if (!currentApplication.value) return false
-    return currentApplication.value.status === 'DRAFT'
-  })
-
-  const statusLabel = computed(() => {
-    const labels: Record<string, string> = {
-      DRAFT: 'Borrador',
-      SUBMITTED: 'Enviada',
-      IN_REVIEW: 'En revisión',
-      DOCS_PENDING: 'Documentos pendientes',
-      CORRECTIONS_PENDING: 'Correcciones pendientes',
-      APPROVED: 'Aprobada',
-      REJECTED: 'Rechazada',
-      SYNCED: 'Sincronizada'
-    }
-    return labels[currentApplication.value?.status ?? ''] ?? ''
-  })
 
   // Actions
   const setSelectedProduct = (product: Product | null) => {
@@ -454,79 +337,8 @@ export const useApplicationStore = defineStore('application', () => {
     await executeUpdateApplication(data)
   }
 
-  const saveStepData = async (stepData: Record<string, unknown>) => {
-    if (!currentApplication.value) {
-      await createApplication({
-        product_id: selectedProduct.value?.id || 'default-product',
-        requested_amount: simulation.value?.requested_amount || 10000,
-        term_months: simulation.value?.term_months || 12,
-        payment_frequency: simulation.value?.payment_frequency || 'MONTHLY'
-      })
-    }
-
-    try {
-      await updateApplication({
-        dynamic_data: {
-          ...currentApplication.value?.dynamic_data,
-          ...stepData
-        }
-      })
-    } catch (error: unknown) {
-      const err = error as { message?: string }
-      if (err.message?.includes('ya fue enviada') || err.message?.includes('no fue encontrada')) {
-        log.info('Creating new application after previous one was closed...')
-        await createApplication({
-          product_id: selectedProduct.value?.id || 'default-product',
-          requested_amount: simulation.value?.requested_amount || 10000,
-          term_months: simulation.value?.term_months || 12,
-          payment_frequency: simulation.value?.payment_frequency || 'MONTHLY'
-        })
-        await updateApplication({
-          dynamic_data: {
-            ...currentApplication.value?.dynamic_data,
-            ...stepData
-          }
-        })
-      } else {
-        throw error
-      }
-    }
-  }
-
   const submitApplication = async (): Promise<Application | null> => {
     return executeSubmitApplication()
-  }
-
-  const cancelApplication = async (): Promise<Application | null> => {
-    return executeCancelApplication()
-  }
-
-  const nextStep = () => {
-    if (currentStep.value < totalSteps.value) {
-      currentStep.value++
-      saveProgress()
-    }
-  }
-
-  const prevStep = () => {
-    if (currentStep.value > 1) {
-      currentStep.value--
-    }
-  }
-
-  const goToStep = (step: number) => {
-    if (step >= 1 && step <= totalSteps.value) {
-      currentStep.value = step
-    }
-  }
-
-  const saveProgress = () => {
-    if (currentApplication.value) {
-      localStorage.setItem(`app_progress_${currentApplication.value.id}`, JSON.stringify({
-        step: currentStep.value,
-        timestamp: Date.now()
-      }))
-    }
   }
 
   const restoreProgress = () => {
@@ -553,11 +365,6 @@ export const useApplicationStore = defineStore('application', () => {
     currentStep,
     totalSteps,
     isLoading,
-    isSaving,
-    // Getters
-    progress,
-    canSubmit,
-    statusLabel,
     // Actions
     setSelectedProduct,
     runSimulation,
@@ -565,12 +372,7 @@ export const useApplicationStore = defineStore('application', () => {
     loadApplication,
     createApplication,
     updateApplication,
-    saveStepData,
     submitApplication,
-    cancelApplication,
-    nextStep,
-    prevStep,
-    goToStep,
     restoreProgress,
     reset
   }

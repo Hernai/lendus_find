@@ -148,27 +148,6 @@ class UserController extends Controller
     }
 
     /**
-     * Get a specific staff user.
-     */
-    public function show(Request $request, string $id): JsonResponse
-    {
-        $tenantId = app('tenant.id');
-
-        $account = StaffAccount::where('tenant_id', $tenantId)
-            ->where('id', $id)
-            ->with('profile')
-            ->first();
-
-        if (!$account) {
-            return $this->notFound('Usuario no encontrado');
-        }
-
-        return $this->success([
-            'user' => $this->formatStaffAccount($account, true),
-        ]);
-    }
-
-    /**
      * Update a staff user.
      */
     public function update(Request $request, string $id): JsonResponse

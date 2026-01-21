@@ -3,8 +3,8 @@
 namespace Tests\Unit\Services\Person;
 
 use App\Models\Person;
-use App\Models\PersonAddress;
-use App\Models\PersonBankAccount;
+use App\Models\Address;
+use App\Models\BankAccount;
 use App\Models\PersonEmployment;
 use App\Models\PersonIdentification;
 use App\Models\Tenant;

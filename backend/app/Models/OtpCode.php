@@ -173,4 +173,19 @@ class OtpCode extends Model
 
         return $this;
     }
+
+    /**
+     * Check if OTP can be sent (rate limiting).
+     * Limits to 5 OTP requests per hour per destination.
+     */
+    public static function canSendOtp(string $type, string $destination): bool
+    {
+        $column = $type === 'EMAIL' ? 'email' : 'phone';
+
+        $recentCount = static::where($column, $destination)
+            ->where('created_at', '>', now()->subHour())
+            ->count();
+
+        return $recentCount < 5;
+    }
 }

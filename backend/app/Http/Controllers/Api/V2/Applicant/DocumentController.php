@@ -2,13 +2,19 @@
 
 namespace App\Http\Controllers\Api\V2\Applicant;
 
+use App\Enums\DocumentStatus;
 use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\ApplicantAccount;
-use App\Models\DocumentV2;
-use App\Services\DocumentV2Service;
+use App\Models\Application;
+use App\Models\DataVerification;
+use App\Models\Document;
+use App\Models\Person;
+use App\Services\ApplicationEventService;
+use App\Services\DocumentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -16,14 +22,27 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * Applicant Document Controller (v2).
  *
  * Handles document uploads and management for authenticated applicants
- * using the new polymorphic DocumentV2 model.
+ * using the new polymorphic Document model.
  */
 class DocumentController extends Controller
 {
     use ApiResponses;
+
     public function __construct(
-        private DocumentV2Service $service
+        private DocumentService $service,
+        private ApplicationEventService $eventService
     ) {}
+
+    /**
+     * Get the current (active) application for the person.
+     */
+    private function getCurrentApplication($person): ?Application
+    {
+        return Application::where('person_id', $person->id)
+            ->active()
+            ->orderByDesc('created_at')
+            ->first();
+    }
 
     /**
      * List applicant's documents.
@@ -64,7 +83,7 @@ class DocumentController extends Controller
         }
 
         $validated = $request->validate([
-            'type' => 'required|string|in:' . implode(',', DocumentV2::validTypes()),
+            'type' => 'required|string|in:' . implode(',', Document::validTypes()),
             'file' => 'required|file|mimes:jpg,jpeg,png,pdf|max:10240', // 10MB
             'identification_id' => 'nullable|uuid|exists:person_identifications,id',
             'metadata' => 'nullable|array',
@@ -103,8 +122,23 @@ class DocumentController extends Controller
                 $validated['metadata'] ?? []
             );
 
+            // Check if document should be auto-approved based on existing KYC validations
+            $this->autoApproveIfKycValidated($document, $person, $validated['type']);
+
+            // Record event if there's an active application
+            $application = $this->getCurrentApplication($person);
+            if ($application) {
+                $this->eventService->recordDocumentUploaded(
+                    $application,
+                    $validated['type'],
+                    $document->id,
+                    $account->id,
+                    $request
+                );
+            }
+
             return $this->created([
-                'document' => $this->formatDocument($document),
+                'document' => $this->formatDocument($document->fresh()),
             ], 'Documento subido exitosamente.');
         } catch (\InvalidArgumentException $e) {
             return $this->badRequest('UPLOAD_FAILED', $e->getMessage());
@@ -290,9 +324,9 @@ class DocumentController extends Controller
         if (empty($requiredTypes)) {
             // Default required documents
             $requiredTypes = [
-                DocumentV2::TYPE_INE_FRONT,
-                DocumentV2::TYPE_INE_BACK,
-                DocumentV2::TYPE_PROOF_OF_ADDRESS,
+                Document::TYPE_INE_FRONT,
+                Document::TYPE_INE_BACK,
+                Document::TYPE_PROOF_OF_ADDRESS,
             ];
         }
 
@@ -302,7 +336,7 @@ class DocumentController extends Controller
             'missing_types' => $missing,
             'missing_labels' => collect($missing)->map(fn($type) => [
                 'type' => $type,
-                'label' => DocumentV2::typeLabels()[$type] ?? $type,
+                'label' => Document::typeLabels()[$type] ?? $type,
             ]),
             'is_complete' => empty($missing),
         ]);
@@ -316,15 +350,15 @@ class DocumentController extends Controller
     public function types(): JsonResponse
     {
         return $this->success([
-            'types' => DocumentV2::typeLabels(),
-            'categories' => DocumentV2::categories(),
+            'types' => Document::typeLabels(),
+            'categories' => Document::categories(),
         ]);
     }
 
     /**
      * Get applicant's document by ID.
      */
-    private function getApplicantDocument(ApplicantAccount $account, string $id): ?DocumentV2
+    private function getApplicantDocument(ApplicantAccount $account, string $id): ?Document
     {
         $person = $account->person;
         if (!$person) {
@@ -332,7 +366,7 @@ class DocumentController extends Controller
         }
 
         // Check documents belonging to person
-        $document = DocumentV2::where('id', $id)
+        $document = Document::where('id', $id)
             ->where('tenant_id', $account->tenant_id)
             ->where(function ($query) use ($person) {
                 $query->where(function ($q) use ($person) {
@@ -352,7 +386,7 @@ class DocumentController extends Controller
     /**
      * Format document for list view.
      */
-    private function formatDocument(DocumentV2 $doc): array
+    private function formatDocument(Document $doc): array
     {
         return [
             'id' => $doc->id,
@@ -374,7 +408,7 @@ class DocumentController extends Controller
     /**
      * Format document for detail view.
      */
-    private function formatDocumentDetail(DocumentV2 $doc): array
+    private function formatDocumentDetail(Document $doc): array
     {
         $data = $this->formatDocument($doc);
 
@@ -384,5 +418,99 @@ class DocumentController extends Controller
         $data['expires_at'] = $doc->expires_at?->toIso8601String();
 
         return $data;
+    }
+
+    /**
+     * Auto-approve a document if the corresponding KYC validation has already passed.
+     *
+     * This handles the race condition where KYC validation runs before the document
+     * is uploaded (e.g., user validates INE, then uploads the INE image).
+     */
+    private function autoApproveIfKycValidated(Document $document, Person $person, string $type): void
+    {
+        // Map document types to their corresponding verification fields
+        $verificationFieldMap = [
+            Document::TYPE_INE_FRONT => 'ine_document_front',
+            Document::TYPE_INE_BACK => 'ine_document_front', // INE validation validates both sides
+            Document::TYPE_SELFIE => 'face_match',
+        ];
+
+        // Only process document types that have KYC validation
+        if (!isset($verificationFieldMap[$type])) {
+            return;
+        }
+
+        $verificationField = $verificationFieldMap[$type];
+
+        // Check if there's a verified record for this field
+        $isVerified = DataVerification::where('applicant_id', $person->id)
+            ->where('field_name', $verificationField)
+            ->where('is_verified', true)
+            ->exists();
+
+        if (!$isVerified) {
+            Log::debug('[DocumentController] No KYC verification found for document auto-approval', [
+                'person_id' => $person->id,
+                'document_type' => $type,
+                'verification_field' => $verificationField,
+            ]);
+            return;
+        }
+
+        // Get verification data for metadata
+        $verification = DataVerification::where('applicant_id', $person->id)
+            ->where('field_name', $verificationField)
+            ->where('is_verified', true)
+            ->first();
+
+        // Build metadata for the auto-approval
+        $kycMetadata = [
+            'kyc_validated' => true,
+            'nubarium_validated' => true,
+            'source' => 'kyc',
+            'validated_at' => $verification->updated_at?->toIso8601String(),
+            'auto_approved' => true,
+            'auto_approved_reason' => 'KYC validation completed before document upload',
+        ];
+
+        // Add type-specific metadata
+        if (in_array($type, [Document::TYPE_INE_FRONT, Document::TYPE_INE_BACK])) {
+            $kycMetadata['ine_valid'] = true;
+            $kycMetadata['ine_ocr'] = true;
+            $kycMetadata['validation_method'] = 'KYC_INE_OCR';
+
+            // Get OCR data from verification if available
+            if ($verification->metadata && isset($verification->metadata['ocr_data'])) {
+                $kycMetadata['ocr_data'] = $verification->metadata['ocr_data'];
+            }
+        } elseif ($type === Document::TYPE_SELFIE) {
+            $kycMetadata['face_match_passed'] = true;
+            $kycMetadata['face_match'] = true;
+            $kycMetadata['validation_method'] = 'KYC_FACE_MATCH';
+
+            // Get face match score from verification if available
+            if ($verification->metadata && isset($verification->metadata['score'])) {
+                $kycMetadata['face_match_score'] = $verification->metadata['score'];
+            }
+        }
+
+        // Merge existing metadata with KYC metadata
+        $currentMetadata = $document->metadata ?? [];
+        $newMetadata = array_merge($currentMetadata, $kycMetadata);
+
+        // Update document to APPROVED status
+        $document->update([
+            'status' => DocumentStatus::APPROVED->value,
+            'reviewed_at' => now(),
+            'metadata' => $newMetadata,
+            'notes' => ($document->notes ? $document->notes . "\n" : '') . 'Auto-aprobado por validación KYC previa.',
+        ]);
+
+        Log::info('[DocumentController] Document auto-approved based on existing KYC validation', [
+            'person_id' => $person->id,
+            'document_id' => $document->id,
+            'document_type' => $type,
+            'verification_field' => $verificationField,
+        ]);
     }
 }

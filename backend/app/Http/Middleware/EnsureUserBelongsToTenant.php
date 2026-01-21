@@ -3,7 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\ApplicantAccount;
-use App\Models\User;
+use App\Models\StaffAccount;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -17,11 +17,11 @@ class EnsureUserBelongsToTenant
      * Ensures the authenticated user belongs to the current tenant.
      * Uses fail-closed design: if tenant context is missing, denies access.
      *
-     * Supports both StaffAccount (User) and ApplicantAccount authentication.
+     * Supports both StaffAccount and ApplicantAccount authentication.
      */
     public function handle(Request $request, Closure $next): Response
     {
-        /** @var User|ApplicantAccount|null $user */
+        /** @var StaffAccount|ApplicantAccount|null $user */
         $user = $request->user();
 
         // If no authenticated user, let auth middleware handle it

@@ -48,11 +48,11 @@ class DataVerification extends Model
     ];
 
     /**
-     * Get the applicant (legacy).
+     * Get the person (for person-related verifications).
      */
-    public function applicant(): BelongsTo
+    public function person(): BelongsTo
     {
-        return $this->belongsTo(Applicant::class);
+        return $this->belongsTo(Person::class, 'applicant_id');
     }
 
     /**
@@ -64,11 +64,11 @@ class DataVerification extends Model
     }
 
     /**
-     * Get the user who verified.
+     * Get the staff who verified.
      */
     public function verifier(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'verified_by');
+        return $this->belongsTo(StaffAccount::class, 'verified_by');
     }
 
     /**

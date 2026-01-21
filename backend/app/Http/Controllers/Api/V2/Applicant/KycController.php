@@ -22,11 +22,14 @@ use App\Http\Requests\Kyc\ValidateRfcRequest;
 use App\Enums\ApplicantType;
 use App\Enums\KycStatus;
 use App\Helpers\PhoneNormalizer;
-use App\Models\Applicant;
 use App\Models\ApplicantAccount;
+use App\Models\Application;
 use App\Models\AuditLog;
 use App\Models\DataVerification;
 use App\Models\Document;
+use App\Models\Person;
+use App\Models\PersonIdentification;
+use App\Services\ApplicationEventService;
 use App\Services\ExternalApi\NubariumService;
 use App\Services\KycServiceFactory;
 use App\Services\VerificationService;
@@ -53,13 +56,31 @@ class KycController extends Controller
 
     protected VerificationService $verificationService;
     protected KycServiceFactory $kycFactory;
+    protected ApplicationEventService $eventService;
 
     public function __construct(
         VerificationService $verificationService,
-        KycServiceFactory $kycFactory
+        KycServiceFactory $kycFactory,
+        ApplicationEventService $eventService
     ) {
         $this->verificationService = $verificationService;
         $this->kycFactory = $kycFactory;
+        $this->eventService = $eventService;
+    }
+
+    /**
+     * Get the current (active) application for the person.
+     */
+    private function getCurrentApplication(?Person $person): ?Application
+    {
+        if (!$person) {
+            return null;
+        }
+
+        return Application::where('person_id', $person->id)
+            ->active()
+            ->orderByDesc('created_at')
+            ->first();
     }
 
     /**
@@ -73,8 +94,9 @@ class KycController extends Controller
         $user = $request?->user();
         if ($user instanceof ApplicantAccount) {
             // V2: Use Person entity for logging context
-            if ($user->person) {
-                $service->forEntity($user->person)
+            $person = $user->person;
+            if ($person) {
+                $service->forEntity($person)
                     ->forUser($user->id);
             }
         }
@@ -83,13 +105,11 @@ class KycController extends Controller
     }
 
     /**
-     * Get the applicant from the authenticated user (V2 pattern).
+     * Get the person from the authenticated user (V2 pattern).
      *
-     * This bridges V2 authentication (ApplicantAccount) with V1 data model (Applicant).
-     * The ApplicantAccount model has a getApplicantAttribute() accessor that looks up
-     * the Applicant by phone, email, or CURP from the account's identities.
+     * The ApplicantAccount model has a person relationship that links to the Person model.
      */
-    protected function getApplicant(Request $request): ?Applicant
+    protected function getPerson(Request $request): ?Person
     {
         $user = $request->user();
 
@@ -100,33 +120,35 @@ class KycController extends Controller
             return null;
         }
 
-        // The applicant accessor in ApplicantAccount looks up by phone/email/CURP
-        $applicant = $user->applicant;
+        // Get the person linked to this account
+        $person = $user->person;
 
-        if (!$applicant) {
-            // Log detailed info to help debug why applicant wasn't found
-            $phoneIdentity = $user->phoneIdentity;
-            $emailIdentity = $user->emailIdentity;
-
-            Log::warning('[V2 KycController] Could not find Applicant for ApplicantAccount', [
+        if (!$person) {
+            Log::warning('[V2 KycController] Could not find Person for ApplicantAccount', [
                 'account_id' => $user->id,
                 'tenant_id' => $user->tenant_id,
-                'phone_identity' => $phoneIdentity?->identifier,
-                'email_identity' => $emailIdentity?->identifier,
                 'person_id' => $user->person_id,
             ]);
         }
 
-        return $applicant;
+        return $person;
     }
 
     /**
-     * Get or create applicant for the authenticated user.
+     * Alias for getPerson - for backwards compatibility in method calls.
+     */
+    protected function getApplicant(Request $request): ?Person
+    {
+        return $this->getPerson($request);
+    }
+
+    /**
+     * Get or create person for the authenticated user.
      *
-     * If no Applicant exists for this ApplicantAccount, creates one automatically
+     * If no Person exists for this ApplicantAccount, creates one automatically
      * using the account's identity information.
      */
-    protected function getOrCreateApplicant(Request $request): ?Applicant
+    protected function getOrCreatePerson(Request $request): ?Person
     {
         $user = $request->user();
 
@@ -134,13 +156,13 @@ class KycController extends Controller
             return null;
         }
 
-        // First try to find existing applicant
-        $applicant = $user->applicant;
-        if ($applicant) {
-            return $applicant;
+        // First try to find existing person
+        $person = $user->person;
+        if ($person) {
+            return $person;
         }
 
-        // Auto-create applicant from account identity
+        // Auto-create person from account identity
         $phoneIdentity = $user->phoneIdentity;
         $emailIdentity = $user->emailIdentity;
 
@@ -148,29 +170,40 @@ class KycController extends Controller
         $phone = PhoneNormalizer::normalize($phoneIdentity?->identifier);
 
         try {
-            $applicant = Applicant::create([
+            $person = Person::create([
                 'id' => Str::uuid(),
                 'tenant_id' => $user->tenant_id,
-                'type' => ApplicantType::INDIVIDUAL->value,
                 'phone' => $phone,
                 'email' => $emailIdentity?->identifier,
                 'kyc_status' => KycStatus::PENDING->value,
             ]);
 
-            Log::info('[V2 KycController] Auto-created Applicant for ApplicantAccount', [
+            // Link person to account
+            $user->person_id = $person->id;
+            $user->save();
+
+            Log::info('[V2 KycController] Auto-created Person for ApplicantAccount', [
                 'account_id' => $user->id,
-                'applicant_id' => $applicant->id,
+                'person_id' => $person->id,
                 'phone' => $phone,
             ]);
 
-            return $applicant;
+            return $person;
         } catch (\Exception $e) {
-            Log::error('[V2 KycController] Failed to auto-create Applicant', [
+            Log::error('[V2 KycController] Failed to auto-create Person', [
                 'account_id' => $user->id,
                 'error' => $e->getMessage(),
             ]);
             return null;
         }
+    }
+
+    /**
+     * Alias for getOrCreatePerson - for backwards compatibility.
+     */
+    protected function getOrCreateApplicant(Request $request): ?Person
+    {
+        return $this->getOrCreatePerson($request);
     }
 
     /**
@@ -307,7 +340,23 @@ class KycController extends Controller
                 $this->verificationService->verify($applicant, 'birth_date', $data['fecha_nacimiento'], VerificationMethod::RENAPO);
             }
 
+            // Create/Update PersonIdentification CURP record to VERIFIED
+            $this->updateCurpIdentificationStatus($applicant, $request->curp, $data);
+
             $this->verificationService->updateKycStatus($applicant);
+
+            // Record event for timeline
+            $application = $this->getCurrentApplication($applicant);
+            if ($application) {
+                $user = $request->user();
+                $this->eventService->recordKycCurpValidated(
+                    $application,
+                    true,
+                    $request->curp,
+                    $user?->id,
+                    $request
+                );
+            }
         }
 
         return $this->success([
@@ -417,6 +466,22 @@ class KycController extends Controller
                 VerificationMethod::SAT,
                 ['sat_response' => $result['data'] ?? []]
             );
+
+            // Update PersonIdentification RFC record to VERIFIED
+            $this->updateRfcIdentificationStatus($applicant, $request->rfc, $result['data'] ?? []);
+
+            // Record event for timeline
+            $application = $this->getCurrentApplication($applicant);
+            if ($application) {
+                $user = $request->user();
+                $this->eventService->recordKycRfcValidated(
+                    $application,
+                    true,
+                    $request->rfc,
+                    $user?->id,
+                    $request
+                );
+            }
         }
 
         return $this->success([
@@ -473,8 +538,24 @@ class KycController extends Controller
                 ]
             );
 
+            // Save CURP, RFC and INE clave to person_identifications table
+            $this->saveIdentificationsFromIne($applicant, $ocrData);
+
             $this->updateAndApproveIneDocuments($applicant, $ocrData, $result['list_validation'] ?? null);
             $this->verificationService->updateKycStatus($applicant);
+
+            // Record event for timeline
+            $application = $this->getCurrentApplication($applicant);
+            if ($application) {
+                $user = $request->user();
+                $this->eventService->recordKycIneValidated(
+                    $application,
+                    true,
+                    $user?->id,
+                    $ocrData,
+                    $request
+                );
+            }
         }
 
         return $this->success([
@@ -536,6 +617,19 @@ class KycController extends Controller
             ]);
 
             $this->verificationService->updateKycStatus($applicant);
+
+            // Record event for timeline
+            $application = $this->getCurrentApplication($applicant);
+            if ($application) {
+                $user = $request->user();
+                $this->eventService->recordKycFaceMatch(
+                    $application,
+                    true,
+                    $result['score'],
+                    $user?->id,
+                    $request
+                );
+            }
         }
 
         return $this->success([
@@ -1003,15 +1097,16 @@ class KycController extends Controller
     /**
      * Update SELFIE document metadata and auto-approve it when face_match validation passes.
      */
-    private function updateAndApproveSelfieDocument(Applicant $applicant, array $faceMatchData): void
+    private function updateAndApproveSelfieDocument(Person $person, array $faceMatchData): void
     {
-        $selfieDoc = Document::where('applicant_id', $applicant->id)
+        $selfieDoc = Document::where('documentable_type', Person::class)
+            ->where('documentable_id', $person->id)
             ->where('type', 'SELFIE')
             ->first();
 
         if (!$selfieDoc) {
             Log::warning('[V2 KycController] No SELFIE document found to update', [
-                'applicant_id' => $applicant->id,
+                'person_id' => $person->id,
             ]);
             return;
         }
@@ -1033,10 +1128,13 @@ class KycController extends Controller
         $selfieDoc->metadata = $newMetadata;
         $selfieDoc->status = \App\Enums\DocumentStatus::APPROVED;
         $selfieDoc->reviewed_at = now();
+        // reviewed_by = null for automated KYC approval (no staff involved)
+        // The metadata indicates it was auto-approved via KYC
+        $selfieDoc->notes = ($selfieDoc->notes ? $selfieDoc->notes . "\n" : '') . 'Auto-aprobado por validación KYC biométrica.';
         $selfieDoc->save();
 
         $this->verificationService->verifySelfieDocument(
-            $applicant,
+            $person,
             $selfieDoc->id,
             [
                 'face_match_score' => $faceMatchData['score'] ?? null,
@@ -1045,7 +1143,7 @@ class KycController extends Controller
         );
 
         Log::info('[V2 KycController] SELFIE document updated and auto-approved via KYC', [
-            'applicant_id' => $applicant->id,
+            'person_id' => $person->id,
             'document_id' => $selfieDoc->id,
             'face_match_score' => $faceMatchData['score'] ?? null,
             'status' => 'APPROVED',
@@ -1055,9 +1153,10 @@ class KycController extends Controller
     /**
      * Update SELFIE document metadata when face_match verification is recorded.
      */
-    private function updateSelfieDocumentMetadata(Applicant $applicant, ?array $verificationMetadata, string $method): void
+    private function updateSelfieDocumentMetadata(Person $person, ?array $verificationMetadata, string $method): void
     {
-        $selfieDoc = Document::where('applicant_id', $applicant->id)
+        $selfieDoc = Document::where('documentable_type', Person::class)
+            ->where('documentable_id', $person->id)
             ->where('type', 'SELFIE')
             ->first();
 
@@ -1100,7 +1199,7 @@ class KycController extends Controller
         $selfieDoc->save();
 
         Log::info('[V2 KycController] Updated SELFIE document metadata with KYC validation', [
-            'applicant_id' => $applicant->id,
+            'person_id' => $person->id,
             'document_id' => $selfieDoc->id,
             'face_match_score' => $newMetadata['face_match_score'] ?? null,
         ]);
@@ -1109,12 +1208,13 @@ class KycController extends Controller
     /**
      * Update INE documents metadata and auto-approve them when INE validation passes.
      */
-    private function updateAndApproveIneDocuments(Applicant $applicant, array $ocrData, ?array $listValidation): void
+    private function updateAndApproveIneDocuments(Person $person, array $ocrData, ?array $listValidation): void
     {
         $documentTypes = ['INE_FRONT', 'INE_BACK'];
 
         foreach ($documentTypes as $docType) {
-            $ineDoc = Document::where('applicant_id', $applicant->id)
+            $ineDoc = Document::where('documentable_type', Person::class)
+                ->where('documentable_id', $person->id)
                 ->where('type', $docType)
                 ->first();
 
@@ -1145,10 +1245,13 @@ class KycController extends Controller
             $ineDoc->metadata = $newMetadata;
             $ineDoc->status = \App\Enums\DocumentStatus::APPROVED;
             $ineDoc->reviewed_at = now();
+            // reviewed_by = null for automated KYC approval (no staff involved)
+            // The metadata indicates it was auto-approved via KYC
+            $ineDoc->notes = ($ineDoc->notes ? $ineDoc->notes . "\n" : '') . 'Auto-aprobado por validación KYC de INE.';
             $ineDoc->save();
 
             Log::info('[V2 KycController] INE document updated and auto-approved via KYC', [
-                'applicant_id' => $applicant->id,
+                'person_id' => $person->id,
                 'document_id' => $ineDoc->id,
                 'doc_type' => $docType,
                 'status' => 'APPROVED',
@@ -1159,9 +1262,10 @@ class KycController extends Controller
     /**
      * Update INE document metadata when INE verification is recorded.
      */
-    private function updateIneDocumentMetadata(Applicant $applicant, string $docType, ?array $verificationMetadata, string $method): void
+    private function updateIneDocumentMetadata(Person $person, string $docType, ?array $verificationMetadata, string $method): void
     {
-        $ineDoc = Document::where('applicant_id', $applicant->id)
+        $ineDoc = Document::where('documentable_type', Person::class)
+            ->where('documentable_id', $person->id)
             ->where('type', $docType)
             ->first();
 
@@ -1193,9 +1297,207 @@ class KycController extends Controller
         $ineDoc->save();
 
         Log::info('[V2 KycController] Updated INE document metadata with KYC validation', [
-            'applicant_id' => $applicant->id,
+            'person_id' => $person->id,
             'document_id' => $ineDoc->id,
             'doc_type' => $docType,
         ]);
+    }
+
+    /**
+     * Save CURP, RFC and INE clave to person_identifications table.
+     *
+     * This method stores the identification values extracted from INE OCR
+     * into the person_identifications table for the Person model.
+     */
+    private function saveIdentificationsFromIne(Person $person, array $ocrData): void
+    {
+        $tenantId = $person->tenant_id;
+
+        // Save CURP
+        if (!empty($ocrData['curp'])) {
+            $person->identifications()->updateOrCreate(
+                ['type' => 'CURP'],
+                [
+                    'tenant_id' => $tenantId,
+                    'identifier_value' => strtoupper($ocrData['curp']),
+                    'is_current' => true,
+                    'status' => 'VERIFIED',
+                    'verified_at' => now(),
+                    'verification_method' => 'INE_OCR',
+                ]
+            );
+            Log::info('[V2 KycController] Saved CURP from INE OCR', [
+                'person_id' => $person->id,
+                'curp' => substr($ocrData['curp'], 0, 4) . '****',
+            ]);
+        }
+
+        // Calculate RFC from CURP if not provided
+        $rfc = null;
+        if (!empty($ocrData['curp']) && strlen($ocrData['curp']) === 18) {
+            // RFC can be derived from CURP (first 10 characters + homoclave)
+            // For now, store partial RFC from CURP
+            $rfc = substr($ocrData['curp'], 0, 10);
+        }
+
+        if ($rfc) {
+            $person->identifications()->updateOrCreate(
+                ['type' => 'RFC'],
+                [
+                    'tenant_id' => $tenantId,
+                    'identifier_value' => strtoupper($rfc),
+                    'is_current' => true,
+                    'status' => 'PENDING', // RFC needs SAT validation to be verified
+                ]
+            );
+            Log::info('[V2 KycController] Saved RFC derived from CURP', [
+                'person_id' => $person->id,
+            ]);
+        }
+
+        // Save INE clave de elector
+        if (!empty($ocrData['clave_elector'])) {
+            $ineData = [
+                'ocr' => $ocrData['ocr'] ?? null,
+                'cic' => $ocrData['cic'] ?? null,
+                'seccion' => $ocrData['seccion'] ?? null,
+                'emision' => $ocrData['emision'] ?? null,
+                'vigencia' => $ocrData['vigencia'] ?? null,
+            ];
+
+            $person->identifications()->updateOrCreate(
+                ['type' => 'INE'],
+                [
+                    'tenant_id' => $tenantId,
+                    'identifier_value' => strtoupper($ocrData['clave_elector']),
+                    'document_data' => $ineData,
+                    'is_current' => true,
+                    'status' => 'VERIFIED',
+                    'verified_at' => now(),
+                    'verification_method' => 'INE_OCR',
+                ]
+            );
+            Log::info('[V2 KycController] Saved INE clave from OCR', [
+                'person_id' => $person->id,
+            ]);
+        }
+
+        // Also update Person's personal data from OCR
+        $updateData = [];
+        if (!empty($ocrData['nombres']) && empty($person->first_name)) {
+            $updateData['first_name'] = $ocrData['nombres'];
+        }
+        if (!empty($ocrData['apellido_paterno']) && empty($person->last_name_1)) {
+            $updateData['last_name_1'] = $ocrData['apellido_paterno'];
+        }
+        if (!empty($ocrData['apellido_materno']) && empty($person->last_name_2)) {
+            $updateData['last_name_2'] = $ocrData['apellido_materno'];
+        }
+        if (!empty($ocrData['fecha_nacimiento']) && empty($person->birth_date)) {
+            // Parse date from format "22/10/1987" to Y-m-d
+            $parts = explode('/', $ocrData['fecha_nacimiento']);
+            if (count($parts) === 3) {
+                $updateData['birth_date'] = "{$parts[2]}-{$parts[1]}-{$parts[0]}";
+            }
+        }
+        if (!empty($ocrData['sexo']) && empty($person->gender)) {
+            $updateData['gender'] = $ocrData['sexo'] === 'H' ? 'M' : 'F';
+        }
+
+        if (!empty($updateData)) {
+            $person->update($updateData);
+            Log::info('[V2 KycController] Updated Person data from INE OCR', [
+                'person_id' => $person->id,
+                'fields' => array_keys($updateData),
+            ]);
+        }
+    }
+
+    /**
+     * Update RFC PersonIdentification status to VERIFIED after SAT validation.
+     */
+    private function updateRfcIdentificationStatus(Person $person, string $rfc, array $satData): void
+    {
+        $rfcUpper = strtoupper($rfc);
+
+        // Find existing RFC identification or create one
+        $identification = $person->identifications()
+            ->where('type', PersonIdentification::TYPE_RFC)
+            ->first();
+
+        if ($identification) {
+            // Update existing record
+            $identification->markAsVerified(
+                'SAT',
+                null, // verified_by - automated
+                ['sat_response' => $satData],
+                1.0 // confidence
+            );
+            Log::info('[V2 KycController] Updated RFC identification to VERIFIED via SAT', [
+                'person_id' => $person->id,
+                'identification_id' => $identification->id,
+            ]);
+        } else {
+            // Create new RFC identification
+            $person->identifications()->create([
+                'tenant_id' => $person->tenant_id,
+                'type' => PersonIdentification::TYPE_RFC,
+                'identifier_value' => $rfcUpper,
+                'is_current' => true,
+                'status' => PersonIdentification::STATUS_VERIFIED,
+                'verified_at' => now(),
+                'verification_method' => 'SAT',
+                'verification_data' => ['sat_response' => $satData],
+                'verification_confidence' => 1.0,
+            ]);
+            Log::info('[V2 KycController] Created RFC identification as VERIFIED via SAT', [
+                'person_id' => $person->id,
+            ]);
+        }
+    }
+
+    /**
+     * Create/Update CURP PersonIdentification after RENAPO validation.
+     */
+    private function updateCurpIdentificationStatus(Person $person, string $curp, array $renapoData): void
+    {
+        $curpUpper = strtoupper($curp);
+
+        // Find existing CURP identification or create one
+        $identification = $person->identifications()
+            ->where('type', PersonIdentification::TYPE_CURP)
+            ->first();
+
+        if ($identification) {
+            // Update existing record to VERIFIED if not already
+            if ($identification->status !== PersonIdentification::STATUS_VERIFIED) {
+                $identification->markAsVerified(
+                    'RENAPO',
+                    null, // verified_by - automated
+                    ['renapo_response' => $renapoData],
+                    1.0 // confidence
+                );
+                Log::info('[V2 KycController] Updated CURP identification to VERIFIED via RENAPO', [
+                    'person_id' => $person->id,
+                    'identification_id' => $identification->id,
+                ]);
+            }
+        } else {
+            // Create new CURP identification
+            $person->identifications()->create([
+                'tenant_id' => $person->tenant_id,
+                'type' => PersonIdentification::TYPE_CURP,
+                'identifier_value' => $curpUpper,
+                'is_current' => true,
+                'status' => PersonIdentification::STATUS_VERIFIED,
+                'verified_at' => now(),
+                'verification_method' => 'RENAPO',
+                'verification_data' => ['renapo_response' => $renapoData],
+                'verification_confidence' => 1.0,
+            ]);
+            Log::info('[V2 KycController] Created CURP identification as VERIFIED via RENAPO', [
+                'person_id' => $person->id,
+            ]);
+        }
     }
 }

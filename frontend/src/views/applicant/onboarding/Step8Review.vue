@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useOnboardingStore, useApplicationStore, useAuthStore } from '@/stores'
+import { useOnboardingStore, useApplicationStore, useAuthStore, useTenantStore } from '@/stores'
 import { AppButton, AppSignaturePad } from '@/components/common'
 import { v2 } from '@/services/v2'
 import { type AxiosErrorResponse } from '@/types/api'
@@ -14,6 +14,7 @@ const router = useRouter()
 const onboardingStore = useOnboardingStore()
 const applicationStore = useApplicationStore()
 const authStore = useAuthStore()
+const tenantStore = useTenantStore()
 
 // Sync from store on mount
 onMounted(async () => {
@@ -31,19 +32,35 @@ const simulation = computed(() => applicationStore.simulation)
 
 const hasApplication = computed(() => !!applicationStore.currentApplication)
 
+// Check if the product requires signature
+const requiresSignature = computed(() => {
+  const product = applicationStore.selectedProduct
+  // Check fresh config first, then fall back to selected product
+  const productFromConfig = tenantStore.products.find(p => p.id === product?.id)
+  const requiredDocs = productFromConfig?.required_documents ?? productFromConfig?.required_docs ??
+                       product?.required_documents ?? product?.required_docs ?? []
+
+  // Check if SIGNATURE is in the required documents list
+  return requiredDocs.some((doc: { type: string } | string) => {
+    const docType = typeof doc === 'string' ? doc : doc.type
+    return docType === 'SIGNATURE'
+  })
+})
+
 const canSubmit = computed(() =>
   hasApplication.value &&
   acceptTerms.value &&
   acceptPrivacy.value &&
   acceptBuro.value &&
-  signature.value !== null
+  // Only require signature if product requires it
+  (!requiresSignature.value || signature.value !== null)
 )
 
 
 
 const handleSubmit = async () => {
   if (!canSubmit.value) {
-    if (!signature.value) {
+    if (requiresSignature.value && !signature.value) {
       error.value = 'Debes firmar la solicitud'
     } else {
       error.value = 'Debes aceptar todos los términos y condiciones'
@@ -61,12 +78,11 @@ const handleSubmit = async () => {
   error.value = ''
 
   try {
-    // 1. Save signature to applicant (required for hasSigned() validation)
-    if (!signature.value) {
-      throw new Error('Firma requerida')
+    // 1. Save signature to applicant if required by product
+    if (requiresSignature.value && signature.value) {
+      await v2.applicant.profile.saveSignature(signature.value)
+      log.debug('Signature saved to applicant')
     }
-    await v2.applicant.profile.saveSignature(signature.value)
-    log.debug('Signature saved to applicant')
 
     // KYC verifications are now automatically recorded by the backend
     // when CURP/INE validation succeeds - no need to call recordVerifications
@@ -268,8 +284,8 @@ const sections = computed(() => {
           </label>
         </div>
 
-        <!-- Signature Pad -->
-        <div class="mt-6">
+        <!-- Signature Pad - only if product requires it -->
+        <div v-if="requiresSignature" class="mt-6">
           <AppSignaturePad
             v-model="signature"
             label="Firma digital"

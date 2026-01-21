@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\Api\Person\PersonAddressController;
-use App\Http\Controllers\Api\Person\PersonBankAccountController;
+use App\Http\Controllers\Api\Person\AddressController;
+use App\Http\Controllers\Api\Person\BankAccountController;
 use App\Http\Controllers\Api\Person\PersonController;
 use App\Http\Controllers\Api\Person\PersonEmploymentController;
 use App\Http\Controllers\Api\Person\PersonIdentificationController;
@@ -57,21 +57,21 @@ Route::middleware(['auth:sanctum'])->prefix('persons')->group(function () {
 
         // Addresses
         Route::prefix('addresses')->group(function () {
-            Route::get('/', [PersonAddressController::class, 'index']);
-            Route::post('/', [PersonAddressController::class, 'store']);
-            Route::get('/current', [PersonAddressController::class, 'current']);
-            Route::get('/current-home', [PersonAddressController::class, 'currentHome']);
-            Route::post('/home', [PersonAddressController::class, 'setHomeAddress']);
-            Route::get('/history/{type}', [PersonAddressController::class, 'history']);
-            Route::get('/has-verified/{type}', [PersonAddressController::class, 'hasVerified']);
+            Route::get('/', [AddressController::class, 'index']);
+            Route::post('/', [AddressController::class, 'store']);
+            Route::get('/current', [AddressController::class, 'current']);
+            Route::get('/current-home', [AddressController::class, 'currentHome']);
+            Route::post('/home', [AddressController::class, 'setHomeAddress']);
+            Route::get('/history/{type}', [AddressController::class, 'history']);
+            Route::get('/has-verified/{type}', [AddressController::class, 'hasVerified']);
 
             Route::prefix('{address}')->group(function () {
-                Route::get('/', [PersonAddressController::class, 'show']);
-                Route::put('/', [PersonAddressController::class, 'update']);
-                Route::delete('/', [PersonAddressController::class, 'destroy']);
-                Route::post('/verify', [PersonAddressController::class, 'verify']);
-                Route::post('/reject', [PersonAddressController::class, 'reject']);
-                Route::post('/geolocation', [PersonAddressController::class, 'setGeolocation']);
+                Route::get('/', [AddressController::class, 'show']);
+                Route::put('/', [AddressController::class, 'update']);
+                Route::delete('/', [AddressController::class, 'destroy']);
+                Route::post('/verify', [AddressController::class, 'verify']);
+                Route::post('/reject', [AddressController::class, 'reject']);
+                Route::post('/geolocation', [AddressController::class, 'setGeolocation']);
             });
         });
 
@@ -123,31 +123,31 @@ Route::middleware(['auth:sanctum'])->prefix('persons')->group(function () {
 
         // Bank Accounts
         Route::prefix('bank-accounts')->group(function () {
-            Route::get('/', [PersonBankAccountController::class, 'index']);
-            Route::post('/', [PersonBankAccountController::class, 'store']);
-            Route::get('/primary', [PersonBankAccountController::class, 'primary']);
-            Route::post('/primary', [PersonBankAccountController::class, 'setPrimaryAccount']);
-            Route::get('/for-disbursement', [PersonBankAccountController::class, 'forDisbursement']);
-            Route::get('/can-receive-disbursement', [PersonBankAccountController::class, 'canReceiveDisbursement']);
-            Route::get('/summary', [PersonBankAccountController::class, 'summary']);
-            Route::get('/has-verified', [PersonBankAccountController::class, 'hasVerified']);
+            Route::get('/', [BankAccountController::class, 'index']);
+            Route::post('/', [BankAccountController::class, 'store']);
+            Route::get('/primary', [BankAccountController::class, 'primary']);
+            Route::post('/primary', [BankAccountController::class, 'setPrimaryAccount']);
+            Route::get('/for-disbursement', [BankAccountController::class, 'forDisbursement']);
+            Route::get('/can-receive-disbursement', [BankAccountController::class, 'canReceiveDisbursement']);
+            Route::get('/summary', [BankAccountController::class, 'summary']);
+            Route::get('/has-verified', [BankAccountController::class, 'hasVerified']);
 
             Route::prefix('{bankAccount}')->group(function () {
-                Route::get('/', [PersonBankAccountController::class, 'show']);
-                Route::put('/', [PersonBankAccountController::class, 'update']);
-                Route::delete('/', [PersonBankAccountController::class, 'destroy']);
-                Route::post('/set-primary', [PersonBankAccountController::class, 'setPrimary']);
-                Route::post('/verify', [PersonBankAccountController::class, 'verify']);
-                Route::post('/unverify', [PersonBankAccountController::class, 'unverify']);
-                Route::post('/deactivate', [PersonBankAccountController::class, 'deactivate']);
-                Route::post('/reactivate', [PersonBankAccountController::class, 'reactivate']);
-                Route::post('/close', [PersonBankAccountController::class, 'close']);
-                Route::post('/freeze', [PersonBankAccountController::class, 'freeze']);
+                Route::get('/', [BankAccountController::class, 'show']);
+                Route::put('/', [BankAccountController::class, 'update']);
+                Route::delete('/', [BankAccountController::class, 'destroy']);
+                Route::post('/set-primary', [BankAccountController::class, 'setPrimary']);
+                Route::post('/verify', [BankAccountController::class, 'verify']);
+                Route::post('/unverify', [BankAccountController::class, 'unverify']);
+                Route::post('/deactivate', [BankAccountController::class, 'deactivate']);
+                Route::post('/reactivate', [BankAccountController::class, 'reactivate']);
+                Route::post('/close', [BankAccountController::class, 'close']);
+                Route::post('/freeze', [BankAccountController::class, 'freeze']);
             });
         });
     });
 
     // Utility routes (no person context needed)
-    Route::post('/validate-clabe', [PersonBankAccountController::class, 'validateClabe']);
-    Route::get('/bank/{code}', [PersonBankAccountController::class, 'getBankName']);
+    Route::post('/validate-clabe', [BankAccountController::class, 'validateClabe']);
+    Route::get('/bank/{code}', [BankAccountController::class, 'getBankName']);
 });

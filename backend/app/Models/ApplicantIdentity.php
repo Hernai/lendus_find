@@ -2,35 +2,36 @@
 
 namespace App\Models;
 
+use App\Traits\HasAuditFields;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * Applicant identity for multi-channel authentication.
+ * Applicant identity for multi-identity authentication.
  *
- * An applicant can have multiple identities (phone, email, WhatsApp)
- * linked to a single account. Each identity can be used for OTP authentication.
+ * Supports multiple login identifiers (phone, email, WhatsApp) linked to a single account.
+ * Each identity can be verified independently.
+ *
+ * @property string $id
+ * @property string $account_id
+ * @property string $type PHONE, EMAIL, WHATSAPP
+ * @property string $identifier The actual phone/email/whatsapp number
+ * @property \Carbon\Carbon|null $verified_at
+ * @property string|null $verification_code
+ * @property \Carbon\Carbon|null $verification_code_expires_at
+ * @property int $verification_attempts
+ * @property bool $is_primary
+ * @property \Carbon\Carbon|null $last_used_at
+ * @property \Carbon\Carbon $created_at
+ * @property \Carbon\Carbon $updated_at
  */
 class ApplicantIdentity extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasUuids, HasAuditFields;
 
-    // =====================================================
-    // Identity Type Constants
-    // =====================================================
-
-    public const TYPE_PHONE = 'PHONE';
-    public const TYPE_EMAIL = 'EMAIL';
-    public const TYPE_WHATSAPP = 'WHATSAPP';
-
-    public const TYPES = [
-        self::TYPE_PHONE,
-        self::TYPE_EMAIL,
-        self::TYPE_WHATSAPP,
-    ];
+    protected $table = 'applicant_identities';
 
     protected $fillable = [
         'account_id',
@@ -66,44 +67,37 @@ class ApplicantIdentity extends Model
         return $this->belongsTo(ApplicantAccount::class, 'account_id');
     }
 
-    /**
-     * Get OTP requests for this identity.
-     */
-    public function otpRequests(): HasMany
-    {
-        return $this->hasMany(OtpRequest::class, 'identity_id');
-    }
-
     // =====================================================
-    // Type Checks
+    // Query Methods
     // =====================================================
 
     /**
-     * Check if identity is phone type.
+     * Find an identity by type and identifier for a tenant.
      */
-    public function isPhone(): bool
+    public static function findByIdentifier(string $type, string $identifier, string $tenantId): ?self
     {
-        return $this->type === self::TYPE_PHONE;
+        return static::query()
+            ->whereHas('account', function ($query) use ($tenantId) {
+                $query->where('tenant_id', $tenantId);
+            })
+            ->where('type', strtoupper($type))
+            ->where('identifier', $identifier)
+            ->first();
     }
 
     /**
-     * Check if identity is email type.
+     * Find an identity by type and identifier (global).
      */
-    public function isEmail(): bool
+    public static function findByIdentifierGlobal(string $type, string $identifier): ?self
     {
-        return $this->type === self::TYPE_EMAIL;
-    }
-
-    /**
-     * Check if identity is WhatsApp type.
-     */
-    public function isWhatsApp(): bool
-    {
-        return $this->type === self::TYPE_WHATSAPP;
+        return static::query()
+            ->where('type', strtoupper($type))
+            ->where('identifier', $identifier)
+            ->first();
     }
 
     // =====================================================
-    // Verification
+    // Status Methods
     // =====================================================
 
     /**
@@ -115,129 +109,24 @@ class ApplicantIdentity extends Model
     }
 
     /**
-     * Generate OTP code.
+     * Mark identity as verified.
      */
-    public function generateOtp(): string
+    public function markAsVerified(): void
     {
-        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-
-        $this->update([
-            'verification_code' => $code,
-            'verification_code_expires_at' => now()->addMinutes(10),
-            'verification_attempts' => 0,
-        ]);
-
-        return $code;
-    }
-
-    /**
-     * Verify OTP code.
-     */
-    public function verifyOtp(string $code): bool
-    {
-        // Check if code matches
-        if ($this->verification_code !== $code) {
-            $this->increment('verification_attempts');
-            return false;
-        }
-
-        // Check if code is expired
-        if (!$this->verification_code_expires_at || $this->verification_code_expires_at->isPast()) {
-            return false;
-        }
-
-        // Mark as verified
         $this->update([
             'verified_at' => now(),
             'verification_code' => null,
             'verification_code_expires_at' => null,
             'verification_attempts' => 0,
-            'last_used_at' => now(),
         ]);
-
-        return true;
     }
 
     /**
-     * Check if can request OTP (rate limiting).
+     * Update last used timestamp.
      */
-    public function canRequestOtp(): bool
+    public function touchLastUsed(): void
     {
-        // Max 3 OTPs per hour
-        $recentRequests = $this->otpRequests()
-            ->where('created_at', '>=', now()->subHour())
-            ->count();
-
-        return $recentRequests < 3;
-    }
-
-    /**
-     * Get remaining OTP attempts before rate limit.
-     */
-    public function getRemainingOtpRequestsAttribute(): int
-    {
-        $recentRequests = $this->otpRequests()
-            ->where('created_at', '>=', now()->subHour())
-            ->count();
-
-        return max(0, 3 - $recentRequests);
-    }
-
-    /**
-     * Check if OTP verification has too many attempts.
-     */
-    public function hasTooManyVerificationAttempts(): bool
-    {
-        return $this->verification_attempts >= 5;
-    }
-
-    /**
-     * Get remaining verification attempts.
-     */
-    public function getRemainingVerificationAttemptsAttribute(): int
-    {
-        return max(0, 5 - $this->verification_attempts);
-    }
-
-    // =====================================================
-    // Display Helpers
-    // =====================================================
-
-    /**
-     * Get masked identifier for display.
-     */
-    public function getMaskedIdentifierAttribute(): string
-    {
-        if ($this->isEmail()) {
-            $parts = explode('@', $this->identifier);
-            if (count($parts) !== 2) {
-                return '***';
-            }
-            $local = $parts[0];
-            $domain = $parts[1];
-            $maskedLocal = substr($local, 0, min(2, strlen($local))) . '***';
-            return $maskedLocal . '@' . $domain;
-        }
-
-        // Phone number
-        $phone = $this->identifier;
-        if (strlen($phone) < 6) {
-            return '***';
-        }
-        return substr($phone, 0, 4) . '****' . substr($phone, -2);
-    }
-
-    /**
-     * Get type label.
-     */
-    public function getTypeLabelAttribute(): string
-    {
-        return match ($this->type) {
-            self::TYPE_PHONE => 'Teléfono',
-            self::TYPE_EMAIL => 'Correo electrónico',
-            self::TYPE_WHATSAPP => 'WhatsApp',
-            default => $this->type,
-        };
+        $this->update(['last_used_at' => now()]);
     }
 
     // =====================================================
@@ -253,7 +142,7 @@ class ApplicantIdentity extends Model
     }
 
     /**
-     * Scope to primary identity.
+     * Scope to primary identities.
      */
     public function scopePrimary($query)
     {
@@ -265,19 +154,6 @@ class ApplicantIdentity extends Model
      */
     public function scopeOfType($query, string $type)
     {
-        return $query->where('type', $type);
-    }
-
-    /**
-     * Find identity by type and identifier within a tenant.
-     */
-    public static function findByIdentifier(string $type, string $identifier, string $tenantId): ?self
-    {
-        return static::whereHas('account', function ($query) use ($tenantId) {
-            $query->where('tenant_id', $tenantId);
-        })
-            ->where('type', $type)
-            ->where('identifier', $identifier)
-            ->first();
+        return $query->where('type', strtoupper($type));
     }
 }

@@ -15,6 +15,18 @@ interface TimelineEvent {
     new_value?: string
     changes?: Record<string, string>
     reason?: string
+    document_type?: string
+    document_type_label?: string
+    changed_fields?: string[]
+    step_number?: number
+    step_label?: string
+    is_valid?: boolean
+    matched?: boolean
+    score?: number
+    bank_name?: string
+    reference_type?: string
+    postal_code?: string
+    employment_type?: string
     [key: string]: unknown
   }
 }
@@ -26,6 +38,34 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'view-details', event: TimelineEvent): void
 }>()
+
+/**
+ * Check if the event has metadata worth showing in the detail modal.
+ */
+const hasDetailableMetadata = (event: TimelineEvent): boolean => {
+  const m = event.metadata
+  if (!m) return false
+
+  return !!(
+    m.ip_address ||
+    m.user_agent ||
+    m.location ||
+    m.old_value ||
+    m.new_value ||
+    (m.changes && Object.keys(m.changes).length > 0) ||
+    m.reason ||
+    m.document_type ||
+    m.changed_fields?.length ||
+    m.step_number ||
+    m.bank_name ||
+    m.reference_type ||
+    m.postal_code ||
+    m.employment_type ||
+    m.is_valid !== undefined ||
+    m.matched !== undefined ||
+    m.score !== undefined
+  )
+}
 
 </script>
 
@@ -58,7 +98,7 @@ const emit = defineEmits<{
               <div class="text-right text-sm whitespace-nowrap text-gray-500 flex flex-col items-end gap-1">
                 <span>{{ formatDateTime(event.created_at) }}</span>
                 <button
-                  v-if="event.metadata?.ip_address || event.metadata?.user_agent"
+                  v-if="hasDetailableMetadata(event)"
                   class="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-1"
                   @click="emit('view-details', event)"
                 >

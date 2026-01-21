@@ -40,11 +40,11 @@ class Tenant extends Model
     ];
 
     /**
-     * Get the users for this tenant.
+     * Get the staff accounts for this tenant.
      */
-    public function users(): HasMany
+    public function staffAccounts(): HasMany
     {
-        return $this->hasMany(User::class);
+        return $this->hasMany(StaffAccount::class);
     }
 
     /**
@@ -56,11 +56,11 @@ class Tenant extends Model
     }
 
     /**
-     * Get the applicants for this tenant.
+     * Get the persons for this tenant.
      */
-    public function applicants(): HasMany
+    public function persons(): HasMany
     {
-        return $this->hasMany(Applicant::class);
+        return $this->hasMany(Person::class);
     }
 
     /**

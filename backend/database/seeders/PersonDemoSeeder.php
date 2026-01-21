@@ -3,8 +3,8 @@
 namespace Database\Seeders;
 
 use App\Models\Person;
-use App\Models\PersonAddress;
-use App\Models\PersonBankAccount;
+use App\Models\Address;
+use App\Models\BankAccount;
 use App\Models\PersonEmployment;
 use App\Models\PersonIdentification;
 use App\Models\PersonReference;
@@ -167,7 +167,7 @@ class PersonDemoSeeder extends Seeder
 
             // Create home address
             $neighborhood = $neighborhoods[$index];
-            PersonAddress::create([
+            Address::create([
                 'tenant_id' => $tenant->id,
                 'person_id' => $person->id,
                 'type' => 'HOME',
@@ -215,7 +215,7 @@ class PersonDemoSeeder extends Seeder
             $clabeBase = $bank['code'] . '180' . str_pad((string) ($index + 1), 11, '0', STR_PAD_LEFT);
             $clabe = $this->calculateClabe($clabeBase);
 
-            PersonBankAccount::create([
+            BankAccount::create([
                 'tenant_id' => $tenant->id,
                 'owner_type' => 'persons',
                 'owner_id' => $person->id,

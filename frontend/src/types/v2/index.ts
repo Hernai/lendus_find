@@ -765,15 +765,47 @@ export interface V2CounterOffer {
 }
 
 export interface V2StatusHistoryEntry {
-  // New format from backend
+  // Event type info (for lifecycle events)
+  event_type?: string
+  event_label?: string
+  is_lifecycle_event?: boolean
+
+  // Status change info (for status changes)
   from_status?: string | null
+  from_status_label?: string | null
   to_status?: string | null
+  to_status_label?: string | null
+
+  // Common fields
+  changed_by?: string | null
+  changed_by_type?: string | null
   notes?: string | null
   created_at?: string
+
+  // Context (IP address, user agent)
+  ip_address?: string | null
+  user_agent?: string | null
+
+  // Event-specific metadata
+  metadata?: {
+    document_type?: string | null
+    document_type_label?: string | null
+    changed_fields?: string[] | null
+    step_number?: number | null
+    step_label?: string | null
+    is_valid?: boolean | null
+    matched?: boolean | null
+    score?: number | null
+    bank_name?: string | null
+    reference_type?: string | null
+    postal_code?: string | null
+    employment_type?: string | null
+    [key: string]: unknown
+  }
+
   // Legacy format (kept for backwards compatibility)
   status?: V2ApplicationStatus
   reason?: string | null
-  changed_by?: string | null
   timestamp?: string
 }
 

@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Enums\AuditAction;
+use App\Enums\VerificationMethod;
 use App\Models\ApplicantAccount;
 use App\Models\ApplicantIdentity;
 use App\Models\AuditLog;
+use App\Models\OtpCode;
 use App\Models\OtpRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -18,6 +20,11 @@ use Illuminate\Support\Facades\Log;
  */
 class ApplicantAuthService
 {
+    public function __construct(
+        private ?VerificationService $verificationService = null
+    ) {
+        // Optional dependency - may be null in some contexts
+    }
     /**
      * Request OTP for a phone or email.
      *
@@ -43,7 +50,7 @@ class ApplicantAuthService
         }
 
         // Check rate limit
-        if (!OtpRequest::canSendOtp($type, $identifier)) {
+        if (!OtpCode::canSendOtp($type, $identifier)) {
             return [
                 'success' => false,
                 'message' => 'Has alcanzado el límite de solicitudes. Intenta en una hora.',
@@ -149,13 +156,20 @@ class ApplicantAuthService
 
             if ($identity) {
                 // Existing user - verify identity if not already verified
+                $wasJustVerified = false;
                 if (!$identity->isVerified()) {
                     $identity->update([
                         'verified_at' => now(),
                         'last_used_at' => now(),
                     ]);
+                    $wasJustVerified = true;
                 } else {
                     $identity->update(['last_used_at' => now()]);
+                }
+
+                // Record phone/email verification in DataVerification if person exists
+                if ($wasJustVerified) {
+                    $this->recordIdentityVerification($identity->account, $type, $identifier);
                 }
 
                 return $this->createLoginResponse($identity->account, 'OTP_' . $type);
@@ -430,6 +444,10 @@ class ApplicantAuthService
             ]
         );
 
+        // Record phone/email verification (new accounts are verified via OTP)
+        // Note: At this point person doesn't exist yet, so we'll record when person is created
+        // The verification will be recorded when the profile is created and linked
+
         return $this->createLoginResponse($account, 'OTP_' . $type, true);
     }
 
@@ -622,5 +640,66 @@ class ApplicantAuthService
                 ],
             ]
         );
+    }
+
+    /**
+     * Record phone/email verification in DataVerification table.
+     *
+     * This records the OTP verification for audit trail and KYC tracking.
+     */
+    private function recordIdentityVerification(ApplicantAccount $account, string $type, string $identifier): void
+    {
+        if (!$this->verificationService) {
+            return;
+        }
+
+        // Only record if person exists (profile has been created)
+        $person = $account->person;
+        if (!$person) {
+            Log::info('[ApplicantAuthService] Skipping verification record - no person linked yet', [
+                'account_id' => $account->id,
+                'type' => $type,
+            ]);
+            return;
+        }
+
+        $fieldName = match ($type) {
+            'PHONE', 'WHATSAPP' => 'phone',
+            'EMAIL' => 'email',
+            default => strtolower($type),
+        };
+
+        $method = match ($type) {
+            'PHONE' => VerificationMethod::OTP_SMS,
+            'WHATSAPP' => VerificationMethod::OTP_WHATSAPP,
+            'EMAIL' => VerificationMethod::OTP_EMAIL,
+            default => VerificationMethod::OTP,
+        };
+
+        try {
+            $this->verificationService->verify(
+                $person,
+                $fieldName,
+                $identifier,
+                $method,
+                [
+                    'verified_via' => 'OTP',
+                    'channel' => $type,
+                    'account_id' => $account->id,
+                ]
+            );
+
+            Log::info('[ApplicantAuthService] Recorded identity verification in DataVerification', [
+                'account_id' => $account->id,
+                'person_id' => $person->id,
+                'type' => $type,
+                'field' => $fieldName,
+            ]);
+        } catch (\Exception $e) {
+            Log::warning('[ApplicantAuthService] Failed to record identity verification', [
+                'account_id' => $account->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

@@ -41,6 +41,17 @@ onMounted(async () => {
     // Ensure tenant config is loaded first
     await tenantStore.loadConfig()
 
+    // Check if user explicitly wants to start a new application
+    // This flag is set by DashboardView.startNewApplication()
+    const startingNew = localStorage.getItem('start_new_application') === 'true'
+    if (startingNew) {
+      log.debug('User requested new application - skipping draft loading')
+      localStorage.removeItem('start_new_application')
+      // Don't load any existing drafts, let user start fresh
+      isInitializing.value = false
+      return
+    }
+
     // Check if there's a pending application to create
     const pendingApp = localStorage.getItem('pending_application')
     // Check if we have a saved application ID from a previous session

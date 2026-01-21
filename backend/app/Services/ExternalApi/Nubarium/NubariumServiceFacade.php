@@ -28,6 +28,8 @@ class NubariumServiceFacade
     protected ?string $applicantId = null;
     protected ?string $applicationId = null;
     protected ?string $userId = null;
+    protected ?string $entityType = null;
+    protected ?string $entityId = null;
 
     /**
      * Available validation services.
@@ -77,6 +79,18 @@ class NubariumServiceFacade
     }
 
     /**
+     * Set the entity context for API logging (Person or Company).
+     */
+    public function forEntity($entity): static
+    {
+        if ($entity) {
+            $this->entityType = get_class($entity);
+            $this->entityId = $entity->id;
+        }
+        return $this;
+    }
+
+    /**
      * Get the identity service instance.
      */
     protected function identity(): NubariumIdentityService
@@ -85,10 +99,16 @@ class NubariumServiceFacade
             $this->identityService = new NubariumIdentityService($this->tenant);
         }
 
-        return $this->identityService
-            ->forApplicant($this->applicantId)
+        $service = $this->identityService
             ->forApplication($this->applicationId)
             ->forUser($this->userId);
+
+        // Set entity context (preferred over legacy applicantId)
+        if ($this->entityType && $this->entityId) {
+            $service->setEntityContext($this->entityType, $this->entityId);
+        }
+
+        return $service;
     }
 
     /**
@@ -100,10 +120,16 @@ class NubariumServiceFacade
             $this->biometricsService = new NubariumBiometricsService($this->tenant);
         }
 
-        return $this->biometricsService
-            ->forApplicant($this->applicantId)
+        $service = $this->biometricsService
             ->forApplication($this->applicationId)
             ->forUser($this->userId);
+
+        // Set entity context (preferred over legacy applicantId)
+        if ($this->entityType && $this->entityId) {
+            $service->setEntityContext($this->entityType, $this->entityId);
+        }
+
+        return $service;
     }
 
     /**
@@ -115,10 +141,16 @@ class NubariumServiceFacade
             $this->complianceService = new NubariumComplianceService($this->tenant);
         }
 
-        return $this->complianceService
-            ->forApplicant($this->applicantId)
+        $service = $this->complianceService
             ->forApplication($this->applicationId)
             ->forUser($this->userId);
+
+        // Set entity context (preferred over legacy applicantId)
+        if ($this->entityType && $this->entityId) {
+            $service->setEntityContext($this->entityType, $this->entityId);
+        }
+
+        return $service;
     }
 
     /**

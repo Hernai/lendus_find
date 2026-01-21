@@ -4,8 +4,8 @@ namespace Tests\Unit\Models;
 
 use App\Models\ApplicantAccount;
 use App\Models\Person;
-use App\Models\PersonAddress;
-use App\Models\PersonBankAccount;
+use App\Models\Address;
+use App\Models\BankAccount;
 use App\Models\PersonEmployment;
 use App\Models\PersonIdentification;
 use App\Models\PersonReference;
@@ -171,11 +171,11 @@ class PersonTest extends TestCase
     {
         $person = Person::factory()->create(['tenant_id' => $this->tenant->id]);
 
-        PersonAddress::factory()->home()->create([
+        Address::factory()->home()->create([
             'tenant_id' => $this->tenant->id,
             'person_id' => $person->id,
         ]);
-        PersonAddress::factory()->work()->create([
+        Address::factory()->work()->create([
             'tenant_id' => $this->tenant->id,
             'person_id' => $person->id,
         ]);
@@ -219,12 +219,12 @@ class PersonTest extends TestCase
     {
         $person = Person::factory()->create(['tenant_id' => $this->tenant->id]);
 
-        PersonBankAccount::factory()->create([
+        BankAccount::factory()->create([
             'tenant_id' => $this->tenant->id,
             'owner_type' => 'persons',
             'owner_id' => $person->id,
         ]);
-        PersonBankAccount::factory()->create([
+        BankAccount::factory()->create([
             'tenant_id' => $this->tenant->id,
             'owner_type' => 'persons',
             'owner_id' => $person->id,
@@ -261,13 +261,13 @@ class PersonTest extends TestCase
     {
         $person = Person::factory()->create(['tenant_id' => $this->tenant->id]);
 
-        $address = PersonAddress::factory()->home()->current()->create([
+        $address = Address::factory()->home()->current()->create([
             'tenant_id' => $this->tenant->id,
             'person_id' => $person->id,
         ]);
 
         // Create old non-current address
-        PersonAddress::factory()->home()->historical()->create([
+        Address::factory()->home()->historical()->create([
             'tenant_id' => $this->tenant->id,
             'person_id' => $person->id,
         ]);
@@ -297,14 +297,14 @@ class PersonTest extends TestCase
     {
         $person = Person::factory()->create(['tenant_id' => $this->tenant->id]);
 
-        $primaryAccount = PersonBankAccount::factory()->primary()->create([
+        $primaryAccount = BankAccount::factory()->primary()->create([
             'tenant_id' => $this->tenant->id,
             'owner_type' => 'persons',
             'owner_id' => $person->id,
         ]);
 
         // Create non-primary account
-        PersonBankAccount::factory()->notPrimary()->create([
+        BankAccount::factory()->notPrimary()->create([
             'tenant_id' => $this->tenant->id,
             'owner_type' => 'persons',
             'owner_id' => $person->id,

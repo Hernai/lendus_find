@@ -75,6 +75,16 @@ abstract class BaseExternalApiService
     }
 
     /**
+     * Set entity context directly (used by facade to propagate context).
+     */
+    public function setEntityContext(?string $entityType, ?string $entityId): static
+    {
+        $this->entityType = $entityType;
+        $this->entityId = $entityId;
+        return $this;
+    }
+
+    /**
      * Set the application context for API logging.
      */
     public function forApplication(?string $applicationId): static

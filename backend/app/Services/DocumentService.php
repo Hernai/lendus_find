@@ -2,476 +2,521 @@
 
 namespace App\Services;
 
-use App\Contracts\DocumentStorageInterface;
-use App\Enums\DocumentStatus;
 use App\Models\Document;
-use App\Models\Application;
-use App\Models\Applicant;
+use App\Models\StaffAccount;
 use App\Models\Tenant;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Intervention\Image\Facades\Image;
 
-/**
- * Document storage and management service.
- *
- * Implements DocumentStorageInterface for consistent storage operations.
- *
- * @deprecated Use DocumentV2Service instead. This service will be removed in v3.0.
- *             DocumentV2Service uses polymorphic DocumentV2 model and DB transactions.
- * @see \App\Services\DocumentV2Service
- */
-class DocumentService implements DocumentStorageInterface
+class DocumentService
 {
-    /**
-     * The storage disk to use.
-     */
-    protected string $disk;
+    // =====================================================
+    // Constants
+    // =====================================================
 
     /**
-     * Max file size in bytes (10MB).
+     * Allowed file extensions for security.
      */
-    protected int $maxFileSize = 10485760;
+    private const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx'];
 
     /**
-     * Allowed MIME types.
+     * Allowed MIME types mapped to extensions for double validation.
      */
-    protected array $allowedMimeTypes = [
-        'image/jpeg',
-        'image/jpg',
-        'image/png',
-        'image/gif',
-        'image/webp',
-        'application/pdf',
+    private const ALLOWED_MIME_TYPES = [
+        'image/jpeg' => ['jpg', 'jpeg'],
+        'image/png' => ['png'],
+        'image/gif' => ['gif'],
+        'application/pdf' => ['pdf'],
+        'application/msword' => ['doc'],
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => ['docx'],
     ];
 
-    /**
-     * Create a new DocumentService instance.
-     */
-    public function __construct()
-    {
-        $this->disk = config('app.env') === 'production' ? 's3' : 'local';
-    }
+    // =====================================================
+    // Document Upload & Storage
+    // =====================================================
 
     /**
-     * Upload a document file.
+     * Upload a document and attach to any documentable entity.
+     *
+     * @throws \InvalidArgumentException
+     * @throws \RuntimeException
      */
     public function upload(
-        UploadedFile $file,
         Tenant $tenant,
-        Applicant $applicant,
-        ?Application $application = null,
-        string $type = 'OTHER',
-        array $metadata = []
+        Model $documentable,
+        string $type,
+        UploadedFile $file,
+        array $options = []
     ): Document {
-        // Validate file
-        $this->validateFile($file);
-
-        // Generate storage path
-        $path = $this->generatePath($tenant, $applicant, $application, $type, $file);
-
-        // Process image if needed (resize, compress)
-        $fileContent = $this->processFile($file);
-
-        // Upload to storage
-        Storage::disk($this->disk)->put($path, $fileContent, 'private');
-
-        // Calculate checksum
-        $checksum = md5($fileContent);
-
-        // Create document record
-        return Document::create([
-            'tenant_id' => $tenant->id,
-            'applicant_id' => $applicant->id,
-            'application_id' => $application?->id,
-            'type' => strtoupper($type),
-            'name' => $file->getClientOriginalName(),
-            'file_name' => $file->getClientOriginalName(),
-            'storage_disk' => $this->disk,
-            'file_path' => $path,
-            'mime_type' => $file->getMimeType(),
-            'file_size' => strlen($fileContent),
-            'status' => DocumentStatus::PENDING,
-            'checksum' => $checksum,
-            'metadata' => $metadata,
-            'is_sensitive' => $this->isSensitiveDocType($type),
-        ]);
-    }
-
-    /**
-     * Get a temporary signed URL for a document.
-     */
-    public function getSignedUrl(Document $document, int $expirationMinutes = 15): string
-    {
-        if ($this->disk === 's3') {
-            return Storage::disk('s3')->temporaryUrl(
-                $document->file_path,
-                now()->addMinutes($expirationMinutes)
+        // Validate documentable entity type (security: prevent arbitrary class associations)
+        $documentableClass = get_class($documentable);
+        if (!Document::isValidDocumentableType($documentableClass)) {
+            throw new \InvalidArgumentException(
+                "Tipo de entidad no permitido para documentos: " . class_basename($documentable)
             );
         }
 
-        // For local development, return a route URL
-        return route('api.documents.download', ['document' => $document->uuid]);
-    }
-
-    /**
-     * Get a presigned URL for direct upload (S3).
-     */
-    public function getPresignedUploadUrl(
-        Tenant $tenant,
-        Applicant $applicant,
-        ?Application $application,
-        string $type,
-        string $fileName,
-        string $mimeType
-    ): array {
-        if ($this->disk !== 's3') {
-            throw new \RuntimeException('Presigned URLs are only available for S3 storage');
+        // Validate file extension for security
+        $extension = strtolower($file->getClientOriginalExtension());
+        if (!in_array($extension, self::ALLOWED_EXTENSIONS)) {
+            throw new \InvalidArgumentException("Tipo de archivo no permitido: {$extension}");
         }
 
-        $extension = pathinfo($fileName, PATHINFO_EXTENSION);
-        $path = $this->generatePathFromParts($tenant, $applicant, $application, $type, $extension);
-
-        // Generate presigned POST URL
-        $s3Client = Storage::disk('s3')->getClient();
-        $bucket = config('filesystems.disks.s3.bucket');
-
-        $formInputs = [
-            'acl' => 'private',
-            'key' => $path,
-        ];
-
-        $options = [
-            ['acl' => 'private'],
-            ['bucket' => $bucket],
-            ['starts-with', '$key', $path],
-            ['content-length-range', 0, $this->maxFileSize],
-        ];
-
-        $expires = '+15 minutes';
-
-        $postObject = new \Aws\S3\PostObjectV4(
-            $s3Client,
-            $bucket,
-            $formInputs,
-            $options,
-            $expires
-        );
-
-        return [
-            'url' => $postObject->getFormAttributes()['action'],
-            'fields' => $postObject->getFormInputs(),
-            'path' => $path,
-            'expires_at' => now()->addMinutes(15)->toIso8601String(),
-        ];
-    }
-
-    /**
-     * Confirm an upload made via presigned URL.
-     */
-    public function confirmPresignedUpload(
-        Tenant $tenant,
-        Applicant $applicant,
-        ?Application $application,
-        string $type,
-        string $path,
-        string $originalName
-    ): Document {
-        // Verify file exists
-        if (!Storage::disk($this->disk)->exists($path)) {
-            throw new \RuntimeException('File not found at specified path');
+        // Validate MIME type matches extension (prevent extension spoofing)
+        $mimeType = $file->getMimeType();
+        if (!isset(self::ALLOWED_MIME_TYPES[$mimeType])) {
+            throw new \InvalidArgumentException("Tipo MIME no permitido: {$mimeType}");
+        }
+        if (!in_array($extension, self::ALLOWED_MIME_TYPES[$mimeType])) {
+            throw new \InvalidArgumentException("La extensión no coincide con el tipo de archivo");
         }
 
-        // Get file info
-        $mimeType = Storage::disk($this->disk)->mimeType($path);
-        $size = Storage::disk($this->disk)->size($path);
+        $category = Document::getCategoryForType($type);
+        $isSensitive = $this->isSensitiveType($type);
 
-        // Create document record
-        return Document::create([
-            'tenant_id' => $tenant->id,
-            'applicant_id' => $applicant->id,
-            'application_id' => $application?->id,
-            'type' => strtoupper($type),
-            'name' => $originalName,
-            'file_name' => $originalName,
-            'storage_disk' => $this->disk,
-            'file_path' => $path,
-            'mime_type' => $mimeType,
-            'file_size' => $size,
-            'status' => DocumentStatus::PENDING,
-            'is_sensitive' => $this->isSensitiveDocType($type),
-        ]);
-    }
+        // Generate storage path
+        $filename = Str::lower($type) . '_' . now()->format('YmdHis') . '.' . $extension;
+        $entityType = class_basename($documentable);
+        $path = "tenants/{$tenant->id}/{$entityType}/{$documentable->id}/documents/{$filename}";
 
-    /**
-     * Delete a document and its file.
-     */
-    public function delete(Document $document): bool
-    {
-        // Delete from storage
-        if ($document->file_path) {
-            Storage::disk($document->storage_disk)->delete($document->file_path);
+        $disk = config('app.env') === 'production' ? 's3' : 'local';
+
+        // Check for existing document of same type BEFORE storing file
+        $existingDoc = Document::where('documentable_type', get_class($documentable))
+            ->where('documentable_id', $documentable->id)
+            ->where('type', $type)
+            ->whereNull('replaced_at')
+            ->first();
+
+        if ($existingDoc && $existingDoc->isApproved() && !($options['allow_replace_approved'] ?? false)) {
+            throw new \InvalidArgumentException('Cannot replace an approved document');
         }
 
-        // Soft delete the record
-        return $document->delete();
+        // Calculate checksum before storing (SHA-256 for cryptographic strength)
+        $checksum = hash_file('sha256', $file->getRealPath());
+
+        // Use transaction for DB operations and handle file storage atomically
+        return DB::transaction(function () use (
+            $tenant, $documentable, $type, $category, $file, $path, $disk,
+            $checksum, $isSensitive, $options, $existingDoc, $extension
+        ) {
+            // Store file using stream for better memory management
+            try {
+                Storage::disk($disk)->put($path, fopen($file->getRealPath(), 'r'), 'private');
+            } catch (\Exception $e) {
+                Log::error('Document upload failed', [
+                    'tenant_id' => $tenant->id,
+                    'type' => $type,
+                    'error' => $e->getMessage(),
+                ]);
+                throw new \RuntimeException('Error al subir el archivo: ' . $e->getMessage());
+            }
+
+            try {
+                // If replacing, mark old as superseded
+                $versionNumber = 1;
+                $previousVersionId = null;
+                if ($existingDoc) {
+                    $previousVersionId = $existingDoc->id;
+                    $versionNumber = $existingDoc->version_number + 1;
+
+                    $reason = $existingDoc->isRejected()
+                        ? Document::REASON_REJECTED
+                        : Document::REASON_UPDATED;
+
+                    $existingDoc->supersede($existingDoc->id, $reason);
+                }
+
+                // Create document record
+                return Document::create([
+                    'tenant_id' => $tenant->id,
+                    'documentable_type' => get_class($documentable),
+                    'documentable_id' => $documentable->id,
+                    'type' => $type,
+                    'category' => $category,
+                    'file_name' => $file->getClientOriginalName(),
+                    'file_path' => $path,
+                    'storage_disk' => $disk,
+                    'mime_type' => $file->getMimeType(),
+                    'file_size' => $file->getSize(),
+                    'checksum' => $checksum,
+                    'status' => $options['status'] ?? Document::STATUS_PENDING,
+                    'is_sensitive' => $isSensitive,
+                    'is_encrypted' => $options['encrypt'] ?? false,
+                    'previous_version_id' => $previousVersionId,
+                    'version_number' => $versionNumber,
+                    'valid_until' => $options['valid_until'] ?? null,
+                    'metadata' => $options['metadata'] ?? null,
+                    'created_by' => $options['created_by'] ?? null,
+                ]);
+            } catch (\Exception $e) {
+                // Clean up uploaded file if DB operation fails
+                Storage::disk($disk)->delete($path);
+                throw $e;
+            }
+        });
     }
 
+    // =====================================================
+    // Document Review & Approval
+    // =====================================================
+
     /**
-     * Replace a document with a new file.
+     * Auto-approve a document (e.g., from KYC validation).
      */
-    public function replace(
+    public function autoApprove(
         Document $document,
-        UploadedFile $file
+        ?string $approvedBy = null,
+        ?array $metadata = null
     ): Document {
-        // Delete old file
-        if ($document->file_path) {
-            Storage::disk($document->storage_disk)->delete($document->file_path);
-        }
-
-        // Validate new file
-        $this->validateFile($file);
-
-        // Generate new path
-        $tenant = $document->tenant ?? Tenant::find($document->tenant_id);
-        $applicant = $document->applicant;
-        $application = $document->application;
-
-        $docType = $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type;
-        $path = $this->generatePath($tenant, $applicant, $application, $docType, $file);
-
-        // Process and upload
-        $fileContent = $this->processFile($file);
-        Storage::disk($this->disk)->put($path, $fileContent, 'private');
-
-        // Update document record
         $document->update([
-            'name' => $file->getClientOriginalName(),
-            'file_name' => $file->getClientOriginalName(),
-            'storage_disk' => $this->disk,
-            'file_path' => $path,
-            'mime_type' => $file->getMimeType(),
-            'file_size' => strlen($fileContent),
-            'status' => DocumentStatus::PENDING,
-            'checksum' => md5($fileContent),
-            'rejection_reason' => null,
-            'reviewed_by' => null,
-            'reviewed_at' => null,
+            'status' => Document::STATUS_APPROVED,
+            'reviewed_at' => now(),
+            'reviewed_by' => $approvedBy,
+            'metadata' => array_merge($document->metadata ?? [], [
+                'auto_approved' => true,
+                'auto_approved_at' => now()->toIso8601String(),
+            ], $metadata ?? []),
         ]);
 
         return $document->fresh();
     }
 
     /**
-     * Copy a document to a new application.
+     * Approve a document by staff.
      */
-    public function copyToApplication(Document $document, Application $newApplication): Document
+    public function approve(Document $document, StaffAccount $staff, ?string $notes = null): Document
     {
-        // Copy file in storage
-        $newPath = str_replace(
-            "applications/{$document->application->uuid}",
-            "applications/{$newApplication->uuid}",
-            $document->file_path
-        );
+        $document->approve($staff->id);
 
-        Storage::disk($document->storage_disk)->copy(
-            $document->file_path,
-            $newPath
-        );
+        if ($notes) {
+            $document->update(['notes' => $notes]);
+        }
 
-        // Create new document record
-        return Document::create([
-            'tenant_id' => $document->tenant_id,
-            'applicant_id' => $document->applicant_id,
-            'application_id' => $newApplication->id,
-            'type' => $document->type,
-            'name' => $document->name ?? $document->file_name,
-            'file_name' => $document->file_name,
-            'storage_disk' => $document->storage_disk,
-            'file_path' => $newPath,
-            'mime_type' => $document->mime_type,
-            'file_size' => $document->file_size,
-            'status' => DocumentStatus::PENDING,
-            'checksum' => $document->checksum,
-            'metadata' => $document->metadata,
-            'is_sensitive' => $document->is_sensitive,
+        return $document->fresh();
+    }
+
+    /**
+     * Reject a document by staff.
+     */
+    public function reject(Document $document, StaffAccount $staff, string $reason): Document
+    {
+        $document->reject($staff->id, $reason);
+
+        return $document->fresh();
+    }
+
+    // =====================================================
+    // OCR Processing
+    // =====================================================
+
+    /**
+     * Set OCR data for a document.
+     */
+    public function setOcrData(Document $document, array $ocrData, float $confidence): Document
+    {
+        $document->setOcrData($ocrData, $confidence);
+
+        return $document->fresh();
+    }
+
+    // =====================================================
+    // URL Generation
+    // =====================================================
+
+    /**
+     * Get a signed URL for accessing the document.
+     */
+    public function getSignedUrl(Document $document, int $expirationMinutes = 15): ?string
+    {
+        return $document->getSignedUrl($expirationMinutes);
+    }
+
+    // =====================================================
+    // Document Deletion
+    // =====================================================
+
+    /**
+     * Delete a document (soft delete).
+     */
+    public function delete(Document $document, ?string $deletedBy = null): bool
+    {
+        if ($deletedBy) {
+            $document->update(['deleted_by' => $deletedBy]);
+        }
+
+        return $document->delete();
+    }
+
+    /**
+     * Permanently delete a document and its file.
+     */
+    public function forceDelete(Document $document): bool
+    {
+        return DB::transaction(function () use ($document) {
+            $filePath = $document->file_path;
+            $disk = $document->storage_disk;
+
+            // Delete DB record first (transaction will rollback if fails)
+            $deleted = $document->forceDelete();
+
+            // Then delete file (if DB delete succeeded)
+            if ($deleted && Storage::disk($disk)->exists($filePath)) {
+                try {
+                    Storage::disk($disk)->delete($filePath);
+                } catch (\Exception $e) {
+                    // Log but don't fail - file can be cleaned up later
+                    Log::warning('Failed to delete document file', [
+                        'document_id' => $document->id,
+                        'file_path' => $filePath,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            return $deleted;
+        });
+    }
+
+    // =====================================================
+    // Query Methods
+    // =====================================================
+
+    /**
+     * Get documents for a documentable entity.
+     */
+    public function getDocumentsFor(
+        Model $documentable,
+        ?string $type = null,
+        ?string $category = null,
+        bool $currentOnly = true
+    ): \Illuminate\Database\Eloquent\Collection {
+        $query = Document::where('documentable_type', get_class($documentable))
+            ->where('documentable_id', $documentable->id);
+
+        if ($currentOnly) {
+            $query->currentVersion();
+        }
+
+        if ($type) {
+            $query->ofType($type);
+        }
+
+        if ($category) {
+            $query->ofCategory($category);
+        }
+
+        return $query->orderByDesc('created_at')->get();
+    }
+
+    /**
+     * Get pending documents for review.
+     */
+    public function getPendingForReview(
+        Tenant $tenant,
+        ?string $category = null,
+        int $limit = 50
+    ): \Illuminate\Database\Eloquent\Collection {
+        $query = Document::where('tenant_id', $tenant->id)
+            ->pending()
+            ->currentVersion()
+            ->with('documentable'); // Eager load to prevent N+1
+
+        if ($category) {
+            $query->ofCategory($category);
+        }
+
+        return $query->orderBy('created_at')->limit($limit)->get();
+    }
+
+    /**
+     * Get documents expiring soon.
+     */
+    public function getExpiringSoon(Tenant $tenant, int $days = 30): \Illuminate\Database\Eloquent\Collection
+    {
+        return Document::where('tenant_id', $tenant->id)
+            ->expiringSoon($days)
+            ->with('documentable')
+            ->get();
+    }
+
+    /**
+     * Mark documents as expiration notified.
+     */
+    public function markExpirationNotified(array $documentIds): int
+    {
+        return Document::whereIn('id', $documentIds)
+            ->update(['expiration_notified' => true]);
+    }
+
+    /**
+     * Check if all required documents are approved for an entity.
+     */
+    public function areAllRequiredApproved(Model $documentable, array $requiredTypes): bool
+    {
+        $approvedTypes = Document::where('documentable_type', get_class($documentable))
+            ->where('documentable_id', $documentable->id)
+            ->approved()
+            ->currentVersion()
+            ->pluck('type')
+            ->toArray();
+
+        return empty(array_diff($requiredTypes, $approvedTypes));
+    }
+
+    /**
+     * Get missing required document types for an entity.
+     */
+    public function getMissingRequired(Model $documentable, array $requiredTypes): array
+    {
+        $existingTypes = Document::where('documentable_type', get_class($documentable))
+            ->where('documentable_id', $documentable->id)
+            ->currentVersion()
+            ->whereIn('status', [Document::STATUS_PENDING, Document::STATUS_APPROVED])
+            ->pluck('type')
+            ->toArray();
+
+        return array_values(array_diff($requiredTypes, $existingTypes));
+    }
+
+    /**
+     * Get rejected documents that need re-upload.
+     */
+    public function getRejectedForReupload(Model $documentable): \Illuminate\Database\Eloquent\Collection
+    {
+        return Document::where('documentable_type', get_class($documentable))
+            ->where('documentable_id', $documentable->id)
+            ->rejected()
+            ->currentVersion()
+            ->get();
+    }
+
+    // =====================================================
+    // Document Copy & Transfer
+    // =====================================================
+
+    /**
+     * Copy documents from one entity to another (e.g., for application snapshots).
+     *
+     * @throws \RuntimeException
+     */
+    public function copyDocuments(
+        Model $sourceEntity,
+        Model $targetEntity,
+        array $types = [],
+        bool $onlyApproved = true
+    ): array {
+        $query = Document::where('documentable_type', get_class($sourceEntity))
+            ->where('documentable_id', $sourceEntity->id)
+            ->currentVersion();
+
+        if ($onlyApproved) {
+            $query->approved();
+        }
+
+        if (!empty($types)) {
+            $query->whereIn('type', $types);
+        }
+
+        $sourceDocuments = $query->get();
+
+        if ($sourceDocuments->isEmpty()) {
+            return [];
+        }
+
+        return DB::transaction(function () use ($sourceDocuments, $sourceEntity, $targetEntity) {
+            $copiedDocuments = [];
+            $copiedFiles = []; // Track copied files for cleanup on failure
+
+            try {
+                foreach ($sourceDocuments as $sourceDoc) {
+                    // Generate new path safely (don't rely on str_replace with IDs)
+                    $filename = basename($sourceDoc->file_path);
+                    $targetType = class_basename($targetEntity);
+                    $newPath = "tenants/{$sourceDoc->tenant_id}/{$targetType}/{$targetEntity->id}/documents/{$filename}";
+
+                    // Copy file
+                    Storage::disk($sourceDoc->storage_disk)->copy(
+                        $sourceDoc->file_path,
+                        $newPath
+                    );
+                    $copiedFiles[] = ['disk' => $sourceDoc->storage_disk, 'path' => $newPath];
+
+                    // Create new document record
+                    $copiedDocuments[] = Document::create([
+                        'tenant_id' => $sourceDoc->tenant_id,
+                        'documentable_type' => get_class($targetEntity),
+                        'documentable_id' => $targetEntity->id,
+                        'type' => $sourceDoc->type,
+                        'category' => $sourceDoc->category,
+                        'file_name' => $sourceDoc->file_name,
+                        'file_path' => $newPath,
+                        'storage_disk' => $sourceDoc->storage_disk,
+                        'mime_type' => $sourceDoc->mime_type,
+                        'file_size' => $sourceDoc->file_size,
+                        'checksum' => $sourceDoc->checksum,
+                        'status' => $sourceDoc->status,
+                        'is_sensitive' => $sourceDoc->is_sensitive,
+                        'is_encrypted' => $sourceDoc->is_encrypted,
+                        'ocr_processed' => $sourceDoc->ocr_processed,
+                        'ocr_data' => $sourceDoc->ocr_data,
+                        'ocr_confidence' => $sourceDoc->ocr_confidence,
+                        'metadata' => array_merge($sourceDoc->metadata ?? [], [
+                            'copied_from' => $sourceDoc->id,
+                            'copied_at' => now()->toIso8601String(),
+                        ]),
+                    ]);
+                }
+
+                return $copiedDocuments;
+            } catch (\Exception $e) {
+                // Clean up any copied files on failure
+                foreach ($copiedFiles as $file) {
+                    try {
+                        Storage::disk($file['disk'])->delete($file['path']);
+                    } catch (\Exception $cleanupError) {
+                        Log::warning('Failed to cleanup copied file', [
+                            'path' => $file['path'],
+                            'error' => $cleanupError->getMessage(),
+                        ]);
+                    }
+                }
+
+                Log::error('Document copy failed', [
+                    'source_id' => $sourceEntity->id,
+                    'target_id' => $targetEntity->id,
+                    'error' => $e->getMessage(),
+                ]);
+
+                throw new \RuntimeException('Error al copiar documentos: ' . $e->getMessage());
+            }
+        });
+    }
+
+    // =====================================================
+    // Utility Methods
+    // =====================================================
+
+    /**
+     * Check if a document type is sensitive.
+     */
+    protected function isSensitiveType(string $type): bool
+    {
+        return in_array($type, [
+            Document::TYPE_INE_FRONT,
+            Document::TYPE_INE_BACK,
+            Document::TYPE_PASSPORT,
+            Document::TYPE_CURP_DOC,
+            Document::TYPE_RFC_CONSTANCIA,
+            Document::TYPE_DRIVER_LICENSE_FRONT,
+            Document::TYPE_DRIVER_LICENSE_BACK,
+            Document::TYPE_SELFIE,
+            Document::TYPE_BANK_STATEMENT,
+            Document::TYPE_PAYSLIP,
         ]);
-    }
-
-    /**
-     * Get all documents for an application grouped by type.
-     */
-    public function getApplicationDocuments(Application $application): array
-    {
-        $documents = $application->documents()->get();
-
-        return [
-            'all' => $documents->map(fn($doc) => $this->formatDocument($doc)),
-            'by_type' => $documents->groupBy('type')->map(fn($group) => $group->first()),
-            'pending' => $documents->where('status', DocumentStatus::PENDING)->count(),
-            'approved' => $documents->where('status', DocumentStatus::APPROVED)->count(),
-            'rejected' => $documents->where('status', DocumentStatus::REJECTED)->count(),
-        ];
-    }
-
-    /**
-     * Check if all required documents are uploaded and approved.
-     */
-    public function hasAllRequiredDocuments(Application $application, array $requiredTypes): array
-    {
-        $documents = $application->documents()->get()->keyBy('type');
-
-        $missing = [];
-        $pending = [];
-        $rejected = [];
-
-        foreach ($requiredTypes as $type) {
-            if (!isset($documents[$type])) {
-                $missing[] = $type;
-            } elseif ($documents[$type]->status === DocumentStatus::PENDING) {
-                $pending[] = $type;
-            } elseif ($documents[$type]->status === DocumentStatus::REJECTED) {
-                $rejected[] = $type;
-            }
-        }
-
-        return [
-            'complete' => empty($missing) && empty($pending) && empty($rejected),
-            'missing' => $missing,
-            'pending' => $pending,
-            'rejected' => $rejected,
-        ];
-    }
-
-    /**
-     * Validate the uploaded file.
-     */
-    protected function validateFile(UploadedFile $file): void
-    {
-        if ($file->getSize() > $this->maxFileSize) {
-            throw new \InvalidArgumentException('File size exceeds maximum allowed size of 10MB');
-        }
-
-        if (!in_array($file->getMimeType(), $this->allowedMimeTypes)) {
-            throw new \InvalidArgumentException('File type not allowed. Allowed types: JPG, PNG, GIF, WEBP, PDF');
-        }
-    }
-
-    /**
-     * Process the file (resize images, etc.).
-     */
-    protected function processFile(UploadedFile $file): string
-    {
-        $mimeType = $file->getMimeType();
-
-        // For images, resize if too large
-        if (str_starts_with($mimeType, 'image/') && $mimeType !== 'application/pdf') {
-            return $this->processImage($file);
-        }
-
-        return file_get_contents($file->getPathname());
-    }
-
-    /**
-     * Process and resize image if needed.
-     */
-    protected function processImage(UploadedFile $file): string
-    {
-        $maxWidth = 2000;
-        $maxHeight = 2000;
-        $quality = 85;
-
-        // Use Intervention Image if available
-        if (class_exists('Intervention\Image\Facades\Image')) {
-            $image = Image::make($file->getPathname());
-
-            // Resize if larger than max dimensions
-            if ($image->width() > $maxWidth || $image->height() > $maxHeight) {
-                $image->resize($maxWidth, $maxHeight, function ($constraint) {
-                    $constraint->aspectRatio();
-                    $constraint->upsize();
-                });
-            }
-
-            // Auto-orient based on EXIF
-            $image->orientate();
-
-            return $image->encode($file->extension(), $quality)->encoded;
-        }
-
-        // Fallback: return original
-        return file_get_contents($file->getPathname());
-    }
-
-    /**
-     * Generate storage path for document.
-     */
-    protected function generatePath(
-        Tenant $tenant,
-        Applicant $applicant,
-        ?Application $application,
-        string $type,
-        UploadedFile $file
-    ): string {
-        $extension = $file->getClientOriginalExtension();
-        return $this->generatePathFromParts($tenant, $applicant, $application, $type, $extension);
-    }
-
-    /**
-     * Generate storage path from parts.
-     */
-    protected function generatePathFromParts(
-        Tenant $tenant,
-        Applicant $applicant,
-        ?Application $application,
-        string $type,
-        string $extension
-    ): string {
-        $timestamp = now()->format('YmdHis');
-        $filename = Str::lower($type) . '_' . $timestamp . '.' . strtolower($extension);
-
-        if ($application) {
-            return "tenants/{$tenant->uuid}/applications/{$application->uuid}/{$filename}";
-        }
-
-        return "tenants/{$tenant->uuid}/applicants/{$applicant->uuid}/{$filename}";
-    }
-
-    /**
-     * Check if document type is sensitive (requires encryption).
-     */
-    protected function isSensitiveDocType(string $type): bool
-    {
-        $sensitiveTypes = [
-            'INE_FRONT',
-            'INE_BACK',
-            'PASSPORT',
-            'RFC_CONSTANCIA',
-            'CURP',
-            'BANK_STATEMENT',
-            'PROOF_OF_INCOME',
-            'TAX_RETURN',
-        ];
-
-        return in_array(strtoupper($type), $sensitiveTypes);
-    }
-
-    /**
-     * Format document for API response.
-     */
-    protected function formatDocument(Document $document): array
-    {
-        return [
-            'id' => $document->uuid,
-            'type' => $document->type instanceof \App\Enums\DocumentType ? $document->type->value : $document->type,
-            'name' => $document->name ?? $document->file_name,
-            'status' => $document->status instanceof \App\Enums\DocumentStatus ? $document->status->value : $document->status,
-            'rejection_reason' => $document->rejection_reason,
-            'mime_type' => $document->mime_type,
-            'size' => $document->file_size,
-            'uploaded_at' => $document->created_at->toIso8601String(),
-            'reviewed_at' => $document->reviewed_at?->toIso8601String(),
-        ];
     }
 }

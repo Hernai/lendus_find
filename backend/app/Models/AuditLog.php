@@ -61,13 +61,13 @@ class AuditLog extends Model
     ): self {
         $request = request();
 
-        // Only use user_id if explicitly provided or if the authenticated user is a User model
-        // (not StaffAccount or ApplicantAccount which are stored in separate tables)
+        // Determine the actor ID based on authenticated user type
         $userId = null;
+        $staffId = null;
         if (array_key_exists('user_id', $options)) {
             $userId = $options['user_id'];
-        } elseif ($request->user() instanceof \App\Models\User) {
-            $userId = $request->user()->id;
+        } elseif ($request->user() instanceof StaffAccount) {
+            $staffId = $request->user()->id;
         }
 
         $data = [
@@ -116,19 +116,19 @@ class AuditLog extends Model
     }
 
     /**
-     * Get the user who performed the action.
+     * Get the staff member who performed the action.
      */
-    public function user(): BelongsTo
+    public function staff(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(StaffAccount::class, 'user_id');
     }
 
     /**
-     * Get the applicant affected.
+     * Get the person affected.
      */
-    public function applicant(): BelongsTo
+    public function person(): BelongsTo
     {
-        return $this->belongsTo(Applicant::class);
+        return $this->belongsTo(Person::class);
     }
 
     /**

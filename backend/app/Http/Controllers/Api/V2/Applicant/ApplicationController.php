@@ -5,9 +5,10 @@ namespace App\Http\Controllers\Api\V2\Applicant;
 use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\ApplicantAccount;
-use App\Models\ApplicationV2;
+use App\Models\Application;
 use App\Models\Product;
-use App\Services\ApplicationV2Service;
+use App\Services\ApplicationEventService;
+use App\Services\ApplicationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -15,14 +16,15 @@ use Illuminate\Http\Request;
  * Applicant Application Controller (v2).
  *
  * Handles loan applications for authenticated applicants using the new
- * normalized ApplicationV2 model.
+ * normalized Application model.
  */
 class ApplicationController extends Controller
 {
     use ApiResponses;
 
     public function __construct(
-        private ApplicationV2Service $service
+        private ApplicationService $service,
+        private ApplicationEventService $eventService
     ) {}
 
     /**
@@ -113,6 +115,13 @@ class ApplicationController extends Controller
             $account
         );
 
+        // Record event for timeline
+        $this->eventService->recordApplicationCreated(
+            $application,
+            $account->id,
+            $request
+        );
+
         return $this->created($this->formatApplication($application), 'Solicitud creada exitosamente.');
     }
 
@@ -126,9 +135,15 @@ class ApplicationController extends Controller
         /** @var ApplicantAccount $account */
         $account = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        // Use person relationship to get person_id (more reliable than person_id column)
+        $person = $account->getPersonOrFind();
+        if (!$person) {
+            return $this->notFound('No tienes un perfil asociado.');
+        }
+
+        $application = Application::where('id', $id)
             ->where('tenant_id', $account->tenant_id)
-            ->where('person_id', $account->person_id)
+            ->where('person_id', $person->id)
             ->with(['product', 'statusHistory'])
             ->first();
 
@@ -157,9 +172,15 @@ class ApplicationController extends Controller
         /** @var ApplicantAccount $account */
         $account = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        // Use person relationship to get person_id (more reliable than person_id column)
+        $person = $account->getPersonOrFind();
+        if (!$person) {
+            return $this->notFound('No tienes un perfil asociado.');
+        }
+
+        $application = Application::where('id', $id)
             ->where('tenant_id', $account->tenant_id)
-            ->where('person_id', $account->person_id)
+            ->where('person_id', $person->id)
             ->first();
 
         if (!$application) {
@@ -198,9 +219,15 @@ class ApplicationController extends Controller
         /** @var ApplicantAccount $account */
         $account = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        // Use person relationship to get person_id
+        $person = $account->getPersonOrFind();
+        if (!$person) {
+            return $this->notFound('No tienes un perfil asociado.');
+        }
+
+        $application = Application::where('id', $id)
             ->where('tenant_id', $account->tenant_id)
-            ->where('person_id', $account->person_id)
+            ->where('person_id', $person->id)
             ->first();
 
         if (!$application) {
@@ -219,6 +246,13 @@ class ApplicationController extends Controller
                 $account,
                 $request->ip(),
                 $request->userAgent()
+            );
+
+            // Record event for timeline
+            $this->eventService->recordApplicationSubmitted(
+                $application,
+                $account->id,
+                $request
             );
 
             return $this->success($this->formatApplication($application), 'Solicitud enviada exitosamente.');
@@ -241,9 +275,15 @@ class ApplicationController extends Controller
         /** @var ApplicantAccount $account */
         $account = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        // Use person relationship to get person_id
+        $person = $account->getPersonOrFind();
+        if (!$person) {
+            return $this->notFound('No tienes un perfil asociado.');
+        }
+
+        $application = Application::where('id', $id)
             ->where('tenant_id', $account->tenant_id)
-            ->where('person_id', $account->person_id)
+            ->where('person_id', $person->id)
             ->first();
 
         if (!$application) {
@@ -278,9 +318,15 @@ class ApplicationController extends Controller
         /** @var ApplicantAccount $account */
         $account = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        // Use person relationship to get person_id
+        $person = $account->getPersonOrFind();
+        if (!$person) {
+            return $this->notFound('No tienes un perfil asociado.');
+        }
+
+        $application = Application::where('id', $id)
             ->where('tenant_id', $account->tenant_id)
-            ->where('person_id', $account->person_id)
+            ->where('person_id', $person->id)
             ->first();
 
         if (!$application) {
@@ -314,9 +360,15 @@ class ApplicationController extends Controller
         /** @var ApplicantAccount $account */
         $account = $request->user();
 
-        $application = ApplicationV2::where('id', $id)
+        // Use person relationship to get person_id
+        $person = $account->getPersonOrFind();
+        if (!$person) {
+            return $this->notFound('No tienes un perfil asociado.');
+        }
+
+        $application = Application::where('id', $id)
             ->where('tenant_id', $account->tenant_id)
-            ->where('person_id', $account->person_id)
+            ->where('person_id', $person->id)
             ->first();
 
         if (!$application) {
@@ -340,7 +392,7 @@ class ApplicationController extends Controller
     /**
      * Format application for list view.
      */
-    private function formatApplication(ApplicationV2 $app): array
+    private function formatApplication(Application $app): array
     {
         // Get opening commission from product (percentage * requested amount)
         $openingCommissionRate = $app->product?->opening_commission ?? 0;
@@ -381,7 +433,7 @@ class ApplicationController extends Controller
     /**
      * Format application for detail view.
      */
-    private function formatApplicationDetail(ApplicationV2 $app): array
+    private function formatApplicationDetail(Application $app): array
     {
         $data = $this->formatApplication($app);
 

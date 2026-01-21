@@ -5,25 +5,25 @@ namespace App\Services;
 use App\Enums\VerifiableField;
 use App\Enums\VerificationMethod;
 use App\Enums\VerificationStatus;
-use App\Models\Applicant;
+use App\Models\ApplicantAccount;
 use App\Models\DataVerification;
-use App\Models\User;
+use App\Models\Person;
 
 class VerificationService
 {
     /**
-     * Verify and lock a field for an entity (User or Applicant).
+     * Verify and lock a field for an entity (ApplicantAccount or Person).
      *
-     * @param User|Applicant $entity The entity to verify
+     * @param ApplicantAccount|Person $entity The entity to verify
      * @param VerifiableField|string $field The field being verified
      * @param mixed $value The verified value
      * @param VerificationMethod|string $method How it was verified (OTP, RENAPO, SAT, INE, etc.)
      * @param array|null $metadata Additional data about the verification
      * @param string|null $notes Optional notes
-     * @return DataVerification|null Returns the verification record, or null if no applicant
+     * @return DataVerification|null Returns the verification record, or null if no person
      */
     public function verify(
-        User|Applicant $entity,
+        ApplicantAccount|Person $entity,
         VerifiableField|string $field,
         mixed $value,
         VerificationMethod|string $method,
@@ -33,25 +33,24 @@ class VerificationService
         $fieldName = $field instanceof VerifiableField ? $field->value : $field;
         $methodEnum = $method instanceof VerificationMethod ? $method : VerificationMethod::tryFrom($method);
 
-        // Get applicant from entity
-        $applicant = $this->resolveApplicant($entity);
+        // Get person from entity
+        $person = $this->resolvePerson($entity);
 
         // Update entity-level verification timestamps
         $this->updateEntityTimestamps($entity, $fieldName);
 
-        // If no applicant yet, can't create DataVerification record
-        if (!$applicant) {
+        // If no person yet, can't create DataVerification record
+        if (!$person) {
             return null;
         }
 
         // Check if already verified and locked
-        $existing = DataVerification::where('applicant_id', $applicant->id)
+        $existing = DataVerification::where('applicant_id', $person->id)
             ->where('field_name', $fieldName)
             ->where('is_verified', true)
             ->first();
 
         // Allow RENAPO/SAT (official government sources) to override OCR-locked fields
-        // RENAPO data is the authoritative source and should take precedence over OCR which can have errors
         $isOfficialSource = in_array($methodEnum, [
             VerificationMethod::RENAPO,
             VerificationMethod::KYC_CURP_RENAPO,
@@ -60,7 +59,7 @@ class VerificationService
         ]);
 
         if ($existing && $existing->is_locked && !$isOfficialSource) {
-            return $existing; // Already verified and locked, and new method is not official source
+            return $existing;
         }
 
         // Determine if this method should lock the field
@@ -80,11 +79,11 @@ class VerificationService
         // Create or update verification record
         return DataVerification::updateOrCreate(
             [
-                'applicant_id' => $applicant->id,
+                'applicant_id' => $person->id,
                 'field_name' => $fieldName,
             ],
             [
-                'tenant_id' => $applicant->tenant_id,
+                'tenant_id' => $person->tenant_id,
                 'field_value' => is_array($value) ? json_encode($value) : (string) $value,
                 'method' => $methodEnum?->value ?? $method,
                 'is_verified' => true,
@@ -99,13 +98,13 @@ class VerificationService
     /**
      * Verify multiple fields at once.
      *
-     * @param User|Applicant $entity
+     * @param ApplicantAccount|Person $entity
      * @param array $verifications Array of [field => [value, method, metadata, notes]] or [field => value]
      * @param VerificationMethod|string|null $defaultMethod Default method if not specified per field
      * @return array<string, DataVerification|null>
      */
     public function verifyBatch(
-        User|Applicant $entity,
+        ApplicantAccount|Person $entity,
         array $verifications,
         VerificationMethod|string|null $defaultMethod = null
     ): array {
@@ -132,21 +131,17 @@ class VerificationService
 
     /**
      * Check if a field is locked for an entity.
-     *
-     * @param User|Applicant $entity
-     * @param VerifiableField|string $field
-     * @return bool
      */
-    public function isLocked(User|Applicant $entity, VerifiableField|string $field): bool
+    public function isLocked(ApplicantAccount|Person $entity, VerifiableField|string $field): bool
     {
-        $applicant = $this->resolveApplicant($entity);
-        if (!$applicant) {
+        $person = $this->resolvePerson($entity);
+        if (!$person) {
             return false;
         }
 
         $fieldName = $field instanceof VerifiableField ? $field->value : $field;
 
-        return DataVerification::where('applicant_id', $applicant->id)
+        return DataVerification::where('applicant_id', $person->id)
             ->where('field_name', $fieldName)
             ->where('is_locked', true)
             ->exists();
@@ -154,21 +149,17 @@ class VerificationService
 
     /**
      * Check if a field is verified for an entity.
-     *
-     * @param User|Applicant $entity
-     * @param VerifiableField|string $field
-     * @return bool
      */
-    public function isVerified(User|Applicant $entity, VerifiableField|string $field): bool
+    public function isVerified(ApplicantAccount|Person $entity, VerifiableField|string $field): bool
     {
-        $applicant = $this->resolveApplicant($entity);
-        if (!$applicant) {
+        $person = $this->resolvePerson($entity);
+        if (!$person) {
             return false;
         }
 
         $fieldName = $field instanceof VerifiableField ? $field->value : $field;
 
-        return DataVerification::where('applicant_id', $applicant->id)
+        return DataVerification::where('applicant_id', $person->id)
             ->where('field_name', $fieldName)
             ->where('is_verified', true)
             ->exists();
@@ -176,18 +167,15 @@ class VerificationService
 
     /**
      * Get all locked fields for an entity.
-     *
-     * @param User|Applicant $entity
-     * @return array
      */
-    public function getLockedFields(User|Applicant $entity): array
+    public function getLockedFields(ApplicantAccount|Person $entity): array
     {
-        $applicant = $this->resolveApplicant($entity);
-        if (!$applicant) {
+        $person = $this->resolvePerson($entity);
+        if (!$person) {
             return [];
         }
 
-        return DataVerification::where('applicant_id', $applicant->id)
+        return DataVerification::where('applicant_id', $person->id)
             ->where('is_locked', true)
             ->pluck('field_name')
             ->toArray();
@@ -195,18 +183,15 @@ class VerificationService
 
     /**
      * Get verification summary for an entity.
-     *
-     * @param User|Applicant $entity
-     * @return array
      */
-    public function getSummary(User|Applicant $entity): array
+    public function getSummary(ApplicantAccount|Person $entity): array
     {
-        $applicant = $this->resolveApplicant($entity);
-        if (!$applicant) {
+        $person = $this->resolvePerson($entity);
+        if (!$person) {
             return ['total' => 0, 'verified' => 0, 'locked' => 0, 'fields' => []];
         }
 
-        $verifications = DataVerification::where('applicant_id', $applicant->id)->get();
+        $verifications = DataVerification::where('applicant_id', $person->id)->get();
 
         $summary = [
             'total' => $verifications->count(),
@@ -230,16 +215,11 @@ class VerificationService
 
     /**
      * Check if entity has completed KYC (critical fields verified).
-     *
-     * Optimized to use a single query instead of N+1 queries per field.
-     *
-     * @param User|Applicant $entity
-     * @return bool
      */
-    public function hasCompletedKyc(User|Applicant $entity): bool
+    public function hasCompletedKyc(ApplicantAccount|Person $entity): bool
     {
-        $applicant = $this->resolveApplicant($entity);
-        if (!$applicant) {
+        $person = $this->resolvePerson($entity);
+        if (!$person) {
             return false;
         }
 
@@ -250,8 +230,7 @@ class VerificationService
             VerifiableField::BIRTH_DATE->value,
         ];
 
-        // Single query to count verified critical fields
-        $verifiedCount = DataVerification::where('applicant_id', $applicant->id)
+        $verifiedCount = DataVerification::where('applicant_id', $person->id)
             ->whereIn('field_name', $criticalFields)
             ->where('is_verified', true)
             ->count();
@@ -261,21 +240,18 @@ class VerificationService
 
     /**
      * Update entity's KYC status if all critical fields are verified.
-     *
-     * @param User|Applicant $entity
-     * @return bool Whether status was updated
      */
-    public function updateKycStatus(User|Applicant $entity): bool
+    public function updateKycStatus(ApplicantAccount|Person $entity): bool
     {
-        $applicant = $this->resolveApplicant($entity);
-        if (!$applicant || $applicant->kyc_verified_at) {
+        $person = $this->resolvePerson($entity);
+        if (!$person || $person->kyc_verified_at) {
             return false;
         }
 
         if ($this->hasCompletedKyc($entity)) {
-            $applicant->kyc_verified_at = now();
-            $applicant->kyc_status = \App\Enums\KycStatus::VERIFIED;
-            $applicant->save();
+            $person->kyc_verified_at = now();
+            $person->kyc_status = \App\Enums\KycStatus::VERIFIED;
+            $person->save();
             return true;
         }
 
@@ -287,24 +263,24 @@ class VerificationService
     // =========================================================================
 
     /**
-     * Resolve applicant from entity.
+     * Resolve person from entity.
      */
-    private function resolveApplicant(User|Applicant $entity): ?Applicant
+    private function resolvePerson(ApplicantAccount|Person $entity): ?Person
     {
-        if ($entity instanceof Applicant) {
+        if ($entity instanceof Person) {
             return $entity;
         }
 
-        // Entity is User, get their applicant
-        return $entity->applicant;
+        // Entity is ApplicantAccount, get their person
+        return $entity->person;
     }
 
     /**
      * Update entity-level verification timestamps.
      */
-    private function updateEntityTimestamps(User|Applicant $entity, string $fieldName): void
+    private function updateEntityTimestamps(ApplicantAccount|Person $entity, string $fieldName): void
     {
-        if ($entity instanceof User) {
+        if ($entity instanceof ApplicantAccount) {
             if ($fieldName === 'phone' && !$entity->phone_verified_at) {
                 $entity->phone_verified_at = now();
                 $entity->save();
@@ -313,18 +289,13 @@ class VerificationService
                 $entity->save();
             }
 
-            // Also update applicant timestamps if exists
-            if ($entity->applicant) {
-                $this->updateEntityTimestamps($entity->applicant, $fieldName);
+            // Also update person timestamps if exists
+            if ($entity->person) {
+                $this->updateEntityTimestamps($entity->person, $fieldName);
             }
-        } elseif ($entity instanceof Applicant) {
-            if ($fieldName === 'phone' && !$entity->phone_verified_at) {
-                $entity->phone_verified_at = now();
-                $entity->save();
-            } elseif ($fieldName === 'email' && !$entity->email_verified_at) {
-                $entity->email_verified_at = now();
-                $entity->save();
-            }
+        } elseif ($entity instanceof Person) {
+            // Person doesn't have phone/email verified timestamps typically
+            // but we can extend this if needed
         }
     }
 
@@ -368,27 +339,17 @@ class VerificationService
 
     /**
      * Verify a document and optionally lock related fields.
-     *
-     * @param User|Applicant $entity
-     * @param string $documentType Type of document (INE_FRONT, INE_BACK, PROOF_OF_ADDRESS, etc.)
-     * @param string $documentId The document ID
-     * @param VerificationMethod|string $method Verification method
-     * @param array|null $metadata Additional metadata (OCR data, etc.)
-     * @param array|null $fieldsToLock Additional fields to lock based on this document
-     * @return DataVerification|null
      */
     public function verifyDocument(
-        User|Applicant $entity,
+        ApplicantAccount|Person $entity,
         string $documentType,
         string $documentId,
         VerificationMethod|string $method,
         ?array $metadata = null,
         ?array $fieldsToLock = null
     ): ?DataVerification {
-        // Normalize document type to field name
         $fieldName = $this->documentTypeToFieldName($documentType);
 
-        // Verify the document itself
         $verification = $this->verify(
             $entity,
             $fieldName,
@@ -400,12 +361,11 @@ class VerificationService
             ])
         );
 
-        // Lock additional fields if specified
         if ($fieldsToLock && $verification) {
-            $applicant = $this->resolveApplicant($entity);
-            if ($applicant) {
+            $person = $this->resolvePerson($entity);
+            if ($person) {
                 foreach ($fieldsToLock as $field => $value) {
-                    $this->verify($applicant, $field, $value, $method, [
+                    $this->verify($person, $field, $value, $method, [
                         'locked_by_document' => $documentType,
                         'document_id' => $documentId,
                     ]);
@@ -418,22 +378,15 @@ class VerificationService
 
     /**
      * Verify INE document (front or back) and lock identity fields.
-     *
-     * @param User|Applicant $entity
-     * @param string $side 'front' or 'back'
-     * @param string $documentId
-     * @param array $ocrData OCR extracted data
-     * @return DataVerification|null
      */
     public function verifyIneDocument(
-        User|Applicant $entity,
+        ApplicantAccount|Person $entity,
         string $side,
         string $documentId,
         array $ocrData = []
     ): ?DataVerification {
         $documentType = $side === 'front' ? 'INE_FRONT' : 'INE_BACK';
 
-        // Fields to lock from INE front
         $fieldsToLock = [];
         if ($side === 'front' && !empty($ocrData)) {
             if (!empty($ocrData['curp'])) {
@@ -469,14 +422,9 @@ class VerificationService
 
     /**
      * Verify selfie document with face match validation.
-     *
-     * @param User|Applicant $entity
-     * @param string $documentId
-     * @param array $faceMatchData Face match validation data (score, threshold, etc.)
-     * @return DataVerification|null
      */
     public function verifySelfieDocument(
-        User|Applicant $entity,
+        ApplicantAccount|Person $entity,
         string $documentId,
         array $faceMatchData = []
     ): ?DataVerification {
@@ -492,24 +440,18 @@ class VerificationService
                 'liveness_score' => $faceMatchData['liveness_score'] ?? null,
                 'auto_approved' => true,
             ],
-            [] // No fields to lock from selfie
+            []
         );
     }
 
     /**
      * Verify proof of address document and lock address fields.
-     *
-     * @param User|Applicant $entity
-     * @param string $documentId
-     * @param array $addressData Extracted address data
-     * @return DataVerification|null
      */
     public function verifyProofOfAddress(
-        User|Applicant $entity,
+        ApplicantAccount|Person $entity,
         string $documentId,
         array $addressData = []
     ): ?DataVerification {
-        // Fields to lock from proof of address
         $fieldsToLock = [];
         if (!empty($addressData)) {
             $addressFields = ['street', 'exterior_number', 'interior_number', 'colony', 'city', 'state', 'postal_code'];

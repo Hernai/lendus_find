@@ -2,94 +2,430 @@
 
 namespace App\Models;
 
-use App\Enums\DocumentStatus;
-use App\Enums\DocumentType;
-use App\Traits\HasAuditFields;
 use App\Traits\HasTenant;
-use App\Traits\HasUuid;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Storage;
 
+/**
+ * Document model with polymorphic relationships.
+ *
+ * Documents can be attached to various entities:
+ * - persons
+ * - person_identifications
+ * - addresses
+ * - person_employments
+ * - applications
+ */
 class Document extends Model
 {
-    use HasFactory, HasUuid, HasTenant, SoftDeletes, HasAuditFields;
+    use HasFactory, HasUuids, SoftDeletes, HasTenant;
+
+    protected $table = 'documents';
 
     protected $fillable = [
         'tenant_id',
-        'application_id',
-        'applicant_id',
+        'documentable_type',
+        'documentable_id',
         'type',
-        'name',
-        'description',
-        'file_path',
+        'category',
         'file_name',
+        'file_path',
+        'storage_disk',
         'mime_type',
         'file_size',
-        'storage_disk',
+        'checksum',
         'status',
         'rejection_reason',
-        'reviewed_by',
         'reviewed_at',
-        'metadata',
-        'checksum',
+        'reviewed_by',
+        'ocr_processed',
+        'ocr_processed_at',
+        'ocr_data',
+        'ocr_confidence',
         'is_sensitive',
+        'is_encrypted',
+        'previous_version_id',
+        'version_number',
+        'replaced_at',
+        'replacement_reason',
+        'valid_until',
+        'expiration_notified',
+        'metadata',
+        'notes',
+        'created_by',
+        'updated_by',
+        'deleted_by',
     ];
 
     protected $casts = [
-        'type' => DocumentType::class,
-        'status' => DocumentStatus::class,
-        'metadata' => 'array',
+        'ocr_processed' => 'boolean',
+        'ocr_processed_at' => 'datetime',
+        'ocr_data' => 'array',
+        'ocr_confidence' => 'decimal:2',
         'is_sensitive' => 'boolean',
+        'is_encrypted' => 'boolean',
         'reviewed_at' => 'datetime',
+        'replaced_at' => 'datetime',
+        'valid_until' => 'date',
+        'expiration_notified' => 'boolean',
+        'metadata' => 'array',
+    ];
+
+    // =====================================================
+    // Document Types
+    // =====================================================
+
+    // Identity
+    public const TYPE_INE_FRONT = 'INE_FRONT';
+    public const TYPE_INE_BACK = 'INE_BACK';
+    public const TYPE_PASSPORT = 'PASSPORT';
+    public const TYPE_CURP_DOC = 'CURP_DOC';
+    public const TYPE_RFC_CONSTANCIA = 'RFC_CONSTANCIA';
+    public const TYPE_DRIVER_LICENSE_FRONT = 'DRIVER_LICENSE_FRONT';
+    public const TYPE_DRIVER_LICENSE_BACK = 'DRIVER_LICENSE_BACK';
+
+    // Address
+    public const TYPE_PROOF_OF_ADDRESS = 'PROOF_OF_ADDRESS';
+    public const TYPE_UTILITY_BILL = 'UTILITY_BILL';
+    public const TYPE_BANK_STATEMENT_ADDRESS = 'BANK_STATEMENT_ADDRESS';
+    public const TYPE_LEASE_AGREEMENT = 'LEASE_AGREEMENT';
+    public const TYPE_PROPERTY_DEED = 'PROPERTY_DEED';
+
+    // Income
+    public const TYPE_PAYSLIP = 'PAYSLIP';
+    public const TYPE_BANK_STATEMENT = 'BANK_STATEMENT';
+    public const TYPE_TAX_RETURN = 'TAX_RETURN';
+    public const TYPE_IMSS_STATEMENT = 'IMSS_STATEMENT';
+    public const TYPE_EMPLOYMENT_LETTER = 'EMPLOYMENT_LETTER';
+    public const TYPE_INCOME_AFFIDAVIT = 'INCOME_AFFIDAVIT';
+
+    // Company
+    public const TYPE_CONSTITUTIVE_ACT = 'CONSTITUTIVE_ACT';
+    public const TYPE_POWER_OF_ATTORNEY = 'POWER_OF_ATTORNEY';
+    public const TYPE_TAX_ID_COMPANY = 'TAX_ID_COMPANY';
+    public const TYPE_FISCAL_SITUATION = 'FISCAL_SITUATION';
+    public const TYPE_LEGAL_REP_ID = 'LEGAL_REP_ID';
+    public const TYPE_SHAREHOLDER_STRUCTURE = 'SHAREHOLDER_STRUCTURE';
+
+    // Other
+    public const TYPE_SELFIE = 'SELFIE';
+    public const TYPE_SIGNATURE = 'SIGNATURE';
+    public const TYPE_OTHER = 'OTHER';
+
+    // =====================================================
+    // Categories
+    // =====================================================
+
+    public const CATEGORY_IDENTITY = 'IDENTITY';
+    public const CATEGORY_ADDRESS = 'ADDRESS';
+    public const CATEGORY_INCOME = 'INCOME';
+    public const CATEGORY_COMPANY = 'COMPANY';
+    public const CATEGORY_VERIFICATION = 'VERIFICATION';
+    public const CATEGORY_OTHER = 'OTHER';
+
+    public static function categories(): array
+    {
+        return [
+            self::CATEGORY_IDENTITY => 'Identidad',
+            self::CATEGORY_ADDRESS => 'Domicilio',
+            self::CATEGORY_INCOME => 'Ingresos',
+            self::CATEGORY_COMPANY => 'Empresa',
+            self::CATEGORY_VERIFICATION => 'Verificación',
+            self::CATEGORY_OTHER => 'Otro',
+        ];
+    }
+
+    public static function typesByCategory(): array
+    {
+        return [
+            self::CATEGORY_IDENTITY => [
+                self::TYPE_INE_FRONT,
+                self::TYPE_INE_BACK,
+                self::TYPE_PASSPORT,
+                self::TYPE_CURP_DOC,
+                self::TYPE_RFC_CONSTANCIA,
+                self::TYPE_DRIVER_LICENSE_FRONT,
+                self::TYPE_DRIVER_LICENSE_BACK,
+            ],
+            self::CATEGORY_ADDRESS => [
+                self::TYPE_PROOF_OF_ADDRESS,
+                self::TYPE_UTILITY_BILL,
+                self::TYPE_BANK_STATEMENT_ADDRESS,
+                self::TYPE_LEASE_AGREEMENT,
+                self::TYPE_PROPERTY_DEED,
+            ],
+            self::CATEGORY_INCOME => [
+                self::TYPE_PAYSLIP,
+                self::TYPE_BANK_STATEMENT,
+                self::TYPE_TAX_RETURN,
+                self::TYPE_IMSS_STATEMENT,
+                self::TYPE_EMPLOYMENT_LETTER,
+                self::TYPE_INCOME_AFFIDAVIT,
+            ],
+            self::CATEGORY_COMPANY => [
+                self::TYPE_CONSTITUTIVE_ACT,
+                self::TYPE_POWER_OF_ATTORNEY,
+                self::TYPE_TAX_ID_COMPANY,
+                self::TYPE_FISCAL_SITUATION,
+                self::TYPE_LEGAL_REP_ID,
+                self::TYPE_SHAREHOLDER_STRUCTURE,
+            ],
+            self::CATEGORY_VERIFICATION => [
+                self::TYPE_SELFIE,
+            ],
+            self::CATEGORY_OTHER => [
+                self::TYPE_SIGNATURE,
+                self::TYPE_OTHER,
+            ],
+        ];
+    }
+
+    public static function getCategoryForType(string $type): string
+    {
+        foreach (self::typesByCategory() as $category => $types) {
+            if (in_array($type, $types)) {
+                return $category;
+            }
+        }
+        return self::CATEGORY_OTHER;
+    }
+
+    /**
+     * Get all valid document types.
+     */
+    public static function validTypes(): array
+    {
+        $types = [];
+        foreach (self::typesByCategory() as $categoryTypes) {
+            $types = array_merge($types, $categoryTypes);
+        }
+        return $types;
+    }
+
+    /**
+     * Get type labels for display (Spanish, user-friendly).
+     * Uses DocumentType enum for consistency.
+     */
+    public static function typeLabels(): array
+    {
+        $labels = [];
+        foreach (\App\Enums\DocumentType::cases() as $type) {
+            $labels[$type->value] = $type->description();
+        }
+        return $labels;
+    }
+
+    /**
+     * Get type label for a specific type.
+     */
+    public function getTypeLabelAttribute(): string
+    {
+        return self::typeLabels()[$this->type] ?? $this->type;
+    }
+
+    // =====================================================
+    // Statuses
+    // =====================================================
+
+    public const STATUS_PENDING = 'PENDING';
+    public const STATUS_APPROVED = 'APPROVED';
+    public const STATUS_REJECTED = 'REJECTED';
+    public const STATUS_EXPIRED = 'EXPIRED';
+    public const STATUS_SUPERSEDED = 'SUPERSEDED';
+
+    public static function statuses(): array
+    {
+        return [
+            self::STATUS_PENDING => 'Pendiente',
+            self::STATUS_APPROVED => 'Aprobado',
+            self::STATUS_REJECTED => 'Rechazado',
+            self::STATUS_EXPIRED => 'Expirado',
+            self::STATUS_SUPERSEDED => 'Reemplazado',
+        ];
+    }
+
+    // =====================================================
+    // Replacement Reasons
+    // =====================================================
+
+    public const REASON_REJECTED = 'REJECTED';
+    public const REASON_EXPIRED = 'EXPIRED';
+    public const REASON_UPDATED = 'UPDATED';
+    public const REASON_BETTER_QUALITY = 'BETTER_QUALITY';
+
+    // =====================================================
+    // Allowed Documentable Types (Security)
+    // =====================================================
+
+    /**
+     * Whitelist of allowed entity types for polymorphic relationship.
+     * This prevents arbitrary class instantiation attacks.
+     */
+    public const ALLOWED_DOCUMENTABLE_TYPES = [
+        'persons' => Person::class,
+        'person_identifications' => PersonIdentification::class,
+        'addresses' => Address::class,
+        'person_employments' => PersonEmployment::class,
+        'applications' => Application::class,
     ];
 
     /**
-     * Get the application.
+     * Get the full class name for a documentable type alias.
      */
-    public function application(): BelongsTo
+    public static function resolveDocumentableType(string $type): ?string
     {
-        return $this->belongsTo(Application::class);
+        return self::ALLOWED_DOCUMENTABLE_TYPES[$type] ?? null;
     }
 
     /**
-     * Get the applicant.
+     * Check if a documentable type is allowed.
      */
-    public function applicant(): BelongsTo
+    public static function isValidDocumentableType(string $type): bool
     {
-        return $this->belongsTo(Applicant::class);
+        // Allow both short aliases and full class names
+        return isset(self::ALLOWED_DOCUMENTABLE_TYPES[$type])
+            || in_array($type, self::ALLOWED_DOCUMENTABLE_TYPES, true);
     }
 
     /**
-     * Get the reviewer.
+     * Get all allowed documentable type aliases.
      */
-    public function reviewer(): BelongsTo
+    public static function getAllowedDocumentableTypes(): array
     {
-        return $this->belongsTo(User::class, 'reviewed_by');
+        return array_keys(self::ALLOWED_DOCUMENTABLE_TYPES);
+    }
+
+    // =====================================================
+    // Relationships
+    // =====================================================
+
+    public function tenant(): BelongsTo
+    {
+        return $this->belongsTo(Tenant::class);
     }
 
     /**
-     * Get the signed URL for the document.
+     * Polymorphic relationship - can belong to various entities.
      */
-    public function getSignedUrl(int $expiration = 60): string
+    public function documentable(): MorphTo
     {
-        return Storage::disk($this->storage_disk)->temporaryUrl(
-            $this->file_path,
-            now()->addMinutes($expiration)
-        );
+        return $this->morphTo();
     }
+
+    public function reviewedBy(): BelongsTo
+    {
+        return $this->belongsTo(StaffAccount::class, 'reviewed_by');
+    }
+
+    public function previousVersion(): BelongsTo
+    {
+        return $this->belongsTo(Document::class, 'previous_version_id');
+    }
+
+    public function newerVersions(): HasMany
+    {
+        return $this->hasMany(Document::class, 'previous_version_id');
+    }
+
+    // =====================================================
+    // Accessors
+    // =====================================================
+
+    public function getStatusLabelAttribute(): string
+    {
+        return self::statuses()[$this->status] ?? $this->status;
+    }
+
+    public function getCategoryLabelAttribute(): string
+    {
+        return self::categories()[$this->category] ?? $this->category;
+    }
+
+    public function getFileSizeFormattedAttribute(): string
+    {
+        $bytes = $this->file_size;
+        if ($bytes >= 1048576) {
+            return round($bytes / 1048576, 2) . ' MB';
+        } elseif ($bytes >= 1024) {
+            return round($bytes / 1024, 2) . ' KB';
+        }
+        return $bytes . ' bytes';
+    }
+
+    public function getIsExpiredAttribute(): bool
+    {
+        return $this->valid_until && $this->valid_until->isPast();
+    }
+
+    public function getIsCurrentVersionAttribute(): bool
+    {
+        return is_null($this->replaced_at);
+    }
+
+    /**
+     * Alias for file_name for backward compatibility.
+     */
+    public function getOriginalFilenameAttribute(): string
+    {
+        return $this->file_name ?? '';
+    }
+
+    /**
+     * Alias for valid_until for API compatibility.
+     */
+    public function getExpiresAtAttribute(): ?\Carbon\Carbon
+    {
+        return $this->valid_until;
+    }
+
+    // =====================================================
+    // Status Helpers
+    // =====================================================
+
+    public function isPending(): bool
+    {
+        return $this->status === self::STATUS_PENDING;
+    }
+
+    public function isApproved(): bool
+    {
+        return $this->status === self::STATUS_APPROVED;
+    }
+
+    public function isRejected(): bool
+    {
+        return $this->status === self::STATUS_REJECTED;
+    }
+
+    public function isExpired(): bool
+    {
+        return $this->status === self::STATUS_EXPIRED;
+    }
+
+    public function isSuperseded(): bool
+    {
+        return $this->status === self::STATUS_SUPERSEDED;
+    }
+
+    // =====================================================
+    // Actions
+    // =====================================================
 
     /**
      * Approve the document.
      */
-    public function approve(int $userId): void
+    public function approve(string $staffId): void
     {
         $this->update([
-            'status' => DocumentStatus::APPROVED,
-            'reviewed_by' => $userId,
+            'status' => self::STATUS_APPROVED,
             'reviewed_at' => now(),
+            'reviewed_by' => $staffId,
             'rejection_reason' => null,
         ]);
     }
@@ -97,53 +433,150 @@ class Document extends Model
     /**
      * Reject the document.
      */
-    public function reject(int $userId, string $reason): void
+    public function reject(string $staffId, string $reason): void
     {
         $this->update([
-            'status' => DocumentStatus::REJECTED,
-            'reviewed_by' => $userId,
+            'status' => self::STATUS_REJECTED,
             'reviewed_at' => now(),
+            'reviewed_by' => $staffId,
             'rejection_reason' => $reason,
         ]);
     }
 
     /**
-     * Check if document is pending.
+     * Mark as expired.
      */
-    public function isPending(): bool
+    public function markExpired(): void
     {
-        return $this->status === DocumentStatus::PENDING;
+        $this->update([
+            'status' => self::STATUS_EXPIRED,
+        ]);
     }
 
     /**
-     * Check if document is approved.
+     * Mark as superseded by a new version.
      */
-    public function isApproved(): bool
+    public function supersede(string $newDocumentId, string $reason = self::REASON_UPDATED): void
     {
-        return $this->status === DocumentStatus::APPROVED;
+        $this->update([
+            'status' => self::STATUS_SUPERSEDED,
+            'replaced_at' => now(),
+            'replacement_reason' => $reason,
+        ]);
     }
 
     /**
-     * Check if document is rejected.
+     * Update OCR data.
      */
-    public function isRejected(): bool
+    public function setOcrData(array $data, float $confidence): void
     {
-        return $this->status === DocumentStatus::REJECTED;
+        $this->update([
+            'ocr_processed' => true,
+            'ocr_processed_at' => now(),
+            'ocr_data' => $data,
+            'ocr_confidence' => $confidence,
+        ]);
+    }
+
+    // =====================================================
+    // URL Generation
+    // =====================================================
+
+    /**
+     * Get a signed URL for accessing the document.
+     */
+    public function getSignedUrl(int $expirationMinutes = 15): ?string
+    {
+        $disk = Storage::disk($this->storage_disk);
+
+        if (!$disk->exists($this->file_path)) {
+            return null;
+        }
+
+        if ($this->storage_disk === 's3' || $this->storage_disk === 'gcs') {
+            return $disk->temporaryUrl(
+                $this->file_path,
+                now()->addMinutes($expirationMinutes)
+            );
+        }
+
+        // For local storage, return route-based URL
+        return route('api.documents.v2.download', ['document' => $this->id]);
     }
 
     /**
-     * Scope by type.
+     * Get the full file path.
      */
+    public function getFullPath(): string
+    {
+        return Storage::disk($this->storage_disk)->path($this->file_path);
+    }
+
+    // =====================================================
+    // Scopes
+    // =====================================================
+
+    public function scopeStatus($query, string $status)
+    {
+        return $query->where('status', $status);
+    }
+
+    public function scopePending($query)
+    {
+        return $query->where('status', self::STATUS_PENDING);
+    }
+
+    public function scopeApproved($query)
+    {
+        return $query->where('status', self::STATUS_APPROVED);
+    }
+
+    public function scopeRejected($query)
+    {
+        return $query->where('status', self::STATUS_REJECTED);
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->whereIn('status', [self::STATUS_PENDING, self::STATUS_APPROVED])
+            ->whereNull('replaced_at');
+    }
+
+    public function scopeCurrentVersion($query)
+    {
+        return $query->whereNull('replaced_at');
+    }
+
     public function scopeOfType($query, string $type)
     {
         return $query->where('type', $type);
     }
 
-    /**
-     * Scope by status.
-     */
-    public function scopeStatus($query, string $status)
+    public function scopeOfCategory($query, string $category)
     {
-        return $query->where('status', $status);
+        return $query->where('category', $category);
+    }
+
+    public function scopeExpiringSoon($query, int $days = 30)
+    {
+        return $query->whereNotNull('valid_until')
+            ->whereBetween('valid_until', [now(), now()->addDays($days)])
+            ->where('expiration_notified', false);
+    }
+
+    public function scopeForEntity($query, string $type, string $id)
+    {
+        return $query->where('documentable_type', $type)
+            ->where('documentable_id', $id);
+    }
+
+    public function scopeSensitive($query)
+    {
+        return $query->where('is_sensitive', true);
+    }
+
+    public function scopeWithOcr($query)
+    {
+        return $query->where('ocr_processed', true);
     }
 }

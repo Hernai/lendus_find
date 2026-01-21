@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, watch, onBeforeMount } from 'vue'
+import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOnboardingStore, useApplicationStore, useTenantStore, useKycStore } from '@/stores'
 import { AppButton } from '@/components/common'
@@ -26,25 +26,70 @@ interface DocumentUpload {
   fromKyc?: boolean // Flag to indicate document was captured during KYC verification
 }
 
-// Document types loaded from backend
-const documentTypeLabels = ref<Record<string, string>>({})
+// Fallback labels in Spanish (used if API call fails)
+const DOCUMENT_TYPE_LABELS_FALLBACK: Record<string, string> = {
+  'INE_FRONT': 'INE (Frente)',
+  'INE_BACK': 'INE (Reverso)',
+  'PASSPORT': 'Pasaporte',
+  'CURP': 'CURP',
+  'CURP_DOC': 'CURP',
+  'DRIVER_LICENSE_FRONT': 'Licencia de Conducir (Frente)',
+  'DRIVER_LICENSE_BACK': 'Licencia de Conducir (Reverso)',
+  'SELFIE': 'Foto de perfil (Selfie)',
+  'SIGNATURE': 'Firma',
+  'PROOF_OF_ADDRESS': 'Comprobante de domicilio',
+  'UTILITY_BILL': 'Recibo de servicios',
+  'BANK_STATEMENT_ADDRESS': 'Estado de cuenta (Domicilio)',
+  'LEASE_AGREEMENT': 'Contrato de arrendamiento',
+  'PROPERTY_DEED': 'Escrituras',
+  'PAYSLIP': 'Recibo de nómina',
+  'PAYSLIP_1': 'Recibo de nómina 1',
+  'PAYSLIP_2': 'Recibo de nómina 2',
+  'PAYSLIP_3': 'Recibo de nómina 3',
+  'BANK_STATEMENT': 'Estado de cuenta bancario',
+  'IMSS_STATEMENT': 'Estado de cuenta IMSS',
+  'EMPLOYMENT_LETTER': 'Carta laboral',
+  'INCOME_AFFIDAVIT': 'Declaración de ingresos',
+  'RFC_CONSTANCIA': 'Constancia de situación fiscal',
+  'RFC': 'Constancia de situación fiscal',
+  'TAX_RETURN': 'Declaración de impuestos',
+  'VEHICLE_INVOICE': 'Factura del vehículo',
+  'BIRTH_CERTIFICATE': 'Acta de nacimiento',
+  'MARRIAGE_CERTIFICATE': 'Acta de matrimonio',
+  'BUSINESS_LICENSE': 'Licencia comercial',
+  'CONSTITUTIVE_ACT': 'Acta constitutiva',
+  'POWER_OF_ATTORNEY': 'Poder notarial',
+  'TAX_ID_COMPANY': 'RFC de empresa',
+  'FISCAL_SITUATION': 'Situación fiscal',
+  'LEGAL_REP_ID': 'Identificación del representante legal',
+  'SHAREHOLDER_STRUCTURE': 'Estructura accionaria',
+  'OTHER': 'Otro documento',
+}
 
-// Load document types from backend
+// Document types loaded from backend
+const documentTypeLabels = ref<Record<string, string>>(DOCUMENT_TYPE_LABELS_FALLBACK)
+
+// Load document types from backend (updates fallback with fresh data if available)
 const loadDocumentTypes = async () => {
   try {
     const response = await v2.applicant.document.getTypes()
     if (response.success && response.data?.types) {
       documentTypeLabels.value = response.data.types
+      log.debug('Loaded document type labels from API')
     }
   } catch (err) {
-    log.error('Failed to load document types from backend', err)
+    log.warn('Failed to load document types from API, using fallback', err)
+    // Keep using fallback labels (already set as default)
   }
 }
 
-// Get label for a document type (from backend or fallback)
+// Get label for a document type
 const getDocumentLabel = (type: string): string => {
-  return documentTypeLabels.value[type] || type.replace(/_/g, ' ')
+  return documentTypeLabels.value[type] || DOCUMENT_TYPE_LABELS_FALLBACK[type] || type.replace(/_/g, ' ')
 }
+
+// Document types that should NOT be shown in Step 6 (handled elsewhere)
+const EXCLUDED_DOCUMENT_TYPES = ['SIGNATURE'] // Signature is drawn in Step 8, not uploaded
 
 // Get document list from product - types come from backend enum
 const getRequiredDocuments = (): DocumentUpload[] => {
@@ -59,21 +104,27 @@ const getRequiredDocuments = (): DocumentUpload[] => {
                        product?.required_documents ?? product?.required_docs ?? []
 
   if (requiredDocs.length > 0) {
-    return requiredDocs.map((doc: { type: string; required: boolean; description?: string } | string) => {
-      const docType = typeof doc === 'string' ? doc : doc.type
-      const isRequired = typeof doc === 'string' ? true : (doc.required ?? true)
-      const label = getDocumentLabel(docType)
+    return requiredDocs
+      .filter((doc: { type: string; required: boolean; description?: string } | string) => {
+        // Exclude document types that are handled elsewhere (e.g., signature in Step 8)
+        const docType = typeof doc === 'string' ? doc : doc.type
+        return !EXCLUDED_DOCUMENT_TYPES.includes(docType)
+      })
+      .map((doc: { type: string; required: boolean; description?: string } | string) => {
+        const docType = typeof doc === 'string' ? doc : doc.type
+        const isRequired = typeof doc === 'string' ? true : (doc.required ?? true)
+        const label = getDocumentLabel(docType)
 
-      return {
-        id: docType,
-        name: label,
-        description: typeof doc === 'object' && doc.description ? doc.description : '',
-        required: isRequired,
-        file: null,
-        preview: null,
-        status: 'pending' as const
-      }
-    })
+        return {
+          id: docType,
+          name: label,
+          description: typeof doc === 'object' && doc.description ? doc.description : '',
+          required: isRequired,
+          file: null,
+          preview: null,
+          status: 'pending' as const
+        }
+      })
   }
 
   // Fallback to basic documents if no product info available
@@ -244,13 +295,11 @@ const uploadKycDocuments = async () => {
   }
 }
 
-// Load document types before mount so labels are available
-onBeforeMount(async () => {
-  await loadDocumentTypes()
-})
-
 // Sync from store on mount
 onMounted(async () => {
+  // Load document type labels first (must complete before initDocuments)
+  await loadDocumentTypes()
+
   // Ensure tenant config is loaded (with fresh product data from API)
   if (!tenantStore.isLoaded) {
     await tenantStore.loadConfig()
