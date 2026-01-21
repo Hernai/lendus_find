@@ -735,6 +735,10 @@ export interface V2Application {
   field_verifications?: Record<string, V2FieldVerification>
   // Signature data
   signature?: V2Signature
+  // Rejection info for corrections UI
+  has_rejected_items?: boolean
+  rejected_fields_count?: number
+  rejected_documents_count?: number
 }
 
 export interface V2Signature {

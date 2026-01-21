@@ -6,7 +6,9 @@ use App\Enums\DocumentStatus;
 use App\Enums\EmploymentType;
 use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
+use App\Models\ApplicantAccount;
 use App\Models\Application;
+use App\Models\ApplicationStatusHistory;
 use App\Models\Document;
 use App\Models\Person;
 use App\Models\Address;
@@ -43,10 +45,18 @@ class CorrectionController extends Controller
         $account = $request->user();
         $person = $this->profileService->getOrCreatePerson($account);
 
-        // Get applications with CORRECTIONS_PENDING status
+        // Get applications that may have corrections - include all active statuses
+        // (not just CORRECTIONS_PENDING, since rejections can happen during IN_REVIEW, DOCS_PENDING, etc.)
+        $activeStatuses = [
+            Application::STATUS_CORRECTIONS_PENDING,
+            Application::STATUS_IN_REVIEW,
+            Application::STATUS_DOCS_PENDING,
+            Application::STATUS_SUBMITTED,
+        ];
+
         $pendingApplications = Application::where('person_id', $person->id)
-            ->where('status', Application::STATUS_CORRECTIONS_PENDING)
-            ->get(['id', 'status', 'updated_at']);
+            ->whereIn('status', $activeStatuses)
+            ->get(['id', 'status', 'updated_at', 'verification_checklist']);
 
         // Get rejected fields from verification_checklist of all pending applications
         $rejectedFields = $this->getRejectedFields($person, $pendingApplications);
@@ -89,9 +99,16 @@ class CorrectionController extends Controller
         $account = $request->user();
         $person = $this->profileService->getOrCreatePerson($account);
 
-        // Get all applications with CORRECTIONS_PENDING
+        // Get all applications that may have rejections
+        $activeStatuses = [
+            Application::STATUS_CORRECTIONS_PENDING,
+            Application::STATUS_IN_REVIEW,
+            Application::STATUS_DOCS_PENDING,
+            Application::STATUS_SUBMITTED,
+        ];
+
         $pendingApplications = Application::where('person_id', $person->id)
-            ->where('status', Application::STATUS_CORRECTIONS_PENDING)
+            ->whereIn('status', $activeStatuses)
             ->get();
 
         if ($pendingApplications->isEmpty()) {
@@ -114,14 +131,26 @@ class CorrectionController extends Controller
             foreach ($pendingApplications as $application) {
                 $this->addCorrectionToHistory($application, $fieldName, $oldValue, $newValue, $account);
 
-                // Add timeline entry
-                $application->addTimelineEntry('DATA_CORRECTED', [
-                    'field_label' => $this->getFieldLabel($fieldName),
-                    'old_value' => $this->formatValueForDisplay($oldValue),
-                    'new_value' => $this->formatValueForDisplay($newValue),
-                    'ip_address' => $request->ip(),
-                    'user_agent' => $request->userAgent(),
-                ], $account->id);
+                // Add timeline entry via ApplicationStatusHistory
+                ApplicationStatusHistory::create([
+                    'application_id' => $application->id,
+                    'from_status' => 'DATA_CORRECTED',
+                    'to_status' => 'DATA_CORRECTED',
+                    'changed_by' => $account->id,
+                    'changed_by_type' => ApplicantAccount::class,
+                    'notes' => "Dato corregido: {$this->getFieldLabel($fieldName)}",
+                    'metadata' => [
+                        'action' => 'data_corrected',
+                        'event_type' => 'DATA_CORRECTED',
+                        'field_name' => $fieldName,
+                        'field_label' => $this->getFieldLabel($fieldName),
+                        'old_value' => $this->formatValueForDisplay($oldValue),
+                        'new_value' => $this->formatValueForDisplay($newValue),
+                        'ip_address' => $request->ip(),
+                        'user_agent' => $request->userAgent(),
+                    ],
+                    'created_at' => now(),
+                ]);
             }
 
             // Check if all corrections are done
@@ -155,9 +184,16 @@ class CorrectionController extends Controller
         $account = $request->user();
         $person = $this->profileService->getOrCreatePerson($account);
 
-        // Get pending applications
+        // Get applications that may have rejections
+        $activeStatuses = [
+            Application::STATUS_CORRECTIONS_PENDING,
+            Application::STATUS_IN_REVIEW,
+            Application::STATUS_DOCS_PENDING,
+            Application::STATUS_SUBMITTED,
+        ];
+
         $pendingApplications = Application::where('person_id', $person->id)
-            ->where('status', Application::STATUS_CORRECTIONS_PENDING)
+            ->whereIn('status', $activeStatuses)
             ->get();
 
         // Find the rejection info for this field
@@ -200,7 +236,9 @@ class CorrectionController extends Controller
             $checklist = $application->verification_checklist ?? [];
 
             foreach ($checklist as $fieldName => $fieldData) {
-                if (($fieldData['status'] ?? null) === 'REJECTED') {
+                // Check for REJECTED status (case-insensitive)
+                $status = strtoupper($fieldData['status'] ?? '');
+                if ($status === 'REJECTED') {
                     // Avoid duplicates
                     if (!$rejectedFields->contains('field_name', $fieldName)) {
                         $rejectedFields->push([
@@ -208,8 +246,9 @@ class CorrectionController extends Controller
                             'field_name' => $fieldName,
                             'field_label' => $this->getFieldLabel($fieldName),
                             'current_value' => $this->formatValueForDisplay($this->getFieldValue($person, $fieldName)),
-                            'rejection_reason' => $fieldData['reason'] ?? null,
-                            'rejected_at' => $fieldData['rejected_at'] ?? null,
+                            // Support both 'rejection_reason' and 'reason' keys for backwards compatibility
+                            'rejection_reason' => $fieldData['rejection_reason'] ?? $fieldData['reason'] ?? null,
+                            'rejected_at' => $fieldData['verified_at'] ?? $fieldData['rejected_at'] ?? null,
                         ]);
                     }
                 }
@@ -305,18 +344,23 @@ class CorrectionController extends Controller
                 'postal_code' => $address->postal_code,
                 'municipality' => $address->municipality,
                 'state' => $address->state,
+                'housing_type' => $address->housing_type,
+                'years_at_address' => $address->years_at_address ?? 0,
+                'months_at_address' => $address->months_at_address ?? 0,
             ] : null,
             'employment' => $employment ? [
                 'type' => $employment->employment_type,
                 'company_name' => $employment->employer_name,
                 'position' => $employment->job_title,
                 'monthly_income' => (float) ($employment->monthly_income ?? 0),
-                'seniority_months' => ($employment->years_employed ?? 0) * 12 + ($employment->months_employed ?? 0),
+                'seniority_years' => $employment->years_employed ?? 0,
+                'seniority_months' => $employment->months_employed ?? 0,
             ] : [
                 'type' => 'EMPLOYEE',
                 'company_name' => '',
                 'position' => '',
                 'monthly_income' => 0,
+                'seniority_years' => 0,
                 'seniority_months' => 0,
             ],
         ];
@@ -368,6 +412,9 @@ class CorrectionController extends Controller
             'postal_code' => $address->postal_code,
             'municipality' => $address->municipality,
             'state' => $address->state,
+            'housing_type' => $address->housing_type,
+            'years_at_address' => $address->years_at_address ?? 0,
+            'months_at_address' => $address->months_at_address ?? 0,
         ];
     }
 
@@ -386,7 +433,8 @@ class CorrectionController extends Controller
             'company_name' => $employment->employer_name,
             'position' => $employment->job_title,
             'monthly_income' => $employment->monthly_income,
-            'seniority_months' => ($employment->years_employed ?? 0) * 12 + ($employment->months_employed ?? 0),
+            'seniority_years' => $employment->years_employed ?? 0,
+            'seniority_months' => $employment->months_employed ?? 0,
         ];
     }
 
@@ -490,10 +538,21 @@ class CorrectionController extends Controller
         if (isset($value['monthly_income'])) {
             $employment->monthly_income = $value['monthly_income'];
         }
+        // Support both formats: separate years/months or combined total months
+        if (isset($value['seniority_years'])) {
+            $employment->years_employed = (int) $value['seniority_years'];
+        }
         if (isset($value['seniority_months'])) {
-            $months = (int) $value['seniority_months'];
-            $employment->years_employed = intdiv($months, 12);
-            $employment->months_employed = $months % 12;
+            // If seniority_years is also set, this is just the additional months (0-11)
+            // Otherwise, it's the total months (backwards compatibility)
+            if (isset($value['seniority_years'])) {
+                $employment->months_employed = (int) $value['seniority_months'];
+            } else {
+                // Legacy: convert total months to years + months
+                $totalMonths = (int) $value['seniority_months'];
+                $employment->years_employed = intdiv($totalMonths, 12);
+                $employment->months_employed = $totalMonths % 12;
+            }
         }
 
         $employment->save();
@@ -542,8 +601,16 @@ class CorrectionController extends Controller
      */
     private function checkAndUpdateApplicationStatus(Person $person, $account): void
     {
+        // Get all applications that may have had corrections
+        $activeStatuses = [
+            Application::STATUS_CORRECTIONS_PENDING,
+            Application::STATUS_IN_REVIEW,
+            Application::STATUS_DOCS_PENDING,
+            Application::STATUS_SUBMITTED,
+        ];
+
         $pendingApplications = Application::where('person_id', $person->id)
-            ->where('status', Application::STATUS_CORRECTIONS_PENDING)
+            ->whereIn('status', $activeStatuses)
             ->get();
 
         foreach ($pendingApplications as $application) {
@@ -566,8 +633,8 @@ class CorrectionController extends Controller
                 ->whereNull('replaced_at')
                 ->exists();
 
-            // If no more rejections, move to IN_REVIEW
-            if (!$hasRejectedFields && !$hasRejectedDocs) {
+            // If no more rejections and was in CORRECTIONS_PENDING, move to IN_REVIEW
+            if (!$hasRejectedFields && !$hasRejectedDocs && $application->status === Application::STATUS_CORRECTIONS_PENDING) {
                 $application->changeStatus(
                     Application::STATUS_IN_REVIEW,
                     'Correcciones completadas',

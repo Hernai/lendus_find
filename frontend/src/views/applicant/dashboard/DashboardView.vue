@@ -35,6 +35,10 @@ interface Application {
   updated_at: string
   next_action?: string
   pending_documents?: PendingDocument[]
+  // Rejection info
+  has_rejected_items?: boolean
+  rejected_fields_count?: number
+  rejected_documents_count?: number
 }
 
 const isLoading = ref(true)
@@ -87,8 +91,12 @@ const loadApplications = async () => {
         term_months: app.requested_term_months || app.term_months || 12,
         created_at: app.created_at,
         updated_at: app.updated_at,
-        next_action: getNextAction(app.status),
-        pending_documents: app.pending_documents
+        next_action: getNextAction(app.status, app.has_rejected_items),
+        pending_documents: app.pending_documents,
+        // Rejection info
+        has_rejected_items: app.has_rejected_items,
+        rejected_fields_count: app.rejected_fields_count,
+        rejected_documents_count: app.rejected_documents_count,
       }))
     }
   } catch (e) {
@@ -110,7 +118,12 @@ onMounted(async () => {
   isLoading.value = false
 })
 
-const getNextAction = (status: string): string | undefined => {
+const getNextAction = (status: string, hasRejectedItems?: boolean): string | undefined => {
+  // If there are rejected items, show correction action regardless of status
+  if (hasRejectedItems && !['CANCELLED', 'REJECTED', 'APPROVED', 'DISBURSED'].includes(status)) {
+    return 'Corregir datos rechazados'
+  }
+
   switch (status) {
     case 'DRAFT':
       return 'Completa tu solicitud'
@@ -451,6 +464,29 @@ const handleCancelApplication = async () => {
                   </div>
                 </div>
 
+                <!-- Rejected Items Alert -->
+                <div v-if="app.has_rejected_items" class="bg-red-50 rounded-xl p-4 mb-4">
+                  <div class="flex items-start gap-3">
+                    <svg class="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div class="min-w-0 flex-1">
+                      <p class="font-medium text-red-800">
+                        Datos rechazados que requieren corrección
+                      </p>
+                      <p class="text-sm text-red-700 mt-1">
+                        <template v-if="app.rejected_fields_count && app.rejected_fields_count > 0">
+                          {{ app.rejected_fields_count }} campo{{ app.rejected_fields_count > 1 ? 's' : '' }}
+                        </template>
+                        <template v-if="app.rejected_fields_count && app.rejected_documents_count">, </template>
+                        <template v-if="app.rejected_documents_count && app.rejected_documents_count > 0">
+                          {{ app.rejected_documents_count }} documento{{ app.rejected_documents_count > 1 ? 's' : '' }}
+                        </template>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- Pending Documents Alert -->
                 <div v-if="app.pending_documents && app.pending_documents.length > 0" class="bg-orange-50 rounded-xl p-4 mb-4">
                   <div class="flex items-start gap-3">
@@ -500,7 +536,7 @@ const handleCancelApplication = async () => {
                     Subir Documentos
                   </AppButton>
                   <AppButton
-                    v-if="app.status === 'CORRECTIONS_PENDING'"
+                    v-if="app.status === 'CORRECTIONS_PENDING' || app.has_rejected_items"
                     variant="primary"
                     class="flex-1"
                     @click="correctData()"
@@ -533,7 +569,7 @@ const handleCancelApplication = async () => {
                     Rechazar
                   </AppButton>
                   <AppButton
-                    v-if="!['CORRECTIONS_PENDING', 'COUNTER_OFFERED'].includes(app.status) && !(app.pending_documents && app.pending_documents.length > 0)"
+                    v-if="!['CORRECTIONS_PENDING', 'COUNTER_OFFERED'].includes(app.status) && !(app.pending_documents && app.pending_documents.length > 0) && !app.has_rejected_items"
                     variant="outline"
                     class="flex-1"
                     @click="viewApplication(app)"

@@ -69,12 +69,16 @@ export interface ApplicantData {
     postal_code: string
     municipality: string
     state: string
+    housing_type: string | null
+    years_at_address: number
+    months_at_address: number
   } | null
   employment: {
     type: string
     company_name: string
     position: string
     monthly_income: number
+    seniority_years: number
     seniority_months: number
   }
 }

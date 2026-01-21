@@ -401,6 +401,9 @@ class ApplicationController extends Controller
         // Get default payment frequency from product
         $defaultFrequency = $app->product?->payment_frequencies[0] ?? 'MONTHLY';
 
+        // Check for rejected items (data fields and documents)
+        $rejectionInfo = $this->getRejectionInfo($app);
+
         return [
             'id' => $app->id,
             'status' => $app->status,
@@ -427,6 +430,47 @@ class ApplicationController extends Controller
             'created_at' => $app->created_at?->toIso8601String(),
             'submitted_at' => $app->submitted_at?->toIso8601String(),
             'decision_at' => $app->decision_at?->toIso8601String(),
+            // Rejection info for correction UI
+            'has_rejected_items' => $rejectionInfo['has_rejected_items'],
+            'rejected_fields_count' => $rejectionInfo['rejected_fields_count'],
+            'rejected_documents_count' => $rejectionInfo['rejected_documents_count'],
+        ];
+    }
+
+    /**
+     * Get rejection info for an application (rejected fields and documents).
+     */
+    private function getRejectionInfo(Application $app): array
+    {
+        // Count rejected fields from verification_checklist
+        $checklist = $app->verification_checklist ?? [];
+        $rejectedFieldsCount = 0;
+        foreach ($checklist as $fieldData) {
+            if (isset($fieldData['status']) && strtoupper($fieldData['status']) === 'REJECTED') {
+                $rejectedFieldsCount++;
+            }
+        }
+
+        // Count rejected documents (both from application and person)
+        $rejectedDocsCount = $app->documents()
+            ->where('status', \App\Enums\DocumentStatus::REJECTED)
+            ->whereNull('replaced_at')
+            ->count();
+
+        // Also check person's documents if person is loaded
+        if ($app->person_id) {
+            $personRejectedDocs = \App\Models\Document::where('documentable_type', \App\Models\Person::class)
+                ->where('documentable_id', $app->person_id)
+                ->where('status', \App\Enums\DocumentStatus::REJECTED)
+                ->whereNull('replaced_at')
+                ->count();
+            $rejectedDocsCount += $personRejectedDocs;
+        }
+
+        return [
+            'has_rejected_items' => ($rejectedFieldsCount + $rejectedDocsCount) > 0,
+            'rejected_fields_count' => $rejectedFieldsCount,
+            'rejected_documents_count' => $rejectedDocsCount,
         ];
     }
 

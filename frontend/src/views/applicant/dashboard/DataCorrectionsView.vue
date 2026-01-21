@@ -42,12 +42,16 @@ interface ApplicantData {
     postal_code: string
     municipality: string
     state: string
+    housing_type: string | null
+    years_at_address: number
+    months_at_address: number
   } | null
   employment: {
     type: string
     company_name: string
     position: string
     monthly_income: number
+    seniority_years: number
     seniority_months: number
   }
 }
@@ -130,13 +134,17 @@ const formData = reactive({
     neighborhood: '',
     postal_code: '',
     municipality: '',
-    state: ''
+    state: '',
+    housing_type: '',
+    years_at_address: 0,
+    months_at_address: 0
   },
   empleo: {
     type: 'EMPLOYEE',
     company_name: '',
     position: '',
     monthly_income: 0,
+    seniority_years: 0,
     seniority_months: 0
   }
 })
@@ -195,8 +203,16 @@ const fieldLabels: Record<string, string> = {
   seniority_months: 'Antigüedad (meses)'
 }
 
-// Employment type options from backend
+// Options from backend
 const employmentTypes = computed(() => tenantStore.options.employmentType)
+const housingTypes = computed(() => tenantStore.options.housingType)
+
+// Conditional display for employment fields (matching Step4Employment.vue logic)
+const showCompanyDetails = computed(() => formData.empleo.type === 'EMPLOYEE')
+const showBusinessDetails = computed(() =>
+  ['SELF_EMPLOYED', 'BUSINESS_OWNER'].includes(formData.empleo.type)
+)
+// For other types (RETIRED, STUDENT, HOMEMAKER, UNEMPLOYED, OTHER) only show income
 
 onMounted(async () => {
   await loadCorrections()
@@ -259,7 +275,10 @@ const initializeFormData = (data: ApplicantData) => {
       neighborhood: data.address.neighborhood || '',
       postal_code: data.address.postal_code || '',
       municipality: data.address.municipality || '',
-      state: data.address.state || ''
+      state: data.address.state || '',
+      housing_type: data.address.housing_type || '',
+      years_at_address: data.address.years_at_address || 0,
+      months_at_address: data.address.months_at_address || 0
     }
   }
   if (data.employment) {
@@ -268,6 +287,7 @@ const initializeFormData = (data: ApplicantData) => {
       company_name: data.employment.company_name || '',
       position: data.employment.position || '',
       monthly_income: data.employment.monthly_income || 0,
+      seniority_years: data.employment.seniority_years || 0,
       seniority_months: data.employment.seniority_months || 0
     }
   }
@@ -809,6 +829,12 @@ onMounted(() => {
                   <template v-else-if="section.id === 'direccion'">
                     <div class="grid grid-cols-1 gap-3">
                       <div>
+                        <p class="text-xs text-gray-500">Tipo de vivienda</p>
+                        <p class="text-sm font-medium text-gray-900">
+                          {{ housingTypes.find(t => t.value === formData.direccion.housing_type)?.label || formData.direccion.housing_type || '(vacío)' }}
+                        </p>
+                      </div>
+                      <div>
                         <p class="text-xs text-gray-500">Dirección</p>
                         <p class="text-sm font-medium text-gray-900">
                           {{ formData.direccion.street }} {{ formData.direccion.ext_number }}{{ formData.direccion.int_number ? ' Int. ' + formData.direccion.int_number : '' }}
@@ -826,6 +852,12 @@ onMounted(() => {
                           {{ formData.direccion.municipality }}, {{ formData.direccion.state }}
                         </p>
                       </div>
+                      <div>
+                        <p class="text-xs text-gray-500">Tiempo en este domicilio</p>
+                        <p class="text-sm font-medium text-gray-900">
+                          {{ formData.direccion.years_at_address }} año{{ formData.direccion.years_at_address !== 1 ? 's' : '' }}, {{ formData.direccion.months_at_address }} mes{{ formData.direccion.months_at_address !== 1 ? 'es' : '' }}
+                        </p>
+                      </div>
                     </div>
                   </template>
 
@@ -838,23 +870,40 @@ onMounted(() => {
                           {{ employmentTypes.find(t => t.value === formData.empleo.type)?.label || formData.empleo.type }}
                         </p>
                       </div>
-                      <div>
-                        <p class="text-xs text-gray-500">{{ fieldLabels.company_name }}</p>
-                        <p class="text-sm font-medium text-gray-900">{{ formData.empleo.company_name || '(vacío)' }}</p>
-                      </div>
-                      <div>
-                        <p class="text-xs text-gray-500">{{ fieldLabels.position }}</p>
-                        <p class="text-sm font-medium text-gray-900">{{ formData.empleo.position || '(vacío)' }}</p>
-                      </div>
-                      <div class="grid grid-cols-2 gap-3">
+                      <!-- EMPLOYEE: Show company name, position, seniority -->
+                      <template v-if="showCompanyDetails">
                         <div>
-                          <p class="text-xs text-gray-500">{{ fieldLabels.monthly_income }}</p>
-                          <p class="text-sm font-medium text-gray-900">{{ formatMoney(formData.empleo.monthly_income) }}</p>
+                          <p class="text-xs text-gray-500">Nombre de la Empresa</p>
+                          <p class="text-sm font-medium text-gray-900">{{ formData.empleo.company_name || '(vacío)' }}</p>
                         </div>
                         <div>
-                          <p class="text-xs text-gray-500">{{ fieldLabels.seniority_months }}</p>
-                          <p class="text-sm font-medium text-gray-900">{{ formData.empleo.seniority_months }} meses</p>
+                          <p class="text-xs text-gray-500">Puesto</p>
+                          <p class="text-sm font-medium text-gray-900">{{ formData.empleo.position || '(vacío)' }}</p>
                         </div>
+                        <div>
+                          <p class="text-xs text-gray-500">Antigüedad</p>
+                          <p class="text-sm font-medium text-gray-900">
+                            {{ formData.empleo.seniority_years }} año{{ formData.empleo.seniority_years !== 1 ? 's' : '' }}, {{ formData.empleo.seniority_months }} mes{{ formData.empleo.seniority_months !== 1 ? 'es' : '' }}
+                          </p>
+                        </div>
+                      </template>
+                      <!-- SELF_EMPLOYED / BUSINESS_OWNER: Show business name, seniority -->
+                      <template v-else-if="showBusinessDetails">
+                        <div>
+                          <p class="text-xs text-gray-500">{{ formData.empleo.type === 'BUSINESS_OWNER' ? 'Nombre del Negocio' : 'Descripción de Actividad' }}</p>
+                          <p class="text-sm font-medium text-gray-900">{{ formData.empleo.company_name || '(vacío)' }}</p>
+                        </div>
+                        <div>
+                          <p class="text-xs text-gray-500">{{ formData.empleo.type === 'BUSINESS_OWNER' ? 'Años con Negocio' : 'Años de Experiencia' }}</p>
+                          <p class="text-sm font-medium text-gray-900">
+                            {{ formData.empleo.seniority_years }} año{{ formData.empleo.seniority_years !== 1 ? 's' : '' }}, {{ formData.empleo.seniority_months }} mes{{ formData.empleo.seniority_months !== 1 ? 'es' : '' }}
+                          </p>
+                        </div>
+                      </template>
+                      <!-- Always show income -->
+                      <div>
+                        <p class="text-xs text-gray-500">{{ fieldLabels.monthly_income }}</p>
+                        <p class="text-sm font-medium text-gray-900">{{ formatMoney(formData.empleo.monthly_income) }}</p>
                       </div>
                     </div>
                   </template>
@@ -1043,10 +1092,65 @@ onMounted(() => {
                         />
                       </div>
                     </div>
+                    <!-- Tipo de vivienda -->
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 mb-1.5">Tipo de vivienda *</label>
+                      <div class="relative">
+                        <select
+                          v-model="formData.direccion.housing_type"
+                          class="w-full px-4 py-3 pr-10 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white appearance-none cursor-pointer"
+                        >
+                          <option value="">Selecciona una opción</option>
+                          <option v-for="type in housingTypes" :key="type.value" :value="type.value">
+                            {{ type.label }}
+                          </option>
+                        </select>
+                        <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                          <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- Tiempo en el domicilio -->
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 mb-1.5">Tiempo en este domicilio *</label>
+                      <div class="grid grid-cols-2 gap-3">
+                        <div>
+                          <div class="relative">
+                            <input
+                              v-model.number="formData.direccion.years_at_address"
+                              type="number"
+                              min="0"
+                              max="99"
+                              placeholder="0"
+                              class="w-full px-4 py-3 pr-16 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              inputmode="numeric"
+                            />
+                            <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">años</span>
+                          </div>
+                        </div>
+                        <div>
+                          <div class="relative">
+                            <input
+                              v-model.number="formData.direccion.months_at_address"
+                              type="number"
+                              min="0"
+                              max="11"
+                              placeholder="0"
+                              class="w-full px-4 py-3 pr-20 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              inputmode="numeric"
+                            />
+                            <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">meses</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </template>
 
                   <!-- Empleo Form -->
                   <template v-else-if="section.id === 'empleo'">
+                    <!-- Employment Type (always shown) -->
                     <div>
                       <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ fieldLabels.type }} *</label>
                       <div class="relative">
@@ -1065,46 +1169,121 @@ onMounted(() => {
                         </div>
                       </div>
                     </div>
-                    <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ fieldLabels.company_name }} *</label>
-                      <input
-                        v-model="formData.empleo.company_name"
-                        type="text"
-                        placeholder="Nombre de la empresa o negocio"
-                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ fieldLabels.position }}</label>
-                      <input
-                        v-model="formData.empleo.position"
-                        type="text"
-                        placeholder="Tu puesto o actividad"
-                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
+
+                    <!-- EMPLOYEE fields -->
+                    <template v-if="showCompanyDetails">
                       <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ fieldLabels.monthly_income }} *</label>
-                        <div class="relative">
-                          <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">$</span>
-                          <input
-                            v-model.number="formData.empleo.monthly_income"
-                            type="number"
-                            min="0"
-                            placeholder="0"
-                            class="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                          />
-                        </div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">Nombre de la Empresa *</label>
+                        <input
+                          v-model="formData.empleo.company_name"
+                          type="text"
+                          placeholder="EMPRESA S.A. DE C.V."
+                          class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 uppercase"
+                        />
                       </div>
                       <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ fieldLabels.seniority_months }} *</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">Puesto *</label>
                         <input
-                          v-model.number="formData.empleo.seniority_months"
+                          v-model="formData.empleo.position"
+                          type="text"
+                          placeholder="GERENTE DE VENTAS"
+                          class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 uppercase"
+                        />
+                      </div>
+                      <div class="grid grid-cols-2 gap-3">
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700 mb-1.5">Años en empleo</label>
+                          <div class="relative">
+                            <input
+                              v-model.number="formData.empleo.seniority_years"
+                              type="number"
+                              min="0"
+                              max="99"
+                              placeholder="0"
+                              class="w-full px-4 py-3 pr-16 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              inputmode="numeric"
+                            />
+                            <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">años</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700 mb-1.5">Meses adicionales</label>
+                          <div class="relative">
+                            <input
+                              v-model.number="formData.empleo.seniority_months"
+                              type="number"
+                              min="0"
+                              max="11"
+                              placeholder="0"
+                              class="w-full px-4 py-3 pr-20 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              inputmode="numeric"
+                            />
+                            <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">meses</span>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+
+                    <!-- SELF_EMPLOYED / BUSINESS_OWNER fields -->
+                    <template v-else-if="showBusinessDetails">
+                      <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">
+                          {{ formData.empleo.type === 'BUSINESS_OWNER' ? 'Nombre del Negocio' : 'Descripción de Actividad' }}
+                        </label>
+                        <input
+                          v-model="formData.empleo.company_name"
+                          type="text"
+                          :placeholder="formData.empleo.type === 'BUSINESS_OWNER' ? 'MI NEGOCIO S.A.' : 'SERVICIOS PROFESIONALES'"
+                          class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 uppercase"
+                        />
+                      </div>
+                      <div class="grid grid-cols-2 gap-3">
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700 mb-1.5">
+                            {{ formData.empleo.type === 'BUSINESS_OWNER' ? 'Años con negocio' : 'Años de experiencia' }}
+                          </label>
+                          <div class="relative">
+                            <input
+                              v-model.number="formData.empleo.seniority_years"
+                              type="number"
+                              min="0"
+                              max="99"
+                              placeholder="0"
+                              class="w-full px-4 py-3 pr-16 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              inputmode="numeric"
+                            />
+                            <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">años</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700 mb-1.5">Meses adicionales</label>
+                          <div class="relative">
+                            <input
+                              v-model.number="formData.empleo.seniority_months"
+                              type="number"
+                              min="0"
+                              max="11"
+                              placeholder="0"
+                              class="w-full px-4 py-3 pr-20 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              inputmode="numeric"
+                            />
+                            <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">meses</span>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+
+                    <!-- Monthly Income (always shown) -->
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 mb-1.5">{{ fieldLabels.monthly_income }} *</label>
+                      <div class="relative">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                        <input
+                          v-model.number="formData.empleo.monthly_income"
                           type="number"
                           min="0"
                           placeholder="0"
-                          class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          class="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                         />
                       </div>
                     </div>
