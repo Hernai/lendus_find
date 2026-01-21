@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ApplicationStatusHistory;
 use App\Models\Application;
 use App\Models\DataVerification;
+use App\Models\Document;
 use App\Models\Person;
 use App\Models\StaffAccount;
 use App\Services\ApplicationEventService;
