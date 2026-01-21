@@ -915,6 +915,7 @@ class ApplicationController extends Controller
                 'note_id' => $newNote['id'],
                 'content_preview' => $truncatedContent,
             ],
+            'created_at' => now(),
         ]);
 
         return $this->created($newNote, 'Nota agregada exitosamente.');
@@ -1160,6 +1161,7 @@ class ApplicationController extends Controller
                 'old_status' => $oldStatus,
                 'new_status' => 'APPROVED',
             ],
+            'created_at' => now(),
         ]);
 
         return $this->success(null, 'Documento aprobado.');
@@ -1219,6 +1221,7 @@ class ApplicationController extends Controller
                 'reason' => $validated['reason'],
                 'comment' => $validated['comment'] ?? null,
             ],
+            'created_at' => now(),
         ]);
 
         return $this->success(null, 'Documento rechazado.');
@@ -1271,6 +1274,7 @@ class ApplicationController extends Controller
                 'old_status' => $oldStatus,
                 'new_status' => 'PENDING',
             ],
+            'created_at' => now(),
         ]);
 
         return $this->success(null, 'Documento regresado a pendiente.');
@@ -1345,6 +1349,7 @@ class ApplicationController extends Controller
                 'result' => $validated['result'],
                 'notes' => $validated['notes'] ?? null,
             ],
+            'created_at' => now(),
         ]);
 
         return $this->success(null, 'Referencia verificada.');
@@ -1399,6 +1404,7 @@ class ApplicationController extends Controller
                 'bank_name' => $bankAccount->bank_name,
                 'was_verified' => $wasVerified,
             ],
+            'created_at' => now(),
         ]);
 
         return $this->success(null, 'Cuenta bancaria verificada.');
@@ -1449,6 +1455,7 @@ class ApplicationController extends Controller
                 'bank_name' => $bankAccount->bank_name,
                 'was_verified' => $wasVerified,
             ],
+            'created_at' => now(),
         ]);
 
         return $this->success(null, 'Verificación de cuenta bancaria removida.');
@@ -1892,6 +1899,7 @@ class ApplicationController extends Controller
                 'rejection_reason' => $validated['rejection_reason'] ?? null,
                 'notes' => $validated['notes'] ?? null,
             ],
+            'created_at' => now(),
         ]);
 
         return $this->success(null, 'Dato verificado.');
