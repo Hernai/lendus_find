@@ -1541,16 +1541,27 @@ const verifyData = async (field: VerifiableField, action: 'verify' | 'reject' | 
 
     if (action === 'verify') {
       application.value.field_verifications[field] = {
+        status: 'VERIFIED',
         verified: true,
         method: 'MANUAL',
+        method_label: 'Manual',
         verified_at: new Date().toISOString()
       }
     } else if (action === 'unverify') {
-      delete application.value.field_verifications[field]
+      // Set to PENDING state instead of deleting (matches backend behavior)
+      application.value.field_verifications[field] = {
+        status: 'PENDING',
+        verified: false,
+        method: null,
+        method_label: null,
+        verified_at: new Date().toISOString()
+      }
     } else if (action === 'reject') {
       application.value.field_verifications[field] = {
+        status: 'REJECTED',
         verified: false,
         method: 'MANUAL',
+        method_label: 'Manual',
         verified_at: new Date().toISOString(),
         rejection_reason: reason
       }
