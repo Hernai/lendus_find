@@ -164,6 +164,13 @@ const userName = computed(() => {
 
 const tenantName = computed(() => tenantStore.name || 'LendusFind')
 
+// Terminal statuses that allow creating a new application
+const terminalStatuses = ['REJECTED', 'CANCELLED', 'SYNCED']
+
+// Check if user has any active (non-terminal) application
+const hasActiveApplication = computed(() => {
+  return applications.value.some(app => !terminalStatuses.includes(app.status))
+})
 
 const getStatusInfo = (status: string) => {
   const statusMap: Record<string, { label: string; color: string; bg: string; icon: string; description: string }> = {
@@ -591,8 +598,8 @@ const handleCancelApplication = async () => {
             </div>
           </div>
 
-          <!-- New Application CTA -->
-          <div class="mt-6 text-center">
+          <!-- New Application CTA (only show if no active application) -->
+          <div v-if="!hasActiveApplication" class="mt-6 text-center">
             <button
               class="text-primary-600 font-medium hover:text-primary-700"
               @click="startNewApplication"
