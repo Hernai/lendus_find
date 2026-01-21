@@ -84,6 +84,27 @@ class ApplicationController extends Controller
             return $this->badRequest('PROFILE_INCOMPLETE', 'Debes completar tu perfil antes de solicitar un crédito.');
         }
 
+        // Check if there's already an active (non-terminal) application
+        $terminalStatuses = [
+            Application::STATUS_REJECTED,
+            Application::STATUS_CANCELLED,
+            Application::STATUS_SYNCED,
+        ];
+
+        $activeApplication = Application::where('person_id', $account->person->id)
+            ->where('tenant_id', $account->tenant_id)
+            ->whereNotIn('status', $terminalStatuses)
+            ->first();
+
+        if ($activeApplication) {
+            $statusLabel = $activeApplication->status_label ?? $activeApplication->status;
+            return $this->error(
+                'APPLICATION_EXISTS',
+                "Ya tienes una solicitud activa (Folio: {$activeApplication->folio}, Estado: {$statusLabel}). No puedes crear otra hasta que finalice.",
+                409
+            );
+        }
+
         $tenant = $account->tenant;
         $product = Product::findOrFail($validated['product_id']);
 
