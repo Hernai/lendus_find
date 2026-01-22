@@ -190,6 +190,9 @@ const form = ref({
   is_active: true
 })
 
+// Document applicant type selection
+const documentApplicantTypes = ref<('nationals' | 'foreigners')[]>(['nationals'])
+
 // Quick add term options per frequency
 const quickTermOptions: Record<string, number[]> = {
   WEEKLY: [4, 8, 12, 16, 26, 52],
@@ -310,6 +313,8 @@ const openCreateModal = () => {
   }
   formErrors.value = {}
   formError.value = ''
+  // Default: both nationals and foreigners enabled for new products
+  documentApplicantTypes.value = ['nationals', 'foreigners']
   showProductModal.value = true
 }
 
@@ -364,6 +369,19 @@ const openEditModal = (product: Product) => {
   }
   formErrors.value = {}
   formError.value = ''
+  // Determine which applicant types are enabled based on documents
+  const normalized = normalizeRequiredDocuments(product.required_documents)
+  documentApplicantTypes.value = []
+  if (normalized.nationals.length > 0) {
+    documentApplicantTypes.value.push('nationals')
+  }
+  if (normalized.foreigners.length > 0) {
+    documentApplicantTypes.value.push('foreigners')
+  }
+  // If both are empty, enable both by default
+  if (documentApplicantTypes.value.length === 0) {
+    documentApplicantTypes.value = ['nationals', 'foreigners']
+  }
   showProductModal.value = true
 }
 
@@ -571,6 +589,34 @@ const toggleDocumentForeigners = (doc: string) => {
   } else {
     form.value.required_documents.foreigners.push(doc)
   }
+}
+
+// Toggle applicant type (nationals/foreigners)
+const toggleApplicantType = (type: 'nationals' | 'foreigners') => {
+  const index = documentApplicantTypes.value.indexOf(type)
+  if (index >= 0) {
+    // Prevent disabling if it's the only one enabled
+    if (documentApplicantTypes.value.length === 1) {
+      return // At least one must remain selected
+    }
+    // Disabling: remove from list and clear documents
+    documentApplicantTypes.value.splice(index, 1)
+    form.value.required_documents[type] = []
+  } else {
+    // Enabling: add to list
+    documentApplicantTypes.value.push(type)
+    // Add default documents based on type
+    if (type === 'nationals') {
+      form.value.required_documents.nationals = ['INE_FRONT', 'INE_BACK', 'PROOF_OF_ADDRESS']
+    } else {
+      form.value.required_documents.foreigners = ['PASSPORT', 'RESIDENCE_CARD', 'PROOF_OF_ADDRESS']
+    }
+  }
+}
+
+// Computed: is type enabled
+const isTypeEnabled = (type: 'nationals' | 'foreigners') => {
+  return documentApplicantTypes.value.includes(type)
 }
 
 // Watch filters
@@ -1269,12 +1315,50 @@ onMounted(fetchProducts)
 
               <!-- Documents Tab -->
               <div v-show="activeTab === 'documents'" class="space-y-6">
-                <p class="text-sm text-gray-500 mb-4">
-                  Selecciona los documentos que serán requeridos para este producto
-                </p>
+                <div class="space-y-4">
+                  <p class="text-sm text-gray-500">
+                    Selecciona los tipos de solicitantes y sus documentos requeridos
+                  </p>
+
+                  <!-- Applicant Type Selector -->
+                  <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <h4 class="text-sm font-semibold text-gray-900 mb-3">
+                      ¿Para qué tipos de solicitantes es este producto?
+                    </h4>
+                    <div class="flex flex-wrap gap-3">
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          :checked="isTypeEnabled('nationals')"
+                          class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          @change="toggleApplicantType('nationals')"
+                        />
+                        <span class="text-sm font-medium text-gray-700">
+                          <span class="inline-block w-2 h-2 rounded-full bg-blue-500 mr-1"></span>
+                          Nacionales
+                        </span>
+                      </label>
+                      <label class="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          :checked="isTypeEnabled('foreigners')"
+                          class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                          @change="toggleApplicantType('foreigners')"
+                        />
+                        <span class="text-sm font-medium text-gray-700">
+                          <span class="inline-block w-2 h-2 rounded-full bg-green-500 mr-1"></span>
+                          Extranjeros
+                        </span>
+                      </label>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2">
+                      Al menos un tipo debe estar seleccionado
+                    </p>
+                  </div>
+                </div>
 
                 <!-- Nationals Section -->
-                <div class="space-y-3">
+                <div v-if="isTypeEnabled('nationals')" class="space-y-3">
                   <h3 class="text-base font-semibold text-gray-900 flex items-center gap-2">
                     <span class="inline-block w-2 h-2 rounded-full bg-blue-500"></span>
                     Documentos para Nacionales
@@ -1303,7 +1387,7 @@ onMounted(fetchProducts)
                 </div>
 
                 <!-- Foreigners Section -->
-                <div class="space-y-3">
+                <div v-if="isTypeEnabled('foreigners')" class="space-y-3">
                   <h3 class="text-base font-semibold text-gray-900 flex items-center gap-2">
                     <span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
                     Documentos para Extranjeros
