@@ -65,13 +65,13 @@ const allDocumentOptions = computed(() =>
 
 // Documents specific to nationals (exclude foreigner documents)
 const nationalDocumentOptions = computed(() => {
-  const excludedTypes = ['PASSPORT', 'FM2', 'FM3', 'RESIDENCE_CARD', 'VISA']
+  const excludedTypes = ['PASSPORT', 'FM2', 'FM3', 'RESIDENCE_CARD', 'VISA', 'CURP'] // Exclude CURP (non-DOC) to avoid duplicates
   return allDocumentOptions.value.filter(doc => !excludedTypes.includes(doc.value))
 })
 
 // Documents specific to foreigners (exclude national-only documents)
 const foreignerDocumentOptions = computed(() => {
-  const excludedTypes = ['INE_FRONT', 'INE_BACK', 'CURP_DOC']
+  const excludedTypes = ['INE_FRONT', 'INE_BACK', 'CURP_DOC', 'CURP'] // Exclude both CURP types
   return allDocumentOptions.value.filter(doc => !excludedTypes.includes(doc.value))
 })
 
