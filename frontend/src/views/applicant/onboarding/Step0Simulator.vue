@@ -105,7 +105,7 @@ onMounted(async () => {
     <!-- Step 2: Simulator -->
     <template v-else>
       <!-- Back button & Selected product -->
-      <div class="flex items-center gap-4 mb-8">
+      <div class="flex items-center gap-4 mb-8 mt-4">
         <button
           class="p-2 hover:bg-gray-200 rounded-lg transition-colors"
           @click="goBack"
