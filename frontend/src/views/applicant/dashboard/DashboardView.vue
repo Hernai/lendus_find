@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore, useTenantStore, useProfileStore, useApplicationStore, useOnboardingStore } from '@/stores'
 import { AppButton } from '@/components/common'
@@ -47,6 +47,10 @@ const showCancelConfirm = ref(false)
 const showCancelled = ref(false)
 const applicationToCancel = ref<Application | null>(null)
 const applications = ref<Application[]>([])
+
+// Carousel state for empty state
+const currentSlide = ref(0)
+const autoPlayInterval = ref<number | null>(null)
 
 const filteredApplications = computed(() => {
   if (showCancelled.value) {
@@ -204,6 +208,82 @@ const terminalStatuses = ['REJECTED', 'CANCELLED', 'SYNCED']
 // Check if user has any active (non-terminal) application
 const hasActiveApplication = computed(() => {
   return applications.value.some(app => !terminalStatuses.includes(app.status))
+})
+
+// Carousel slides for empty state
+const carouselSlides = computed(() => {
+  const slides = []
+
+  // Slide 1: Welcome with tenant info
+  slides.push({
+    type: 'welcome',
+    title: `Bienvenido a ${tenantName.value}`,
+    description: 'Tu financiera de confianza. Obtén el crédito que necesitas con tasas competitivas y proceso 100% digital.',
+    icon: 'building',
+  })
+
+  // Slides 2+: Products (one per product)
+  const products = tenantStore.activeProducts || []
+  products.forEach(product => {
+    slides.push({
+      type: 'product',
+      title: product.name,
+      description: product.description || `Crédito ${product.name.toLowerCase()} con aprobación rápida`,
+      productId: product.id,
+      icon: 'cash',
+    })
+  })
+
+  // Final slide: Benefits
+  slides.push({
+    type: 'benefits',
+    title: '¿Por qué elegirnos?',
+    description: 'Proceso rápido, 100% digital, aprobación en 24 horas y depósito directo a tu cuenta.',
+    icon: 'star',
+  })
+
+  return slides
+})
+
+// Carousel controls
+const nextSlide = () => {
+  currentSlide.value = (currentSlide.value + 1) % carouselSlides.value.length
+}
+
+const prevSlide = () => {
+  currentSlide.value = currentSlide.value === 0
+    ? carouselSlides.value.length - 1
+    : currentSlide.value - 1
+}
+
+const goToSlide = (index: number) => {
+  currentSlide.value = index
+}
+
+// Auto-play carousel
+const startAutoPlay = () => {
+  if (autoPlayInterval.value) return
+  autoPlayInterval.value = window.setInterval(() => {
+    nextSlide()
+  }, 5000) // Change slide every 5 seconds
+}
+
+const stopAutoPlay = () => {
+  if (autoPlayInterval.value) {
+    clearInterval(autoPlayInterval.value)
+    autoPlayInterval.value = null
+  }
+}
+
+// Lifecycle hooks for auto-play
+onMounted(() => {
+  if (applications.value.length === 0) {
+    startAutoPlay()
+  }
+})
+
+onBeforeUnmount(() => {
+  stopAutoPlay()
 })
 
 const getStatusInfo = (status: string) => {
@@ -643,61 +723,98 @@ const handleCancelApplication = async () => {
           </div>
         </template>
 
-        <!-- No Applications -->
+        <!-- No Applications - Carousel -->
         <template v-else>
-          <div class="bg-white rounded-2xl shadow-lg p-8">
-            <div class="text-center mb-6">
-              <div class="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg class="w-10 h-10 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+          <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+            <!-- Carousel -->
+            <div class="relative" @mouseenter="stopAutoPlay" @mouseleave="startAutoPlay">
+              <!-- Slides -->
+              <div class="relative h-80 overflow-hidden">
+                <TransitionGroup name="carousel">
+                  <div
+                    v-for="(slide, index) in carouselSlides"
+                    v-show="index === currentSlide"
+                    :key="index"
+                    class="absolute inset-0 flex items-center justify-center p-8"
+                  >
+                    <div class="text-center max-w-md">
+                      <!-- Icon -->
+                      <div class="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <!-- Building icon -->
+                        <svg v-if="slide.icon === 'building'" class="w-10 h-10 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                        <!-- Cash icon -->
+                        <svg v-else-if="slide.icon === 'cash'" class="w-10 h-10 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <!-- Star icon -->
+                        <svg v-else-if="slide.icon === 'star'" class="w-10 h-10 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                        </svg>
+                      </div>
+
+                      <!-- Content -->
+                      <h2 class="text-2xl font-bold text-gray-900 mb-3">{{ slide.title }}</h2>
+                      <p class="text-gray-600 leading-relaxed">{{ slide.description }}</p>
+                    </div>
+                  </div>
+                </TransitionGroup>
               </div>
-              <h2 class="text-xl font-bold text-gray-900 mb-2">Obtén tu crédito hoy</h2>
-              <p class="text-gray-500">
-                Solicita un préstamo en minutos con aprobación rápida y depósito directo a tu cuenta.
+
+              <!-- Navigation Arrows -->
+              <button
+                v-if="carouselSlides.length > 1"
+                @click="prevSlide"
+                class="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110"
+                aria-label="Slide anterior"
+              >
+                <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <button
+                v-if="carouselSlides.length > 1"
+                @click="nextSlide"
+                class="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110"
+                aria-label="Slide siguiente"
+              >
+                <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+
+              <!-- Dots Indicator -->
+              <div v-if="carouselSlides.length > 1" class="absolute bottom-4 left-0 right-0 flex justify-center gap-2">
+                <button
+                  v-for="(slide, index) in carouselSlides"
+                  :key="index"
+                  @click="goToSlide(index)"
+                  :class="[
+                    'h-2 rounded-full transition-all',
+                    index === currentSlide
+                      ? 'w-8 bg-primary-600'
+                      : 'w-2 bg-gray-300 hover:bg-gray-400'
+                  ]"
+                  :aria-label="`Ir a slide ${index + 1}`"
+                />
+              </div>
+            </div>
+
+            <!-- CTA Button -->
+            <div class="p-8 pt-6 border-t border-gray-100">
+              <AppButton
+                variant="primary"
+                full-width
+                size="lg"
+                @click="startNewApplication"
+              >
+                Solicitar Crédito Ahora
+              </AppButton>
+              <p class="text-center text-sm text-gray-500 mt-3">
+                Proceso 100% digital • Aprobación en 24 horas
               </p>
             </div>
-
-            <!-- Features -->
-            <div class="grid grid-cols-2 gap-4 mb-6">
-              <div class="bg-gray-50 rounded-xl p-4">
-                <svg class="w-6 h-6 text-primary-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <p class="text-sm font-medium text-gray-900">Rápido</p>
-                <p class="text-xs text-gray-500">Respuesta en 24h</p>
-              </div>
-              <div class="bg-gray-50 rounded-xl p-4">
-                <svg class="w-6 h-6 text-primary-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                <p class="text-sm font-medium text-gray-900">Seguro</p>
-                <p class="text-xs text-gray-500">Datos protegidos</p>
-              </div>
-              <div class="bg-gray-50 rounded-xl p-4">
-                <svg class="w-6 h-6 text-primary-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                </svg>
-                <p class="text-sm font-medium text-gray-900">Sin aval</p>
-                <p class="text-xs text-gray-500">Trámite sencillo</p>
-              </div>
-              <div class="bg-gray-50 rounded-xl p-4">
-                <svg class="w-6 h-6 text-primary-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-                <p class="text-sm font-medium text-gray-900">Directo</p>
-                <p class="text-xs text-gray-500">A tu cuenta</p>
-              </div>
-            </div>
-
-            <AppButton
-              variant="primary"
-              full-width
-              size="lg"
-              @click="startNewApplication"
-            >
-              Solicitar Crédito
-            </AppButton>
           </div>
         </template>
       </template>
@@ -774,3 +891,24 @@ const handleCancelApplication = async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Carousel transitions */
+.carousel-enter-active {
+  transition: all 0.5s ease;
+}
+
+.carousel-leave-active {
+  transition: all 0.5s ease;
+}
+
+.carousel-enter-from {
+  opacity: 0;
+  transform: translateX(30px);
+}
+
+.carousel-leave-to {
+  opacity: 0;
+  transform: translateX(-30px);
+}
+</style>
