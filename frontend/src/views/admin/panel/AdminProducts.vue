@@ -63,6 +63,18 @@ const allDocumentOptions = computed(() =>
   Object.entries(documentLabels.value).map(([value, label]) => ({ value, label }))
 )
 
+// Documents specific to nationals (exclude foreigner documents)
+const nationalDocumentOptions = computed(() => {
+  const excludedTypes = ['PASSPORT', 'FM2', 'FM3', 'RESIDENCE_CARD', 'VISA']
+  return allDocumentOptions.value.filter(doc => !excludedTypes.includes(doc.value))
+})
+
+// Documents specific to foreigners (exclude national-only documents)
+const foreignerDocumentOptions = computed(() => {
+  const excludedTypes = ['INE_FRONT', 'INE_BACK', 'CURP_DOC']
+  return allDocumentOptions.value.filter(doc => !excludedTypes.includes(doc.value))
+})
+
 // Load document types from backend
 const loadDocumentTypes = async () => {
   try {
@@ -1365,7 +1377,7 @@ onMounted(fetchProducts)
                   </h3>
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <label
-                      v-for="doc in allDocumentOptions"
+                      v-for="doc in nationalDocumentOptions"
                       :key="'nationals-' + doc.value"
                       class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
                       :class="{ 'border-blue-500 bg-blue-50': form.required_documents.nationals.includes(doc.value) }"
@@ -1394,7 +1406,7 @@ onMounted(fetchProducts)
                   </h3>
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <label
-                      v-for="doc in allDocumentOptions"
+                      v-for="doc in foreignerDocumentOptions"
                       :key="'foreigners-' + doc.value"
                       class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
                       :class="{ 'border-green-500 bg-green-50': form.required_documents.foreigners.includes(doc.value) }"
