@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore, useTenantStore } from '@/stores'
+import { useAuthStore, useTenantStore, useApplicationStore } from '@/stores'
 import { AppButton } from '@/components/common'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const tenantStore = useTenantStore()
+const applicationStore = useApplicationStore()
 
 const pin = ref('')
 const confirmPin = ref('')
@@ -75,10 +76,34 @@ const handleSubmit = async () => {
       router.push(redirect)
     } else if (!authStore.hasApplicant) {
       // User is new, redirect to onboarding
-      if (tenantSlug) {
-        router.push(`/${tenantSlug}/solicitud`)
+      // Initialize application store to restore saved data from landing page
+      applicationStore.init()
+
+      // Check if user already has product selected (from landing page)
+      const hasProductSelected = applicationStore.selectedProduct !== null || applicationStore.simulation !== null
+
+      console.log('🔍 [PIN Setup] Checking product selection state', {
+        selectedProduct: applicationStore.selectedProduct?.name || 'null',
+        hasSimulation: applicationStore.simulation !== null,
+        hasProductSelected
+      })
+
+      if (hasProductSelected) {
+        // User came from landing with product selected, skip simulator
+        console.log('✅ [PIN Setup] User has product - skipping simulator → verification')
+        if (tenantSlug) {
+          router.push(`/${tenantSlug}/solicitud/verificacion`)
+        } else {
+          router.push('/solicitud/verificacion')
+        }
       } else {
-        router.push('/solicitud')
+        // No product selected, start with simulator
+        console.log('❌ [PIN Setup] No product - starting with simulator')
+        if (tenantSlug) {
+          router.push(`/${tenantSlug}/solicitud`)
+        } else {
+          router.push('/solicitud')
+        }
       }
     } else {
       // User exists, redirect to dashboard
@@ -110,10 +135,34 @@ const skipSetup = async () => {
     router.push(redirect)
   } else if (!authStore.hasApplicant) {
     // User is new, redirect to onboarding
-    if (tenantSlug) {
-      router.push(`/${tenantSlug}/solicitud`)
+    // Initialize application store to restore saved data from landing page
+    applicationStore.init()
+
+    // Check if user already has product selected (from landing page)
+    const hasProductSelected = applicationStore.selectedProduct !== null || applicationStore.simulation !== null
+
+    console.log('🔍 [PIN Skip] Checking product selection state', {
+      selectedProduct: applicationStore.selectedProduct?.name || 'null',
+      hasSimulation: applicationStore.simulation !== null,
+      hasProductSelected
+    })
+
+    if (hasProductSelected) {
+      // User came from landing with product selected, skip simulator
+      console.log('✅ [PIN Skip] User has product - skipping simulator → verification')
+      if (tenantSlug) {
+        router.push(`/${tenantSlug}/solicitud/verificacion`)
+      } else {
+        router.push('/solicitud/verificacion')
+      }
     } else {
-      router.push('/solicitud')
+      // No product selected, start with simulator
+      console.log('❌ [PIN Skip] No product - starting with simulator')
+      if (tenantSlug) {
+        router.push(`/${tenantSlug}/solicitud`)
+      } else {
+        router.push('/solicitud')
+      }
     }
   } else {
     // User exists, redirect to dashboard

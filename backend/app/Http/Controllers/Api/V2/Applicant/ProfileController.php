@@ -150,8 +150,8 @@ class ProfileController extends Controller
                 'company_name' => $person->currentEmployment->employer_name,
                 'position' => $person->currentEmployment->job_title,
                 'department' => $person->currentEmployment->department,
-                'work_phone' => $person->currentEmployment->employer_phone,
-                'monthly_income' => $person->currentEmployment->monthly_income,
+                'work_phone' => $this->formatPhone($person->currentEmployment->employer_phone),
+                'monthly_income' => (int) $person->currentEmployment->monthly_income,
                 'payment_frequency' => $person->currentEmployment->payment_frequency,
                 'years_employed' => $person->currentEmployment->years_employed,
                 'months_employed' => $person->currentEmployment->months_employed,
@@ -329,6 +329,26 @@ class ProfileController extends Controller
         return str_repeat('*', strlen($clabe) - 4) . substr($clabe, -4);
     }
 
+    /**
+     * Format Mexican phone number for display (XX XXXX XXXX).
+     */
+    private function formatPhone(?string $phone): ?string
+    {
+        if (!$phone) {
+            return null;
+        }
+
+        // Remove all non-numeric characters
+        $cleaned = preg_replace('/\D/', '', $phone);
+
+        // Only format if it's a valid 10-digit number
+        if (strlen($cleaned) === 10) {
+            return substr($cleaned, 0, 2) . ' ' . substr($cleaned, 2, 4) . ' ' . substr($cleaned, 6, 4);
+        }
+
+        return $phone;
+    }
+
     // =========================================================================
     // Personal Data
     // =========================================================================
@@ -347,7 +367,7 @@ class ProfileController extends Controller
             'birth_date' => 'sometimes|date|before:today',
             'birth_state' => 'nullable|string|max:50',
             'birth_country' => 'nullable|string|max:50',
-            'gender' => 'nullable|in:M,F',
+            'gender' => 'nullable|in:M,F,O',
             'nationality' => 'nullable|string|max:50',
             'marital_status' => 'nullable|string|max:30',
             'education_level' => 'nullable|string|max:50',
@@ -661,12 +681,12 @@ class ProfileController extends Controller
             'company_name' => $employment->employer_name,
             'position' => $employment->job_title,
             'department' => $employment->department,
-            'monthly_income' => $employment->monthly_income,
+            'monthly_income' => (int) $employment->monthly_income,
             'payment_frequency' => $employment->payment_frequency,
             'seniority_years' => $employment->years_employed,
             'seniority_months' => $employment->months_employed,
             'start_date' => $employment->start_date?->format('Y-m-d'),
-            'work_phone' => $employment->employer_phone,
+            'work_phone' => $this->formatPhone($employment->employer_phone),
         ]);
     }
 
@@ -693,6 +713,16 @@ class ProfileController extends Controller
             'employer_rfc' => 'nullable|string|max:13',
         ]);
 
+        // Clean phone number (remove spaces and formatting)
+        $cleanPhone = null;
+        if (!empty($validated['work_phone'])) {
+            $cleanPhone = preg_replace('/\D/', '', $validated['work_phone']);
+            // Only save if it's a valid 10-digit Mexican number
+            if (strlen($cleanPhone) !== 10) {
+                $cleanPhone = null;
+            }
+        }
+
         // Map frontend field names to database column names (person_employments table)
         $data = [
             'employment_type' => $validated['employment_type'],
@@ -704,7 +734,7 @@ class ProfileController extends Controller
             'contract_type' => $validated['contract_type'] ?? null,
             'years_employed' => $validated['seniority_years'] ?? null,
             'months_employed' => $validated['seniority_months'] ?? null,
-            'employer_phone' => $validated['work_phone'] ?? null,
+            'employer_phone' => $cleanPhone,
             'employer_address' => $validated['company_address'] ?? null,
             'employer_rfc' => $validated['employer_rfc'] ?? null,
         ];
@@ -721,16 +751,9 @@ class ProfileController extends Controller
         $account = $request->user();
         $person = $this->profileService->getOrCreatePerson($account);
 
-        $employment = $person->currentEmployment;
-
-        if ($employment) {
-            $employment->update($data);
-        } else {
-            $employment = $person->employments()->create(array_merge($data, [
-                'tenant_id' => $account->tenant_id,
-                'is_current' => true,
-            ]));
-        }
+        // Use the service method which already has the duration calculation logic
+        // Pass only $data since it already has all fields properly mapped to DB column names
+        $employment = $this->profileService->updateEmployment($person, $data);
 
         // Record event if there's an active application
         $application = $this->getCurrentApplication($person);
@@ -749,12 +772,12 @@ class ProfileController extends Controller
                 'company_name' => $employment->employer_name,
                 'position' => $employment->job_title,
                 'department' => $employment->department,
-                'monthly_income' => $employment->monthly_income,
+                'monthly_income' => (int) $employment->monthly_income,
                 'payment_frequency' => $employment->payment_frequency,
                 'seniority_years' => $employment->years_employed,
                 'seniority_months' => $employment->months_employed,
                 'start_date' => $employment->start_date?->format('Y-m-d'),
-                'work_phone' => $employment->employer_phone,
+                'work_phone' => $this->formatPhone($employment->employer_phone),
             ],
             'profile_completeness' => $this->calculateCompleteness($person),
         ], 'Empleo actualizado');

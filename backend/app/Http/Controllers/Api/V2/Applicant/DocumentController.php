@@ -14,6 +14,7 @@ use App\Services\ApplicationEventService;
 use App\Services\DocumentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -59,7 +60,34 @@ class DocumentController extends Controller
         }
 
         $type = $request->query('type');
-        $documents = $this->service->getDocumentsFor($account->person, $type);
+        $person = $account->person;
+        $application = $this->getCurrentApplication($person);
+
+        if (!$application) {
+            // No active application - return empty list
+            return $this->success([
+                'documents' => [],
+            ]);
+        }
+
+        // Get documents for current application via documentable_relations
+        // Find all documents that have USAGE relation with this application
+        $query = DB::table('documentable_relations')
+            ->join('documents', 'documentable_relations.document_id', '=', 'documents.id')
+            ->where('documentable_relations.relatable_type', 'App\\Models\\Application')
+            ->where('documentable_relations.relatable_id', $application->id)
+            ->where('documentable_relations.relation_context', 'USAGE')
+            ->whereNull('documentable_relations.deleted_at') // Exclude soft-deleted relations
+            ->select('documents.*');
+
+        if ($type) {
+            $query->where('documents.type', $type);
+        }
+
+        $documentIds = $query->pluck('documents.id');
+
+        // Load full Document models with relationships
+        $documents = Document::whereIn('id', $documentIds)->get();
 
         return $this->success([
             'documents' => $documents->map(fn($doc) => $this->formatDocument($doc)),
@@ -97,11 +125,12 @@ class DocumentController extends Controller
             return $this->badRequest('PROFILE_INCOMPLETE', 'Debes completar tu perfil antes de subir documentos.');
         }
 
-        // Determine documentable entity
-        $documentable = $person;
+        // Get current application (needed for snapshot relationship)
+        $application = $this->getCurrentApplication($person);
 
-        // If identification_id is provided, use that identification as documentable
+        // Determine documentable entity
         if (!empty($validated['identification_id'])) {
+            // If identification_id is provided, use that identification as documentable
             $identification = $person->identifications()
                 ->where('id', $validated['identification_id'])
                 ->first();
@@ -111,22 +140,34 @@ class DocumentController extends Controller
             }
 
             $documentable = $identification;
+        } else {
+            // ALL documents are associated with Person
+            // The application_documents pivot table handles per-application relationships
+            // Some documents (INE, Selfie) are reused across applications
+            // Others (PAYSLIP, PROOF_OF_ADDRESS) must be renewed per application
+            $documentable = $person;
         }
 
         try {
+            $options = $validated['metadata'] ?? [];
+
+            // Upload the document
             $document = $this->service->upload(
                 $account->tenant,
                 $documentable,
                 $validated['type'],
                 $request->file('file'),
-                $validated['metadata'] ?? []
+                $options
             );
+
+            // Activate the document (Active Document Pattern)
+            // This will deactivate any previous active document of the same type
+            $document->activate();
 
             // Check if document should be auto-approved based on existing KYC validations
             $this->autoApproveIfKycValidated($document, $person, $validated['type']);
 
-            // Record event if there's an active application
-            $application = $this->getCurrentApplication($person);
+            // Record event if there's an active application (already fetched above)
             if ($application) {
                 $this->eventService->recordDocumentUploaded(
                     $application,
@@ -135,6 +176,10 @@ class DocumentController extends Controller
                     $account->id,
                     $request
                 );
+
+                // Create snapshot relationship - link document to application immediately
+                // This preserves which documents were used even if person uploads new ones later
+                $this->attachDocumentToApplication($application, $document, $account->id);
             }
 
             return $this->created([
@@ -183,13 +228,12 @@ class DocumentController extends Controller
         }
 
         // Generate signed URL for secure download
-        /** @var \Illuminate\Contracts\Filesystem\Filesystem&\Illuminate\Filesystem\FilesystemAdapter $disk */
         $disk = Storage::disk($document->storage_disk ?? 'local');
 
         // Check if disk supports temporary URLs (S3, MinIO, etc.)
-        if (method_exists($disk, 'temporaryUrl')) {
+        try {
             $url = $disk->temporaryUrl($document->file_path, now()->addMinutes(15));
-        } else {
+        } catch (\RuntimeException $e) {
             // Fallback: return regular URL for local disk
             $url = $disk->url($document->file_path);
         }
@@ -365,17 +409,22 @@ class DocumentController extends Controller
             return null;
         }
 
-        // Check documents belonging to person
+        // Check documents belonging to person, person's identifications, or person's applications
         $document = Document::where('id', $id)
             ->where('tenant_id', $account->tenant_id)
             ->where(function ($query) use ($person) {
                 $query->where(function ($q) use ($person) {
+                    // Documents for Person
                     $q->where('documentable_type', get_class($person))
                         ->where('documentable_id', $person->id);
                 })->orWhere(function ($q) use ($person) {
-                    // Also check documents for person's identifications
+                    // Documents for Person's Identifications
                     $q->where('documentable_type', \App\Models\PersonIdentification::class)
                         ->whereIn('documentable_id', $person->identifications()->pluck('id'));
+                })->orWhere(function ($q) use ($person) {
+                    // Documents for Person's Applications
+                    $q->where('documentable_type', \App\Models\Application::class)
+                        ->whereIn('documentable_id', $person->applications()->pluck('id'));
                 });
             })
             ->first();
@@ -400,8 +449,14 @@ class DocumentController extends Controller
             'mime_type' => $doc->mime_type,
             'version_number' => $doc->version_number,
             'rejection_reason' => $doc->rejection_reason,
+            'metadata' => $doc->metadata, // Include metadata to check kyc_validated flag
             'created_at' => $doc->created_at?->toIso8601String(),
             'reviewed_at' => $doc->reviewed_at?->toIso8601String(),
+            // Active Document Pattern fields
+            'is_active' => $doc->is_active,
+            'is_currently_valid' => $doc->isCurrentlyValid(),
+            'valid_from' => $doc->valid_from?->toIso8601String(),
+            'valid_to' => $doc->valid_to?->toIso8601String(),
         ];
     }
 
@@ -416,6 +471,8 @@ class DocumentController extends Controller
         $data['ocr_confidence'] = $doc->ocr_confidence;
         $data['notes'] = $doc->notes;
         $data['expires_at'] = $doc->expires_at?->toIso8601String();
+        $data['superseded_by_id'] = $doc->superseded_by_id;
+        $data['is_superseded'] = $doc->isSuperseded();
 
         return $data;
     }
@@ -512,5 +569,128 @@ class DocumentController extends Controller
             'document_type' => $type,
             'verification_field' => $verificationField,
         ]);
+    }
+
+    /**
+     * Attach document to application (create snapshot relationship).
+     * This preserves which documents were used even if person uploads new ones later.
+     *
+     * When replacing a rejected document, marks the old one as replaced.
+     *
+     * IMPORTANT: All operations wrapped in transaction for data integrity.
+     */
+    private function attachDocumentToApplication(
+        Application $application,
+        Document $document,
+        string $attachedBy
+    ): void {
+        DB::transaction(function () use ($application, $document, $attachedBy) {
+            // Create OWNERSHIP relation: Document belongs to Person
+            $person = $application->person;
+        $ownershipExists = DB::table('documentable_relations')
+            ->where('document_id', $document->id)
+            ->where('relatable_type', 'App\\Models\\Person')
+            ->where('relatable_id', $person->id)
+            ->where('relation_context', 'OWNERSHIP')
+            ->whereNull('deleted_at')
+            ->exists();
+
+        if (!$ownershipExists) {
+            DB::table('documentable_relations')->insert([
+                'id' => \Illuminate\Support\Str::uuid(),
+                'tenant_id' => $application->tenant_id,
+                'document_id' => $document->id,
+                'relatable_type' => 'App\\Models\\Person',
+                'relatable_id' => $person->id,
+                'relation_context' => 'OWNERSHIP',
+                'created_by' => $attachedBy,
+                'created_by_type' => 'App\\Models\\ApplicantAccount',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        // Check if USAGE relation already exists for this document type in this application
+        $existingUsage = DB::table('documentable_relations')
+            ->where('document_id', '!=', $document->id) // Different document
+            ->where('relatable_type', 'App\\Models\\Application')
+            ->where('relatable_id', $application->id)
+            ->where('relation_context', 'USAGE')
+            ->whereNull('documentable_relations.deleted_at')
+            ->join('documents', 'documentable_relations.document_id', '=', 'documents.id')
+            ->where('documents.type', $document->type) // Same document type
+            ->whereNull('documents.deleted_at')
+            ->select('documentable_relations.*', 'documents.id as old_document_id')
+            ->first();
+
+        if ($existingUsage) {
+            // Get the old document and supersede it with the new one
+            $oldDocument = Document::find($existingUsage->old_document_id);
+            if ($oldDocument && !$oldDocument->isSuperseded()) {
+                // Determine replacement reason based on old document status
+                $reason = match ($oldDocument->status) {
+                    Document::STATUS_REJECTED => Document::REASON_REJECTED,
+                    Document::STATUS_EXPIRED => Document::REASON_EXPIRED,
+                    default => Document::REASON_UPDATED,
+                };
+
+                // Use supersedeWith method (Active Document Pattern)
+                $oldDocument->supersedeWith($document, $reason);
+            }
+
+            // Soft delete old relation
+            DB::table('documentable_relations')
+                ->where('id', $existingUsage->id)
+                ->update(['deleted_at' => now()]);
+
+            Log::info('Document superseded in application', [
+                'application_id' => $application->id,
+                'old_document_id' => $existingUsage->old_document_id,
+                'new_document_id' => $document->id,
+                'document_type' => $document->type,
+                'reason' => $reason ?? 'UPDATED',
+            ]);
+        }
+
+        // Create or restore USAGE relation: Document used in Application
+        $usageRelation = DB::table('documentable_relations')
+            ->where('document_id', $document->id)
+            ->where('relatable_type', 'App\\Models\\Application')
+            ->where('relatable_id', $application->id)
+            ->where('relation_context', 'USAGE')
+            ->first();
+
+        if ($usageRelation) {
+            // Restore if soft-deleted
+            if ($usageRelation->deleted_at) {
+                DB::table('documentable_relations')
+                    ->where('id', $usageRelation->id)
+                    ->update([
+                        'deleted_at' => null,
+                        'updated_at' => now(),
+                    ]);
+            }
+        } else {
+            // Create new USAGE relation
+            DB::table('documentable_relations')->insert([
+                'id' => \Illuminate\Support\Str::uuid(),
+                'tenant_id' => $application->tenant_id,
+                'document_id' => $document->id,
+                'relatable_type' => 'App\\Models\\Application',
+                'relatable_id' => $application->id,
+                'relation_context' => 'USAGE',
+                'created_by' => $attachedBy,
+                'created_by_type' => 'App\\Models\\ApplicantAccount',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+            Log::debug('Document attached to application', [
+                'application_id' => $application->id,
+                'document_id' => $document->id,
+                'document_type' => $document->type,
+            ]);
+        }); // End transaction
     }
 }

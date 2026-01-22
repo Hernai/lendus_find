@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore, useTenantStore } from '@/stores'
+import { useAuthStore, useTenantStore, useApplicationStore } from '@/stores'
 import { AppButton, AppOtpInput } from '@/components/common'
 import { logger } from '@/utils/logger'
 
@@ -10,6 +10,7 @@ const log = logger.child('AuthOtpView')
 const router = useRouter()
 const authStore = useAuthStore()
 const tenantStore = useTenantStore()
+const applicationStore = useApplicationStore()
 
 const otpCode = ref('')
 const error = ref('')
@@ -85,16 +86,40 @@ const handleOtpComplete = async (code: string) => {
       // Check if user has completed registration (has applicant)
       await authStore.checkAuth()
 
+      // Ensure application store is initialized and restored from storage
+      applicationStore.init()
+
       // Redirect based on context
       if (redirect) {
         // Explicit redirect (e.g., from protected route)
         await router.push(redirect)
       } else if (!authStore.hasApplicant) {
         // User is new, redirect to onboarding
-        if (tenantSlug) {
-          await router.push(`/${tenantSlug}/solicitud`)
+        // Check if user already has product selected (from landing page)
+        const hasProductSelected = applicationStore.selectedProduct !== null || applicationStore.simulation !== null
+
+        log.info('🔍 Checking product selection state', {
+          selectedProduct: applicationStore.selectedProduct?.name || 'null',
+          hasSimulation: applicationStore.simulation !== null,
+          hasProductSelected
+        })
+
+        if (hasProductSelected) {
+          // User came from landing with product selected, skip simulator
+          log.info('✅ User has product/simulation from landing, SKIPPING simulator → going to verification')
+          if (tenantSlug) {
+            await router.push(`/${tenantSlug}/solicitud/verificacion`)
+          } else {
+            await router.push('/solicitud/verificacion')
+          }
         } else {
-          await router.push('/solicitud')
+          // No product selected, start with simulator
+          log.info('❌ No product selected, starting with simulator')
+          if (tenantSlug) {
+            await router.push(`/${tenantSlug}/solicitud`)
+          } else {
+            await router.push('/solicitud')
+          }
         }
       } else {
         // User exists, redirect to dashboard

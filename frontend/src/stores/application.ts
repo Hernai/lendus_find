@@ -309,12 +309,31 @@ export const useApplicationStore = defineStore('application', () => {
 
   // Actions
   const setSelectedProduct = (product: Product | null) => {
+    console.log('💾 [ApplicationStore] setSelectedProduct called', { product: product ? { id: product.id, name: product.name } : null })
     selectedProduct.value = product
+    // Persist to storage so it survives page reloads (e.g., during auth)
+    if (product) {
+      storage.set(STORAGE_KEYS.SELECTED_PRODUCT, product)
+      console.log('✅ [ApplicationStore] Product saved to storage:', product.name)
+      // Verify it was saved
+      const verify = storage.get<Product>(STORAGE_KEYS.SELECTED_PRODUCT)
+      console.log('🔍 [ApplicationStore] Verification - product in storage:', verify ? verify.name : 'NOT FOUND')
+    } else {
+      storage.remove(STORAGE_KEYS.SELECTED_PRODUCT)
+      console.log('🗑️ [ApplicationStore] Product removed from storage')
+    }
   }
 
   const runSimulation = async (params: SimulationParams): Promise<SimulationResult> => {
+    console.log('🎲 [ApplicationStore] runSimulation called', { params })
     const result = await executeSimulation(params)
     if (!result) throw new Error('Simulation failed')
+    // Persist simulation to storage
+    storage.set(STORAGE_KEYS.SIMULATION, result)
+    console.log('✅ [ApplicationStore] Simulation saved to storage:', { amount: result.requested_amount })
+    // Verify it was saved
+    const verify = storage.get<SimulationResult>(STORAGE_KEYS.SIMULATION)
+    console.log('🔍 [ApplicationStore] Verification - simulation in storage:', verify ? `${verify.requested_amount}` : 'NOT FOUND')
     return result
   }
 
@@ -354,8 +373,41 @@ export const useApplicationStore = defineStore('application', () => {
   const reset = () => {
     currentApplication.value = null
     simulation.value = null
+    selectedProduct.value = null
     currentStep.value = 1
+    // Clear persisted data
+    storage.remove(STORAGE_KEYS.SELECTED_PRODUCT)
+    storage.remove(STORAGE_KEYS.SIMULATION)
   }
+
+  // Initialize: restore state from storage on mount
+  const init = () => {
+    console.log('🔧 [ApplicationStore] init() called - restoring from storage...')
+    const savedProduct = storage.get<Product>(STORAGE_KEYS.SELECTED_PRODUCT)
+    const savedSimulation = storage.get<SimulationResult>(STORAGE_KEYS.SIMULATION)
+
+    console.log('📦 [ApplicationStore] Retrieved from storage:', {
+      savedProduct: savedProduct ? { id: savedProduct.id, name: savedProduct.name } : null,
+      savedSimulation: savedSimulation ? { amount: savedSimulation.requested_amount } : null
+    })
+
+    if (savedProduct) {
+      selectedProduct.value = savedProduct
+      log.info('✅ Restored selected product from storage', { productId: savedProduct.id, name: savedProduct.name })
+    } else {
+      log.warn('⚠️ No saved product found in storage')
+    }
+
+    if (savedSimulation) {
+      simulation.value = savedSimulation
+      log.info('✅ Restored simulation from storage', { amount: savedSimulation.requested_amount })
+    } else {
+      log.warn('⚠️ No saved simulation found in storage')
+    }
+  }
+
+  // Auto-init on store creation
+  init()
 
   return {
     // State
@@ -374,6 +426,7 @@ export const useApplicationStore = defineStore('application', () => {
     updateApplication,
     submitApplication,
     restoreProgress,
-    reset
+    reset,
+    init
   }
 })

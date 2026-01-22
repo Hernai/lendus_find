@@ -232,9 +232,11 @@ const handleRequestCredit = async () => {
   console.log('🔐 isAuthenticated:', authStore.isAuthenticated)
 
   if (authStore.isAuthenticated) {
-    // Go directly to onboarding - application will be created there
-    console.log('➡️ Navigating to /solicitud')
-    router.push('/solicitud')
+    // User is already authenticated and has product selected
+    // Skip simulator and go directly to verification (KYC)
+    console.log('✅ User authenticated with product selected - skipping simulator')
+    console.log('➡️ Navigating to /solicitud/verificacion')
+    router.push('/solicitud/verificacion')
   } else {
     // Redirect to auth - application will be created after successful login
     console.log('➡️ Navigating to /auth')
