@@ -419,6 +419,12 @@ class KycController extends Controller
             if (!empty($data['fecha_nacimiento'])) {
                 $this->verificationService->verify($applicant, 'birth_date', $data['fecha_nacimiento'], VerificationMethod::RENAPO);
             }
+            if (!empty($data['entidad_nacimiento'])) {
+                $this->verificationService->verify($applicant, 'birth_state', $data['entidad_nacimiento'], VerificationMethod::RENAPO);
+            }
+            if (!empty($data['sexo'])) {
+                $this->verificationService->verify($applicant, 'gender', $data['sexo'], VerificationMethod::RENAPO);
+            }
 
             $this->verificationService->updateKycStatus($applicant);
         }
