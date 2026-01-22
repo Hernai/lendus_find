@@ -428,6 +428,10 @@ class ProfileController extends Controller
             'ine_clave' => 'sometimes|string|max:20',
             'ine_ocr' => 'sometimes|string|max:20',
             'ine_folio' => 'sometimes|string|max:20',
+            // Passport fields for foreigners
+            'passport_number' => 'sometimes|string|max:20',
+            'passport_issue_date' => 'sometimes|date',
+            'passport_expiry_date' => 'sometimes|date|after:today',
         ]);
 
         $account = $request->user();
@@ -492,19 +496,52 @@ class ProfileController extends Controller
             );
         }
 
+        // Save PASSPORT to person_identifications (for foreigners)
+        if (isset($validated['passport_number'])) {
+            $existingPassport = $person->identifications()->where('type', 'PASSPORT')->first();
+            $isVerified = $existingPassport && $existingPassport->status === 'VERIFIED';
+
+            $passportData = [
+                'issue_date' => $validated['passport_issue_date'] ?? ($existingPassport?->document_data['issue_date'] ?? null),
+                'expiry_date' => $validated['passport_expiry_date'] ?? ($existingPassport?->document_data['expiry_date'] ?? null),
+            ];
+            $person->identifications()->updateOrCreate(
+                ['type' => 'PASSPORT'],
+                [
+                    'tenant_id' => $account->tenant_id,
+                    'identifier_value' => strtoupper($validated['passport_number']),
+                    'document_data' => $passportData,
+                    'is_current' => true,
+                    'status' => $isVerified ? 'VERIFIED' : 'PENDING',
+                    'verified_at' => $isVerified ? ($existingPassport->verified_at ?? now()) : null,
+                    'verification_method' => $isVerified ? ($existingPassport->verification_method ?? 'MANUAL') : null,
+                ]
+            );
+        }
+
         // Reload identifications
         $person->load('identifications');
         $identifications = $person->identifications;
         $curp = $identifications->firstWhere('type', 'CURP')?->identifier_value;
         $rfc = $identifications->firstWhere('type', 'RFC')?->identifier_value;
+        $passport = $identifications->firstWhere('type', 'PASSPORT');
 
-        return $this->success([
+        $response = [
             'identifications' => [
                 'curp' => $curp,
                 'rfc' => $rfc,
             ],
             'profile_completeness' => $this->calculateCompleteness($person),
-        ], 'Identificaciones actualizadas');
+        ];
+
+        // Include passport data if exists
+        if ($passport) {
+            $response['identifications']['passport_number'] = $passport->identifier_value;
+            $response['identifications']['passport_issue_date'] = $passport->document_data['issue_date'] ?? null;
+            $response['identifications']['passport_expiry_date'] = $passport->document_data['expiry_date'] ?? null;
+        }
+
+        return $this->success($response, 'Identificaciones actualizadas');
     }
 
     /**
