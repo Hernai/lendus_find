@@ -200,13 +200,39 @@ class ConfigController extends Controller
     /**
      * Format required docs for frontend.
      * Uses DocumentType enum for descriptions to stay in sync with backend.
+     * Supports both legacy array format and new {nationals: [], foreigners: []} structure.
      */
-    private function formatRequiredDocs(?array $docs): array
+    private function formatRequiredDocs(?array $docs): array|object
     {
         if (!$docs) {
             return [];
         }
 
+        // Check if using new structure {nationals: [], foreigners: []}
+        if (isset($docs['nationals']) || isset($docs['foreigners'])) {
+            // New structure: return as object with formatted arrays for each type
+            $result = [];
+
+            if (isset($docs['nationals'])) {
+                $result['nationals'] = $this->formatDocArray($docs['nationals']);
+            }
+
+            if (isset($docs['foreigners'])) {
+                $result['foreigners'] = $this->formatDocArray($docs['foreigners']);
+            }
+
+            return $result;
+        }
+
+        // Legacy format: flat array
+        return $this->formatDocArray($docs);
+    }
+
+    /**
+     * Format an array of document types with descriptions.
+     */
+    private function formatDocArray(array $docs): array
+    {
         return array_map(function ($doc) {
             // Try to get description from DocumentType enum
             $description = $doc;

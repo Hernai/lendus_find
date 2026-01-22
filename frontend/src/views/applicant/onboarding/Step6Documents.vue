@@ -118,6 +118,12 @@ const getRequiredDocuments = (): DocumentUpload[] => {
   if (requiredDocs && typeof requiredDocs === 'object' && ('nationals' in requiredDocs || 'foreigners' in requiredDocs)) {
     // Select appropriate document list based on nationality
     const docList = isForeigner.value ? requiredDocs.foreigners : requiredDocs.nationals
+    log.debug('Using new document structure', {
+      isForeigner: isForeigner.value,
+      selectedList: isForeigner.value ? 'foreigners' : 'nationals',
+      docList,
+      requiredDocs
+    })
 
     if (docList && docList.length > 0) {
       return docList
