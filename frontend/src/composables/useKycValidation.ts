@@ -73,7 +73,16 @@ export function useKycValidation(): UseKycValidationReturn {
     const requiredDocs = product.required_documents || product.required_docs || []
     log.debug('[KYC] Checking requiresSelfie - requiredDocs:', requiredDocs)
 
-    return requiredDocs.some((doc) => {
+    // Handle new structure {nationals: [], foreigners: []} or legacy array
+    let docsToCheck: any[] = []
+    if (Array.isArray(requiredDocs)) {
+      docsToCheck = requiredDocs
+    } else if (requiredDocs && typeof requiredDocs === 'object') {
+      // New structure: combine both nationals and foreigners
+      docsToCheck = [...(requiredDocs.nationals || []), ...(requiredDocs.foreigners || [])]
+    }
+
+    return docsToCheck.some((doc) => {
       // Handle both string and object formats
       const docType = typeof doc === 'string' ? doc : doc.type
       const upperType = docType?.toUpperCase() || ''

@@ -40,8 +40,17 @@ const requiresSignature = computed(() => {
   const requiredDocs = productFromConfig?.required_documents ?? productFromConfig?.required_docs ??
                        product?.required_documents ?? product?.required_docs ?? []
 
+  // Handle new structure {nationals: [], foreigners: []} or legacy array
+  let docsToCheck: any[] = []
+  if (Array.isArray(requiredDocs)) {
+    docsToCheck = requiredDocs
+  } else if (requiredDocs && typeof requiredDocs === 'object') {
+    // New structure: combine both nationals and foreigners
+    docsToCheck = [...(requiredDocs.nationals || []), ...(requiredDocs.foreigners || [])]
+  }
+
   // Check if SIGNATURE is in the required documents list
-  return requiredDocs.some((doc: { type: string } | string) => {
+  return docsToCheck.some((doc: { type: string } | string) => {
     const docType = typeof doc === 'string' ? doc : doc.type
     return docType === 'SIGNATURE'
   })
