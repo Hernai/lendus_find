@@ -410,8 +410,8 @@ const startNewApplication = () => {
   // Reset onboarding store data
   onboardingStore.reset()
 
-  // Navigate to start new application flow
-  router.push('/solicitud')
+  // Navigate to simulator first to let user see what they'll pay
+  router.push('/simulador')
 }
 
 const uploadDocs = (app: Application) => {
