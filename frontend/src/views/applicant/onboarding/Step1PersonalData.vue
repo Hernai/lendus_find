@@ -420,21 +420,31 @@ const handleSubmit = async () => {
             hint="Extraído de tu CURP"
           />
           <template v-else>
-            <!-- Divider -->
-            <div class="border-t border-gray-200 my-6 pt-4">
-              <p class="text-sm text-gray-500 mb-4">Completa la siguiente información:</p>
-            </div>
-
-            <!-- Editable: Birth state (not in INE OCR usually) -->
-            <AppSelect
-              v-model="form.birth_state"
-              :options="mexicanStates"
+            <!-- If birth_state is locked/verified, show as LockedField -->
+            <LockedField
+              v-if="isBirthStateLocked && form.birth_state"
               label="Entidad de nacimiento"
-              placeholder="Selecciona tu estado"
-              :error="errors.birth_state"
-              :disabled="isBirthStateLocked"
-              required
+              :value="mexicanStates.find(s => s.value === form.birth_state)?.label || form.birth_state"
+              format="uppercase"
+              :verified="true"
+              :verification="getVerification('birth_state')"
             />
+            <template v-else>
+              <!-- Divider -->
+              <div class="border-t border-gray-200 my-6 pt-4">
+                <p class="text-sm text-gray-500 mb-4">Completa la siguiente información:</p>
+              </div>
+
+              <!-- Editable: Birth state (not in INE OCR usually) -->
+              <AppSelect
+                v-model="form.birth_state"
+                :options="mexicanStates"
+                label="Entidad de nacimiento"
+                placeholder="Selecciona tu estado"
+                :error="errors.birth_state"
+                required
+              />
+            </template>
           </template>
         </template>
 
@@ -494,14 +504,21 @@ const handleSubmit = async () => {
         </template>
 
         <!-- Entidad de nacimiento (solo mexicanos y sin KYC verificado) -->
+        <LockedField
+          v-if="isMexican && !isKycVerified && isBirthStateLocked && form.birth_state"
+          label="Entidad de nacimiento"
+          :value="mexicanStates.find(s => s.value === form.birth_state)?.label || form.birth_state"
+          format="uppercase"
+          :verified="true"
+          :verification="getVerification('birth_state')"
+        />
         <AppSelect
-          v-if="isMexican && !isKycVerified"
+          v-else-if="isMexican && !isKycVerified"
           v-model="form.birth_state"
           :options="mexicanStates"
           label="Entidad de nacimiento"
           placeholder="Selecciona tu estado"
           :error="errors.birth_state"
-          :disabled="isBirthStateLocked"
           required
         />
 
