@@ -39,7 +39,7 @@ const { form, errors, submitError, handleSubmit, prevStep, isSaving, init } = us
       ],
       transform: (v: string) => v.toUpperCase(),
     },
-    company_phone: { default: '' },
+    work_phone: { default: '' },
     company_address: { default: '' },
     monthly_income: {
       default: 0,
@@ -76,7 +76,7 @@ const showBusinessDetails = computed(() =>
 // Handle phone input (format as user types)
 const handlePhoneInput = (event: Event) => {
   const target = event.target as HTMLInputElement
-  form.company_phone = formatPhoneInput(target.value)
+  form.work_phone = formatPhoneInput(target.value)
 }
 </script>
 
@@ -127,7 +127,7 @@ const handlePhoneInput = (event: Event) => {
             <div class="relative">
               <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">+52</span>
               <input
-                :value="form.company_phone"
+                :value="form.work_phone"
                 type="tel"
                 inputmode="numeric"
                 placeholder="55 1234 5678"
