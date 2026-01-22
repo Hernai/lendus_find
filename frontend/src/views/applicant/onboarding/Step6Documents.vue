@@ -125,11 +125,14 @@ const getRequiredDocuments = (): DocumentUpload[] => {
         const isRequired = typeof doc === 'string' ? true : (doc.required ?? true)
 
         // Replace INE with PASSPORT and add residence document for foreigners
+        let customDescription = ''
         if (isForeigner.value) {
           if (docType === 'INE_FRONT') {
             docType = 'PASSPORT'
+            customDescription = '' // Clear INE description
           } else if (docType === 'INE_BACK') {
             docType = 'RESIDENCE_CARD' // FM2/FM3/Residence card
+            customDescription = 'FM2, FM3 o Tarjeta de Residente vigente'
           }
         }
 
@@ -138,7 +141,7 @@ const getRequiredDocuments = (): DocumentUpload[] => {
         return {
           id: docType,
           name: label,
-          description: typeof doc === 'object' && doc.description ? doc.description : '',
+          description: customDescription || (typeof doc === 'object' && doc.description ? doc.description : ''),
           required: isRequired,
           file: null,
           preview: null,
