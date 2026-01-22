@@ -23,6 +23,12 @@ const isKycVerified = computed(() => kycStore.verified && !!kycStore.lockedData.
 // Get verification info for fields (for showing method badges)
 const getVerification = (field: string) => kycStore.getFieldVerification(field)
 
+// Check if birth_state is verified/locked
+const isBirthStateLocked = computed(() => {
+  const verification = kycStore.getFieldVerification('birth_state')
+  return verification?.is_locked === true || !!kycStore.lockedData.entidad_nacimiento
+})
+
 // Local form state (reactive copy from store)
 const form = reactive({
   first_name: '',
@@ -426,6 +432,7 @@ const handleSubmit = async () => {
               label="Entidad de nacimiento"
               placeholder="Selecciona tu estado"
               :error="errors.birth_state"
+              :disabled="isBirthStateLocked"
               required
             />
           </template>
@@ -494,6 +501,7 @@ const handleSubmit = async () => {
           label="Entidad de nacimiento"
           placeholder="Selecciona tu estado"
           :error="errors.birth_state"
+          :disabled="isBirthStateLocked"
           required
         />
 
