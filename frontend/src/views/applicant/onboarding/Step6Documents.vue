@@ -15,6 +15,12 @@ const applicationStore = useApplicationStore()
 const tenantStore = useTenantStore()
 const kycStore = useKycStore()
 
+// Check if user is foreigner (non-Mexican)
+const isForeigner = computed(() => {
+  const nationality = onboardingStore.data.step1.nationality
+  return nationality && nationality !== 'MX'
+})
+
 interface DocumentUpload {
   id: string
   name: string
@@ -111,8 +117,19 @@ const getRequiredDocuments = (): DocumentUpload[] => {
         return !EXCLUDED_DOCUMENT_TYPES.includes(docType)
       })
       .map((doc: { type: string; required: boolean; description?: string } | string) => {
-        const docType = typeof doc === 'string' ? doc : doc.type
+        let docType = typeof doc === 'string' ? doc : doc.type
         const isRequired = typeof doc === 'string' ? true : (doc.required ?? true)
+
+        // Replace INE with PASSPORT for foreigners
+        if (isForeigner.value) {
+          if (docType === 'INE_FRONT') {
+            docType = 'PASSPORT'
+            // Skip INE_BACK as it's not needed for passport
+          } else if (docType === 'INE_BACK') {
+            return null // Will be filtered out below
+          }
+        }
+
         const label = getDocumentLabel(docType)
 
         return {
@@ -125,9 +142,19 @@ const getRequiredDocuments = (): DocumentUpload[] => {
           status: 'pending' as const
         }
       })
+      .filter((doc: any) => doc !== null) // Remove null entries (INE_BACK for foreigners)
   }
 
   // Fallback to basic documents if no product info available
+  if (isForeigner.value) {
+    // Foreigners: PASSPORT instead of INE
+    return [
+      { id: 'PASSPORT', name: getDocumentLabel('PASSPORT'), description: '', required: true, file: null, preview: null, status: 'pending' as const },
+      { id: 'PROOF_OF_ADDRESS', name: getDocumentLabel('PROOF_OF_ADDRESS'), description: '', required: true, file: null, preview: null, status: 'pending' as const },
+    ]
+  }
+
+  // Mexicans: INE front and back
   return [
     { id: 'INE_FRONT', name: getDocumentLabel('INE_FRONT'), description: '', required: true, file: null, preview: null, status: 'pending' as const },
     { id: 'INE_BACK', name: getDocumentLabel('INE_BACK'), description: '', required: true, file: null, preview: null, status: 'pending' as const },
