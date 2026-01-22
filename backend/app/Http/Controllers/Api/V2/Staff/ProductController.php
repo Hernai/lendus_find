@@ -94,7 +94,10 @@ class ProductController extends Controller
             'payment_frequencies.*' => 'string|in:WEEKLY,BIWEEKLY,MONTHLY',
             'term_config' => 'nullable|array',
             'required_documents' => 'nullable|array',
-            'required_documents.*' => ['string', Rule::in(DocumentType::values())],
+            'required_documents.nationals' => 'sometimes|array',
+            'required_documents.nationals.*' => ['string', Rule::in(DocumentType::values())],
+            'required_documents.foreigners' => 'sometimes|array',
+            'required_documents.foreigners.*' => ['string', Rule::in(DocumentType::values())],
             'eligibility_rules' => 'nullable|array',
             'is_active' => 'boolean',
         ]);
@@ -110,7 +113,18 @@ class ProductController extends Controller
         // Set default values
         $data['opening_commission'] = $data['opening_commission'] ?? 0;
         $data['late_fee_rate'] = $data['late_fee_rate'] ?? 0;
-        $data['required_documents'] = $data['required_documents'] ?? [];
+
+        // Normalize required_documents structure
+        if (!isset($data['required_documents'])) {
+            $data['required_documents'] = ['nationals' => [], 'foreigners' => []];
+        } elseif (is_array($data['required_documents']) && !isset($data['required_documents']['nationals']) && !isset($data['required_documents']['foreigners'])) {
+            // Legacy format: convert flat array to new structure
+            $data['required_documents'] = [
+                'nationals' => $data['required_documents'],
+                'foreigners' => $data['required_documents']
+            ];
+        }
+
         $data['eligibility_rules'] = $data['eligibility_rules'] ?? [];
         $data['is_active'] = $data['is_active'] ?? true;
 
@@ -168,7 +182,10 @@ class ProductController extends Controller
             'payment_frequencies.*' => 'string|in:WEEKLY,BIWEEKLY,MONTHLY',
             'term_config' => 'nullable|array',
             'required_documents' => 'nullable|array',
-            'required_documents.*' => ['string', Rule::in(DocumentType::values())],
+            'required_documents.nationals' => 'sometimes|array',
+            'required_documents.nationals.*' => ['string', Rule::in(DocumentType::values())],
+            'required_documents.foreigners' => 'sometimes|array',
+            'required_documents.foreigners.*' => ['string', Rule::in(DocumentType::values())],
             'eligibility_rules' => 'nullable|array',
             'is_active' => 'boolean',
         ]);
