@@ -113,6 +113,8 @@ class ProfileController extends Controller
                 'curp' => $curp,
                 'rfc' => $rfc,
                 'ine_clave' => $ineData?->identifier_value,
+                'ine_ocr' => $ineData?->document_data['ocr'] ?? null,
+                'ine_folio' => $ineData?->document_data['folio'] ?? null,
                 'ine_verified' => $ineData?->verified_at !== null,
             ],
 

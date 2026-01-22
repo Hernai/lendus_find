@@ -208,14 +208,19 @@ onMounted(async () => {
     form.id_type = 'INE' // KYC is always INE
     form.curp = kycStore.lockedData.curp || step2.curp
 
-    // Load INE fields from lockedData OR from verified fields
+    // Load INE fields from multiple sources (in priority order):
+    // 1. lockedData (from OCR in current session)
+    // 2. verified fields (from backend verifications)
+    // 3. profile identifications (from saved data)
+    // 4. onboarding store (from previous form submission)
     const claveElectorVerif = kycStore.getFieldVerification('ine_clave')
     const numeroOcrVerif = kycStore.getFieldVerification('ine_ocr')
     const folioIneVerif = kycStore.getFieldVerification('ine_folio')
+    const profileIds = profileStore.identifications
 
-    form.clave_elector = kycStore.lockedData.clave_elector || claveElectorVerif?.value || step2.clave_elector
-    form.numero_ocr = kycStore.lockedData.ocr || numeroOcrVerif?.value || step2.numero_ocr
-    form.folio_ine = kycStore.lockedData.cic || kycStore.lockedData.identificador_ciudadano || folioIneVerif?.value || step2.folio_ine
+    form.clave_elector = kycStore.lockedData.clave_elector || claveElectorVerif?.value || profileIds?.ine_clave || step2.clave_elector
+    form.numero_ocr = kycStore.lockedData.ocr || numeroOcrVerif?.value || profileIds?.ine_ocr || step2.numero_ocr
+    form.folio_ine = kycStore.lockedData.cic || kycStore.lockedData.identificador_ciudadano || folioIneVerif?.value || profileIds?.ine_folio || step2.folio_ine
 
     // Check if RFC is already verified (locked)
     const rfcVerified = kycStore.getFieldVerification('rfc')
