@@ -269,7 +269,12 @@ onMounted(async () => {
     }
   } else {
     // Auto-select PASSPORT for foreigners, INE for Mexicans
-    form.id_type = step2.id_type || (isForeigner.value ? 'PASSPORT' : 'INE')
+    // Force correct id_type based on nationality
+    if (isForeigner.value) {
+      form.id_type = 'PASSPORT'
+    } else {
+      form.id_type = step2.id_type || 'INE'
+    }
     form.curp = step2.curp
     form.rfc = step2.rfc
     form.clave_elector = step2.clave_elector
