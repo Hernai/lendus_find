@@ -207,9 +207,15 @@ onMounted(async () => {
   if (hasKycData.value) {
     form.id_type = 'INE' // KYC is always INE
     form.curp = kycStore.lockedData.curp || step2.curp
-    form.clave_elector = kycStore.lockedData.clave_elector || step2.clave_elector
-    form.numero_ocr = kycStore.lockedData.ocr || step2.numero_ocr
-    form.folio_ine = kycStore.lockedData.cic || kycStore.lockedData.identificador_ciudadano || step2.folio_ine
+
+    // Load INE fields from lockedData OR from verified fields
+    const claveElectorVerif = kycStore.getFieldVerification('ine_clave')
+    const numeroOcrVerif = kycStore.getFieldVerification('ine_ocr')
+    const folioIneVerif = kycStore.getFieldVerification('ine_folio')
+
+    form.clave_elector = kycStore.lockedData.clave_elector || claveElectorVerif?.value || step2.clave_elector
+    form.numero_ocr = kycStore.lockedData.ocr || numeroOcrVerif?.value || step2.numero_ocr
+    form.folio_ine = kycStore.lockedData.cic || kycStore.lockedData.identificador_ciudadano || folioIneVerif?.value || step2.folio_ine
 
     // Check if RFC is already verified (locked)
     const rfcVerified = kycStore.getFieldVerification('rfc')
