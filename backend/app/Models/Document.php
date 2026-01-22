@@ -100,6 +100,12 @@ class Document extends Model
     public const TYPE_DRIVER_LICENSE_FRONT = 'DRIVER_LICENSE_FRONT';
     public const TYPE_DRIVER_LICENSE_BACK = 'DRIVER_LICENSE_BACK';
 
+    // Foreigner residence documents
+    public const TYPE_FM2 = 'FM2';
+    public const TYPE_FM3 = 'FM3';
+    public const TYPE_RESIDENCE_CARD = 'RESIDENCE_CARD';
+    public const TYPE_VISA = 'VISA';
+
     // Address
     public const TYPE_PROOF_OF_ADDRESS = 'PROOF_OF_ADDRESS';
     public const TYPE_UTILITY_BILL = 'UTILITY_BILL';
@@ -162,6 +168,10 @@ class Document extends Model
                 self::TYPE_RFC_CONSTANCIA,
                 self::TYPE_DRIVER_LICENSE_FRONT,
                 self::TYPE_DRIVER_LICENSE_BACK,
+                self::TYPE_FM2,
+                self::TYPE_FM3,
+                self::TYPE_RESIDENCE_CARD,
+                self::TYPE_VISA,
             ],
             self::CATEGORY_ADDRESS => [
                 self::TYPE_PROOF_OF_ADDRESS,
@@ -232,6 +242,10 @@ class Document extends Model
             self::TYPE_RFC_CONSTANCIA,
             self::TYPE_DRIVER_LICENSE_FRONT,
             self::TYPE_DRIVER_LICENSE_BACK,
+            self::TYPE_FM2,
+            self::TYPE_FM3,
+            self::TYPE_RESIDENCE_CARD,
+            self::TYPE_VISA,
 
             // Verification
             self::TYPE_SELFIE,
