@@ -468,7 +468,13 @@ const getErrorMessage = (e: unknown): string => {
 }
 
 const handleSubmit = async () => {
-  if (!validate()) return
+  const isValid = validate()
+
+  if (!isValid) {
+    log.warn('Validation failed', { errors })
+    console.log('Validation errors:', errors)
+    return
+  }
 
   submitError.value = ''
 
