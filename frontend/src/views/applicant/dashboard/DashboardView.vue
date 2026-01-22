@@ -548,7 +548,7 @@ const handleCancelApplication = async () => {
       <!-- Applications List -->
       <template v-else>
         <!-- Has Applications -->
-        <template v-if="filteredApplications.length > 0 || cancelledCount > 0">
+        <template v-if="filteredApplications.length > 0">
           <div class="space-y-4">
             <div
               v-for="app in filteredApplications"
