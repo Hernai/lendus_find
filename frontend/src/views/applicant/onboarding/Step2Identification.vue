@@ -42,6 +42,27 @@ const isRfcLocked = computed(() => {
   return hasBackendVerification || validatedInSession
 })
 
+// Check if other fields are locked (verified via KYC)
+const isCurpLocked = computed(() => {
+  const verification = kycStore.getFieldVerification('curp')
+  return verification?.is_locked === true || !!kycStore.lockedData.curp
+})
+
+const isClaveElectorLocked = computed(() => {
+  const verification = kycStore.getFieldVerification('clave_elector')
+  return verification?.is_locked === true
+})
+
+const isNumeroOcrLocked = computed(() => {
+  const verification = kycStore.getFieldVerification('numero_ocr')
+  return verification?.is_locked === true
+})
+
+const isFolioIneLocked = computed(() => {
+  const verification = kycStore.getFieldVerification('folio')
+  return verification?.is_locked === true
+})
+
 // RFC suggestion state
 const suggestedRfc = ref<string | null>(null)
 
@@ -533,6 +554,7 @@ const prevStep = () => router.push('/solicitud/paso-1')
                   placeholder="XXXX000000XXX"
                   :error="errors.rfc"
                   :maxlength="13"
+                  :disabled="isRfcLocked"
                   uppercase
                   required
                 />
@@ -630,6 +652,7 @@ const prevStep = () => router.push('/solicitud/paso-1')
                 placeholder="XXXX000000XXX"
                 :error="errors.rfc"
                 :maxlength="13"
+                :disabled="isRfcLocked"
                 uppercase
                 required
               />
@@ -691,6 +714,7 @@ const prevStep = () => router.push('/solicitud/paso-1')
                     placeholder="ABCDEF12345678ABCD"
                     :error="errors.clave_elector"
                     :maxlength="18"
+                    :disabled="isClaveElectorLocked"
                     uppercase
                     required
                   />
@@ -711,6 +735,7 @@ const prevStep = () => router.push('/solicitud/paso-1')
                     placeholder="0000000000000"
                     :error="errors.numero_ocr"
                     :maxlength="13"
+                    :disabled="isNumeroOcrLocked"
                     inputmode="numeric"
                     required
                   />
@@ -731,6 +756,7 @@ const prevStep = () => router.push('/solicitud/paso-1')
                     placeholder="000000000000"
                     :error="errors.folio_ine"
                     :maxlength="20"
+                    :disabled="isFolioIneLocked"
                     inputmode="numeric"
                     required
                   />
