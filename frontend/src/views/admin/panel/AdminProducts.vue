@@ -183,7 +183,10 @@ const form = ref({
   late_fee_rate: 2,
   payment_frequencies: ['MONTHLY'] as string[],
   term_config: { MONTHLY: { available_terms: [3, 6, 12, 18, 24, 36, 48] } } as Record<string, TermConfig>,
-  required_documents: [] as string[],
+  required_documents: {
+    nationals: [] as string[],
+    foreigners: [] as string[]
+  },
   is_active: true
 })
 
@@ -293,7 +296,10 @@ const openCreateModal = () => {
     late_fee_rate: 2,
     payment_frequencies: ['MONTHLY'],
     term_config: { MONTHLY: { available_terms: [3, 6, 12, 18, 24, 36, 48] } },
-    required_documents: ['INE_FRONT', 'INE_BACK', 'PROOF_OF_ADDRESS'],
+    required_documents: {
+      nationals: ['INE_FRONT', 'INE_BACK', 'PROOF_OF_ADDRESS'],
+      foreigners: ['PASSPORT', 'RESIDENCE_CARD', 'PROOF_OF_ADDRESS']
+    },
     is_active: true
   }
   // Initialize newTermInput for all frequencies for proper reactivity
@@ -347,7 +353,7 @@ const openEditModal = (product: Product) => {
     late_fee_rate: product.late_fee_rate || 0,
     payment_frequencies: frequencies,
     term_config: termConfig,
-    required_documents: product.required_documents || [],
+    required_documents: normalizeRequiredDocuments(product.required_documents),
     is_active: product.is_active
   }
   // Initialize newTermInput for all frequencies for proper reactivity
@@ -516,13 +522,54 @@ const toggleFrequency = (freq: string) => {
   }
 }
 
-// Toggle document
-const toggleDocument = (doc: string) => {
-  const index = form.value.required_documents.indexOf(doc)
+// Normalize required documents to new structure
+const normalizeRequiredDocuments = (docs: any) => {
+  // If already in new format
+  if (docs && typeof docs === 'object' && ('nationals' in docs || 'foreigners' in docs)) {
+    return {
+      nationals: Array.isArray(docs.nationals) ? docs.nationals : [],
+      foreigners: Array.isArray(docs.foreigners) ? docs.foreigners : []
+    }
+  }
+
+  // If old format (array), convert to new format
+  if (Array.isArray(docs)) {
+    // Map INE to PASSPORT for foreigners
+    const foreignerDocs = docs.map(doc => {
+      if (doc === 'INE_FRONT') return 'PASSPORT'
+      if (doc === 'INE_BACK') return 'RESIDENCE_CARD'
+      return doc
+    })
+    return {
+      nationals: docs,
+      foreigners: foreignerDocs
+    }
+  }
+
+  // Default empty structure
+  return {
+    nationals: [],
+    foreigners: []
+  }
+}
+
+// Toggle document for nationals
+const toggleDocumentNationals = (doc: string) => {
+  const index = form.value.required_documents.nationals.indexOf(doc)
   if (index >= 0) {
-    form.value.required_documents.splice(index, 1)
+    form.value.required_documents.nationals.splice(index, 1)
   } else {
-    form.value.required_documents.push(doc)
+    form.value.required_documents.nationals.push(doc)
+  }
+}
+
+// Toggle document for foreigners
+const toggleDocumentForeigners = (doc: string) => {
+  const index = form.value.required_documents.foreigners.indexOf(doc)
+  if (index >= 0) {
+    form.value.required_documents.foreigners.splice(index, 1)
+  } else {
+    form.value.required_documents.foreigners.push(doc)
   }
 }
 
@@ -1221,32 +1268,67 @@ onMounted(fetchProducts)
               </div>
 
               <!-- Documents Tab -->
-              <div v-show="activeTab === 'documents'" class="space-y-4">
+              <div v-show="activeTab === 'documents'" class="space-y-6">
                 <p class="text-sm text-gray-500 mb-4">
                   Selecciona los documentos que serán requeridos para este producto
                 </p>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <label
-                    v-for="doc in allDocumentOptions"
-                    :key="doc.value"
-                    class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
-                    :class="{ 'border-primary-500 bg-primary-50': form.required_documents.includes(doc.value) }"
-                  >
-                    <input
-                      type="checkbox"
-                      :checked="form.required_documents.includes(doc.value)"
-                      class="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                      @change="toggleDocument(doc.value)"
-                    />
-                    <span class="text-sm text-gray-700">{{ doc.label }}</span>
-                  </label>
+                <!-- Nationals Section -->
+                <div class="space-y-3">
+                  <h3 class="text-base font-semibold text-gray-900 flex items-center gap-2">
+                    <span class="inline-block w-2 h-2 rounded-full bg-blue-500"></span>
+                    Documentos para Nacionales
+                  </h3>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label
+                      v-for="doc in allDocumentOptions"
+                      :key="'nationals-' + doc.value"
+                      class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                      :class="{ 'border-blue-500 bg-blue-50': form.required_documents.nationals.includes(doc.value) }"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="form.required_documents.nationals.includes(doc.value)"
+                        class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        @change="toggleDocumentNationals(doc.value)"
+                      />
+                      <span class="text-sm text-gray-700">{{ doc.label }}</span>
+                    </label>
+                  </div>
+                  <div class="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                    <p class="text-sm text-blue-700">
+                      <strong>{{ form.required_documents.nationals.length }}</strong> documentos seleccionados
+                    </p>
+                  </div>
                 </div>
 
-                <div class="mt-4 p-3 bg-gray-50 rounded-lg">
-                  <p class="text-sm text-gray-600">
-                    <strong>{{ form.required_documents.length }}</strong> documentos seleccionados
-                  </p>
+                <!-- Foreigners Section -->
+                <div class="space-y-3">
+                  <h3 class="text-base font-semibold text-gray-900 flex items-center gap-2">
+                    <span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+                    Documentos para Extranjeros
+                  </h3>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label
+                      v-for="doc in allDocumentOptions"
+                      :key="'foreigners-' + doc.value"
+                      class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                      :class="{ 'border-green-500 bg-green-50': form.required_documents.foreigners.includes(doc.value) }"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="form.required_documents.foreigners.includes(doc.value)"
+                        class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                        @change="toggleDocumentForeigners(doc.value)"
+                      />
+                      <span class="text-sm text-gray-700">{{ doc.label }}</span>
+                    </label>
+                  </div>
+                  <div class="p-3 bg-green-50 rounded-lg border border-green-100">
+                    <p class="text-sm text-green-700">
+                      <strong>{{ form.required_documents.foreigners.length }}</strong> documentos seleccionados
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
