@@ -703,7 +703,7 @@ const handleCancelApplication = async () => {
       </template>
 
       <!-- Help Section -->
-      <div v-if="phoneUrl || whatsappUrl" class="bg-white rounded-2xl shadow-sm p-6 mt-6 mb-8">
+      <div v-if="phoneUrl || whatsappUrl" class="bg-white rounded-2xl shadow-sm p-6 mt-10 mb-8">
         <h3 class="font-semibold text-gray-900 mb-3">¿Necesitas ayuda?</h3>
         <div class="space-y-3">
           <a v-if="phoneUrl" :href="phoneUrl" class="flex items-center gap-3 text-gray-600 hover:text-primary-600">
