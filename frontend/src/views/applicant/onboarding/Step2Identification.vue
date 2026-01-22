@@ -368,12 +368,22 @@ const validate = () => {
     isValid = false
   }
 
-  if (!form.rfc.trim()) {
-    errors.rfc = 'El RFC es requerido'
-    isValid = false
-  } else if (!validateRfcFormat(form.rfc)) {
-    errors.rfc = 'RFC inválido (12-13 caracteres)'
-    isValid = false
+  // RFC validation - optional for foreigners
+  if (!isForeigner.value) {
+    // Mexicans: RFC required and must be valid format
+    if (!form.rfc.trim()) {
+      errors.rfc = 'El RFC es requerido'
+      isValid = false
+    } else if (!validateRfcFormat(form.rfc)) {
+      errors.rfc = 'RFC inválido (12-13 caracteres)'
+      isValid = false
+    }
+  } else {
+    // Foreigners: RFC optional, but if provided must have at least 10 characters
+    if (form.rfc.trim() && form.rfc.trim().length < 10) {
+      errors.rfc = 'RFC inválido (mínimo 10 caracteres)'
+      isValid = false
+    }
   }
 
   // Validate INE fields only if ID type is INE
@@ -699,7 +709,7 @@ const prevStep = () => router.push('/solicitud/paso-1')
                 :maxlength="13"
                 :disabled="isRfcLocked"
                 uppercase
-                required
+                :required="!isForeigner"
               />
               <!-- Validation indicator inside input area (only if Nubarium configured) -->
               <div v-if="kycStore.hasNubarium" class="absolute right-3 top-9 flex items-center">
@@ -716,7 +726,12 @@ const prevStep = () => router.push('/solicitud/paso-1')
               </div>
             </div>
             <p class="text-xs text-gray-400">
-              12-13 caracteres con homoclave
+              <template v-if="!isForeigner">
+                12-13 caracteres con homoclave
+              </template>
+              <template v-else>
+                Opcional - RFC mexicano si ya lo tienes
+              </template>
             </p>
             <!-- SAT Validation result (only if Nubarium configured) -->
             <template v-if="kycStore.hasNubarium">
