@@ -18,6 +18,12 @@ enum DocumentType: string
     case SELFIE = 'SELFIE';
     case SIGNATURE = 'SIGNATURE';
 
+    // Foreigner residence documents
+    case FM2 = 'FM2';
+    case FM3 = 'FM3';
+    case RESIDENCE_CARD = 'RESIDENCE_CARD';
+    case VISA = 'VISA';
+
     // Address documents
     case PROOF_OF_ADDRESS = 'PROOF_OF_ADDRESS';
     case UTILITY_BILL = 'UTILITY_BILL';
@@ -82,6 +88,11 @@ enum DocumentType: string
             self::DRIVER_LICENSE_BACK => 'Licencia de Conducir (Reverso)',
             self::SELFIE => 'Foto de perfil (Selfie)',
             self::SIGNATURE => 'Firma',
+            // Foreigner residence
+            self::FM2 => 'FM2 (Tarjeta de No Inmigrante)',
+            self::FM3 => 'FM3 (Tarjeta de Visitante)',
+            self::RESIDENCE_CARD => 'Tarjeta de Residente',
+            self::VISA => 'Visa vigente',
             // Address
             self::PROOF_OF_ADDRESS => 'Comprobante de domicilio',
             self::UTILITY_BILL => 'Recibo de servicios',

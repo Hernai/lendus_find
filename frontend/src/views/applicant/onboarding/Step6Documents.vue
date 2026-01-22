@@ -37,6 +37,10 @@ const DOCUMENT_TYPE_LABELS_FALLBACK: Record<string, string> = {
   'INE_FRONT': 'INE (Frente)',
   'INE_BACK': 'INE (Reverso)',
   'PASSPORT': 'Pasaporte',
+  'FM2': 'FM2 (Tarjeta de No Inmigrante)',
+  'FM3': 'FM3 (Tarjeta de Visitante)',
+  'RESIDENCE_CARD': 'Tarjeta de Residente',
+  'VISA': 'Visa vigente',
   'CURP': 'CURP',
   'CURP_DOC': 'CURP',
   'DRIVER_LICENSE_FRONT': 'Licencia de Conducir (Frente)',
@@ -120,13 +124,12 @@ const getRequiredDocuments = (): DocumentUpload[] => {
         let docType = typeof doc === 'string' ? doc : doc.type
         const isRequired = typeof doc === 'string' ? true : (doc.required ?? true)
 
-        // Replace INE with PASSPORT for foreigners
+        // Replace INE with PASSPORT and add residence document for foreigners
         if (isForeigner.value) {
           if (docType === 'INE_FRONT') {
             docType = 'PASSPORT'
-            // Skip INE_BACK as it's not needed for passport
           } else if (docType === 'INE_BACK') {
-            return null // Will be filtered out below
+            docType = 'RESIDENCE_CARD' // FM2/FM3/Residence card
           }
         }
 
@@ -147,9 +150,10 @@ const getRequiredDocuments = (): DocumentUpload[] => {
 
   // Fallback to basic documents if no product info available
   if (isForeigner.value) {
-    // Foreigners: PASSPORT instead of INE
+    // Foreigners: PASSPORT + RESIDENCE_CARD
     return [
       { id: 'PASSPORT', name: getDocumentLabel('PASSPORT'), description: '', required: true, file: null, preview: null, status: 'pending' as const },
+      { id: 'RESIDENCE_CARD', name: getDocumentLabel('RESIDENCE_CARD'), description: 'FM2, FM3 o Tarjeta de Residente vigente', required: true, file: null, preview: null, status: 'pending' as const },
       { id: 'PROOF_OF_ADDRESS', name: getDocumentLabel('PROOF_OF_ADDRESS'), description: '', required: true, file: null, preview: null, status: 'pending' as const },
     ]
   }

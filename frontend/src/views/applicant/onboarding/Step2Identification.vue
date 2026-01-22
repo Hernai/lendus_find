@@ -17,6 +17,12 @@ const authStore = useAuthStore()
 const profileStore = useProfileStore()
 const tenantStore = useTenantStore()
 
+// Check if user is a foreigner (from Step 1)
+const isForeigner = computed(() => {
+  const nationality = onboardingStore.data.step1.nationality
+  return nationality && nationality !== 'MX'
+})
+
 // Check if KYC data is available (from INE OCR)
 const hasKycData = computed(() => kycStore.verified && !!kycStore.lockedData.curp)
 
@@ -262,7 +268,8 @@ onMounted(async () => {
       form.rfc = step2.rfc
     }
   } else {
-    form.id_type = step2.id_type || 'INE'
+    // Auto-select PASSPORT for foreigners, INE for Mexicans
+    form.id_type = step2.id_type || (isForeigner.value ? 'PASSPORT' : 'INE')
     form.curp = step2.curp
     form.rfc = step2.rfc
     form.clave_elector = step2.clave_elector
@@ -346,10 +353,17 @@ const validate = () => {
     isValid = false
   }
 
-  if (!form.curp.trim()) {
-    errors.curp = 'La CURP es requerida'
-    isValid = false
-  } else if (!validateCurp(form.curp)) {
+  // CURP is optional for foreigners
+  if (!isForeigner.value) {
+    if (!form.curp.trim()) {
+      errors.curp = 'La CURP es requerida'
+      isValid = false
+    } else if (!validateCurp(form.curp)) {
+      errors.curp = 'CURP inválida (18 caracteres)'
+      isValid = false
+    }
+  } else if (form.curp.trim() && !validateCurp(form.curp)) {
+    // If foreigner provides CURP, validate format
     errors.curp = 'CURP inválida (18 caracteres)'
     isValid = false
   }
@@ -634,13 +648,28 @@ const prevStep = () => router.push('/solicitud/paso-1')
 
         <!-- Normal flow: All fields editable -->
         <template v-else>
+          <!-- Only show ID type selector for Mexicans -->
           <AppRadioGroup
+            v-if="!isForeigner"
             v-model="form.id_type"
             :options="idTypeOptions"
             label="Tipo de identificación"
             :error="errors.id_type"
             required
           />
+
+          <!-- Info badge for foreigners -->
+          <div v-if="isForeigner" class="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3 mb-4">
+            <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-sm font-medium text-blue-800">Identificación para extranjeros</p>
+              <p class="text-xs text-blue-600">Necesitarás tu pasaporte vigente</p>
+            </div>
+          </div>
 
           <AppInput
             v-model="form.curp"
@@ -649,10 +678,15 @@ const prevStep = () => router.push('/solicitud/paso-1')
             :error="errors.curp"
             :maxlength="18"
             uppercase
-            required
+            :required="!isForeigner"
           />
           <p class="text-xs text-gray-400 -mt-3">
-            <a href="https://www.gob.mx/curp/" target="_blank" class="text-primary-600 hover:underline">Consultar CURP</a>
+            <template v-if="!isForeigner">
+              <a href="https://www.gob.mx/curp/" target="_blank" class="text-primary-600 hover:underline">Consultar CURP</a>
+            </template>
+            <template v-else>
+              Opcional - Solo si ya tienes CURP mexicana
+            </template>
           </p>
 
           <div class="space-y-2">
