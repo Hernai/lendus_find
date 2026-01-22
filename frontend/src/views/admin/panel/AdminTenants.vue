@@ -11,7 +11,7 @@ import type {
 } from '@/services/v2/tenant.staff.service'
 import { AppInput, AppConfirmModal } from '@/components/common'
 import TenantBrandingEditor, { type Branding } from '@/components/admin/TenantBrandingEditor.vue'
-import { useToast, formatPhoneValue, stripPhoneFormatting } from '@/composables'
+import { useToast, formatPhoneValue, stripPhoneFormatting, PHONE_INPUT_CONFIG } from '@/composables'
 import { getErrorMessage } from '@/types/api'
 import { logger } from '@/utils/logger'
 import { formatDate } from '@/utils/formatters'
@@ -1156,10 +1156,10 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                 <label class="block text-xs font-medium text-gray-700 mb-1.5">Teléfono</label>
                 <input
                   v-model="formattedPhone"
-                  placeholder="55 1234 5678"
-                  type="tel"
-                  inputmode="numeric"
-                  maxlength="14"
+                  :placeholder="PHONE_INPUT_CONFIG.placeholder"
+                  :type="PHONE_INPUT_CONFIG.type"
+                  :inputmode="PHONE_INPUT_CONFIG.inputMode"
+                  :maxlength="PHONE_INPUT_CONFIG.maxLength"
                   class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500 transition-colors"
                 />
               </div>
@@ -1806,10 +1806,10 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                 </div>
                 <input
                   v-model="formattedTestPhone"
-                  type="tel"
-                  inputmode="numeric"
-                  maxlength="14"
-                  placeholder="55 1234 5678"
+                  :type="PHONE_INPUT_CONFIG.type"
+                  :inputmode="PHONE_INPUT_CONFIG.inputMode"
+                  :maxlength="PHONE_INPUT_CONFIG.maxLength"
+                  :placeholder="PHONE_INPUT_CONFIG.placeholder"
                   class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                   :disabled="isTesting"
                 />

@@ -7,7 +7,7 @@
  * @example
  * ```vue
  * <script setup lang="ts">
- * import { usePhoneInput } from '@/composables'
+ * import { usePhoneInput, PHONE_INPUT_CONFIG } from '@/composables'
  *
  * const phone = ref('')
  * const { displayValue, onInput, onBlur, rawValue } = usePhoneInput(phone)
@@ -19,35 +19,31 @@
  *     @input="onInput"
  *     @blur="onBlur"
  *     type="tel"
- *     maxlength="14"
+ *     :maxlength="PHONE_INPUT_CONFIG.maxLength"
  *     inputmode="numeric"
+ *     :placeholder="PHONE_INPUT_CONFIG.placeholder"
  *   />
  * </template>
  * ```
  */
 
 import { computed, ref, watch, type Ref } from 'vue'
+import {
+  formatPhoneInput,
+  stripPhoneFormatting as extractDigits,
+  PHONE_MAX_DIGITS,
+  PHONE_MAX_LENGTH_FORMATTED,
+  PHONE_INPUT_CONFIG,
+} from '@/utils/formatters'
+
+// Re-export constants for convenience
+export { PHONE_MAX_DIGITS, PHONE_MAX_LENGTH_FORMATTED, PHONE_INPUT_CONFIG }
 
 /**
  * Format a phone number for display (XX XXXX XXXX).
+ * Uses the centralized formatPhoneInput from @/utils/formatters.
  */
-function formatForDisplay(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 10)
-  if (digits.length >= 6) {
-    return `${digits.slice(0, 2)} ${digits.slice(2, 6)} ${digits.slice(6)}`
-  }
-  if (digits.length >= 2) {
-    return `${digits.slice(0, 2)} ${digits.slice(2)}`
-  }
-  return digits
-}
-
-/**
- * Extract only digits from a value.
- */
-function extractDigits(value: string): string {
-  return value.replace(/\D/g, '').slice(0, 10)
-}
+const formatForDisplay = formatPhoneInput
 
 export interface UsePhoneInputOptions {
   /** Format to store: 'digits' (default) or 'formatted' */
@@ -88,7 +84,7 @@ export function usePhoneInput(
   const rawValue = computed(() => extractDigits(displayValue.value))
 
   // Validity check
-  const isValid = computed(() => rawValue.value.length === 10)
+  const isValid = computed(() => rawValue.value.length === PHONE_MAX_DIGITS)
   const isEmpty = computed(() => rawValue.value.length === 0)
 
   // Initialize display value from model

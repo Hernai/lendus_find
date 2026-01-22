@@ -68,6 +68,26 @@ export function formatMoneyShort(amount: number | null | undefined): string {
 // Phone Formatters
 // =====================================================
 
+/** Maximum digits for Mexican phone numbers */
+export const PHONE_MAX_DIGITS = 10
+
+/** Maximum length including formatting spaces (XX XXXX XXXX = 12 chars) */
+export const PHONE_MAX_LENGTH_FORMATTED = 12
+
+/** Centralized configuration for phone inputs */
+export const PHONE_INPUT_CONFIG = {
+  /** Max digits (10 for Mexican phones) */
+  maxDigits: PHONE_MAX_DIGITS,
+  /** Max length for input field (formatted with spaces) */
+  maxLength: PHONE_MAX_LENGTH_FORMATTED,
+  /** Placeholder text */
+  placeholder: '55 1234 5678',
+  /** Input mode for mobile keyboards */
+  inputMode: 'numeric' as const,
+  /** Input type */
+  type: 'tel' as const,
+} as const
+
 /**
  * Format a Mexican phone number (10 digits) with spaces.
  * @param phone - The phone number to format
@@ -75,7 +95,7 @@ export function formatMoneyShort(amount: number | null | undefined): string {
  */
 export function formatPhone(phone: string | null | undefined): string {
   if (!phone) return '-'
-  const digits = phone.replace(/\D/g, '').slice(0, 10)
+  const digits = phone.replace(/\D/g, '').slice(0, PHONE_MAX_DIGITS)
   if (digits.length === 10) {
     return `${digits.slice(0, 2)} ${digits.slice(2, 6)} ${digits.slice(6)}`
   }
@@ -91,7 +111,7 @@ export function formatPhone(phone: string | null | undefined): string {
  * @returns Formatted phone string
  */
 export function formatPhoneInput(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 10)
+  const digits = value.replace(/\D/g, '').slice(0, PHONE_MAX_DIGITS)
   if (digits.length >= 6) {
     return `${digits.slice(0, 2)} ${digits.slice(2, 6)} ${digits.slice(6)}`
   }
@@ -99,6 +119,15 @@ export function formatPhoneInput(value: string): string {
     return `${digits.slice(0, 2)} ${digits.slice(2)}`
   }
   return digits
+}
+
+/**
+ * Extract only digits from a phone value.
+ * @param value - The formatted or unformatted value
+ * @returns Digits only (max 10)
+ */
+export function stripPhoneFormatting(value: string | null | undefined): string {
+  return (value || '').replace(/\D/g, '').slice(0, PHONE_MAX_DIGITS)
 }
 
 // =====================================================

@@ -55,6 +55,9 @@ export {
   usePhoneInput,
   formatPhoneValue,
   stripPhoneFormatting,
+  PHONE_INPUT_CONFIG,
+  PHONE_MAX_DIGITS,
+  PHONE_MAX_LENGTH_FORMATTED,
   type UsePhoneInputOptions,
   type UsePhoneInputReturn,
 } from './usePhoneInput'
