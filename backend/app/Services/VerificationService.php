@@ -442,6 +442,7 @@ class VerificationService
 
         $fieldsToLock = [];
         if ($side === 'front' && !empty($ocrData)) {
+            // Personal data from INE OCR
             if (!empty($ocrData['curp'])) {
                 $fieldsToLock['curp'] = $ocrData['curp'];
             }
@@ -456,6 +457,20 @@ class VerificationService
             }
             if (!empty($ocrData['birth_date'])) {
                 $fieldsToLock['birth_date'] = $ocrData['birth_date'];
+            }
+
+            // INE-specific fields
+            if (!empty($ocrData['clave_elector'])) {
+                $fieldsToLock['ine_clave'] = $ocrData['clave_elector'];
+            }
+            if (!empty($ocrData['ocr'])) {
+                $fieldsToLock['ine_ocr'] = $ocrData['ocr'];
+            }
+            if (!empty($ocrData['cic'])) {
+                $fieldsToLock['ine_folio'] = $ocrData['cic'];
+            }
+            if (!empty($ocrData['identificador_ciudadano'])) {
+                $fieldsToLock['ine_folio'] = $ocrData['identificador_ciudadano'];
             }
         }
 
