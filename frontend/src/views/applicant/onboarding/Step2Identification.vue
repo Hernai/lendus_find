@@ -403,8 +403,8 @@ const validate = () => {
     }
   }
 
-  // Validate Passport fields
-  if (form.id_type === 'PASSPORT') {
+  // Validate Passport fields (for PASSPORT type or foreigners)
+  if (form.id_type === 'PASSPORT' || isForeigner.value) {
     if (!form.passport_number.trim()) {
       errors.passport_number = 'El número de pasaporte es requerido'
       isValid = false
