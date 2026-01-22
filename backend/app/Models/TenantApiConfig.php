@@ -31,6 +31,8 @@ class TenantApiConfig extends Model
         'last_tested_at',
         'last_test_success',
         'last_test_error',
+        'created_by',
+        'updated_by',
     ];
 
     protected $casts = [

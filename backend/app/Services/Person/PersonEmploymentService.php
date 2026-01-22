@@ -6,6 +6,7 @@ use App\Models\Person;
 use App\Models\PersonEmployment;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class PersonEmploymentService
 {
@@ -30,7 +31,7 @@ class PersonEmploymentService
             $data['person_id'] = $person->id;
             $data['status'] = $data['status'] ?? PersonEmployment::STATUS_PENDING;
 
-            \Log::info('PersonEmploymentService::create data', [
+            Log::info('PersonEmploymentService::create data', [
                 'years_employed' => $data['years_employed'] ?? 'NOT_SET',
                 'months_employed' => $data['months_employed'] ?? 'NOT_SET',
                 'years_employed_isset' => isset($data['years_employed']),
@@ -40,11 +41,16 @@ class PersonEmploymentService
             $employment = PersonEmployment::create($data);
 
             // Only calculate duration from start_date if explicit years/months were NOT provided
-            // This prevents overwriting user-entered seniority values
-            $hasExplicitSeniority = isset($data['years_employed']) || isset($data['months_employed']);
+            // Treat 0 and null as "not set" - only preserve explicit positive values
+            // This allows automatic calculation from start_date when user hasn't entered seniority
+            $yearsProvided = isset($data['years_employed']) && $data['years_employed'] > 0;
+            $monthsProvided = isset($data['months_employed']) && $data['months_employed'] > 0;
+            $hasExplicitSeniority = $yearsProvided || $monthsProvided;
 
-            \Log::info('PersonEmploymentService::create after save', [
+            Log::info('PersonEmploymentService::create after save', [
                 'hasExplicitSeniority' => $hasExplicitSeniority,
+                'yearsProvided' => $yearsProvided,
+                'monthsProvided' => $monthsProvided,
                 'employment_years_employed' => $employment->years_employed,
                 'employment_months_employed' => $employment->months_employed,
                 'will_calculateDuration' => $employment->start_date && $employment->is_current && !$hasExplicitSeniority,

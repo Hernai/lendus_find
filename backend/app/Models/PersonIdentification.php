@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\HasAuditFields;
 use App\Traits\HasTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -55,7 +56,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class PersonIdentification extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes, HasTenant;
+    use HasFactory, HasUuids, SoftDeletes, HasTenant, HasAuditFields;
 
     protected $table = 'person_identifications';
 
@@ -99,6 +100,7 @@ class PersonIdentification extends Model
         'metadata',
         'created_by',
         'updated_by',
+        'deleted_by',
     ];
 
     protected function casts(): array

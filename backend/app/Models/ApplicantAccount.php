@@ -41,6 +41,9 @@ class ApplicantAccount extends Authenticatable
         'last_login_method',
         'known_devices',
         'preferences',
+        'created_by',
+        'updated_by',
+        'deleted_by',
     ];
 
     protected $hidden = [

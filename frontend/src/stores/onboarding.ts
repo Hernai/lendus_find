@@ -53,7 +53,7 @@ interface Step4Data {
   monthly_income: number
   seniority_years: number
   seniority_months: number
-  company_phone: string
+  work_phone: string
   company_address: string
 }
 
@@ -150,7 +150,7 @@ const getDefaultData = (): OnboardingData => ({
     monthly_income: 0,
     seniority_years: 0,
     seniority_months: 0,
-    company_phone: '',
+    work_phone: '',
     company_address: ''
   },
   step5: {
@@ -316,7 +316,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
             monthly_income: emp.monthly_income || 0,
             seniority_years: seniorityYears,
             seniority_months: seniorityMonths,
-            company_phone: emp.work_phone || '',
+            work_phone: emp.work_phone || '',
             company_address: ''
           }
           if (!completedSteps.value.includes(4)) {
@@ -435,15 +435,18 @@ export const useOnboardingStore = defineStore('onboarding', () => {
             throw new Error('Missing required fields in employment information')
           }
 
-          await profileStore.updateEmployment({
+          const employmentPayload = {
             employment_type: s4.employment_type,
             company_name: s4.company_name || undefined,
             position: s4.job_title || undefined,
             monthly_income: s4.monthly_income,
             seniority_years: Number(s4.seniority_years) || 0,
             seniority_months: Number(s4.seniority_months) || 0,
-            work_phone: s4.company_phone || undefined
-          })
+            work_phone: s4.work_phone || undefined
+          }
+          console.log('[OnboardingStore] saveStepToBackend step 4 - Employment payload:', employmentPayload)
+          console.trace('[OnboardingStore] Call stack for employment save')
+          await profileStore.updateEmployment(employmentPayload)
           break
         }
 
@@ -500,8 +503,19 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     }
   }
 
+  // Cancel pending auto-save
+  const cancelAutoSave = () => {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer)
+      autoSaveTimer = null
+    }
+  }
+
   // Mark step as completed and save
   const completeStep = async (step: number) => {
+    // Cancel any pending auto-save to prevent duplicate requests
+    cancelAutoSave()
+
     await saveStepToBackend(step)
 
     if (!completedSteps.value.includes(step)) {

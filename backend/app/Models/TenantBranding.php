@@ -29,6 +29,8 @@ class TenantBranding extends Model
         'border_radius',
         'button_style',
         'custom_css',
+        'created_by',
+        'updated_by',
     ];
 
     protected $casts = [

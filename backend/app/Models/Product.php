@@ -43,6 +43,9 @@ class Product extends Model
         'extra_fields',
         'is_active',
         'display_order',
+        'created_by',
+        'updated_by',
+        'deleted_by',
     ];
 
     protected $casts = [

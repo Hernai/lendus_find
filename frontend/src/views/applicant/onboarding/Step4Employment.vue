@@ -44,6 +44,13 @@ const { form, errors, submitError, handleSubmit, prevStep, isSaving, init } = us
     monthly_income: {
       default: 0,
       rules: [rules.min(1000, 'Ingresa un ingreso válido (mínimo $1,000)')],
+      transform: (v: string | number) => {
+        // Ensure monthly_income is always a number, not a string
+        if (typeof v === 'string') {
+          return parseFloat(v.replace(/[^0-9.]/g, '')) || 0
+        }
+        return v
+      },
     },
     seniority_years: { default: 0 },
     seniority_months: { default: 0 },
@@ -53,11 +60,23 @@ const { form, errors, submitError, handleSubmit, prevStep, isSaving, init } = us
 })
 
 // Initialize form on mount
-onMounted(() => init())
+onMounted(async () => {
+  await init()
+
+  // Convert monthly_income from string to number if needed
+  // Backend returns "35000.00" as string, we need it as number for formatting
+  if (typeof form.monthly_income === 'string') {
+    form.monthly_income = parseFloat(form.monthly_income.replace(/[^0-9.]/g, '')) || 0
+  }
+})
 
 // Computed for formatted income display
 const formattedIncome = computed(() => {
-  return form.monthly_income ? form.monthly_income.toLocaleString('es-MX') : ''
+  if (!form.monthly_income || form.monthly_income === 0) return ''
+  return form.monthly_income.toLocaleString('es-MX', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  })
 })
 
 // Handle income input (parse formatted number)

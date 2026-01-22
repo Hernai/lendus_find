@@ -34,6 +34,8 @@ class DataVerification extends Model
         'correction_history',
         'metadata',
         'verified_by',
+        'created_by',
+        'updated_by',
     ];
 
     protected $casts = [

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\BankAccountType;
+use App\Traits\HasAuditFields;
 use App\Traits\HasTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -58,7 +59,7 @@ use Illuminate\Support\Facades\DB;
  */
 class BankAccount extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes, HasTenant;
+    use HasFactory, HasUuids, SoftDeletes, HasTenant, HasAuditFields;
 
     protected $table = 'bank_accounts';
 
@@ -93,6 +94,7 @@ class BankAccount extends Model
         'metadata',
         'created_by',
         'updated_by',
+        'deleted_by',
     ];
 
     protected function casts(): array

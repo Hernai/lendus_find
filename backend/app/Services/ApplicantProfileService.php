@@ -18,6 +18,7 @@ use App\Services\Person\PersonIdentificationService;
 use App\Services\Person\PersonReferenceService;
 use App\Services\Person\PersonService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Applicant Profile Service.
@@ -298,7 +299,7 @@ class ApplicantProfileService
      */
     public function updateEmployment(Person $person, array $data): PersonEmployment
     {
-        \Log::info('ApplicantProfileService::updateEmployment input', [
+        Log::info('ApplicantProfileService::updateEmployment input', [
             'seniority_years' => $data['seniority_years'] ?? 'NOT_SET',
             'seniority_months' => $data['seniority_months'] ?? 'NOT_SET',
             'data_keys' => array_keys($data),

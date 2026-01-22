@@ -28,6 +28,9 @@ class Tenant extends Model
         'is_active',
         'activated_at',
         'suspended_at',
+        'created_by',
+        'updated_by',
+        'deleted_by',
     ];
 
     protected $casts = [

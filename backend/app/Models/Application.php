@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Traits\HasAuditFields;
 use App\Traits\HasTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -20,7 +22,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class Application extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes, HasTenant;
+    use HasFactory, HasUuids, SoftDeletes, HasTenant, HasAuditFields;
 
     protected $table = 'applications';
 
@@ -305,9 +307,39 @@ class Application extends Model
             ->orderByDesc('created_at');
     }
 
+    /**
+     * Documents attached directly to this application (polymorphic).
+     * These are application-specific documents like PROOF_OF_ADDRESS.
+     */
     public function documents(): MorphMany
     {
         return $this->morphMany(Document::class, 'documentable');
+    }
+
+    /**
+     * Get documents used in this application via documentable_relations.
+     *
+     * Returns documents that have a USAGE relation with this application.
+     * This is a polymorphic many-to-many relationship through documentable_relations.
+     */
+    public function usedDocuments(): BelongsToMany
+    {
+        return $this->morphToMany(
+            Document::class,
+            'relatable',
+            'documentable_relations',
+            'relatable_id',
+            'document_id'
+        )
+            ->wherePivot('relation_context', 'USAGE')
+            ->wherePivotNull('deleted_at')
+            ->withPivot([
+                'relation_context',
+                'notes',
+                'created_by',
+                'created_by_type',
+            ])
+            ->withTimestamps();
     }
 
     public function references(): HasMany
@@ -540,6 +572,7 @@ class Application extends Model
                 'assignee_name' => $assigneeName,
                 'previous_assignee' => $previousAssignee,
             ],
+            'created_at' => now(),
         ]);
     }
 
@@ -624,6 +657,7 @@ class Application extends Model
                 'monthly_payment' => $offer['monthly_payment'] ?? null,
                 'reason' => $reason,
             ],
+            'created_at' => now(),
         ]);
     }
 

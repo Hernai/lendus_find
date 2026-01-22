@@ -160,11 +160,19 @@ const getKycDocuments = (): Set<string> => {
 }
 
 // Initialize documents from product on mount
-const initDocuments = () => {
+const initDocuments = async () => {
   const requiredDocs = getRequiredDocuments()
   const kycDocs = getKycDocuments()
 
   documents.length = 0 // Clear array
+
+  log.debug('KYC Store state:', {
+    verified: kycStore.verified,
+    hasCurp: !!kycStore.lockedData.curp,
+    hasIneFront: !!kycStore.ineFrontImage,
+    hasIneBack: !!kycStore.ineBackImage,
+    hasSelfie: !!kycStore.selfieImage
+  })
 
   // Helper to ensure base64 image has data URL prefix
   const ensureDataUrl = (base64: string): string => {
@@ -172,6 +180,40 @@ const initDocuments = () => {
       return base64
     }
     return `data:image/jpeg;base64,${base64}`
+  }
+
+  // Fetch existing documents from backend to check which are KYC-verified
+  let uploadedKycDocs = new Map<string, { id: string; preview?: string }>()
+  try {
+    const response = await v2.applicant.document.list()
+    if (response.success && response.data?.documents) {
+      // Filter only KYC-verified documents and store their IDs
+      for (const doc of response.data.documents) {
+        if (doc.metadata?.kyc_validated === true) {
+          uploadedKycDocs.set(doc.type, { id: doc.id })
+
+          // For image documents, try to get preview URL
+          if (doc.mime_type?.startsWith('image/')) {
+            try {
+              const urlResponse = await v2.applicant.document.download(doc.id)
+              if (urlResponse.success && urlResponse.data?.url) {
+                uploadedKycDocs.set(doc.type, { id: doc.id, preview: urlResponse.data.url })
+              }
+            } catch (err) {
+              log.warn('Failed to get preview URL for document', { type: doc.type, error: err })
+            }
+          }
+        }
+      }
+
+      log.debug('Found KYC-verified documents', {
+        total: response.data.documents.length,
+        kycVerified: Array.from(uploadedKycDocs.keys()),
+        withPreviews: Array.from(uploadedKycDocs.entries()).filter(([, v]) => v.preview).map(([k]) => k)
+      })
+    }
+  } catch (e) {
+    log.warn('Failed to fetch existing documents', { error: e })
   }
 
   // Add documents, marking KYC ones with preview but NOT as uploaded yet
@@ -193,15 +235,31 @@ const initDocuments = () => {
     documents.push(doc)
   })
 
-  // Restore uploaded status from store (for non-KYC docs)
-  const step6 = onboardingStore.data.step6
-  if (step6.documents_uploaded && step6.documents_uploaded.length > 0) {
-    documents.forEach(doc => {
-      if (!doc.fromKyc && step6.documents_uploaded.includes(doc.id)) {
-        doc.status = 'uploaded'
+  // Restore uploaded status ONLY for KYC-verified documents
+  documents.forEach(doc => {
+    if (uploadedKycDocs.has(doc.id)) {
+      doc.status = 'uploaded'
+      doc.fromKyc = true
+
+      // Set preview from backend download URL (signed URL)
+      const docData = uploadedKycDocs.get(doc.id)
+      if (docData?.preview) {
+        doc.preview = docData.preview
+      } else {
+        // Fallback to KYC store images if backend preview not available
+        const docIdLower = doc.id.toLowerCase()
+        if (docIdLower === 'ine_front' && kycStore.ineFrontImage) {
+          doc.preview = ensureDataUrl(kycStore.ineFrontImage)
+        } else if (docIdLower === 'ine_back' && kycStore.ineBackImage) {
+          doc.preview = ensureDataUrl(kycStore.ineBackImage)
+        } else if (docIdLower === 'selfie' && kycStore.selfieImage) {
+          doc.preview = ensureDataUrl(kycStore.selfieImage)
+        }
       }
-    })
-  }
+
+      log.debug('KYC document already uploaded and verified, skipping re-upload', { type: doc.id, hasPreview: !!doc.preview })
+    }
+  })
 }
 
 // Upload KYC images to backend as documents (if not already uploaded)
@@ -305,7 +363,7 @@ onMounted(async () => {
     await tenantStore.loadConfig()
   }
   await onboardingStore.init()
-  initDocuments()
+  await initDocuments()
   // Auto-upload KYC documents to backend
   await uploadKycDocuments()
 })

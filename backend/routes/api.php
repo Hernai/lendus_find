@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\V2\Public\ConfigController as V2ConfigController;
 use App\Http\Controllers\Api\V2\Applicant\ApplicationController as ApplicantAppController;
 use App\Http\Controllers\Api\V2\Applicant\CorrectionController as ApplicantCorrectionController;
 use App\Http\Controllers\Api\V2\Applicant\DocumentController as ApplicantDocController;
+use App\Http\Controllers\Api\V2\Applicant\DocumentHistoryController as ApplicantDocHistoryController;
 use App\Http\Controllers\Api\V2\Applicant\ProfileController as ApplicantProfileController;
 use App\Http\Controllers\Api\V2\Applicant\KycController as ApplicantKycController;
 use App\Http\Controllers\Api\V2\Staff\ApplicationController as StaffAppController;
@@ -168,6 +169,12 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
         Route::get('/documents/{id}/download', [ApplicantDocController::class, 'download']);
         Route::get('/documents/{id}/stream', [ApplicantDocController::class, 'stream']);
         Route::delete('/documents/{id}', [ApplicantDocController::class, 'destroy']);
+
+        // Document History & Audit
+        Route::get('/documents/history/{type}', [ApplicantDocHistoryController::class, 'index']);
+        Route::get('/documents/{id}/supersession-chain', [ApplicantDocHistoryController::class, 'supersessionChain']);
+        Route::get('/documents/valid-at', [ApplicantDocHistoryController::class, 'validAt']);
+        Route::get('/documents/timeline', [ApplicantDocHistoryController::class, 'timeline']);
 
         // =============================================
         // Data Corrections (for rejected fields)

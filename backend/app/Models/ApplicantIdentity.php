@@ -43,6 +43,8 @@ class ApplicantIdentity extends Model
         'verification_attempts',
         'is_primary',
         'last_used_at',
+        'created_by',
+        'updated_by',
     ];
 
     protected function casts(): array

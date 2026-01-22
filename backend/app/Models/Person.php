@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\EducationLevel;
 use App\Enums\Gender;
 use App\Enums\MaritalStatus;
+use App\Traits\HasAuditFields;
 use App\Traits\HasTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -73,7 +74,7 @@ use Illuminate\Support\Facades\DB;
  */
 class Person extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes, HasTenant;
+    use HasFactory, HasUuids, SoftDeletes, HasTenant, HasAuditFields;
 
     protected $table = 'persons';
 
@@ -188,6 +189,14 @@ class Person extends Model
     {
         return $this->hasMany(BankAccount::class, 'entity_id')
             ->where('entity_type', 'persons');
+    }
+
+    /**
+     * Get all applications for this person.
+     */
+    public function applications(): HasMany
+    {
+        return $this->hasMany(Application::class, 'person_id');
     }
 
     /**

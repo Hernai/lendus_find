@@ -27,6 +27,8 @@ class StaffProfile extends Model
         'avatar_url',
         'title',
         'preferences',
+        'created_by',
+        'updated_by',
     ];
 
     protected function casts(): array

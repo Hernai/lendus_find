@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\UserType;
+use App\Traits\HasAuditFields;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -21,7 +22,7 @@ use Laravel\Sanctum\HasApiTokens;
  */
 class StaffAccount extends Authenticatable
 {
-    use HasApiTokens, HasFactory, HasUuids, Notifiable;
+    use HasApiTokens, HasFactory, HasUuids, Notifiable, HasAuditFields;
 
     // =====================================================
     // Role Constants

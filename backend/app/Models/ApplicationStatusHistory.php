@@ -17,7 +17,11 @@ class ApplicationStatusHistory extends Model
 
     protected $table = 'application_status_history';
 
-    public $timestamps = false;
+    // Enable timestamps but only for created_at
+    public $timestamps = true;
+
+    const CREATED_AT = 'created_at';
+    const UPDATED_AT = null;
 
     protected $fillable = [
         'application_id',

@@ -6,6 +6,7 @@ use App\Enums\CompanySize;
 use App\Enums\ContractType;
 use App\Enums\EmploymentType;
 use App\Enums\PaymentFrequency;
+use App\Traits\HasAuditFields;
 use App\Traits\HasTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -82,7 +83,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class PersonEmployment extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes, HasTenant;
+    use HasFactory, HasUuids, SoftDeletes, HasTenant, HasAuditFields;
 
     protected $table = 'person_employments';
 
@@ -130,6 +131,7 @@ class PersonEmployment extends Model
         'metadata',
         'created_by',
         'updated_by',
+        'deleted_by',
     ];
 
     protected function casts(): array
