@@ -102,6 +102,7 @@ const getDocumentLabel = (type: string): string => {
 const EXCLUDED_DOCUMENT_TYPES = ['SIGNATURE'] // Signature is drawn in Step 8, not uploaded
 
 // Get document list from product - types come from backend enum
+// New structure: {nationals: [...], foreigners: [...]}
 const getRequiredDocuments = (): DocumentUpload[] => {
   const product = applicationStore.selectedProduct
   // Always prefer fresh data from tenant config (loaded from API) over cached application data
@@ -113,42 +114,34 @@ const getRequiredDocuments = (): DocumentUpload[] => {
   const requiredDocs = productFromConfig?.required_documents ?? productFromConfig?.required_docs ??
                        product?.required_documents ?? product?.required_docs ?? []
 
-  if (requiredDocs.length > 0) {
-    return requiredDocs
-      .filter((doc: { type: string; required: boolean; description?: string } | string) => {
-        // Exclude document types that are handled elsewhere (e.g., signature in Step 8)
-        const docType = typeof doc === 'string' ? doc : doc.type
-        return !EXCLUDED_DOCUMENT_TYPES.includes(docType)
-      })
-      .map((doc: { type: string; required: boolean; description?: string } | string) => {
-        let docType = typeof doc === 'string' ? doc : doc.type
-        const isRequired = typeof doc === 'string' ? true : (doc.required ?? true)
+  // Check if using new structure {nationals: [], foreigners: []}
+  if (requiredDocs && typeof requiredDocs === 'object' && ('nationals' in requiredDocs || 'foreigners' in requiredDocs)) {
+    // Select appropriate document list based on nationality
+    const docList = isForeigner.value ? requiredDocs.foreigners : requiredDocs.nationals
 
-        // Replace INE with PASSPORT and add residence document for foreigners
-        let customDescription = ''
-        if (isForeigner.value) {
-          if (docType === 'INE_FRONT') {
-            docType = 'PASSPORT'
-            customDescription = '' // Clear INE description
-          } else if (docType === 'INE_BACK') {
-            docType = 'RESIDENCE_CARD' // FM2/FM3/Residence card
-            customDescription = 'FM2, FM3 o Tarjeta de Residente vigente'
+    if (docList && docList.length > 0) {
+      return docList
+        .filter((doc: { type: string; required: boolean; description?: string } | string) => {
+          // Exclude document types that are handled elsewhere (e.g., signature in Step 8)
+          const docType = typeof doc === 'string' ? doc : doc.type
+          return !EXCLUDED_DOCUMENT_TYPES.includes(docType)
+        })
+        .map((doc: { type: string; required: boolean; description?: string } | string) => {
+          const docType = typeof doc === 'string' ? doc : doc.type
+          const isRequired = typeof doc === 'string' ? true : (doc.required ?? true)
+          const label = getDocumentLabel(docType)
+
+          return {
+            id: docType,
+            name: label,
+            description: typeof doc === 'object' && doc.description ? doc.description : '',
+            required: isRequired,
+            file: null,
+            preview: null,
+            status: 'pending' as const
           }
-        }
-
-        const label = getDocumentLabel(docType)
-
-        return {
-          id: docType,
-          name: label,
-          description: customDescription || (typeof doc === 'object' && doc.description ? doc.description : ''),
-          required: isRequired,
-          file: null,
-          preview: null,
-          status: 'pending' as const
-        }
-      })
-      .filter((doc: any) => doc !== null) // Remove null entries (INE_BACK for foreigners)
+        })
+    }
   }
 
   // Fallback to basic documents if no product info available
