@@ -8,6 +8,8 @@ import { useWebSocket } from '@/composables/useWebSocket'
 import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent } from '@/types/realtime'
 import { logger } from '@/utils/logger'
 import { formatMoney, formatDateShort } from '@/utils/formatters'
+import SimulatorCard from '@/components/simulator/SimulatorCard.vue'
+import type { Product } from '@/types'
 
 const log = logger.child('Dashboard')
 const router = useRouter()
@@ -51,6 +53,11 @@ const applications = ref<Application[]>([])
 // Carousel state for empty state
 const currentSlide = ref(0)
 const autoPlayInterval = ref<number | null>(null)
+
+// Simulator modal state
+const showSimulatorModal = ref(false)
+const simulatorStep = ref<'select' | 'simulate'>('select')
+const selectedProduct = ref<Product | null>(null)
 
 const filteredApplications = computed(() => {
   if (showCancelled.value) {
@@ -393,25 +400,29 @@ const viewApplication = (app: Application) => {
 }
 
 const startNewApplication = () => {
-  // Clear any previous application state before starting a new one
-  log.info('Starting new application - clearing previous state')
+  // Open simulator modal to let user see what they'll pay before starting application
+  log.info('Opening simulator modal')
+  simulatorStep.value = 'select'
+  selectedProduct.value = null
+  showSimulatorModal.value = true
+}
 
-  // Reset application store state
-  applicationStore.reset()
+const selectProduct = (product: Product) => {
+  selectedProduct.value = product
+  applicationStore.setSelectedProduct(product)
+  simulatorStep.value = 'simulate'
+}
 
-  // Clear localStorage references to previous application
-  localStorage.removeItem('current_application_id')
-  localStorage.removeItem('pending_application')
+const goBackToProductSelection = () => {
+  simulatorStep.value = 'select'
+  selectedProduct.value = null
+  applicationStore.setSelectedProduct(null)
+}
 
-  // Set flag to indicate this is intentionally a new application
-  // This prevents OnboardingLayout from loading existing drafts
-  localStorage.setItem('start_new_application', 'true')
-
-  // Reset onboarding store data
-  onboardingStore.reset()
-
-  // Navigate to simulator first to let user see what they'll pay
-  router.push('/simulador')
+const closeSimulatorModal = () => {
+  showSimulatorModal.value = false
+  simulatorStep.value = 'select'
+  selectedProduct.value = null
 }
 
 const uploadDocs = (app: Application) => {
@@ -886,6 +897,86 @@ const handleCancelApplication = async () => {
           >
             No, continuar
           </AppButton>
+        </div>
+      </div>
+    </div>
+
+    <!-- Simulator Modal -->
+    <div
+      v-if="showSimulatorModal"
+      class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto"
+      @click.self="closeSimulatorModal"
+    >
+      <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto my-8">
+        <!-- Modal Header -->
+        <div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+          <h2 class="text-xl font-bold text-gray-900">
+            {{ simulatorStep === 'select' ? '¿Qué tipo de financiamiento necesitas?' : 'Simula tu crédito' }}
+          </h2>
+          <button
+            @click="closeSimulatorModal"
+            class="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Modal Content -->
+        <div class="p-6">
+          <!-- Step 1: Product Selection -->
+          <template v-if="simulatorStep === 'select'">
+            <p class="text-gray-600 mb-6 text-center">
+              Selecciona el producto que mejor se adapte a tus necesidades
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button
+                v-for="product in tenantStore.activeProducts"
+                :key="product.id"
+                class="bg-white rounded-xl p-5 shadow-sm border-2 border-gray-200 hover:border-primary-500 hover:shadow-md transition-all text-left group"
+                @click="selectProduct(product)"
+              >
+                <div class="flex items-start gap-4">
+                  <div class="w-12 h-12 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0 group-hover:bg-primary-200 transition-colors">
+                    <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <h3 class="font-semibold text-gray-900 mb-1">{{ product.name }}</h3>
+                    <p class="text-sm text-gray-500 mb-3">{{ product.description }}</p>
+                    <div class="flex flex-wrap gap-2 text-xs">
+                      <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+                        {{ formatMoney(product.rules?.min_amount ?? 0) }} - {{ formatMoney(product.rules?.max_amount ?? 0) }}
+                      </span>
+                      <span class="bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                        {{ product.rules?.annual_rate ?? 0 }}% anual
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </template>
+
+          <!-- Step 2: Simulator -->
+          <template v-else>
+            <div class="mb-6">
+              <button
+                class="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+                @click="goBackToProductSelection"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+                <span>Cambiar producto</span>
+              </button>
+            </div>
+
+            <SimulatorCard v-if="selectedProduct" :product="selectedProduct" />
+          </template>
         </div>
       </div>
     </div>
