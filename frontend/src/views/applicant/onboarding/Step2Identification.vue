@@ -101,9 +101,9 @@ const errors = reactive({
   passport_expiry_date: ''
 })
 
-// Show fields based on ID type
-const showIneFields = computed(() => form.id_type === 'INE')
-const showPassportFields = computed(() => form.id_type === 'PASSPORT')
+// Show fields based on ID type (INE fields only for Mexicans with INE)
+const showIneFields = computed(() => !isForeigner.value && form.id_type === 'INE')
+const showPassportFields = computed(() => form.id_type === 'PASSPORT' || isForeigner.value)
 
 // Get ID type options from backend enum
 const idTypeOptions = computed(() => tenantStore.options.idType)
