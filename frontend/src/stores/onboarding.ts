@@ -381,11 +381,15 @@ export const useOnboardingStore = defineStore('onboarding', () => {
             rfc: rfc || undefined
           }
 
-          if (s2.id_type === 'INE') {
+          // Always include INE fields if present
+          if (s2.clave_elector || s2.numero_ocr || s2.folio_ine) {
             payload.ine_clave = s2.clave_elector || undefined
             payload.ine_ocr = s2.numero_ocr || undefined
             payload.ine_folio = s2.folio_ine || undefined
-          } else {
+          }
+
+          // Always include passport fields if present
+          if (s2.passport_number || s2.passport_issue_date || s2.passport_expiry_date) {
             payload.passport_number = s2.passport_number || undefined
             payload.passport_issue_date = s2.passport_issue_date || undefined
             payload.passport_expiry_date = s2.passport_expiry_date || undefined
