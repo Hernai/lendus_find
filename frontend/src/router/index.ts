@@ -24,8 +24,9 @@ const AuthOtpView = () => import('@/views/applicant/auth/AuthOtpView.vue')
 const AuthPinSetupView = () => import('@/views/applicant/auth/AuthPinSetupView.vue')
 const AuthPinLoginView = () => import('@/views/applicant/auth/AuthPinLoginView.vue')
 
-// Applicant Onboarding (8-step wizard + KYC verification)
+// Applicant Onboarding (9-step wizard: simulator + KYC + 7 data steps)
 const OnboardingLayout = () => import('@/views/applicant/onboarding/OnboardingLayout.vue')
+const Step0Simulator = () => import('@/views/applicant/onboarding/Step0Simulator.vue')
 const StepKycVerification = () => import('@/views/applicant/onboarding/StepKycVerification.vue')
 const Step1PersonalData = () => import('@/views/applicant/onboarding/Step1PersonalData.vue')
 const Step2Identification = () => import('@/views/applicant/onboarding/Step2Identification.vue')
@@ -137,16 +138,17 @@ const routes: RouteRecordRaw[] = [
     component: OnboardingLayout,
     meta: { requiresAuth: true },
     children: [
-      { path: '', redirect: (to) => `/${to.params.tenant}/solicitud/verificacion` },
-      { path: 'verificacion', name: 'tenant-onboarding-kyc', component: StepKycVerification, meta: { step: 0, title: 'Verificación de identidad' } },
-      { path: 'paso-1', name: 'tenant-onboarding-step-1', component: Step1PersonalData, meta: { step: 1, title: '¿Cómo te llamas?' } },
-      { path: 'paso-2', name: 'tenant-onboarding-step-2', component: Step2Identification, meta: { step: 2, title: 'Tu identificación' } },
-      { path: 'paso-3', name: 'tenant-onboarding-step-3', component: Step3Address, meta: { step: 3, title: '¿Dónde vives?' } },
-      { path: 'paso-4', name: 'tenant-onboarding-step-4', component: Step4Employment, meta: { step: 4, title: '¿A qué te dedicas?' } },
-      { path: 'paso-5', name: 'tenant-onboarding-step-5', component: Step5LoanDetails, meta: { step: 5, title: 'Tu crédito' } },
-      { path: 'paso-6', name: 'tenant-onboarding-step-6', component: Step6Documents, meta: { step: 6, title: 'Documentos' } },
-      { path: 'paso-7', name: 'tenant-onboarding-step-7', component: Step7References, meta: { step: 7, title: 'Referencias' } },
-      { path: 'paso-8', name: 'tenant-onboarding-step-8', component: Step8Review, meta: { step: 8, title: 'Revisión y firma' } }
+      { path: '', redirect: (to) => `/${to.params.tenant}/solicitud/simulador` },
+      { path: 'simulador', name: 'tenant-onboarding-simulator', component: Step0Simulator, meta: { step: 0, title: 'Simulador de crédito' } },
+      { path: 'verificacion', name: 'tenant-onboarding-kyc', component: StepKycVerification, meta: { step: 1, title: 'Verificación de identidad' } },
+      { path: 'paso-1', name: 'tenant-onboarding-step-1', component: Step1PersonalData, meta: { step: 2, title: '¿Cómo te llamas?' } },
+      { path: 'paso-2', name: 'tenant-onboarding-step-2', component: Step2Identification, meta: { step: 3, title: 'Tu identificación' } },
+      { path: 'paso-3', name: 'tenant-onboarding-step-3', component: Step3Address, meta: { step: 4, title: '¿Dónde vives?' } },
+      { path: 'paso-4', name: 'tenant-onboarding-step-4', component: Step4Employment, meta: { step: 5, title: '¿A qué te dedicas?' } },
+      { path: 'paso-5', name: 'tenant-onboarding-step-5', component: Step5LoanDetails, meta: { step: 6, title: 'Tu crédito' } },
+      { path: 'paso-6', name: 'tenant-onboarding-step-6', component: Step6Documents, meta: { step: 7, title: 'Documentos' } },
+      { path: 'paso-7', name: 'tenant-onboarding-step-7', component: Step7References, meta: { step: 8, title: 'Referencias' } },
+      { path: 'paso-8', name: 'tenant-onboarding-step-8', component: Step8Review, meta: { step: 9, title: 'Revisión y firma' } }
     ]
   },
   {
@@ -252,61 +254,67 @@ const routes: RouteRecordRaw[] = [
     children: [
       {
         path: '',
-        redirect: '/solicitud/verificacion'
+        redirect: '/solicitud/simulador'
+      },
+      {
+        path: 'simulador',
+        name: 'onboarding-simulator',
+        component: Step0Simulator,
+        meta: { step: 0, title: 'Simulador de crédito' }
       },
       {
         path: 'verificacion',
         name: 'onboarding-kyc',
         component: StepKycVerification,
-        meta: { step: 0, title: 'Verificación de identidad' }
+        meta: { step: 1, title: 'Verificación de identidad' }
       },
       {
         path: 'paso-1',
         name: 'onboarding-step-1',
         component: Step1PersonalData,
-        meta: { step: 1, title: '¿Cómo te llamas?' }
+        meta: { step: 2, title: '¿Cómo te llamas?' }
       },
       {
         path: 'paso-2',
         name: 'onboarding-step-2',
         component: Step2Identification,
-        meta: { step: 2, title: 'Tu identificación' }
+        meta: { step: 3, title: 'Tu identificación' }
       },
       {
         path: 'paso-3',
         name: 'onboarding-step-3',
         component: Step3Address,
-        meta: { step: 3, title: '¿Dónde vives?' }
+        meta: { step: 4, title: '¿Dónde vives?' }
       },
       {
         path: 'paso-4',
         name: 'onboarding-step-4',
         component: Step4Employment,
-        meta: { step: 4, title: '¿A qué te dedicas?' }
+        meta: { step: 5, title: '¿A qué te dedicas?' }
       },
       {
         path: 'paso-5',
         name: 'onboarding-step-5',
         component: Step5LoanDetails,
-        meta: { step: 5, title: 'Tu crédito' }
+        meta: { step: 6, title: 'Tu crédito' }
       },
       {
         path: 'paso-6',
         name: 'onboarding-step-6',
         component: Step6Documents,
-        meta: { step: 6, title: 'Documentos' }
+        meta: { step: 7, title: 'Documentos' }
       },
       {
         path: 'paso-7',
         name: 'onboarding-step-7',
         component: Step7References,
-        meta: { step: 7, title: 'Referencias' }
+        meta: { step: 8, title: 'Referencias' }
       },
       {
         path: 'paso-8',
         name: 'onboarding-step-8',
         component: Step8Review,
-        meta: { step: 8, title: 'Revisión y firma' }
+        meta: { step: 9, title: 'Revisión y firma' }
       }
     ]
   },
