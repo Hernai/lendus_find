@@ -9,12 +9,18 @@ import type { PaymentFrequency, Product } from '@/types'
 interface Props {
   compact?: boolean
   product?: Product | null
+  inOnboarding?: boolean // Flag to indicate if simulator is within onboarding flow
 }
 
 const props = withDefaults(defineProps<Props>(), {
   compact: false,
-  product: null
+  product: null,
+  inOnboarding: false
 })
+
+const emit = defineEmits<{
+  continue: [] // Emitted when user clicks "Solicitar ahora" in onboarding mode
+}>()
 
 const router = useRouter()
 const applicationStore = useApplicationStore()
@@ -214,6 +220,13 @@ const handleRequestCredit = async () => {
   // Verify it was saved
   const saved = localStorage.getItem('pending_application')
   console.log('✅ Verified saved:', saved ? 'YES' : 'NO')
+
+  // If we're in onboarding mode, emit event to parent instead of navigating
+  if (props.inOnboarding) {
+    console.log('➡️ In onboarding mode - emitting continue event')
+    emit('continue')
+    return
+  }
 
   // Check if user is already authenticated
   console.log('🔐 isAuthenticated:', authStore.isAuthenticated)

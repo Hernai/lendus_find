@@ -32,6 +32,13 @@ const goBack = () => {
   applicationStore.setSelectedProduct(null)
 }
 
+const handleContinue = () => {
+  // User completed simulation and wants to continue with application
+  // Navigate to next step (KYC verification)
+  log.info('User continuing to next step after simulation')
+  router.push('/solicitud/verificacion')
+}
+
 const getProductIcon = (icon: string) => {
   const icons: Record<string, string> = {
     user: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
@@ -128,7 +135,11 @@ onMounted(async () => {
       </div>
 
       <!-- Simulator Card -->
-      <SimulatorCard :product="selectedProduct" />
+      <SimulatorCard
+        :product="selectedProduct"
+        :in-onboarding="true"
+        @continue="handleContinue"
+      />
 
       <!-- Additional Info -->
       <div class="mt-8 bg-white rounded-2xl p-6 shadow-sm">
