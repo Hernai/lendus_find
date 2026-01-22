@@ -11,6 +11,12 @@ class ApiLog extends Model
 {
     use HasUuid, HasTenant;
 
+    // Enable timestamps but only for created_at
+    public $timestamps = true;
+
+    const CREATED_AT = 'created_at';
+    const UPDATED_AT = null;
+
     protected $fillable = [
         'tenant_id',
         'applicant_id',

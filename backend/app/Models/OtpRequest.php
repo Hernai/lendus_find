@@ -14,6 +14,8 @@ use Illuminate\Support\Str;
  * Tracks OTP requests for rate limiting and verification.
  * Can be linked to an identity (existing user) or standalone (new registration).
  *
+ * This is an immutable audit table - records are never updated after creation.
+ *
  * @property string $id
  * @property string|null $identity_id
  * @property string|null $target_type PHONE, EMAIL, WHATSAPP
@@ -26,13 +28,18 @@ use Illuminate\Support\Str;
  * @property string|null $ip_address
  * @property string|null $user_agent
  * @property \Carbon\Carbon $created_at
- * @property \Carbon\Carbon $updated_at
  */
 class OtpRequest extends Model
 {
     use HasFactory, HasUuids;
 
     protected $table = 'otp_requests';
+
+    // Enable timestamps but only for created_at
+    public $timestamps = true;
+
+    const CREATED_AT = 'created_at';
+    const UPDATED_AT = null;
 
     /**
      * Maximum verification attempts allowed.
@@ -173,8 +180,9 @@ class OtpRequest extends Model
             return false;
         }
 
-        // Mark as verified
-        $this->update(['verified_at' => now()]);
+        // Mark as verified (using saveQuietly to avoid triggering observers)
+        $this->verified_at = now();
+        $this->saveQuietly();
 
         return true;
     }

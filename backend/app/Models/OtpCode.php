@@ -8,10 +8,17 @@ use App\Traits\HasTenant;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class OtpCode extends Model
 {
     use HasFactory, HasUuid, HasTenant;
+
+    // Enable timestamps but only for created_at
+    public $timestamps = true;
+
+    const CREATED_AT = 'created_at';
+    const UPDATED_AT = null;
 
     protected $fillable = [
         'tenant_id',
@@ -50,9 +57,11 @@ class OtpCode extends Model
         ?string $tenantId = null,
         int $expirationMinutes = 10
     ): self {
-        // Invalidate previous unused codes
-        static::where('phone', $destination)
-            ->orWhere('email', $destination)
+        // Invalidate previous unused codes (using DB::table to bypass timestamps)
+        \DB::table('otp_codes')
+            ->where(function ($q) use ($destination) {
+                $q->where('phone', $destination)->orWhere('email', $destination);
+            })
             ->where('purpose', $purpose)
             ->where('is_used', false)
             ->update(['is_used' => true, 'used_at' => now()]);
@@ -118,10 +127,9 @@ class OtpCode extends Model
         }
 
         // Mark as used
-        $otp->update([
-            'is_used' => true,
-            'used_at' => now(),
-        ]);
+        $otp->is_used = true;
+        $otp->used_at = now();
+        $otp->saveQuietly();
 
         return $otp;
     }
@@ -165,11 +173,10 @@ class OtpCode extends Model
      */
     public function markAsSent(?string $messageId = null, ?string $status = null): self
     {
-        $this->update([
-            'sent_at' => now(),
-            'provider_message_id' => $messageId,
-            'provider_status' => $status ?? 'sent',
-        ]);
+        $this->sent_at = now();
+        $this->provider_message_id = $messageId;
+        $this->provider_status = $status ?? 'sent';
+        $this->saveQuietly();
 
         return $this;
     }

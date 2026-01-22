@@ -10,6 +10,12 @@ class SmsLog extends Model
 {
     use HasUuid;
 
+    // Enable timestamps but only for created_at
+    public $timestamps = true;
+
+    const CREATED_AT = 'created_at';
+    const UPDATED_AT = null;
+
     protected $fillable = [
         'tenant_id',
         'to',
@@ -75,10 +81,9 @@ class SmsLog extends Model
      */
     public function markAsDelivered(): void
     {
-        $this->update([
-            'status' => 'delivered',
-            'delivered_at' => now(),
-        ]);
+        $this->status = 'delivered';
+        $this->delivered_at = now();
+        $this->saveQuietly();
     }
 
     /**
