@@ -51,8 +51,7 @@ class NotificationTemplateController extends Controller
             $query->where('is_active', $request->boolean('is_active'));
         }
 
-        $templates = $query->with(['creator.profile'])
-            ->orderBy('event')
+        $templates = $query->orderBy('event')
             ->orderBy('channel')
             ->orderBy('priority')
             ->get()
@@ -73,7 +72,6 @@ class NotificationTemplateController extends Controller
         $tenant = app('tenant');
 
         $template = NotificationTemplate::where('tenant_id', $tenant->id)
-            ->with(['creator.profile', 'updater.profile'])
             ->findOrFail($id);
 
         return $this->success([
