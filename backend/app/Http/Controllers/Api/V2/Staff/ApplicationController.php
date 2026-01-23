@@ -702,6 +702,7 @@ class ApplicationController extends Controller
             $curp = $identifications->firstWhere('type', 'CURP')?->identifier_value;
             $rfc = $identifications->firstWhere('type', 'RFC')?->identifier_value;
             $ineData = $identifications->firstWhere('type', 'INE');
+            $passportData = $identifications->firstWhere('type', 'PASSPORT');
 
             $data['applicant'] = [
                 'type' => 'INDIVIDUAL',
@@ -716,6 +717,7 @@ class ApplicationController extends Controller
                         'birth_state' => $person->birth_state,
                         'gender' => $person->gender,
                         'nationality' => $person->nationality,
+                        'nationality_info' => \App\Helpers\CountryHelper::getCountryInfo($person->nationality),
                         'marital_status' => $person->marital_status,
                         'education_level' => $person->education_level,
                         'dependents_count' => $person->dependents_count ?? 0,
@@ -727,6 +729,11 @@ class ApplicationController extends Controller
                         'rfc_verified' => $identifications->firstWhere('type', 'RFC')?->status === 'VERIFIED',
                         'ine_clave' => $ineData?->identifier_value,
                         'ine_verified' => $ineData?->status === 'VERIFIED',
+                        // Passport data for foreigners
+                        'passport_number' => $passportData?->identifier_value,
+                        'passport_issue_date' => $passportData?->document_data['issue_date'] ?? null,
+                        'passport_expiry_date' => $passportData?->document_data['expiry_date'] ?? null,
+                        'passport_verified' => $passportData?->status === 'VERIFIED',
                     ],
                     'contact' => [
                         'email' => $person->account?->identities?->where('type', 'email')->first()?->identifier,
@@ -786,12 +793,13 @@ class ApplicationController extends Controller
             ] : null,
             'status_history' => $app->statusHistory->map(function ($h) {
                 $metadata = $h->metadata ?? [];
-                $isLifecycleEvent = ApplicationEventService::isLifecycleEvent($h->from_status ?? '');
+                $fromStatus = $h->from_status ?? '';
+                $isLifecycleEvent = ApplicationEventService::isLifecycleEvent($fromStatus);
 
                 return [
                     'from_status' => $h->from_status,
                     'from_status_label' => $isLifecycleEvent
-                        ? ApplicationEventService::getEventLabel($h->from_status)
+                        ? ApplicationEventService::getEventLabel($fromStatus)
                         : $h->from_status_label,
                     'to_status' => $h->to_status,
                     'to_status_label' => $h->to_status_label,
@@ -800,8 +808,8 @@ class ApplicationController extends Controller
                     'created_at' => $h->created_at->toIso8601String(),
                     // Lifecycle event fields
                     'is_lifecycle_event' => $isLifecycleEvent,
-                    'event_type' => $isLifecycleEvent ? ($metadata['event_type'] ?? $h->from_status) : 'STATUS_CHANGE',
-                    'event_label' => $isLifecycleEvent ? ApplicationEventService::getEventLabel($h->from_status) : null,
+                    'event_type' => $isLifecycleEvent ? ($metadata['event_type'] ?? $fromStatus) : 'STATUS_CHANGE',
+                    'event_label' => $isLifecycleEvent ? ApplicationEventService::getEventLabel($fromStatus) : null,
                     // Metadata for "Ver detalles" button
                     'ip_address' => $metadata['ip_address'] ?? null,
                     'user_agent' => $metadata['user_agent'] ?? null,

@@ -373,6 +373,27 @@ class DocumentService
      */
     public function getMissingRequired(Model $documentable, array $requiredTypes): array
     {
+        // Handle new structure: {nationals: [], foreigners: []}
+        $docTypes = [];
+
+        if (isset($requiredTypes['nationals']) || isset($requiredTypes['foreigners'])) {
+            // New format: select based on nationality
+            $isForeigner = false;
+
+            // Check if documentable is a Person with nationality
+            if ($documentable instanceof \App\Models\Person && $documentable->nationality) {
+                $isForeigner = $documentable->nationality !== 'MX';
+            }
+
+            // Select appropriate document list
+            $docTypes = $isForeigner
+                ? ($requiredTypes['foreigners'] ?? [])
+                : ($requiredTypes['nationals'] ?? []);
+        } else {
+            // Legacy format: flat array
+            $docTypes = $requiredTypes;
+        }
+
         $existingTypes = Document::where('documentable_type', get_class($documentable))
             ->where('documentable_id', $documentable->id)
             ->currentVersion()
@@ -380,7 +401,7 @@ class DocumentService
             ->pluck('type')
             ->toArray();
 
-        return array_values(array_diff($requiredTypes, $existingTypes));
+        return array_values(array_diff($docTypes, $existingTypes));
     }
 
     /**

@@ -110,7 +110,7 @@ interface Application {
   updated_at: string
   assigned_to?: string
   completeness: ApplicationCompleteness
-  required_documents: string[]
+  required_documents: string[] | { nationals: string[]; foreigners: string[] }
   applicant: {
     id: string
     full_name: string
@@ -121,9 +121,18 @@ interface Application {
     phone: string
     curp: string
     rfc: string
+    ine_clave?: string
     birth_date: string
     nationality: string
+    nationality_info?: {
+      code: string
+      name: string
+      flag: string
+    }
     gender: string
+    passport_number?: string
+    passport_issue_date?: string
+    passport_expiry_date?: string
   }
   address: {
     street: string
@@ -484,8 +493,20 @@ const fetchApplication = async () => {
     const personBankAccounts = person?.bank_accounts || []
 
     // Calculate approved documents that are in the required list
-    const requiredDocTypes = data.required_documents || []
-    const requiredTypes = new Set(requiredDocTypes)
+    const requiredDocTypesRaw = data.required_documents || []
+    // Handle new structure: {nationals: [], foreigners: []} or legacy flat array
+    const isForeigner = person?.personal_data?.nationality !== 'MX'
+    let requiredDocsArray: string[] = []
+    if (Array.isArray(requiredDocTypesRaw)) {
+      // Legacy format: flat array
+      requiredDocsArray = requiredDocTypesRaw
+    } else if (typeof requiredDocTypesRaw === 'object' && requiredDocTypesRaw !== null) {
+      // New format: {nationals: [], foreigners: []}
+      requiredDocsArray = isForeigner
+        ? (requiredDocTypesRaw.foreigners || [])
+        : (requiredDocTypesRaw.nationals || [])
+    }
+    const requiredTypes = new Set(requiredDocsArray)
     const approvedRequiredCount = docs.filter(d =>
       d.status === 'APPROVED' && requiredTypes.has(d.type)
     ).length
@@ -497,14 +518,14 @@ const fetchApplication = async () => {
       created_at: data.created_at,
       updated_at: data.updated_at,
       assigned_to: workflow?.assigned_to?.name ?? undefined,
-      required_documents: requiredDocTypes,
+      required_documents: requiredDocTypesRaw,
       completeness: {
         personal_data: !!person,
         address: !!personAddress,
         employment: !!personEmployment,
         documents: {
           uploaded: docs.length,
-          required: requiredDocTypes.length,
+          required: requiredDocsArray.length,
           approved: approvedRequiredCount
         },
         references: {
@@ -526,7 +547,11 @@ const fetchApplication = async () => {
         ine_clave: person.identifications.ine_clave || '',
         birth_date: person.personal_data.birth_date || '',
         nationality: person.personal_data.nationality || '',
-        gender: person.personal_data.gender || ''
+        nationality_info: person.personal_data.nationality_info,
+        gender: person.personal_data.gender || '',
+        passport_number: person.identifications.passport_number || '',
+        passport_issue_date: person.identifications.passport_issue_date || '',
+        passport_expiry_date: person.identifications.passport_expiry_date || ''
       } : company ? {
         id: company.id,
         full_name: company.legal_name,
@@ -540,7 +565,11 @@ const fetchApplication = async () => {
         ine_clave: '',
         birth_date: '',
         nationality: '',
-        gender: ''
+        nationality_info: undefined,
+        gender: '',
+        passport_number: '',
+        passport_issue_date: '',
+        passport_expiry_date: ''
       } : {
         id: '',
         full_name: '',
@@ -554,7 +583,11 @@ const fetchApplication = async () => {
         ine_clave: '',
         birth_date: '',
         nationality: '',
-        gender: ''
+        nationality_info: undefined,
+        gender: '',
+        passport_number: '',
+        passport_issue_date: '',
+        passport_expiry_date: ''
       },
       address: personAddress ? {
         street: personAddress.street,
@@ -739,6 +772,9 @@ const fetchApplication = async () => {
       })()
     }
   } catch (e) {
+    console.error('Error completo:', e)
+    console.error('Error message:', e instanceof Error ? e.message : String(e))
+    console.error('Error stack:', e instanceof Error ? e.stack : 'No stack')
     log.error('Error al cargar solicitud', { error: e })
     error.value = 'Error al cargar la solicitud'
   } finally {
@@ -1167,6 +1203,29 @@ const getPurpose = (purpose: string) => {
   return purposes[purpose] || purpose
 }
 
+// Computed: check if applicant is foreigner
+const isForeigner = computed(() => {
+  return application.value?.applicant?.nationality !== 'MX'
+})
+
+// Computed: normalize required documents based on nationality
+const normalizedRequiredDocuments = computed(() => {
+  const requiredDocs = application.value?.required_documents ?? []
+
+  // Handle new structure: {nationals: [], foreigners: []} or legacy flat array
+  if (Array.isArray(requiredDocs)) {
+    // Legacy format: flat array
+    return requiredDocs
+  } else if (typeof requiredDocs === 'object' && requiredDocs !== null) {
+    // New format: {nationals: [], foreigners: []}
+    return isForeigner.value
+      ? (requiredDocs.foreigners || [])
+      : (requiredDocs.nationals || [])
+  }
+
+  return []
+})
+
 // Computed: all documents (uploaded + missing required)
 const allDocuments = computed(() => {
   if (!application.value) return []
@@ -1175,11 +1234,23 @@ const allDocuments = computed(() => {
   const uploadedTypes = new Set(uploadedDocs.map(d => d.type))
   const requiredDocs = application.value.required_documents || []
 
+  // Handle new structure: {nationals: [], foreigners: []} or legacy flat array
+  let requiredDocsArray: string[] = []
+  if (Array.isArray(requiredDocs)) {
+    // Legacy format: flat array
+    requiredDocsArray = requiredDocs
+  } else if (typeof requiredDocs === 'object' && requiredDocs !== null) {
+    // New format: {nationals: [], foreigners: []}
+    requiredDocsArray = isForeigner.value
+      ? (requiredDocs.foreigners || [])
+      : (requiredDocs.nationals || [])
+  }
+
   // Create list with uploaded docs first
   const result: Array<Document & { missing?: boolean }> = [...uploadedDocs]
 
   // Add missing required docs
-  for (const docType of requiredDocs) {
+  for (const docType of requiredDocsArray) {
     if (!uploadedTypes.has(docType)) {
       result.push({
         id: `missing-${docType}`,
@@ -1197,7 +1268,21 @@ const allDocuments = computed(() => {
 // Check if product requires signature
 const requiresSignature = computed(() => {
   const requiredDocs = application.value?.required_documents ?? []
-  return requiredDocs.some((doc: { type: string } | string) => {
+
+  // Handle new structure: {nationals: [], foreigners: []} or legacy flat array
+  const isForeigner = application.value?.applicant?.nationality !== 'MX'
+  let requiredDocsArray: (string | { type: string })[] = []
+  if (Array.isArray(requiredDocs)) {
+    // Legacy format: flat array
+    requiredDocsArray = requiredDocs
+  } else if (typeof requiredDocs === 'object' && requiredDocs !== null) {
+    // New format: {nationals: [], foreigners: []}
+    requiredDocsArray = isForeigner.value
+      ? (requiredDocs.foreigners || [])
+      : (requiredDocs.nationals || [])
+  }
+
+  return requiredDocsArray.some((doc: { type: string } | string) => {
     const docType = typeof doc === 'string' ? doc : doc.type
     return docType === 'SIGNATURE'
   })
@@ -1463,7 +1548,7 @@ const confirmVerifyReference = async () => {
 
 // Verify data (field-level verification)
 const isVerifyingData = ref(false)
-type VerifiableField = 'first_name' | 'last_name_1' | 'last_name_2' | 'curp' | 'rfc' | 'ine_clave' | 'birth_date' | 'phone' | 'email' | 'address' | 'employment'
+type VerifiableField = 'first_name' | 'last_name_1' | 'last_name_2' | 'curp' | 'rfc' | 'ine_clave' | 'birth_date' | 'phone' | 'email' | 'address' | 'employment' | 'passport_number' | 'passport_issue_date' | 'passport_expiry_date'
 
 // Reject data modal state
 const showRejectDataModal = ref(false)
@@ -1515,7 +1600,10 @@ const getFieldLabel = (field: string): string => {
     'phone': 'Teléfono',
     'email': 'Email',
     'address': 'Dirección',
-    'employment': 'Información Laboral'
+    'employment': 'Información Laboral',
+    'passport_number': 'Número de Pasaporte',
+    'passport_issue_date': 'Fecha de Emisión (Pasaporte)',
+    'passport_expiry_date': 'Fecha de Expiración (Pasaporte)'
   }
   return labels[field] || field
 }
@@ -2057,7 +2145,12 @@ onUnmounted(() => {
             <!-- Applicant Info - Improved UI with completion/verification distinction -->
             <div class="border border-gray-200 rounded-lg">
               <div class="bg-gray-50 px-3 py-2 border-b border-gray-200 flex items-center justify-between">
-                <h3 class="text-sm font-semibold text-gray-900">Datos del Solicitante</h3>
+                <div class="flex items-center gap-2">
+                  <h3 class="text-sm font-semibold text-gray-900">Datos del Solicitante</h3>
+                  <span v-if="isForeigner" class="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded">
+                    Extranjero
+                  </span>
+                </div>
                 <div class="flex items-center gap-3 text-xs text-gray-500">
                   <span class="flex items-center gap-1">
                     <span class="w-2 h-2 rounded-full bg-gray-300"></span>
@@ -2158,6 +2251,20 @@ onUnmounted(() => {
                     </p>
                     <p v-if="isFieldLocked('first_name')" class="text-[10px] text-gray-500 mt-0.5">
                       Verificado automáticamente - No modificable
+                    </p>
+                  </div>
+                  <!-- Nacionalidad -->
+                  <div class="group relative">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span class="w-2 h-2 rounded-full flex-shrink-0 bg-blue-500"></span>
+                      <span class="text-xs text-gray-500">Nacionalidad</span>
+                    </div>
+                    <p class="font-medium text-gray-900 flex items-center gap-1.5">
+                      <span class="text-xl">{{ application.applicant.nationality_info?.flag || '🌍' }}</span>
+                      <span>{{ application.applicant.nationality_info?.name || application.applicant.nationality || '—' }}</span>
+                      <span v-if="isForeigner" class="text-xs font-medium bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
+                        Extranjero
+                      </span>
                     </p>
                   </div>
                   <!-- Email -->
@@ -2292,8 +2399,8 @@ onUnmounted(() => {
                       Verificado automáticamente - No modificable
                     </p>
                   </div>
-                  <!-- CURP -->
-                  <div class="group relative">
+                  <!-- CURP (solo para nacionales) -->
+                  <div v-if="!isForeigner" class="group relative">
                     <div class="flex items-center gap-1.5 mb-0.5">
                       <span
                         class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
@@ -2434,8 +2541,199 @@ onUnmounted(() => {
                       Verificado automáticamente - No modificable
                     </p>
                   </div>
-                  <!-- Clave INE -->
-                  <div class="group relative">
+                  <!-- Número de Pasaporte (solo para extranjeros) -->
+                  <div v-if="isForeigner" class="group relative">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span
+                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
+                        :class="isFieldRejected('passport_number') ? 'bg-red-500' : isFieldVerified('passport_number') ? 'bg-green-500' : isFieldPending('passport_number') ? 'bg-yellow-500' : application.applicant.passport_number ? 'bg-blue-500' : 'bg-gray-300'"
+                      ></span>
+                      <span class="text-xs text-gray-500">Número de Pasaporte</span>
+                      <svg v-if="isFieldLocked('passport_number')" class="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20" title="Verificado por KYC - No modificable">
+                        <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
+                      </svg>
+                      <div v-if="application.applicant.passport_number && !isFieldLocked('passport_number')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
+                        <button
+                          v-if="!isFieldVerified('passport_number') && !isFieldRejected('passport_number')"
+                          class="p-0.5 rounded hover:bg-green-100 text-gray-400 hover:text-green-600"
+                          :disabled="isVerifyingData"
+                          title="Verificar dato"
+                          @click="verifyData('passport_number', 'verify')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <button
+                          v-if="isFieldVerified('passport_number')"
+                          class="p-0.5 rounded hover:bg-gray-100 text-green-600"
+                          :disabled="isVerifyingData"
+                          title="Quitar verificación"
+                          @click="verifyData('passport_number', 'unverify')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                          </svg>
+                        </button>
+                        <button
+                          v-if="!isFieldRejected('passport_number')"
+                          class="p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600"
+                          :disabled="isVerifyingData"
+                          title="Rechazar dato"
+                          @click="openRejectDataModal('passport_number')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <button
+                          v-if="isFieldRejected('passport_number')"
+                          class="p-0.5 rounded hover:bg-gray-100 text-red-600"
+                          :disabled="isVerifyingData"
+                          title="Quitar rechazo"
+                          @click="openUnverifyModal('passport_number')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div v-if="isFieldLocked('passport_number')" class="ml-auto">
+                        <span class="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                          {{ getFieldVerification('passport_number')?.method_label || 'KYC' }}
+                        </span>
+                      </div>
+                    </div>
+                    <p class="font-mono text-sm text-gray-900">{{ application.applicant.passport_number || '—' }}</p>
+                    <p v-if="isFieldRejected('passport_number')" class="text-xs text-red-600 mt-0.5">
+                      ⚠ {{ getFieldVerification('passport_number')?.rejection_reason }}
+                    </p>
+                    <p v-if="isFieldLocked('passport_number')" class="text-[10px] text-gray-500 mt-0.5">
+                      Verificado automáticamente - No modificable
+                    </p>
+                  </div>
+                  <!-- Fecha de Emisión (solo para extranjeros) -->
+                  <div v-if="isForeigner" class="group relative">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span
+                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
+                        :class="isFieldRejected('passport_issue_date') ? 'bg-red-500' : isFieldVerified('passport_issue_date') ? 'bg-green-500' : isFieldPending('passport_issue_date') ? 'bg-yellow-500' : application.applicant.passport_issue_date ? 'bg-blue-500' : 'bg-gray-300'"
+                      ></span>
+                      <span class="text-xs text-gray-500">Fecha de Emisión</span>
+                      <div v-if="application.applicant.passport_issue_date && !isFieldLocked('passport_issue_date')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
+                        <button
+                          v-if="!isFieldVerified('passport_issue_date') && !isFieldRejected('passport_issue_date')"
+                          class="p-0.5 rounded hover:bg-green-100 text-gray-400 hover:text-green-600"
+                          :disabled="isVerifyingData"
+                          title="Verificar dato"
+                          @click="verifyData('passport_issue_date', 'verify')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <button
+                          v-if="isFieldVerified('passport_issue_date')"
+                          class="p-0.5 rounded hover:bg-gray-100 text-green-600"
+                          :disabled="isVerifyingData"
+                          title="Quitar verificación"
+                          @click="verifyData('passport_issue_date', 'unverify')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                          </svg>
+                        </button>
+                        <button
+                          v-if="!isFieldRejected('passport_issue_date')"
+                          class="p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600"
+                          :disabled="isVerifyingData"
+                          title="Rechazar dato"
+                          @click="openRejectDataModal('passport_issue_date')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <button
+                          v-if="isFieldRejected('passport_issue_date')"
+                          class="p-0.5 rounded hover:bg-gray-100 text-red-600"
+                          :disabled="isVerifyingData"
+                          title="Quitar rechazo"
+                          @click="openUnverifyModal('passport_issue_date')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    <p class="text-sm text-gray-900">{{ application.applicant.passport_issue_date ? formatDate(application.applicant.passport_issue_date) : '—' }}</p>
+                    <p v-if="isFieldRejected('passport_issue_date')" class="text-xs text-red-600 mt-0.5">
+                      ⚠ {{ getFieldVerification('passport_issue_date')?.rejection_reason }}
+                    </p>
+                  </div>
+                  <!-- Fecha de Expiración (solo para extranjeros) -->
+                  <div v-if="isForeigner" class="group relative">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span
+                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
+                        :class="isFieldRejected('passport_expiry_date') ? 'bg-red-500' : isFieldVerified('passport_expiry_date') ? 'bg-green-500' : isFieldPending('passport_expiry_date') ? 'bg-yellow-500' : application.applicant.passport_expiry_date ? 'bg-blue-500' : 'bg-gray-300'"
+                      ></span>
+                      <span class="text-xs text-gray-500">Fecha de Expiración</span>
+                      <div v-if="application.applicant.passport_expiry_date && !isFieldLocked('passport_expiry_date')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
+                        <button
+                          v-if="!isFieldVerified('passport_expiry_date') && !isFieldRejected('passport_expiry_date')"
+                          class="p-0.5 rounded hover:bg-green-100 text-gray-400 hover:text-green-600"
+                          :disabled="isVerifyingData"
+                          title="Verificar dato"
+                          @click="verifyData('passport_expiry_date', 'verify')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <button
+                          v-if="isFieldVerified('passport_expiry_date')"
+                          class="p-0.5 rounded hover:bg-gray-100 text-green-600"
+                          :disabled="isVerifyingData"
+                          title="Quitar verificación"
+                          @click="verifyData('passport_expiry_date', 'unverify')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                          </svg>
+                        </button>
+                        <button
+                          v-if="!isFieldRejected('passport_expiry_date')"
+                          class="p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600"
+                          :disabled="isVerifyingData"
+                          title="Rechazar dato"
+                          @click="openRejectDataModal('passport_expiry_date')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <button
+                          v-if="isFieldRejected('passport_expiry_date')"
+                          class="p-0.5 rounded hover:bg-gray-100 text-red-600"
+                          :disabled="isVerifyingData"
+                          title="Quitar rechazo"
+                          @click="openUnverifyModal('passport_expiry_date')"
+                        >
+                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    <p class="text-sm text-gray-900">{{ application.applicant.passport_expiry_date ? formatDate(application.applicant.passport_expiry_date) : '—' }}</p>
+                    <p v-if="isFieldRejected('passport_expiry_date')" class="text-xs text-red-600 mt-0.5">
+                      ⚠ {{ getFieldVerification('passport_expiry_date')?.rejection_reason }}
+                    </p>
+                  </div>
+                  <!-- Clave INE (solo para nacionales) -->
+                  <div v-if="!isForeigner" class="group relative">
                     <div class="flex items-center gap-1.5 mb-0.5">
                       <span
                         class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
@@ -2868,7 +3166,7 @@ onUnmounted(() => {
             <AdminDocumentGallery
               :application-id="application.id"
               :documents="application.documents"
-              :required-documents="application.required_documents"
+              :required-documents="normalizedRequiredDocuments"
               :can-review="canReviewDocs"
               @refresh="fetchApplication"
             />

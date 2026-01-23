@@ -44,7 +44,7 @@ interface ReviewHistoryEntry {
 const props = withDefaults(defineProps<{
   applicationId: string
   documents: Document[]
-  requiredDocuments: string[]
+  requiredDocuments: string[] | { nationals: string[]; foreigners: string[] }
   canReview?: boolean
 }>(), {
   canReview: true
@@ -94,10 +94,31 @@ const isUnrejecting = ref(false)
 // Rejection reasons from backend enum via tenantStore.options
 const rejectionReasons = computed(() => tenantStore.options.documentRejectionReason ?? [])
 
+// Normalize required documents to array (handles both legacy array and new object format)
+const normalizedRequiredDocuments = computed(() => {
+  const requiredDocs = props.requiredDocuments
+
+  // If it's already an array, return as-is
+  if (Array.isArray(requiredDocs)) {
+    return requiredDocs
+  }
+
+  // If it's an object with nationals/foreigners, we can't determine which to use
+  // without nationality info, so we'll combine both to be safe
+  if (typeof requiredDocs === 'object' && requiredDocs !== null) {
+    const nationals = requiredDocs.nationals || []
+    const foreigners = requiredDocs.foreigners || []
+    // Combine and deduplicate
+    return [...new Set([...nationals, ...foreigners])]
+  }
+
+  return []
+})
+
 // Computed
 const missingDocuments = computed(() => {
   const uploadedTypes = new Set(props.documents.map(d => d.type))
-  return props.requiredDocuments
+  return normalizedRequiredDocuments.value
     .filter(type => !uploadedTypes.has(type))
     .map(type => ({
       type,
@@ -513,7 +534,7 @@ const formatHistoryDate = formatDateTime
         </svg>
         Documentos
         <span class="text-xs font-normal text-gray-500 ml-2">
-          ({{ documents.filter(d => d.status === 'APPROVED').length }}/{{ requiredDocuments.length }} aprobados)
+          ({{ documents.filter(d => d.status === 'APPROVED').length }}/{{ normalizedRequiredDocuments.length }} aprobados)
         </span>
       </h3>
 

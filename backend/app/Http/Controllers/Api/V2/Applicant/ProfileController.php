@@ -1110,34 +1110,40 @@ class ProfileController extends Controller
         $disk = config('filesystems.default', 'local');
         \Illuminate\Support\Facades\Storage::disk($disk)->put($path, $imageData);
 
-        // Mark any existing signature documents as replaced
-        \App\Models\Document::where('documentable_type', \App\Models\Person::class)
-            ->where('documentable_id', $person->id)
-            ->where('type', 'SIGNATURE')
-            ->whereNull('replaced_at')
-            ->update(['replaced_at' => now()]);
+        // Use database transaction to avoid unique constraint violation
+        $document = \Illuminate\Support\Facades\DB::transaction(function () use ($person, $account, $filename, $path, $disk, $imageData, $request) {
+            // Mark any existing signature documents as replaced
+            \App\Models\Document::where('documentable_type', \App\Models\Person::class)
+                ->where('documentable_id', $person->id)
+                ->where('type', 'SIGNATURE')
+                ->where('is_active', true)
+                ->update([
+                    'replaced_at' => now(),
+                    'is_active' => false,
+                ]);
 
-        // Create document record
-        $document = \App\Models\Document::create([
-            'tenant_id' => $account->tenant_id,
-            'documentable_type' => \App\Models\Person::class,
-            'documentable_id' => $person->id,
-            'type' => 'SIGNATURE',
-            'category' => 'LEGAL',
-            'file_name' => $filename,
-            'original_filename' => 'firma_digital.png',
-            'file_path' => $path,
-            'mime_type' => 'image/png',
-            'file_size' => strlen($imageData),
-            'storage_disk' => $disk,
-            'status' => 'APPROVED',
-            'uploaded_by' => $account->id,
-            'ocr_data' => [
-                'signed_at' => now()->toIso8601String(),
-                'ip_address' => $request->ip(),
-                'user_agent' => $request->userAgent(),
-            ],
-        ]);
+            // Create document record
+            return \App\Models\Document::create([
+                'tenant_id' => $account->tenant_id,
+                'documentable_type' => \App\Models\Person::class,
+                'documentable_id' => $person->id,
+                'type' => 'SIGNATURE',
+                'category' => 'LEGAL',
+                'file_name' => $filename,
+                'original_filename' => 'firma_digital.png',
+                'file_path' => $path,
+                'mime_type' => 'image/png',
+                'file_size' => strlen($imageData),
+                'storage_disk' => $disk,
+                'status' => 'APPROVED',
+                'uploaded_by' => $account->id,
+                'ocr_data' => [
+                    'signed_at' => now()->toIso8601String(),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ],
+            ]);
+        });
 
         // Update person record
         $person->update([
