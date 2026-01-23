@@ -687,21 +687,20 @@ class CorrectionController extends Controller
     }
 
     /**
-     * Get human-readable label for a document type.
+     * Get human-readable label for a document type using DocumentType enum.
      */
     private function getDocumentTypeLabel(string $type): string
     {
-        $labels = [
-            'INE_FRONT' => 'INE (Frente)',
-            'INE_BACK' => 'INE (Reverso)',
-            'PROOF_OF_ADDRESS' => 'Comprobante de Domicilio',
-            'INCOME_PROOF' => 'Comprobante de Ingresos',
-            'BANK_STATEMENT' => 'Estado de Cuenta Bancario',
-            'SELFIE' => 'Selfie',
-            'SIGNATURE' => 'Firma',
-        ];
+        try {
+            $docType = \App\Enums\DocumentType::tryFrom($type);
+            if ($docType) {
+                return $docType->label();
+            }
+        } catch (\Throwable) {
+            // Fallback to raw type if enum doesn't have this value
+        }
 
-        return $labels[$type] ?? $type;
+        return $type;
     }
 
     /**
