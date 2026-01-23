@@ -123,6 +123,7 @@ interface Application {
     rfc: string
     ine_clave?: string
     birth_date: string
+    birth_state?: string
     nationality: string
     nationality_info?: {
       code: string
@@ -546,6 +547,7 @@ const fetchApplication = async () => {
         rfc: person.identifications.rfc || '',
         ine_clave: person.identifications.ine_clave || '',
         birth_date: person.personal_data.birth_date || '',
+        birth_state: person.personal_data.birth_state || '',
         nationality: person.personal_data.nationality || '',
         nationality_info: person.personal_data.nationality_info,
         gender: person.personal_data.gender || '',
@@ -1201,6 +1203,14 @@ const getPurpose = (purpose: string) => {
     OTRO: 'Otro'
   }
   return purposes[purpose] || purpose
+}
+
+// Get Mexican state name from code using tenant store options
+const getMexicanStateName = (stateCode: string | undefined): string => {
+  if (!stateCode) return '—'
+
+  const option = tenantStore.options.mexicanState.find(opt => opt.value === stateCode.toUpperCase())
+  return option?.label || stateCode
 }
 
 // Computed: check if applicant is foreigner
@@ -2253,15 +2263,16 @@ onUnmounted(() => {
                       Verificado automáticamente - No modificable
                     </p>
                   </div>
-                  <!-- Nacionalidad -->
+                  <!-- Nacionalidad / Entidad de Nacimiento -->
                   <div class="group relative">
                     <div class="flex items-center gap-1.5 mb-0.5">
                       <span class="w-2 h-2 rounded-full flex-shrink-0 bg-blue-500"></span>
-                      <span class="text-xs text-gray-500">Nacionalidad</span>
+                      <span class="text-xs text-gray-500">{{ isForeigner ? 'Nacionalidad' : 'Entidad de Nacimiento' }}</span>
                     </div>
                     <p class="font-medium text-gray-900 flex items-center gap-1.5">
-                      <span class="text-xl">{{ application.applicant.nationality_info?.flag || '🌍' }}</span>
-                      <span>{{ application.applicant.nationality_info?.name || application.applicant.nationality || '—' }}</span>
+                      <span v-if="isForeigner" class="text-xl">{{ application.applicant.nationality_info?.flag || '🌍' }}</span>
+                      <span v-if="isForeigner">{{ application.applicant.nationality_info?.name || application.applicant.nationality || '—' }}</span>
+                      <span v-else>{{ getMexicanStateName(application.applicant.birth_state) }}</span>
                       <span v-if="isForeigner" class="text-xs font-medium bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
                         Extranjero
                       </span>

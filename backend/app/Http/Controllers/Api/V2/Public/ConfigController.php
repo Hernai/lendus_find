@@ -13,6 +13,7 @@ use App\Enums\HousingType;
 use App\Enums\IdType;
 use App\Enums\LoanPurpose;
 use App\Enums\MaritalStatus;
+use App\Enums\MexicanState;
 use App\Enums\PaymentFrequency;
 use App\Enums\ProductType;
 use App\Enums\ReferenceType;
@@ -100,6 +101,7 @@ class ConfigController extends Controller
             'housingType' => HousingType::toOptions(),
             'employmentType' => EmploymentType::toOptions(),
             'bankAccountType' => BankAccountType::toOptions(),
+            'mexicanState' => MexicanState::toOptions(),
             // Reference enums
             'referenceType' => ReferenceType::toOptions(),
             'relationship' => Relationship::toOptions(),

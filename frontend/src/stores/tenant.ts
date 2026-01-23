@@ -23,6 +23,7 @@ interface EnumOptions {
   housingType: Option[]
   employmentType: Option[]
   bankAccountType: Option[]
+  mexicanState: Option[]
   // Reference enums
   referenceType: Option[]
   relationship: Option[]
@@ -145,6 +146,7 @@ const defaultOptions: EnumOptions = {
   housingType: [],
   employmentType: [],
   bankAccountType: [],
+  mexicanState: [],
   // Reference enums
   referenceType: [],
   relationship: [],
