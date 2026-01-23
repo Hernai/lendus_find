@@ -51,7 +51,7 @@ class NotificationTemplateController extends Controller
             $query->where('is_active', $request->boolean('is_active'));
         }
 
-        $templates = $query->with(['creator:id,first_name,last_name,email'])
+        $templates = $query->with(['creator.profile'])
             ->orderBy('event')
             ->orderBy('channel')
             ->orderBy('priority')
@@ -73,7 +73,7 @@ class NotificationTemplateController extends Controller
         $tenant = app('tenant');
 
         $template = NotificationTemplate::where('tenant_id', $tenant->id)
-            ->with(['creator:id,first_name,last_name,email', 'updater:id,first_name,last_name,email'])
+            ->with(['creator.profile', 'updater.profile'])
             ->findOrFail($id);
 
         return $this->success([
@@ -289,12 +289,12 @@ class NotificationTemplateController extends Controller
             'metadata' => $template->metadata,
             'created_by' => $template->creator ? [
                 'id' => $template->creator->id,
-                'name' => $template->creator->first_name.' '.$template->creator->last_name,
+                'name' => $template->creator->name,
                 'email' => $template->creator->email,
             ] : null,
             'updated_by' => $template->updater ? [
                 'id' => $template->updater->id,
-                'name' => $template->updater->first_name.' '.$template->updater->last_name,
+                'name' => $template->updater->name,
                 'email' => $template->updater->email,
             ] : null,
             'created_at' => $template->created_at?->toIso8601String(),

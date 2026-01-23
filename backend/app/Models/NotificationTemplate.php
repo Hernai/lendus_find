@@ -53,7 +53,7 @@ class NotificationTemplate extends Model
      */
     public function creator(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'created_by');
+        return $this->belongsTo(StaffAccount::class, 'created_by');
     }
 
     /**
@@ -61,7 +61,7 @@ class NotificationTemplate extends Model
      */
     public function updater(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'updated_by');
+        return $this->belongsTo(StaffAccount::class, 'updated_by');
     }
 
     /**
