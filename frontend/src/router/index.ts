@@ -63,6 +63,8 @@ const AdminSettings = () => import('@/views/admin/panel/AdminSettings.vue')
 const AdminIntegrations = () => import('@/views/admin/settings/AdminIntegrationsView.vue')
 const AdminApiLogs = () => import('@/views/admin/panel/AdminApiLogs.vue')
 const AdminUnderConstruction = () => import('@/views/admin/panel/AdminUnderConstruction.vue')
+const NotificationTemplates = () => import('@/views/admin/panel/NotificationTemplates.vue')
+const NotificationTemplateForm = () => import('@/views/admin/panel/NotificationTemplateForm.vue')
 
 // Reserved paths that are NOT tenant slugs (must match tenant.ts)
 const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones', 'find']
@@ -414,6 +416,21 @@ const routes: RouteRecordRaw[] = [
         path: 'tenants',
         name: 'admin-tenants',
         component: AdminTenants
+      },
+      {
+        path: 'notificaciones',
+        name: 'admin-notification-templates',
+        component: NotificationTemplates
+      },
+      {
+        path: 'notificaciones/nueva',
+        name: 'admin-notification-template-create',
+        component: NotificationTemplateForm
+      },
+      {
+        path: 'notificaciones/:id/editar',
+        name: 'admin-notification-template-edit',
+        component: NotificationTemplateForm
       }
     ]
   },
