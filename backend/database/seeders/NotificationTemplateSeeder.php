@@ -15,16 +15,30 @@ class NotificationTemplateSeeder extends Seeder
      */
     public function run(): void
     {
-        // Get first tenant (or create if none exists)
-        $tenant = Tenant::first();
+        // Get all tenants
+        $tenants = Tenant::all();
 
-        if (! $tenant) {
+        if ($tenants->isEmpty()) {
             $this->command->warn('No tenants found. Please seed tenants first.');
 
             return;
         }
 
-        $this->command->info("Creating professional notification templates for tenant: {$tenant->name}");
+        $this->command->info("Creating professional notification templates for {$tenants->count()} tenant(s)");
+
+        foreach ($tenants as $tenant) {
+            $this->command->info("  → Tenant: {$tenant->name}");
+            $this->createTemplatesForTenant($tenant);
+        }
+
+        $this->command->info('All professional notification templates created successfully!');
+    }
+
+    /**
+     * Create templates for a specific tenant
+     */
+    private function createTemplatesForTenant(Tenant $tenant): void
+    {
 
         $templates = [
             // ==========================================
@@ -750,9 +764,7 @@ Saludos,
                 'available_variables' => $availableVariables,
             ]);
 
-            $this->command->info("  ✓ {$templateData['name']}");
+            // Don't output each template, too verbose for multiple tenants
         }
-
-        $this->command->info('Professional notification templates created successfully!');
     }
 }
