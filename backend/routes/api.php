@@ -37,6 +37,7 @@ use App\Http\Controllers\Api\V2\Staff\ConfigController as StaffConfigController;
 use App\Http\Controllers\Api\V2\Staff\ApiLogController as StaffApiLogController;
 use App\Http\Controllers\Api\V2\Staff\TenantController as StaffTenantController;
 use App\Http\Controllers\Api\V2\Staff\IntegrationController as StaffIntegrationController;
+use App\Http\Controllers\Api\V2\Staff\NotificationTemplateController as StaffNotificationTemplateController;
 
 // =============================================
 // BROADCASTING AUTH (for WebSocket channel authorization)
@@ -288,6 +289,19 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff'])
             Route::post('/{id}/api-configs', [StaffTenantController::class, 'saveApiConfig']);
             Route::delete('/{id}/api-configs/{configId}', [StaffTenantController::class, 'deleteApiConfig']);
             Route::post('/{id}/api-configs/{configId}/test', [StaffTenantController::class, 'testApiConfig']);
+        });
+
+        // =============================================
+        // Notification Templates - Admin only
+        // =============================================
+        Route::middleware('permission:canManageProducts')->prefix('notification-templates')->group(function () {
+            Route::get('/config', [StaffNotificationTemplateController::class, 'config']);
+            Route::post('/test-render', [StaffNotificationTemplateController::class, 'testRender']);
+            Route::get('/', [StaffNotificationTemplateController::class, 'index']);
+            Route::post('/', [StaffNotificationTemplateController::class, 'store']);
+            Route::get('/{id}', [StaffNotificationTemplateController::class, 'show']);
+            Route::put('/{id}', [StaffNotificationTemplateController::class, 'update']);
+            Route::delete('/{id}', [StaffNotificationTemplateController::class, 'destroy']);
         });
 
         // Applications - Read (any staff)
