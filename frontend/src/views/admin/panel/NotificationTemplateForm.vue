@@ -120,6 +120,11 @@ watch(
   }
 )
 
+// Helper to format variable syntax for display
+const formatVariable = (variable: string) => {
+  return `{{${variable}}}`
+}
+
 // Watch channel change
 watch(
   () => form.value.channel,
@@ -400,7 +405,7 @@ Usa variables con doble llave: {{user.first_name}}, {{application.folio}}, etc."
               :key="variable"
               class="flex items-start gap-1"
             >
-              <code class="bg-white px-2 py-1 rounded text-indigo-600">{{ '{{' + variable + '}}' }}</code>
+              <code class="bg-white px-2 py-1 rounded text-indigo-600">{{ formatVariable(variable as string) }}</code>
               <span class="text-gray-600">{{ description }}</span>
             </div>
           </div>
