@@ -38,6 +38,8 @@ use App\Http\Controllers\Api\V2\Staff\ApiLogController as StaffApiLogController;
 use App\Http\Controllers\Api\V2\Staff\TenantController as StaffTenantController;
 use App\Http\Controllers\Api\V2\Staff\IntegrationController as StaffIntegrationController;
 use App\Http\Controllers\Api\V2\Staff\NotificationTemplateController as StaffNotificationTemplateController;
+use App\Http\Controllers\Api\V2\Applicant\NotificationPreferenceController as ApplicantNotificationPreferenceController;
+use App\Http\Controllers\Api\V2\Staff\NotificationPreferenceController as StaffNotificationPreferenceController;
 
 // =============================================
 // BROADCASTING AUTH (for WebSocket channel authorization)
@@ -211,6 +213,16 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
             Route::post('/verifications', [ApplicantKycController::class, 'recordVerifications']);
             Route::get('/verifications', [ApplicantKycController::class, 'getVerifications']);
         });
+
+        // =============================================
+        // Notification Preferences
+        // =============================================
+        Route::prefix('notification-preferences')->group(function () {
+            Route::get('/', [ApplicantNotificationPreferenceController::class, 'show']);
+            Route::put('/', [ApplicantNotificationPreferenceController::class, 'update']);
+            Route::post('/events/{event}/disable', [ApplicantNotificationPreferenceController::class, 'disableEvent']);
+            Route::post('/events/{event}/enable', [ApplicantNotificationPreferenceController::class, 'enableEvent']);
+        });
     });
 
 // =============================================
@@ -352,4 +364,14 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff'])
 
         // Documents - Types only (other document routes not used)
         Route::get('/documents/types', [StaffDocController::class, 'types']);
+
+        // =============================================
+        // Notification Preferences
+        // =============================================
+        Route::prefix('notification-preferences')->group(function () {
+            Route::get('/', [StaffNotificationPreferenceController::class, 'show']);
+            Route::put('/', [StaffNotificationPreferenceController::class, 'update']);
+            Route::post('/events/{event}/disable', [StaffNotificationPreferenceController::class, 'disableEvent']);
+            Route::post('/events/{event}/enable', [StaffNotificationPreferenceController::class, 'enableEvent']);
+        });
     });

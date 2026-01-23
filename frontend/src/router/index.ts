@@ -352,6 +352,12 @@ const routes: RouteRecordRaw[] = [
     component: ProfileView,
     meta: { requiresAuth: true }
   },
+  {
+    path: '/notificaciones',
+    name: 'notification-preferences',
+    component: () => import('../views/applicant/NotificationPreferences.vue'),
+    meta: { requiresAuth: true }
+  },
 
   // Admin login (public, guest only)
   {
@@ -431,6 +437,11 @@ const routes: RouteRecordRaw[] = [
         path: 'notificaciones/:id/editar',
         name: 'admin-notification-template-edit',
         component: NotificationTemplateForm
+      },
+      {
+        path: 'mis-notificaciones',
+        name: 'admin-notification-preferences',
+        component: () => import('../views/admin/panel/NotificationPreferences.vue')
       }
     ]
   },
