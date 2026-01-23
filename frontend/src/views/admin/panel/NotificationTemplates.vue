@@ -49,6 +49,8 @@ const loadConfig = async () => {
 
 // Filtered templates
 const filteredTemplates = computed(() => {
+  if (!templates.value) return []
+
   let result = templates.value
 
   if (searchQuery.value) {
@@ -67,7 +69,9 @@ const filteredTemplates = computed(() => {
 // Group by event
 const templatesByEvent = computed(() => {
   const groups: Record<string, NotificationTemplate[]> = {}
-  filteredTemplates.value.forEach((template) => {
+  const filtered = filteredTemplates.value || []
+
+  filtered.forEach((template) => {
     if (!groups[template.event]) {
       groups[template.event] = []
     }
@@ -77,15 +81,19 @@ const templatesByEvent = computed(() => {
 })
 
 // Stats
-const stats = computed(() => ({
-  total: templates.value.length,
-  active: templates.value.filter((t) => t.is_active).length,
-  inactive: templates.value.filter((t) => !t.is_active).length,
-  byChannel: templates.value.reduce((acc, t) => {
-    acc[t.channel] = (acc[t.channel] || 0) + 1
-    return acc
-  }, {} as Record<string, number>),
-}))
+const stats = computed(() => {
+  const templateList = templates.value || []
+
+  return {
+    total: templateList.length,
+    active: templateList.filter((t) => t.is_active).length,
+    inactive: templateList.filter((t) => !t.is_active).length,
+    byChannel: templateList.reduce((acc, t) => {
+      acc[t.channel] = (acc[t.channel] || 0) + 1
+      return acc
+    }, {} as Record<string, number>),
+  }
+})
 
 // Delete template
 const deleteTemplate = async (template: NotificationTemplate) => {
