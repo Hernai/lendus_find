@@ -420,7 +420,314 @@ _Mensaje automático - {{tenant.name}}_',
                 'body' => '{{tenant.name}}: Solicitud {{application.folio}} recibida por ${{currency application.amount}} a {{application.term_months}} meses. Te contactaremos pronto. Dudas: {{tenant.phone}}',
             ],
 
-            // Continúa en el siguiente mensaje debido al límite de caracteres...
+            // ==========================================
+            // SOLICITUD EN REVISIÓN
+            // ==========================================
+            [
+                'name' => 'Solicitud en Revisión - In-App',
+                'event' => NotificationEvent::APPLICATION_IN_REVIEW,
+                'channel' => NotificationChannel::IN_APP,
+                'priority' => 3,
+                'subject' => 'Solicitud en revisión',
+                'body' => 'Tu solicitud {{application.folio}} está siendo revisada por nuestro equipo de analistas. Te notificaremos cuando tengamos novedades.',
+            ],
+            [
+                'name' => 'Solicitud en Revisión - WhatsApp',
+                'event' => NotificationEvent::APPLICATION_IN_REVIEW,
+                'channel' => NotificationChannel::WHATSAPP,
+                'priority' => 3,
+                'subject' => null,
+                'body' => '🔍 *Actualización de Solicitud*
+
+Hola *{{user.first_name}}*,
+
+Tu solicitud *{{application.folio}}* está siendo revisada por nuestro equipo de analistas de crédito.
+
+⏱️ Tiempo estimado: 24-48 horas
+
+Te mantendremos informado sobre el progreso.
+
+{{tenant.name}}',
+            ],
+
+            // ==========================================
+            // DOCUMENTOS PENDIENTES
+            // ==========================================
+            [
+                'name' => 'Documentos Pendientes - Email',
+                'event' => NotificationEvent::APPLICATION_DOCS_PENDING,
+                'channel' => NotificationChannel::EMAIL,
+                'priority' => 2,
+                'subject' => '📄 Documentos pendientes - Solicitud {{application.folio}}',
+                'body' => 'Hola {{user.first_name}},
+
+Tu solicitud {{application.folio}} está siendo procesada, pero necesitamos que subas algunos documentos adicionales para continuar.
+
+Documentos faltantes:
+{{#each missing_documents}}
+- {{this}}
+{{/each}}
+
+Por favor, ingresa a tu cuenta y sube los documentos lo antes posible para agilizar tu solicitud.
+
+Saludos,
+{{tenant.name}}',
+            ],
+            [
+                'name' => 'Documentos Pendientes - WhatsApp',
+                'event' => NotificationEvent::APPLICATION_DOCS_PENDING,
+                'channel' => NotificationChannel::WHATSAPP,
+                'priority' => 2,
+                'subject' => null,
+                'body' => '📄 *Documentos Pendientes*
+
+Hola *{{user.first_name}}*,
+
+Para continuar con tu solicitud *{{application.folio}}* necesitamos algunos documentos adicionales.
+
+Por favor ingresa a tu cuenta y sube los documentos faltantes.
+
+⚡ *Acción requerida*
+
+{{tenant.name}}
+{{tenant.phone}}',
+            ],
+            [
+                'name' => 'Documento Rechazado - In-App',
+                'event' => NotificationEvent::DOCUMENT_REJECTED,
+                'channel' => NotificationChannel::IN_APP,
+                'priority' => 2,
+                'subject' => 'Documento rechazado',
+                'body' => 'Tu documento {{document.type}} ha sido rechazado. Motivo: {{document.rejection_reason}}. Por favor sube un nuevo documento.',
+            ],
+
+            // ==========================================
+            // SOLICITUD APROBADA - Se requieren más plantillas
+            // ==========================================
+            [
+                'name' => 'Solicitud Aprobada - SMS',
+                'event' => NotificationEvent::APPLICATION_APPROVED,
+                'channel' => NotificationChannel::SMS,
+                'priority' => 1,
+                'subject' => null,
+                'body' => '🎉 {{tenant.name}}: ¡APROBADO! Tu solicitud {{application.folio}} por ${{currency application.amount}} fue aprobada. Te contactaremos en 24hrs.',
+            ],
+            [
+                'name' => 'Solicitud Aprobada - WhatsApp',
+                'event' => NotificationEvent::APPLICATION_APPROVED,
+                'channel' => NotificationChannel::WHATSAPP,
+                'priority' => 1,
+                'subject' => null,
+                'body' => '🎉🎊 *¡FELICIDADES {{user.first_name}}!* 🎊🎉
+
+Tu solicitud de crédito ha sido *APROBADA* ✅
+
+┏━━━━━━━━━━━━━━━━━━━┓
+┃  *DETALLES DEL CRÉDITO*  ┃
+┗━━━━━━━━━━━━━━━━━━━┛
+
+📋 Folio: `{{application.folio}}`
+💰 Monto: *${{currency application.amount}} MXN*
+📅 Plazo: *{{application.term_months}} meses*
+📊 Tasa: *{{application.interest_rate}}%*
+
+━━━━━━━━━━━━━━━━━━━━
+
+🚀 *PRÓXIMOS PASOS:*
+
+1️⃣ Contacto (24 hrs)
+2️⃣ Firma de Contrato
+3️⃣ Desembolso (24-48 hrs)
+
+━━━━━━━━━━━━━━━━━━━━
+
+💬 *¿Dudas?*
+📞 {{tenant.phone}}
+
+_¡Gracias por confiar en {{tenant.name}}!_',
+            ],
+
+            // ==========================================
+            // SOLICITUD RECHAZADA
+            // ==========================================
+            [
+                'name' => 'Solicitud Rechazada - Email',
+                'event' => NotificationEvent::APPLICATION_REJECTED,
+                'channel' => NotificationChannel::EMAIL,
+                'priority' => 2,
+                'subject' => 'Actualización sobre tu solicitud {{application.folio}}',
+                'body' => 'Hola {{user.first_name}} {{user.last_name}},
+
+Lamentamos informarte que en esta ocasión tu solicitud de crédito {{application.folio}} no ha sido aprobada.
+
+Esta decisión se basa en nuestro análisis de crédito y políticas internas.
+
+Esto no significa que no puedas aplicar nuevamente. Te invitamos a intentarlo después de 90 días, cuando tu situación financiera pueda haber mejorado.
+
+Si tienes dudas sobre esta decisión, puedes contactarnos:
+📞 {{tenant.phone}}
+📧 {{tenant.email}}
+
+Agradecemos tu interés en {{tenant.name}}.
+
+Saludos cordiales,
+Equipo {{tenant.name}}',
+            ],
+            [
+                'name' => 'Solicitud Rechazada - WhatsApp',
+                'event' => NotificationEvent::APPLICATION_REJECTED,
+                'channel' => NotificationChannel::WHATSAPP,
+                'priority' => 2,
+                'subject' => null,
+                'body' => 'Hola *{{user.first_name}}*,
+
+Lamentamos informarte que tu solicitud *{{application.folio}}* no ha sido aprobada en esta ocasión.
+
+Puedes volver a aplicar después de 90 días.
+
+Si tienes dudas, contáctanos:
+📞 {{tenant.phone}}
+
+Gracias por tu interés en {{tenant.name}}.',
+            ],
+            [
+                'name' => 'Solicitud Rechazada - SMS',
+                'event' => NotificationEvent::APPLICATION_REJECTED,
+                'channel' => NotificationChannel::SMS,
+                'priority' => 2,
+                'subject' => null,
+                'body' => '{{tenant.name}}: Tu solicitud {{application.folio}} no fue aprobada en esta ocasión. Puedes volver a aplicar en 90 días. Dudas: {{tenant.phone}}',
+            ],
+
+            // ==========================================
+            // CORRECCIONES SOLICITADAS
+            // ==========================================
+            [
+                'name' => 'Correcciones Solicitadas - Email',
+                'event' => NotificationEvent::APPLICATION_CORRECTIONS_REQUESTED,
+                'channel' => NotificationChannel::EMAIL,
+                'priority' => 2,
+                'subject' => '✏️ Correcciones requeridas - {{application.folio}}',
+                'body' => 'Hola {{user.first_name}},
+
+Necesitamos que corrijas algunos datos en tu solicitud {{application.folio}} para poder continuar con el proceso.
+
+Por favor ingresa a tu cuenta y revisa los campos marcados para corrección.
+
+Saludos,
+{{tenant.name}}',
+            ],
+            [
+                'name' => 'Correcciones Solicitadas - WhatsApp',
+                'event' => NotificationEvent::APPLICATION_CORRECTIONS_REQUESTED,
+                'channel' => NotificationChannel::WHATSAPP,
+                'priority' => 2,
+                'subject' => null,
+                'body' => '✏️ *Correcciones Requeridas*
+
+Hola *{{user.first_name}}*,
+
+Necesitamos que corrijas algunos datos en tu solicitud *{{application.folio}}*.
+
+Por favor ingresa a tu cuenta.
+
+{{tenant.name}}',
+            ],
+
+            // ==========================================
+            // ANALISTA ASIGNADO (STAFF)
+            // ==========================================
+            [
+                'name' => 'Analista Asignado - Email Staff',
+                'event' => NotificationEvent::ANALYST_ASSIGNED,
+                'channel' => NotificationChannel::EMAIL,
+                'priority' => 2,
+                'subject' => '📋 Nueva solicitud asignada - {{application.folio}}',
+                'body' => 'Hola {{staff.first_name}},
+
+Se te ha asignado una nueva solicitud de crédito para revisión:
+
+Solicitud: {{application.folio}}
+Solicitante: {{user.first_name}} {{user.last_name}}
+Monto: ${{currency application.amount}} MXN
+Plazo: {{application.term_months}} meses
+Producto: {{application.product_name}}
+
+Por favor revisa la solicitud en el panel administrativo.
+
+{{tenant.name}}',
+            ],
+            [
+                'name' => 'Analista Asignado - In-App Staff',
+                'event' => NotificationEvent::ANALYST_ASSIGNED,
+                'channel' => NotificationChannel::IN_APP,
+                'priority' => 2,
+                'subject' => 'Nueva solicitud asignada',
+                'body' => 'Se te ha asignado la solicitud {{application.folio}} de {{user.first_name}} {{user.last_name}} por ${{currency application.amount}}.',
+            ],
+
+            // ==========================================
+            // DOCUMENTOS APROBADOS
+            // ==========================================
+            [
+                'name' => 'Documentos Completos - WhatsApp',
+                'event' => NotificationEvent::DOCUMENTS_COMPLETE,
+                'channel' => NotificationChannel::WHATSAPP,
+                'priority' => 3,
+                'subject' => null,
+                'body' => '✅ *Documentos Aprobados*
+
+Hola *{{user.first_name}}*,
+
+Todos tus documentos han sido aprobados.
+
+Tu solicitud *{{application.folio}}* está siendo evaluada por nuestro equipo.
+
+{{tenant.name}}',
+            ],
+            [
+                'name' => 'Documentos Completos - In-App',
+                'event' => NotificationEvent::DOCUMENTS_COMPLETE,
+                'channel' => NotificationChannel::IN_APP,
+                'priority' => 3,
+                'subject' => 'Documentos aprobados',
+                'body' => 'Todos tus documentos han sido aprobados. Tu solicitud {{application.folio}} está siendo evaluada.',
+            ],
+
+            // ==========================================
+            // RECORDATORIOS
+            // ==========================================
+            [
+                'name' => 'Recordatorio Documentos Pendientes - WhatsApp',
+                'event' => NotificationEvent::REMINDER_PENDING_DOCS,
+                'channel' => NotificationChannel::WHATSAPP,
+                'priority' => 4,
+                'subject' => null,
+                'body' => '⏰ *Recordatorio*
+
+Hola *{{user.first_name}}*,
+
+Aún tienes documentos pendientes en tu solicitud *{{application.folio}}*.
+
+Por favor súbelos lo antes posible para continuar con tu proceso.
+
+{{tenant.name}}',
+            ],
+            [
+                'name' => 'Recordatorio Perfil Incompleto - Email',
+                'event' => NotificationEvent::REMINDER_INCOMPLETE_PROFILE,
+                'channel' => NotificationChannel::EMAIL,
+                'priority' => 5,
+                'subject' => '⏰ Completa tu perfil - {{tenant.name}}',
+                'body' => 'Hola {{user.first_name}},
+
+Notamos que tu perfil está incompleto.
+
+Por favor ingresa a tu cuenta y completa tu información para poder solicitar un crédito.
+
+Saludos,
+{{tenant.name}}',
+            ],
         ];
 
         foreach ($templates as $templateData) {
