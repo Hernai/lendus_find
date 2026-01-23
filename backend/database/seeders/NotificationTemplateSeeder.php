@@ -7,6 +7,7 @@ use App\Enums\NotificationEvent;
 use App\Models\NotificationTemplate;
 use App\Models\Tenant;
 use Illuminate\Database\Seeder;
+use Database\Seeders\ProfessionalEmailTemplates;
 
 class NotificationTemplateSeeder extends Seeder
 {
@@ -89,100 +90,7 @@ Por tu seguridad:
 - Si no solicitaste este código, ignora este mensaje
 
 {{tenant.name}}',
-                'html_body' => '<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, sans-serif; background-color: #f3f4f6;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f3f4f6; padding: 40px 0;">
-        <tr>
-            <td align="center">
-                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;">
-                    <!-- Header -->
-                    <tr>
-                        <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center;">
-                            <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">🔐 Código de Seguridad</h1>
-                        </td>
-                    </tr>
-
-                    <!-- Body -->
-                    <tr>
-                        <td style="padding: 40px 30px;">
-                            <p style="margin: 0 0 24px; font-size: 16px; line-height: 24px; color: #374151;">
-                                Hola,
-                            </p>
-
-                            <p style="margin: 0 0 32px; font-size: 16px; line-height: 24px; color: #374151;">
-                                Se ha solicitado un código de verificación para tu cuenta en <strong>{{tenant.name}}</strong>.
-                            </p>
-
-                            <!-- OTP Code Box -->
-                            <table width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 32px;">
-                                <tr>
-                                    <td align="center" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 32px;">
-                                        <p style="margin: 0 0 8px; font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.9); text-transform: uppercase; letter-spacing: 1px;">
-                                            Tu código de verificación
-                                        </p>
-                                        <p style="margin: 0; font-size: 48px; font-weight: 700; color: #ffffff; letter-spacing: 8px; font-family: \'Courier New\', monospace;">
-                                            {{otp.code}}
-                                        </p>
-                                    </td>
-                                </tr>
-                            </table>
-
-                            <table width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 32px; background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 16px;">
-                                <tr>
-                                    <td>
-                                        <p style="margin: 0 0 8px; font-size: 14px; font-weight: 600; color: #92400e;">
-                                            ⏱️ Tiempo de validez
-                                        </p>
-                                        <p style="margin: 0; font-size: 14px; color: #78350f;">
-                                            Este código expirará en <strong>{{otp.expires_in}} minutos</strong>
-                                        </p>
-                                    </td>
-                                </tr>
-                            </table>
-
-                            <!-- Security Notice -->
-                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #fee2e2; border-left: 4px solid #ef4444; border-radius: 8px; padding: 16px;">
-                                <tr>
-                                    <td>
-                                        <p style="margin: 0 0 12px; font-size: 14px; font-weight: 600; color: #991b1b;">
-                                            🛡️ Por tu seguridad
-                                        </p>
-                                        <ul style="margin: 0; padding-left: 20px; font-size: 14px; color: #7f1d1d; line-height: 20px;">
-                                            <li style="margin-bottom: 4px;">Nunca compartas este código con nadie</li>
-                                            <li style="margin-bottom: 4px;">Nuestro personal NUNCA te pedirá este código por teléfono o email</li>
-                                            <li>Si no solicitaste este código, ignora este mensaje o contacta a soporte</li>
-                                        </ul>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-
-                    <!-- Footer -->
-                    <tr>
-                        <td style="background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb;">
-                            <p style="margin: 0 0 8px; font-size: 14px; color: #6b7280;">
-                                Este es un correo automático, por favor no respondas.
-                            </p>
-                            <p style="margin: 0; font-size: 14px; font-weight: 600; color: #374151;">
-                                {{tenant.name}}
-                            </p>
-                            <p style="margin: 4px 0 0; font-size: 14px; color: #6b7280;">
-                                {{tenant.phone}} • {{tenant.email}}
-                            </p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>',
+                'html_body' => ProfessionalEmailTemplates::getOtpEmailHtml(),
             ],
 
             // ==========================================
