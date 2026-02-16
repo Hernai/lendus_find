@@ -1,211 +1,142 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
-LendusFind is a white-label **Loan Origination System (LOS) SaaS** for Mexican financial companies (SOFOMES). The system handles credit application onboarding, KYC validation, and integration with external financial systems via webhooks.
+LendusFind is a white-label **Loan Origination System (LOS) SaaS** for Mexican financial companies (SOFOMES). Handles credit application onboarding, KYC validation, and integration with external systems via webhooks.
 
 **Key Characteristics:**
-- **Agnostic**: Only captures clients, validates identity (KYC), and originates credit applications - does NOT manage portfolio or payments
-- **Integration First**: Sends standardized JSON via webhooks to external systems (SAP, Core Banking, Lendus, etc.)
-- **White-Label**: Multiple tenants use the same installation with custom branding, colors, and subdomains
-
-## Project Structure
-
-```
-LendusFind/
-├── backend/              # Laravel 12 API (PHP 8.2+)
-│   ├── app/
-│   │   ├── Http/Controllers/
-│   │   ├── Models/
-│   │   ├── Services/
-│   │   ├── Jobs/
-│   │   └── Traits/
-│   ├── database/migrations/
-│   ├── routes/api.php
-│   └── tests/
-│
-├── frontend/             # Vue.js 3 SPA (TypeScript)
-│   ├── src/
-│   │   ├── assets/
-│   │   ├── components/
-│   │   ├── composables/
-│   │   ├── router/
-│   │   ├── stores/       # Pinia stores
-│   │   ├── views/
-│   │   │   ├── public/       # Landing, Simulator
-│   │   │   ├── applicant/    # Auth, Onboarding, Dashboard
-│   │   │   └── admin/        # Auth, Panel
-│   │   └── types/
-│   ├── tailwind.config.js
-│   └── vite.config.ts
-│
-├── requerimientos/       # Project specifications & wireframes
-└── CLAUDE.md
-```
+- **Agnostic**: Only captures clients, validates identity (KYC), and originates credit applications — does NOT manage portfolio or payments
+- **Integration First**: Sends standardized JSON via webhooks to external systems (SAP, Core Banking, etc.)
+- **White-Label**: Multiple tenants, custom branding, subdomains
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| Backend | PHP 8.2+ with Laravel 12 (RESTful API, Sanctum Auth) |
-| Frontend | Vue.js 3 (Composition API + TypeScript) + Tailwind CSS |
-| Database | PostgreSQL 15+ (with JSONB fields for flexibility) |
-| Multitenancy | Single Database with Tenant Scoping (BelongsToTenant trait) |
-| Cache/Queue | Redis |
-| Storage | S3/MinIO for documents with signed URLs |
-| OTP | Twilio or MessageBird for SMS/WhatsApp |
+| Backend | PHP 8.2+ / Laravel 12 (RESTful API, Sanctum Auth) |
+| Frontend | Vue.js 3 (Composition API + TypeScript) + Tailwind CSS 3 |
+| Database | PostgreSQL 15+ (JSONB fields) |
+| Multitenancy | Single DB with Tenant Scoping (`HasTenant` trait) |
+| Cache/Queue | Redis (Predis) |
+| Storage | S3/MinIO (signed URLs) |
+| SMS/WhatsApp | Twilio |
+| KYC | Nubarium (CURP, RFC, INE, biometrics, OFAC/PLD) |
+| Email | SMTP / SendGrid / Mailgun (per tenant via TenantApiConfig) |
+| WebSocket | Laravel Reverb + Laravel Echo |
+| Templates | Handlebars (LightnCandy) for notifications |
+
+## Project Structure
+
+```
+LendusFind/
+├── backend/                    # Laravel 12 API
+│   ├── app/
+│   │   ├── Enums/              # 39 PHP 8.1 enums (HasOptions trait)
+│   │   ├── Http/Controllers/Api/V2/  # Public/, Applicant/, Staff/
+│   │   ├── Http/Middleware/    # IdentifyTenant, RequireStaff, RequirePermission
+│   │   ├── Models/             # 26 Eloquent models (UUID PKs, HasTenant)
+│   │   ├── Services/           # Business logic + ExternalApi/
+│   │   ├── Traits/             # HasTenant, HasUuid, HasAuditFields
+│   │   └── Jobs/               # SendNotificationJob
+│   ├── routes/api.php          # V2 API routes
+│   └── database/migrations/    # 82 migration files
+│
+├── frontend/                   # Vue.js 3 SPA
+│   └── src/
+│       ├── views/              # public/, applicant/, admin/
+│       ├── stores/             # Pinia: auth, tenant, application, onboarding, kyc, ui
+│       ├── services/v2/        # Role-based: *.applicant.service.ts, *.staff.service.ts
+│       ├── composables/        # useAsyncAction, useToast, useKyc*, useModal, etc.
+│       ├── components/         # common/, admin/, kyc/, simulator/
+│       └── types/v2/index.ts   # V2ApiResponse<T> and all V2 types
+│
+└── .claude/skills/             # Modular conventions (loaded on-demand)
+```
 
 ## Development Commands
 
-### Backend (Laravel)
-
 ```bash
+# Quick start
+./dev.sh start              # Backend :8000 + Frontend :5173
+./dev.sh stop
+
+# Backend
 cd backend
-
-# Install dependencies
-composer install
-
-# Run migrations
-php artisan migrate
-
-# Seed database
-php artisan db:seed
-
-# Start development server
-php artisan serve
-
-# Run tests
-php artisan test
-
-# Run single test
-php artisan test --filter=TestClassName
-
-# Queue worker
+composer install && php artisan serve
+php artisan migrate && php artisan db:seed
+php artisan test [--filter=TestClassName]
 php artisan queue:work redis
-
-# Clear caches
 php artisan cache:clear && php artisan config:clear && php artisan route:clear
-```
 
-### Frontend (Vue.js)
-
-```bash
+# Frontend
 cd frontend
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-
-# Build for production
+npm install && npm run dev
 npm run build
-
-# Lint and format
-npm run lint
-npm run format
-
-# Type check
-npm run type-check
+npm run lint && npm run format
+npm run type-check           # vue-tsc --noEmit
 ```
 
-## Architecture
+## Key Architecture Decisions
 
 ### Multitenancy
+- Tenant via subdomain or `X-Tenant-ID` header (slug or UUID)
+- `HasTenant` trait: auto-assigns `tenant_id` + global scope filter
+- Middleware stack: `tenant` → `metadata` → `auth:sanctum` → `staff` → `permission:method`
+- See `.claude/skills/multitenancy/` for details
 
-Tenant identification via subdomain (`tenant.losapp.com`) or `X-Tenant-Slug` header. All tenant-scoped models use the `BelongsToTenant` trait which:
-- Auto-assigns `tenant_id` on creation
-- Adds global scope to filter queries by current tenant
+### API (V2)
+- Route groups: `v2/public/`, `v2/applicant/`, `v2/staff/`
+- Response: `{ success: bool, data?: T, message?: string, error?: string, errors?: {} }`
+- `ApiResponses` trait on all controllers
+- See `.claude/skills/api-design/` for full endpoint catalog
 
-### Database Schema (Main Entities)
+### Application Lifecycle
+- 13 statuses (UPPERCASE): DRAFT → SUBMITTED → IN_REVIEW → ... → APPROVED/REJECTED
+- State machine with `canTransitionTo()` / `validateTransition()`
+- See `.claude/skills/application-lifecycle/` for complete workflow
 
-- **tenants**: Company configuration, branding (JSONB), webhook config
-- **products**: Credit product types (SIMPLE, NOMINA, ARRENDAMIENTO, HIPOTECARIO, PYME) with rules and required docs as JSONB
-- **users**: Authentication with roles (APPLICANT, SUPERVISOR, ANALYST, ADMIN, SUPER_ADMIN)
-- **applicants**: Client data (PERSONA_FISICA or PERSONA_MORAL) with JSONB fields for personal_data, address, employment_info
-- **applications**: Credit applications with status workflow (DRAFT → SUBMITTED → IN_REVIEW → DOCS_PENDING → APPROVED/REJECTED → SYNCED)
-- **documents**: Uploaded files with OCR data, status tracking
-- **references**: Personal/work references for applicants
-- **audit_logs**: Activity tracking
+## General Conventions
 
-### API Endpoints
+- **Language**: UI text, validation messages, toasts in **Spanish**
+- **IDs**: UUIDs everywhere (never auto-increment)
+- **Enums**: String-backed, UPPERCASE values, `HasOptions` trait (`toOptions()`, `toLabels()`)
+- **Mexican validators**: CURP (18 chars), RFC (12-13), CLABE (18 digits), Phone (10 digits +52)
+- **Backend**: PSR-12, PHP 8.2+ features, `ApiResponses` trait, constructor DI
+- **Frontend**: `<script setup lang="ts">`, Composition API, `V2ApiResponse<T>`, `isAxiosError()`
+- **Mobile-first**: Tailwind responsive, `primary-*` color system mapped to tenant CSS vars
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/config` | Tenant configuration and branding |
-| POST | `/api/auth/otp/send` | Send OTP via SMS/WhatsApp/Email |
-| POST | `/api/auth/otp/verify` | Verify OTP code |
-| GET | `/api/products` | List available products |
-| POST | `/api/simulator` | Calculate loan simulation |
-| POST | `/api/applicants` | Create/update applicant |
-| POST | `/api/applications` | Create application |
-| POST | `/api/applications/{id}/submit` | Submit application |
-| POST | `/api/documents` | Upload document |
-| GET | `/api/postal-codes/{cp}` | Lookup neighborhoods by postal code |
+## Roles & Permissions
 
-## Mexican-Specific Validations
+| Role | Admin Access | Key Permissions |
+|------|-------------|-----------------|
+| APPLICANT | No | Self-service only |
+| ANALYST | Yes | Review docs, verify references, change status (assigned only) |
+| SUPERVISOR | Yes | All analyst + approve/reject, assign analysts |
+| ADMIN | Yes | All supervisor + manage products, users |
+| SUPER_ADMIN | Yes | All admin + configure tenant, manage integrations |
 
-The system validates Mexican tax and identification formats:
-- **RFC** (Registro Federal de Contribuyentes): 13 chars for individuals, 12 for companies
-- **CURP** (Clave Única de Registro de Población): 18 chars with verification digit
-- **Phone**: 10 digits
-- **Postal Code**: 5 digits with SEPOMEX lookup
+Permission methods on `StaffAccount`: `canReviewDocuments()`, `canApproveRejectApplications()`, `canManageUsers()`, `canManageProducts()`, `canAssignApplications()`, `canConfigureTenant()`, etc.
 
-## Design Principles
+## Test Credentials (after seed)
 
-- **Mobile-First**: Single-column layouts on mobile, multi-column on desktop
-- **Conversational UI**: One main question per screen in the onboarding wizard
-- **Thumb-First**: Action buttons in bottom sticky zone for mobile ergonomics
-- **Progressive Disclosure**: Form fields revealed step by step (8-step wizard)
-- **White-Label Theming**: CSS variables (`--tenant-primary`, etc.) for dynamic branding
-
-## Roles y Permisos (Staff)
-
-El sistema tiene 5 tipos de usuario. Solo los roles de staff pueden acceder al panel administrativo (`/admin`).
-
-### Tipos de Usuario
-
-| Rol | Descripción | Acceso Admin |
-|-----|-------------|--------------|
-| `APPLICANT` | Solicitante de crédito | No |
-| `SUPERVISOR` | Supervisor (asigna y autoriza) | Sí |
-| `ANALYST` | Analista de crédito (revisa solicitudes) | Sí |
-| `ADMIN` | Administrador | Sí |
-| `SUPER_ADMIN` | Super Administrador | Sí |
-
-### Matriz de Permisos
-
-| Permiso | ANALYST | SUPERVISOR | ADMIN | SUPER_ADMIN |
-|---------|---------|------------|-------|-------------|
-| Ver solicitudes | Solo asignadas | Todas | Todas | Todas |
-| Revisar documentos | ✅ | ✅ | ✅ | ✅ |
-| Verificar referencias | ✅ | ✅ | ✅ | ✅ |
-| Cambiar status | ✅ | ✅ | ✅ | ✅ |
-| Aprobar/Rechazar | ❌ | ✅ | ✅ | ✅ |
-| Asignar a analistas | ❌ | ✅ | ✅ | ✅ |
-| Gestionar productos | ❌ | ❌ | ✅ | ✅ |
-| Gestionar usuarios | ❌ | ❌ | ✅ | ✅ |
-| Ver reportes | ✅ | ❌ | ✅ | ✅ |
-| Configurar tenant | ❌ | ❌ | ❌ | ✅ |
-
-### Implementación
-
-**Backend (Laravel):**
-- Enum `UserType`: `APPLICANT`, `SUPERVISOR`, `ANALYST`, `ADMIN`, `SUPER_ADMIN`
-- Métodos de permiso: `canReviewDocuments()`, `canVerifyReferences()`, `canChangeApplicationStatus()`, `canApproveRejectApplications()`, etc.
-- Middlewares: `staff` (verifica que sea staff), `permission:methodName` (verifica permiso específico)
-
-**Frontend (Vue):**
-- Store `auth.ts`: expone `isStaff`, `isSupervisor`, `isAnalyst`, `isAdmin`, `permissions`
-- Router: usa `requiresStaff` en meta para proteger rutas admin
-- `AdminLayout.vue`: filtra navegación según `permissions`
-
-### Credenciales de Prueba (después de seed)
-
-| Rol | Email | Password |
-|-----|-------|----------|
+| Role | Email | Password |
+|------|-------|----------|
 | Admin | admin@lendus.mx | password |
-| Analista | patricia.moreno@lendus.mx | password |
+| Analyst | patricia.moreno@lendus.mx | password |
 | Supervisor | carlos.ramirez@lendus.mx | password |
+
+## Skills Reference
+
+Detailed conventions are in `.claude/skills/`. Use when working on specific areas:
+
+| Skill | When to use |
+|-------|-------------|
+| `backend-conventions` | Creating/modifying PHP: controllers, models, services, enums, traits, migrations |
+| `frontend-conventions` | Creating/modifying Vue components, stores, services, composables, types |
+| `api-design` | Creating/consuming API endpoints, understanding permissions |
+| `database-patterns` | Creating migrations, working with JSONB, indexes, schema |
+| `kyc-integration` | Working with identity validation, CURP/RFC/INE, biometrics, Nubarium |
+| `notification-system` | Working with templates, channels, email delivery, SendNotificationJob |
+| `multitenancy` | Working with tenant scoping, branding, TenantApiConfig, identification |
+| `application-lifecycle` | Working with status workflow, transitions, approval/rejection, counter-offers |
+| `dev-ops` | Starting/stopping servers, installing deps, troubleshooting, scripts, env config |
