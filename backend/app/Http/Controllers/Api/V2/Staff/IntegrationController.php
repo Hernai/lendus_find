@@ -246,6 +246,31 @@ class IntegrationController extends Controller
                 }
             }
 
+            // Test SMTP email
+            if ($config->provider === 'smtp' && $config->service_type === 'email') {
+                $smtpService = \App\Services\ExternalApi\SmtpService::createFromConfig($config);
+
+                if ($request->filled('test_email')) {
+                    $result = $smtpService->sendTestEmail($request->test_email);
+                } else {
+                    $result = $smtpService->testConnection();
+                }
+
+                $config->update([
+                    'last_tested_at' => now(),
+                    'last_test_success' => $result['success'],
+                    'last_test_error' => $result['success'] ? null : ($result['error'] ?? $result['message'] ?? 'Error desconocido'),
+                ]);
+
+                if ($result['success']) {
+                    return $this->success([
+                        'details' => $result['details'] ?? null,
+                    ], $result['message'] ?? 'Prueba exitosa');
+                } else {
+                    return $this->badRequest('SMTP_ERROR', $result['message'] ?? 'Error de conexión SMTP');
+                }
+            }
+
             return $this->error('NOT_IMPLEMENTED', 'Test not implemented for this provider/service type', 501);
         } catch (\Exception $e) {
             $config->update([

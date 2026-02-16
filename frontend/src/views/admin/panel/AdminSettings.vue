@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { v2 } from '@/services/v2'
 import type { V2TenantInfo, V2ApiConfig } from '@/services/v2/config.staff.service'
 import { AppInput, AppConfirmModal } from '@/components/common'
@@ -62,8 +62,19 @@ const apiForm = ref({
   from_number: '',
   from_email: '',
   domain: '',
+  smtp_host: '',
+  smtp_port: '587',
+  smtp_encryption: 'tls',
+  smtp_from_name: '',
   is_active: true,
   is_sandbox: false
+})
+
+// Auto-select service_type when provider changes
+watch(() => apiForm.value.provider, (provider) => {
+  if (provider === 'smtp' && !editingApiConfig.value) {
+    apiForm.value.service_type = 'email'
+  }
 })
 
 // Visibility toggles for credential fields
@@ -168,6 +179,10 @@ const openAddApiModal = () => {
     from_number: '',
     from_email: '',
     domain: '',
+    smtp_host: '',
+    smtp_port: '587',
+    smtp_encryption: 'tls',
+    smtp_from_name: '',
     is_active: true,
     is_sandbox: false
   }
@@ -179,6 +194,7 @@ const openAddApiModal = () => {
 
 const openEditApiModal = (config: ApiConfig) => {
   editingApiConfig.value = config
+  const extra = config.extra_config ?? {}
   apiForm.value = {
     provider: config.provider,
     service_type: config.service_type,
@@ -189,6 +205,10 @@ const openEditApiModal = (config: ApiConfig) => {
     from_number: config.from_number || '',
     from_email: config.from_email || '',
     domain: config.domain || '',
+    smtp_host: (extra.host as string) || '',
+    smtp_port: (extra.port as string) || '587',
+    smtp_encryption: (extra.encryption as string) || 'tls',
+    smtp_from_name: (extra.from_name as string) || '',
     is_active: config.is_active,
     is_sandbox: config.is_sandbox
   }
@@ -218,6 +238,16 @@ const saveApiConfig = async () => {
     if (apiForm.value.api_secret) payload.api_secret = apiForm.value.api_secret
     if (apiForm.value.account_sid) payload.account_sid = apiForm.value.account_sid
     if (apiForm.value.auth_token) payload.auth_token = apiForm.value.auth_token
+
+    // Pack SMTP fields into extra_config
+    if (apiForm.value.provider === 'smtp') {
+      payload.extra_config = {
+        host: apiForm.value.smtp_host,
+        port: apiForm.value.smtp_port,
+        encryption: apiForm.value.smtp_encryption,
+        from_name: apiForm.value.smtp_from_name,
+      }
+    }
 
     await v2.staff.config.saveApiConfig(payload)
     await loadConfig()
@@ -291,6 +321,8 @@ const getProviderFields = (provider: string) => {
     case 'buro_credito':
     case 'circulo_credito':
       return ['api_key', 'api_secret']
+    case 'smtp':
+      return ['smtp_host', 'smtp_port', 'smtp_encryption', 'api_key', 'api_secret', 'from_email', 'smtp_from_name']
     default:
       return ['api_key']
   }
@@ -303,6 +335,11 @@ const getProviderLabels = (provider: string) => {
       return {
         api_key: 'Usuario (Username)',
         api_secret: 'Contraseña (Password)'
+      }
+    case 'smtp':
+      return {
+        api_key: 'Usuario (email)',
+        api_secret: 'Contraseña'
       }
     default:
       return {
@@ -319,6 +356,11 @@ const getProviderHelpText = (provider: string) => {
       return {
         api_key: 'Usuario proporcionado por Nubarium para autenticación Basic Auth',
         api_secret: 'Contraseña proporcionada por Nubarium para autenticación Basic Auth'
+      }
+    case 'smtp':
+      return {
+        api_key: 'Usuario de autenticación SMTP (generalmente tu email)',
+        api_secret: 'Contraseña SMTP. Para Gmail, usa una "Contraseña de aplicación"'
       }
     default:
       return {
@@ -406,8 +448,8 @@ const getProviderHelpText = (provider: string) => {
       </div>
 
       <!-- General Tab -->
-      <div v-show="activeTab === 'general'" class="p-6">
-        <div class="bg-white rounded-xl border border-gray-200 p-6 max-w-2xl">
+      <div v-show="activeTab === 'general'" class="p-6 w-full">
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-4">Información de la Empresa</h2>
 
           <div class="space-y-4">
@@ -777,6 +819,50 @@ const getProviderHelpText = (provider: string) => {
                   type="text"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="mg.miempresa.com"
+                />
+              </div>
+
+              <!-- SMTP specific fields -->
+              <div v-if="getProviderFields(apiForm.provider).includes('smtp_host')" class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Host SMTP</label>
+                  <input
+                    v-model="apiForm.smtp_host"
+                    type="text"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="smtp.gmail.com"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Puerto</label>
+                  <input
+                    v-model="apiForm.smtp_port"
+                    type="number"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="587"
+                  />
+                </div>
+              </div>
+
+              <div v-if="getProviderFields(apiForm.provider).includes('smtp_encryption')">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Encriptación</label>
+                <select
+                  v-model="apiForm.smtp_encryption"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="tls">TLS (STARTTLS) - Puerto 587</option>
+                  <option value="ssl">SSL - Puerto 465</option>
+                  <option value="none">Sin encriptación - Puerto 25</option>
+                </select>
+              </div>
+
+              <div v-if="getProviderFields(apiForm.provider).includes('smtp_from_name')">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Nombre del remitente</label>
+                <input
+                  v-model="apiForm.smtp_from_name"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="Mi Empresa"
                 />
               </div>
             </div>

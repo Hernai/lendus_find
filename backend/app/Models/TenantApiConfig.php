@@ -66,6 +66,7 @@ class TenantApiConfig extends Model
         'mati' => 'Mati (Metamap)',
         'onfido' => 'Onfido',
         'jumio' => 'Jumio',
+        'smtp' => 'SMTP (Correo propio)',
     ];
 
     /**
@@ -141,6 +142,7 @@ class TenantApiConfig extends Model
             'mailgun' => !empty($this->api_key) && !empty($this->domain),
             'sendgrid', 'mati' => !empty($this->api_key),
             'nubarium', 'circulo_credito' => !empty($this->api_key) && !empty($this->api_secret),
+            'smtp' => !empty($this->extra_config['host']) && !empty($this->extra_config['port']),
             default => !empty($this->api_key),
         };
     }
@@ -178,6 +180,7 @@ class TenantApiConfig extends Model
             'is_sandbox' => $this->is_sandbox,
             'has_credentials' => $this->hasCredentials(),
             'masked_credentials' => $this->getMaskedCredentials(),
+            'extra_config' => $this->extra_config,
             'last_tested_at' => $this->last_tested_at?->toISOString(),
             'last_test_success' => $this->last_test_success,
             'last_test_error' => $this->last_test_error,

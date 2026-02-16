@@ -9,6 +9,8 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use App\Models\TenantApiConfig;
+use App\Services\ExternalApi\SmtpService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Twilio\Rest\Client as TwilioClient;
@@ -160,13 +162,27 @@ class SendNotificationJob implements ShouldQueue
 
     /**
      * Send Email via configured provider.
+     *
+     * Priority: TenantApiConfig SMTP integration > tenant settings > default SMTP.
      */
     protected function sendEmail(): array
     {
         try {
             $tenant = $this->log->tenant;
-            $settings = $tenant->settings ?? [];
 
+            // Check for SMTP integration in TenantApiConfig first
+            $smtpConfig = TenantApiConfig::where('tenant_id', $tenant->id)
+                ->where('provider', 'smtp')
+                ->where('service_type', 'email')
+                ->where('is_active', true)
+                ->first();
+
+            if ($smtpConfig && $smtpConfig->hasCredentials()) {
+                return $this->sendEmailViaSmtpIntegration($smtpConfig);
+            }
+
+            // Fallback to tenant settings
+            $settings = $tenant->settings ?? [];
             $provider = $settings['email_provider'] ?? 'sendgrid';
 
             return match ($provider) {
@@ -174,6 +190,25 @@ class SendNotificationJob implements ShouldQueue
                 'mailgun' => $this->sendEmailViaMailgun(),
                 default => $this->sendEmailViaSmtp(),
             };
+        } catch (\Exception $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Send email via tenant SMTP integration (TenantApiConfig).
+     */
+    protected function sendEmailViaSmtpIntegration(TenantApiConfig $config): array
+    {
+        try {
+            $smtpService = SmtpService::createFromConfig($config);
+
+            return $smtpService->sendEmail(
+                $this->log->recipient,
+                $this->log->subject,
+                $this->log->body,
+                $this->log->html_body
+            );
         } catch (\Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }

@@ -55,6 +55,7 @@ export interface V2ApiConfig {
   is_sandbox: boolean
   has_credentials: boolean
   masked_credentials: Record<string, string | null>
+  extra_config?: Record<string, unknown>
   last_tested_at: string | null
   last_test_success: boolean | null
   last_test_error: string | null

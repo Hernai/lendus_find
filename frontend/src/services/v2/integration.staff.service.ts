@@ -32,6 +32,7 @@ export interface V2Integration {
     api_key?: string
     api_secret?: string
   }
+  extra_config?: Record<string, unknown>
   last_tested_at?: string
   last_test_success?: boolean
   last_test_error?: string

@@ -93,7 +93,23 @@
                   </div>
                 </template>
 
-                <!-- Email providers -->
+                <!-- SMTP specific -->
+                <template v-else-if="integration.provider === 'smtp'">
+                  <div v-if="integration.extra_config?.host" class="flex justify-between">
+                    <span class="text-gray-500">Servidor</span>
+                    <span class="font-mono text-gray-900 text-xs">{{ integration.extra_config.host }}:{{ integration.extra_config.port }}</span>
+                  </div>
+                  <div v-if="integration.extra_config?.encryption" class="flex justify-between">
+                    <span class="text-gray-500">Encriptación</span>
+                    <span class="font-mono text-gray-900 text-xs uppercase">{{ integration.extra_config.encryption }}</span>
+                  </div>
+                  <div v-if="integration.from_email" class="flex justify-between">
+                    <span class="text-gray-500">Email</span>
+                    <span class="font-mono text-gray-900 text-xs">{{ integration.from_email }}</span>
+                  </div>
+                </template>
+
+                <!-- Email providers (API-based) -->
                 <template v-else-if="integration.service_type === 'email'">
                   <div v-if="integration.from_email" class="flex justify-between">
                     <span class="text-gray-500">Email</span>
@@ -148,7 +164,7 @@
               <!-- Primary Actions Row -->
               <div class="flex gap-2">
                 <button
-                  v-if="['sms', 'whatsapp', 'kyc'].includes(integration.service_type)"
+                  v-if="['sms', 'whatsapp', 'kyc', 'email'].includes(integration.service_type)"
                   @click="openQuickTestModal(integration)"
                   class="flex-1 px-3 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors flex items-center justify-center gap-1.5 font-medium"
                 >
@@ -264,7 +280,7 @@
             </div>
           </div>
 
-          <!-- Twilio Specific Fields -->
+          <!-- Provider-Specific Fields -->
           <div v-if="form.provider === 'twilio'" class="space-y-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Account SID *</label>
@@ -303,7 +319,6 @@
             </div>
           </div>
 
-          <!-- Nubarium Specific Fields -->
           <div v-else-if="form.provider === 'nubarium'" class="space-y-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">API Key *</label>
@@ -341,8 +356,110 @@
             </div>
           </div>
 
+          <!-- SMTP Specific Fields -->
+          <div v-if="form.provider === 'smtp'" class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Host SMTP *</label>
+                <input
+                  v-model="form.smtp_host"
+                  type="text"
+                  required
+                  placeholder="smtp.gmail.com"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Puerto *</label>
+                <input
+                  v-model="form.smtp_port"
+                  type="number"
+                  required
+                  placeholder="587"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Encriptación *</label>
+              <select
+                v-model="form.smtp_encryption"
+                required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="tls">TLS (STARTTLS) - Puerto 587</option>
+                <option value="ssl">SSL - Puerto 465</option>
+                <option value="none">Sin encriptación - Puerto 25</option>
+              </select>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Usuario (email) *</label>
+                <input
+                  v-model="form.api_key"
+                  type="text"
+                  :required="!editingIntegration"
+                  placeholder="tu@empresa.com"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+                <p v-if="editingIntegration" class="mt-1 text-xs text-gray-500">Dejar vacío para mantener el actual</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Contraseña *</label>
+                <input
+                  v-model="form.api_secret"
+                  type="password"
+                  :required="!editingIntegration"
+                  placeholder="••••••••••••••••"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+                <p v-if="editingIntegration" class="mt-1 text-xs text-gray-500">Dejar vacío para mantener el actual</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Email de Origen *</label>
+                <input
+                  v-model="form.from_email"
+                  type="email"
+                  required
+                  placeholder="notificaciones@empresa.com"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Nombre del Remitente</label>
+                <input
+                  v-model="form.smtp_from_name"
+                  type="text"
+                  placeholder="Mi Empresa"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+              </div>
+            </div>
+
+            <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div class="flex items-start gap-2">
+                <svg class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                </svg>
+                <div class="text-sm text-blue-800">
+                  <p class="font-medium mb-1">Configuraciones comunes:</p>
+                  <ul class="space-y-0.5 text-xs">
+                    <li><strong>Gmail:</strong> smtp.gmail.com : 587 (TLS) - Usar contraseña de aplicación</li>
+                    <li><strong>Office 365:</strong> smtp.office365.com : 587 (TLS)</li>
+                    <li><strong>Outlook:</strong> smtp-mail.outlook.com : 587 (TLS)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Generic API Key Fields (for other providers) -->
-          <div v-else-if="form.provider && !['twilio', 'nubarium'].includes(form.provider)" class="space-y-4">
+          <div v-if="form.provider && !['twilio', 'nubarium', 'smtp'].includes(form.provider)" class="space-y-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">API Key *</label>
               <input
@@ -585,9 +702,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { v2 } from '@/services/v2'
-import type { V2Integration } from '@/services/v2/integration.staff.service'
+import type { V2Integration, V2IntegrationPayload } from '@/services/v2/integration.staff.service'
 import { getErrorMessage } from '@/types/api'
 import { AppConfirmModal } from '@/components/common'
 import { useToast } from '@/composables'
@@ -618,8 +735,19 @@ const form = ref({
   from_number: '',
   from_email: '',
   domain: '',
+  smtp_host: '',
+  smtp_port: '587',
+  smtp_encryption: 'tls',
+  smtp_from_name: '',
   is_active: true,
   is_sandbox: false,
+})
+
+// Auto-select service_type when provider changes
+watch(() => form.value.provider, (provider) => {
+  if (provider === 'smtp' && !editingIntegration.value) {
+    form.value.service_type = 'email'
+  }
 })
 
 // Test Modal
@@ -674,6 +802,10 @@ const openNewIntegrationModal = () => {
     from_number: '',
     from_email: '',
     domain: '',
+    smtp_host: '',
+    smtp_port: '587',
+    smtp_encryption: 'tls',
+    smtp_from_name: '',
     is_active: true,
     is_sandbox: false,
   }
@@ -683,6 +815,7 @@ const openNewIntegrationModal = () => {
 // Open edit modal
 const openEditModal = (integration: Integration) => {
   editingIntegration.value = integration
+  const extra = integration.extra_config ?? {}
   form.value = {
     provider: integration.provider,
     service_type: integration.service_type,
@@ -693,6 +826,10 @@ const openEditModal = (integration: Integration) => {
     from_number: integration.from_number || '',
     from_email: integration.from_email || '',
     domain: integration.domain || '',
+    smtp_host: (extra.host as string) || '',
+    smtp_port: (extra.port as string) || '587',
+    smtp_encryption: (extra.encryption as string) || 'tls',
+    smtp_from_name: (extra.from_name as string) || '',
     is_active: integration.is_active,
     is_sandbox: integration.is_sandbox,
   }
@@ -709,7 +846,31 @@ const closeEditModal = () => {
 const saveIntegration = async () => {
   try {
     isSaving.value = true
-    await v2.staff.integration.save(form.value)
+    const payload: V2IntegrationPayload = {
+      provider: form.value.provider,
+      service_type: form.value.service_type,
+      account_sid: form.value.account_sid || undefined,
+      auth_token: form.value.auth_token || undefined,
+      api_key: form.value.api_key || undefined,
+      api_secret: form.value.api_secret || undefined,
+      from_number: form.value.from_number || undefined,
+      from_email: form.value.from_email || undefined,
+      domain: form.value.domain || undefined,
+      is_active: form.value.is_active,
+      is_sandbox: form.value.is_sandbox,
+    }
+
+    // Pack SMTP fields into extra_config
+    if (form.value.provider === 'smtp') {
+      payload.extra_config = {
+        host: form.value.smtp_host,
+        port: form.value.smtp_port,
+        encryption: form.value.smtp_encryption,
+        from_name: form.value.smtp_from_name,
+      }
+    }
+
+    await v2.staff.integration.save(payload)
     await loadIntegrations()
     closeEditModal()
     toast.success('Integración guardada')
