@@ -140,3 +140,4 @@ Detailed conventions are in `.claude/skills/`. Use when working on specific area
 | `multitenancy` | Working with tenant scoping, branding, TenantApiConfig, identification |
 | `application-lifecycle` | Working with status workflow, transitions, approval/rejection, counter-offers |
 | `dev-ops` | Starting/stopping servers, installing deps, troubleshooting, scripts, env config |
+| `git-workflow` | Git commits, branches, PRs, tags, versionado — Conventional Commits en español |
