@@ -48,8 +48,10 @@ class SendNotificationJob implements ShouldQueue
     public function handle(): void
     {
         try {
-            // Get channel enum
-            $channel = NotificationChannel::from($this->log->channel);
+            // Get channel enum (already cast on the model, but handle string fallback)
+            $channel = $this->log->channel instanceof NotificationChannel
+                ? $this->log->channel
+                : NotificationChannel::from($this->log->channel);
 
             // Send via appropriate channel
             $result = match ($channel) {

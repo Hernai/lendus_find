@@ -313,6 +313,7 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff'])
             Route::post('/', [StaffNotificationTemplateController::class, 'store']);
             Route::get('/{id}', [StaffNotificationTemplateController::class, 'show']);
             Route::put('/{id}', [StaffNotificationTemplateController::class, 'update']);
+            Route::post('/{id}/send-test', [StaffNotificationTemplateController::class, 'sendTest']);
             Route::delete('/{id}', [StaffNotificationTemplateController::class, 'destroy']);
         });
 

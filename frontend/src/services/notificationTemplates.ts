@@ -71,6 +71,16 @@ export interface TestRenderResponse {
   extracted_variables: string[]
 }
 
+export interface SendTestPayload {
+  recipient: string
+  variables?: Record<string, unknown>
+}
+
+export interface SendTestResponse {
+  log_id: string
+  status: string
+}
+
 export const notificationTemplatesApi = {
   /**
    * Get all notification templates
@@ -139,5 +149,13 @@ export const notificationTemplatesApi = {
       data
     )
     return response.data.data
+  },
+
+  async sendTest(id: string, data: SendTestPayload) {
+    const response = await api.post<{ data: SendTestResponse; message: string }>(
+      `/v2/staff/notification-templates/${id}/send-test`,
+      data
+    )
+    return response.data
   },
 }

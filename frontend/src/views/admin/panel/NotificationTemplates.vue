@@ -6,6 +6,12 @@ import {
   type NotificationTemplate,
   type TemplateConfig,
 } from '@/services/notificationTemplates'
+import SendTestModal from '@/components/admin/notification-templates/SendTestModal.vue'
+import ConfirmModal from '@/components/admin/ConfirmModal.vue'
+import { useToast } from '@/composables/useToast'
+import { emailHtml, detailRows } from '@/utils/emailHtmlHelper'
+
+const toast = useToast()
 
 const router = useRouter()
 
@@ -13,6 +19,15 @@ const templates = ref<NotificationTemplate[]>([])
 const config = ref<TemplateConfig | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+
+// Send test modal
+const showSendTestModal = ref(false)
+const sendTestTemplate = ref<NotificationTemplate | null>(null)
+
+const openSendTest = (template: NotificationTemplate) => {
+  sendTestTemplate.value = template
+  showSendTestModal.value = true
+}
 
 // Filters
 const filterEvent = ref<string>('')
@@ -97,57 +112,44 @@ const stats = computed(() => {
 
 // Create suggested templates
 const creatingSuggested = ref(false)
+const showSuggestedConfirm = ref(false)
 
-const createSuggestedTemplates = async () => {
-  if (!confirm('¿Crear plantillas sugeridas profesionales? Se crearán 8 plantillas de ejemplo que podrás editar después.')) {
+const suggestedModeOptions = [
+  { value: 'replace', label: 'Reemplazar todas las existentes' },
+  { value: 'delete', label: 'Eliminar existentes (sin crear nuevas)' },
+  { value: 'keep', label: 'Mantener existentes y agregar nuevas' },
+]
+
+const onSuggestedConfirm = async (data: { selectValue?: string }) => {
+  const mode = data.selectValue as 'replace' | 'delete' | 'keep'
+  if (!mode) return
+
+  if (mode === 'delete') {
+    creatingSuggested.value = true
+    try {
+      const existing = templates.value || []
+      for (const t of existing) {
+        await notificationTemplatesApi.delete(t.id)
+      }
+      await loadTemplates()
+      showSuggestedConfirm.value = false
+      toast.success(`Se eliminaron ${existing.length} plantillas exitosamente`)
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Error al eliminar plantillas')
+    } finally {
+      creatingSuggested.value = false
+    }
     return
   }
 
+  await createSuggestedTemplates(mode)
+}
+
+const createSuggestedTemplates = async (mode: 'replace' | 'keep') => {
   creatingSuggested.value = true
   try {
     const suggestedTemplates = [
-      // Solicitud Recibida
-      {
-        name: 'Solicitud Recibida - Email Elegante',
-        event: 'application.submitted',
-        channel: 'EMAIL',
-        is_active: true,
-        priority: 5,
-        subject: '¡Solicitud Recibida! - {{application.folio}}',
-        body: 'Hola {{applicant.first_name}}, hemos recibido tu solicitud.',
-        html_body: `<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{{tenant.name}}</title></head>
-<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background-color:#f5f5f5">
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f5f5f5;padding:40px 0"><tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" border="0" style="background-color:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1)">
-<tr><td style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:40px 30px;text-align:center">
-<h1 style="margin:0;color:#fff;font-size:28px;font-weight:700">{{tenant.name}}</h1>
-</td></tr>
-<tr><td style="padding:40px 30px">
-<h2 style="margin:0 0 20px 0;color:#1a202c;font-size:24px;font-weight:600">¡Hola {{applicant.first_name}}!</h2>
-<p style="margin:0 0 20px 0;color:#4a5568;font-size:16px;line-height:1.6">Tu solicitud ha sido recibida exitosamente. Nuestro equipo está revisando tu información.</p>
-<div style="background:linear-gradient(135deg,#667eea15 0%,#764ba215 100%);border-radius:12px;padding:24px;margin:30px 0">
-<table width="100%" cellpadding="0" cellspacing="0" border="0">
-<tr><td style="padding:8px 0;color:#4a5568;font-size:14px;font-weight:600">Folio:</td>
-<td align="right" style="padding:8px 0;color:#1a202c;font-size:14px;font-weight:700">{{application.folio}}</td></tr>
-<tr><td style="padding:8px 0;color:#4a5568;font-size:14px;font-weight:600">Monto:</td>
-<td align="right" style="padding:8px 0;color:#1a202c;font-size:14px;font-weight:700">{{application.amount}}</td></tr>
-</table>
-</div>
-<p style="margin:30px 0 0 0;color:#718096;font-size:14px;line-height:1.6">Si tienes alguna pregunta, no dudes en contactarnos.</p>
-</td></tr>
-<tr><td style="background-color:#f7fafc;padding:30px;text-align:center;border-top:1px solid #e2e8f0">
-<p style="margin:0 0 10px 0;color:#718096;font-size:14px">{{tenant.name}}</p>
-<p style="margin:0;color:#a0aec0;font-size:12px">Este correo fue enviado automáticamente</p>
-</td></tr>
-</table>
-</td></tr></table>
-</body>
-</html>`,
-      },
-
-      // Código OTP
+      // ═══════════════ OTP ═══════════════
       {
         name: 'Código de Verificación - Email',
         event: 'otp.sent',
@@ -155,93 +157,32 @@ const createSuggestedTemplates = async () => {
         is_active: true,
         priority: 1,
         subject: 'Tu código de verificación: {{otp.code}}',
-        body: 'Tu código: {{otp.code}}',
+        body: '{{tenant.name}}: Tu código de verificación es {{otp.code}}. Válido por {{otp.expires_in}} minutos.',
         html_body: `<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background-color:#f3f4f6">
 <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f3f4f6;padding:40px 20px"><tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" border="0" style="background-color:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1)">
-<tr><td style="padding:40px 30px;text-align:center;background-color:#3b82f6">
+<tr><td style="padding:40px 30px;text-align:center;background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%)">
 <h1 style="margin:0;color:#fff;font-size:24px;font-weight:700">{{tenant.name}}</h1>
 </td></tr>
 <tr><td style="padding:40px 30px;text-align:center">
-<div style="width:80px;height:80px;background-color:#dbeafe;border-radius:50%;margin:0 auto 24px;line-height:80px;font-size:40px">🔐</div>
-<h2 style="margin:0 0 16px 0;color:#1f2937;font-size:28px;font-weight:700">Código de Verificación</h2>
+<h2 style="margin:0 0 16px 0;color:#1f2937;font-size:24px;font-weight:700">Código de Verificación</h2>
 <p style="margin:0 0 32px 0;color:#6b7280;font-size:16px">Usa el siguiente código para verificar tu identidad:</p>
 <div style="background:linear-gradient(135deg,#3b82f6 0%,#2563eb 100%);padding:24px 48px;border-radius:12px;margin:0 auto 24px;display:inline-block">
 <span style="color:#fff;font-size:36px;font-weight:700;letter-spacing:8px;font-family:'Courier New',monospace">{{otp.code}}</span>
 </div>
-<p style="margin:0;color:#6b7280;font-size:14px">Este código expirará en <strong>{{otp.expires_in}}</strong></p>
+<p style="margin:0;color:#6b7280;font-size:14px">Este código expirará en <strong>{{otp.expires_in}} minutos</strong></p>
 </td></tr>
 <tr><td style="background-color:#f9fafb;padding:24px 30px;text-align:center;border-top:1px solid #e5e7eb">
-<p style="margin:0;color:#9ca3af;font-size:12px">{{tenant.name}} • Mensaje automático</p>
+<p style="margin:0;color:#9ca3af;font-size:12px">{{tenant.name}} · Mensaje automático</p>
 </td></tr>
 </table>
 </td></tr></table>
 </body>
 </html>`,
       },
-
-      // Solicitud Aprobada
-      {
-        name: 'Solicitud Aprobada - Email',
-        event: 'application.approved',
-        channel: 'EMAIL',
-        is_active: true,
-        priority: 3,
-        subject: '¡Felicidades! Tu solicitud ha sido aprobada',
-        body: 'Tu solicitud {{application.folio}} ha sido aprobada',
-        html_body: `<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:linear-gradient(135deg,#f5f7fa 0%,#c3cfe2 100%)">
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="padding:60px 20px"><tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" border="0" style="background-color:#fff;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.15)">
-<tr><td align="center" style="padding:50px 30px 30px 30px">
-<div style="width:80px;height:80px;background:linear-gradient(135deg,#10b981 0%,#059669 100%);border-radius:50%;display:inline-flex;align-items:center;justify-content:center">
-<span style="color:#fff;font-size:40px">✓</span>
-</div>
-</td></tr>
-<tr><td align="center" style="padding:0 30px 20px 30px">
-<h1 style="margin:0;color:#1e293b;font-size:28px;font-weight:700">¡Solicitud Aprobada!</h1>
-</td></tr>
-<tr><td style="padding:0 30px 30px 30px">
-<p style="margin:0 0 30px 0;color:#64748b;font-size:16px;line-height:1.6;text-align:center">
-Hola <strong style="color:#1e293b">{{applicant.first_name}}</strong>, tu solicitud ha sido aprobada exitosamente.
-</p>
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f8fafc;border-radius:12px">
-<tr><td style="padding:24px">
-<p style="margin:0;color:#64748b;font-size:13px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">Folio</p>
-<p style="margin:4px 0 0 0;color:#1e293b;font-size:20px;font-weight:700">{{application.folio}}</p>
-<p style="margin:16px 0 0 0;padding-top:12px;border-top:1px solid #e2e8f0;color:#64748b;font-size:13px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">Monto Aprobado</p>
-<p style="margin:4px 0 0 0;color:#10b981;font-size:24px;font-weight:700">{{application.amount}}</p>
-</td></tr>
-</table>
-</td></tr>
-<tr><td style="background-color:#f8fafc;padding:30px;text-align:center">
-<p style="margin:0 0 8px 0;color:#1e293b;font-size:14px;font-weight:600">{{tenant.name}}</p>
-<p style="margin:0;color:#94a3b8;font-size:12px">Mensaje automático</p>
-</td></tr>
-</table>
-</td></tr></table>
-</body>
-</html>`,
-      },
-
-      // WhatsApp OTP
-      {
-        name: 'Código OTP - WhatsApp',
-        event: 'otp.sent',
-        channel: 'WHATSAPP',
-        is_active: true,
-        priority: 1,
-        subject: null,
-        body: '*{{tenant.name}}*\n\nTu código de verificación es:\n\n*{{otp.code}}*\n\nExpira en {{otp.expires_in}}',
-        html_body: null,
-      },
-
-      // SMS OTP
       {
         name: 'Código OTP - SMS',
         event: 'otp.sent',
@@ -249,120 +190,551 @@ Hola <strong style="color:#1e293b">{{applicant.first_name}}</strong>, tu solicit
         is_active: true,
         priority: 1,
         subject: null,
-        body: '{{tenant.name}}: Tu código es {{otp.code}}. Expira en {{otp.expires_in}}',
+        body: '{{tenant.name}}: Tu código es {{otp.code}}. Expira en {{otp.expires_in}} min. No lo compartas.',
+        html_body: null,
+      },
+      {
+        name: 'Código OTP - WhatsApp',
+        event: 'otp.sent',
+        channel: 'WHATSAPP',
+        is_active: true,
+        priority: 1,
+        subject: null,
+        body: '*{{tenant.name}}*\n\nTu código de verificación es:\n\n*{{otp.code}}*\n\nExpira en {{otp.expires_in}} minutos. No lo compartas con nadie.',
         html_body: null,
       },
 
-      // Notificación In-App
+      // ═══════════════ REGISTRO Y PERFIL ═══════════════
+      {
+        name: 'Bienvenida - Email',
+        event: 'user.registered',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 5,
+        subject: '¡Bienvenido/a a {{tenant.name}}!',
+        body: 'Hola {{applicant.first_name}}, tu cuenta ha sido creada exitosamente en {{tenant.name}}.',
+        html_body: emailHtml({
+          gradient: '#667eea 0%,#764ba2 100%',
+          heading: '¡Bienvenido/a!',
+          icon: 'wave',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0 0 16px 0;color:#374151;font-size:16px;line-height:1.6">Tu cuenta ha sido creada exitosamente. Ya puedes iniciar tu solicitud de crédito.</p><p style="margin:0;color:#6b7280;font-size:14px">Si tienes alguna pregunta, no dudes en contactarnos.</p>',
+          ctaText: 'Acceder',
+          ctaUrl: '{{dashboard_url}}',
+        }),
+      },
+      {
+        name: 'Bienvenida - SMS',
+        event: 'user.registered',
+        channel: 'SMS',
+        is_active: true,
+        priority: 5,
+        subject: null,
+        body: '{{tenant.name}}: Bienvenido/a {{applicant.first_name}}. Tu cuenta ha sido creada. Inicia sesión para continuar.',
+        html_body: null,
+      },
+      {
+        name: 'Perfil Completado - Email',
+        event: 'profile.completed',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 5,
+        subject: 'Perfil completado - {{tenant.name}}',
+        body: 'Hola {{applicant.first_name}}, tu perfil ha sido completado. Ya puedes enviar tu solicitud.',
+        html_body: emailHtml({
+          gradient: '#10b981 0%,#059669 100%',
+          heading: 'Perfil Completado',
+          icon: 'check',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Tu perfil ha sido completado exitosamente. Ya puedes continuar con tu solicitud de crédito.</p>',
+          ctaText: 'Continuar Solicitud',
+          ctaUrl: '{{dashboard_url}}',
+        }),
+      },
+      {
+        name: 'Perfil Completado - In App',
+        event: 'profile.completed',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 5,
+        subject: 'Perfil completado',
+        body: 'Tu perfil ha sido completado exitosamente. Ya puedes enviar tu solicitud.',
+        html_body: null,
+      },
+
+      // ═══════════════ SOLICITUD - CREACIÓN Y ENVÍO ═══════════════
+      {
+        name: 'Solicitud Creada - In App',
+        event: 'application.created',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 5,
+        subject: 'Solicitud creada',
+        body: 'Tu solicitud {{application.folio}} ha sido creada. Completa tu información y envíala para revisión.',
+        html_body: null,
+      },
+      {
+        name: 'Solicitud Recibida - Email',
+        event: 'application.submitted',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 5,
+        subject: '¡Solicitud Recibida! - {{application.folio}}',
+        body: 'Hola {{applicant.first_name}}, hemos recibido tu solicitud {{application.folio}}.',
+        html_body: emailHtml({
+          gradient: '#667eea 0%,#764ba2 100%',
+          heading: '¡Solicitud Recibida!',
+          icon: 'mail-sent',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Tu solicitud ha sido recibida exitosamente. Nuestro equipo la revisará pronto.</p>',
+          details: detailRows(['Folio', '{{application.folio}}'], ['Monto', '{{application.amount}}'], ['Producto', '{{application.product_name}}']),
+          detailsTitle: 'Detalles de la Solicitud',
+          detailsTint: 'purple',
+        }),
+      },
+      {
+        name: 'Solicitud Recibida - SMS',
+        event: 'application.submitted',
+        channel: 'SMS',
+        is_active: true,
+        priority: 5,
+        subject: null,
+        body: '{{tenant.name}}: Recibimos tu solicitud {{application.folio}}. Te notificaremos cuando haya novedades.',
+        html_body: null,
+      },
+      {
+        name: 'Solicitud Recibida - In App',
+        event: 'application.submitted',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 5,
+        subject: 'Solicitud enviada',
+        body: 'Tu solicitud {{application.folio}} ha sido enviada y está pendiente de revisión.',
+        html_body: null,
+      },
+
+      // ═══════════════ SOLICITUD - EN REVISIÓN ═══════════════
+      {
+        name: 'Solicitud en Revisión - Email',
+        event: 'application.in_review',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 5,
+        subject: 'Tu solicitud está en revisión - {{application.folio}}',
+        body: 'Hola {{applicant.first_name}}, tu solicitud {{application.folio}} está siendo revisada por nuestro equipo.',
+        html_body: emailHtml({
+          gradient: '#f59e0b 0%,#d97706 100%',
+          heading: 'Solicitud en Revisión',
+          icon: 'search',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Tu solicitud está siendo revisada por nuestro equipo. Te notificaremos cuando tengamos novedades.</p>',
+          details: detailRows(['Folio', '{{application.folio}}'], ['Producto', '{{application.product_name}}']),
+          detailsTitle: 'Tu Solicitud',
+          detailsTint: 'amber',
+        }),
+      },
       {
         name: 'Solicitud en Revisión - In App',
         event: 'application.in_review',
         channel: 'IN_APP',
         is_active: true,
         priority: 5,
-        subject: 'Tu solicitud está en revisión',
-        body: 'Estamos revisando tu solicitud {{application.folio}}. Te notificaremos cuando tengamos novedades.',
+        subject: 'Solicitud en revisión',
+        body: 'Tu solicitud {{application.folio}} está siendo revisada. Te notificaremos cuando tengamos novedades.',
         html_body: null,
       },
 
-      // Documentos Pendientes
+      // ═══════════════ SOLICITUD - APROBADA ═══════════════
       {
-        name: 'Documentos Pendientes - Email',
-        event: 'documents.pending',
+        name: 'Solicitud Aprobada - Email',
+        event: 'application.approved',
         channel: 'EMAIL',
         is_active: true,
-        priority: 4,
-        subject: 'Documentos pendientes - {{application.folio}}',
-        body: 'Necesitamos documentación adicional',
-        html_body: `<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background-color:#ffffff">
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fff;padding:40px 20px"><tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" border="0">
-<tr><td style="padding:0 0 40px 0;border-bottom:2px solid #000">
-<h1 style="margin:0;color:#000;font-size:24px;font-weight:700">{{tenant.name}}</h1>
-</td></tr>
-<tr><td style="padding:40px 0">
-<h2 style="margin:0 0 24px 0;color:#000;font-size:32px;font-weight:700">Hola {{applicant.first_name}}</h2>
-<p style="margin:0 0 20px 0;color:#333;font-size:16px;line-height:1.7">
-Necesitamos documentación adicional para continuar con tu solicitud <strong>{{application.folio}}</strong>.
-</p>
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:40px 0;border:2px solid #000;border-radius:4px">
-<tr><td style="padding:30px">
-<p style="margin:0 0 16px 0;color:#000;font-size:18px;font-weight:700">Documentos Requeridos:</p>
-<ul style="margin:0;padding-left:20px;color:#333;font-size:15px;line-height:1.8">
-<li>Identificación oficial vigente</li>
-<li>Comprobante de domicilio reciente</li>
-<li>Comprobante de ingresos</li>
-</ul>
-</td></tr>
-</table>
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:40px 0">
-<tr><td>
-<a href="#" style="display:inline-block;background-color:#000;color:#fff;text-decoration:none;padding:16px 32px;font-weight:600;font-size:16px;text-transform:uppercase;letter-spacing:0.5px">Subir Documentos</a>
-</td></tr>
-</table>
-</td></tr>
-<tr><td style="padding:40px 0 0 0;border-top:1px solid #e5e5e5">
-<p style="margin:0;color:#999;font-size:12px">{{tenant.name}}<br>Correo automático</p>
-</td></tr>
-</table>
-</td></tr></table>
-</body>
-</html>`,
+        priority: 3,
+        subject: '¡Felicidades! Tu solicitud ha sido aprobada',
+        body: 'Hola {{applicant.first_name}}, tu solicitud {{application.folio}} ha sido aprobada.',
+        html_body: emailHtml({
+          gradient: '#10b981 0%,#059669 100%',
+          heading: '¡Solicitud Aprobada!',
+          icon: 'celebrate',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Nos complace informarte que tu solicitud ha sido aprobada exitosamente.</p>',
+          details: detailRows(['Folio', '{{application.folio}}'], ['Monto Aprobado', '{{application.amount}}'], ['Plazo', '{{application.term_months}} meses']),
+          detailsTitle: 'Detalles del Crédito',
+          detailsTint: 'green',
+          ctaText: 'Ver Mi Solicitud',
+          ctaUrl: '{{dashboard_url}}',
+        }),
+      },
+      {
+        name: 'Solicitud Aprobada - SMS',
+        event: 'application.approved',
+        channel: 'SMS',
+        is_active: true,
+        priority: 3,
+        subject: null,
+        body: '{{tenant.name}}: ¡Felicidades {{applicant.first_name}}! Tu solicitud {{application.folio}} ha sido aprobada.',
+        html_body: null,
+      },
+      {
+        name: 'Solicitud Aprobada - WhatsApp',
+        event: 'application.approved',
+        channel: 'WHATSAPP',
+        is_active: true,
+        priority: 3,
+        subject: null,
+        body: '*{{tenant.name}}*\n\n¡Felicidades *{{applicant.first_name}}*! Tu solicitud *{{application.folio}}* ha sido *aprobada*.\n\nMonto: {{application.amount}}\nPlazo: {{application.term_months}} meses',
+        html_body: null,
+      },
+      {
+        name: 'Solicitud Aprobada - In App',
+        event: 'application.approved',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 3,
+        subject: '¡Solicitud aprobada!',
+        body: '¡Felicidades! Tu solicitud {{application.folio}} por {{application.amount}} ha sido aprobada.',
+        html_body: null,
       },
 
-      // Solicitud Rechazada
+      // ═══════════════ SOLICITUD - RECHAZADA ═══════════════
       {
         name: 'Solicitud Rechazada - Email',
         event: 'application.rejected',
         channel: 'EMAIL',
         is_active: true,
         priority: 3,
-        subject: 'Actualización de tu solicitud',
-        body: 'Tu solicitud {{application.folio}} no pudo ser aprobada en este momento',
-        html_body: `<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background-color:#f5f5f5">
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f5f5f5;padding:40px 0"><tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" border="0" style="background-color:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1)">
-<tr><td style="background:linear-gradient(135deg,#6b7280 0%,#4b5563 100%);padding:40px 30px;text-align:center">
-<h1 style="margin:0;color:#fff;font-size:28px;font-weight:700">{{tenant.name}}</h1>
-</td></tr>
-<tr><td style="padding:40px 30px">
-<h2 style="margin:0 0 20px 0;color:#1a202c;font-size:24px;font-weight:600">Hola {{applicant.first_name}}</h2>
-<p style="margin:0 0 20px 0;color:#4a5568;font-size:16px;line-height:1.6">
-Lamentamos informarte que tu solicitud <strong>{{application.folio}}</strong> no pudo ser aprobada en este momento.
-</p>
-<p style="margin:20px 0;color:#4a5568;font-size:16px;line-height:1.6">
-Esto no significa el fin del camino. Puedes volver a aplicar en el futuro o contactarnos para más información.
-</p>
-<p style="margin:30px 0 0 0;color:#718096;font-size:14px;line-height:1.6">
-Si tienes preguntas, estamos aquí para ayudarte.
-</p>
-</td></tr>
-<tr><td style="background-color:#f7fafc;padding:30px;text-align:center;border-top:1px solid #e2e8f0">
-<p style="margin:0 0 10px 0;color:#718096;font-size:14px">{{tenant.name}}</p>
-<p style="margin:0;color:#a0aec0;font-size:12px">Este correo fue enviado automáticamente</p>
-</td></tr>
-</table>
-</td></tr></table>
-</body>
-</html>`,
+        subject: 'Actualización de tu solicitud - {{application.folio}}',
+        body: 'Hola {{applicant.first_name}}, lamentamos informarte que tu solicitud {{application.folio}} no pudo ser aprobada.',
+        html_body: emailHtml({
+          gradient: '#6b7280 0%,#4b5563 100%',
+          heading: 'Actualización de tu Solicitud',
+          icon: 'document',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0 0 16px 0;color:#374151;font-size:16px;line-height:1.6">Lamentamos informarte que tu solicitud <strong>{{application.folio}}</strong> no pudo ser aprobada en este momento.</p><p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Esto no significa el fin del camino. Puedes volver a aplicar en el futuro o contactarnos para más información.</p>',
+          details: detailRows(['Folio', '{{application.folio}}']),
+          detailsTint: 'neutral',
+        }),
+      },
+      {
+        name: 'Solicitud Rechazada - SMS',
+        event: 'application.rejected',
+        channel: 'SMS',
+        is_active: true,
+        priority: 3,
+        subject: null,
+        body: '{{tenant.name}}: Tu solicitud {{application.folio}} no fue aprobada. Contactanos para más información.',
+        html_body: null,
+      },
+      {
+        name: 'Solicitud Rechazada - In App',
+        event: 'application.rejected',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 3,
+        subject: 'Solicitud no aprobada',
+        body: 'Tu solicitud {{application.folio}} no pudo ser aprobada en este momento. Contacta a soporte para más información.',
+        html_body: null,
+      },
+
+      // ═══════════════ DOCUMENTOS PENDIENTES ═══════════════
+      {
+        name: 'Documentos Pendientes - Email',
+        event: 'application.docs_pending',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 4,
+        subject: 'Documentos pendientes - {{application.folio}}',
+        body: 'Hola {{applicant.first_name}}, necesitamos documentación adicional para tu solicitud {{application.folio}}.',
+        html_body: emailHtml({
+          gradient: '#f59e0b 0%,#d97706 100%',
+          heading: 'Documentos Pendientes',
+          icon: 'document',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Necesitamos documentación adicional para continuar con tu solicitud.</p>',
+          details: detailRows(['Folio', '{{application.folio}}']),
+          detailsTint: 'amber',
+          ctaText: 'Subir Documentos',
+          ctaUrl: '{{dashboard_url}}',
+        }),
+      },
+      {
+        name: 'Documentos Pendientes - SMS',
+        event: 'application.docs_pending',
+        channel: 'SMS',
+        is_active: true,
+        priority: 4,
+        subject: null,
+        body: '{{tenant.name}}: Necesitamos documentos adicionales para tu solicitud {{application.folio}}. Ingresa a tu cuenta.',
+        html_body: null,
+      },
+      {
+        name: 'Documentos Pendientes - WhatsApp',
+        event: 'application.docs_pending',
+        channel: 'WHATSAPP',
+        is_active: true,
+        priority: 4,
+        subject: null,
+        body: '*{{tenant.name}}*\n\nHola {{applicant.first_name}}, necesitamos documentos adicionales para tu solicitud *{{application.folio}}*.\n\nIngresa a tu cuenta para subirlos.',
+        html_body: null,
+      },
+
+      // ═══════════════ CORRECCIONES SOLICITADAS ═══════════════
+      {
+        name: 'Correcciones Solicitadas - Email',
+        event: 'application.corrections_requested',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 4,
+        subject: 'Se requieren correcciones - {{application.folio}}',
+        body: 'Hola {{applicant.first_name}}, se han solicitado correcciones en tu solicitud {{application.folio}}.',
+        html_body: emailHtml({
+          gradient: '#ef4444 0%,#dc2626 100%',
+          heading: 'Correcciones Requeridas',
+          icon: 'edit',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Hemos detectado información que necesita ser corregida en tu solicitud <strong>{{application.folio}}</strong>. Ingresa a tu cuenta para revisar y corregir los datos indicados.</p>',
+          details: detailRows(['Folio', '{{application.folio}}']),
+          detailsTint: 'red',
+          ctaText: 'Revisar Solicitud',
+          ctaUrl: '{{dashboard_url}}',
+        }),
+      },
+      {
+        name: 'Correcciones Solicitadas - SMS',
+        event: 'application.corrections_requested',
+        channel: 'SMS',
+        is_active: true,
+        priority: 4,
+        subject: null,
+        body: '{{tenant.name}}: Se requieren correcciones en tu solicitud {{application.folio}}. Ingresa a tu cuenta.',
+        html_body: null,
+      },
+
+      // ═══════════════ DOCUMENTOS ═══════════════
+      {
+        name: 'Documento Subido - In App',
+        event: 'document.uploaded',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 5,
+        subject: 'Documento recibido',
+        body: 'Tu documento {{document.type_label}} ha sido recibido y está pendiente de revisión.',
+        html_body: null,
+      },
+      {
+        name: 'Documento Aprobado - In App',
+        event: 'document.approved',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 5,
+        subject: 'Documento aprobado',
+        body: 'Tu documento {{document.type_label}} ha sido aprobado.',
+        html_body: null,
+      },
+      {
+        name: 'Documento Rechazado - Email',
+        event: 'document.rejected',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 4,
+        subject: 'Documento rechazado - Se requiere acción',
+        body: 'Hola {{applicant.first_name}}, tu documento {{document.type_label}} fue rechazado. Por favor sube uno nuevo.',
+        html_body: emailHtml({
+          gradient: '#ef4444 0%,#dc2626 100%',
+          heading: 'Documento Rechazado',
+          icon: 'warning',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Tu documento <strong>{{document.type_label}}</strong> no pudo ser validado. Ingresa a tu cuenta para subir un nuevo documento.</p>',
+          ctaText: 'Subir Documento',
+          ctaUrl: '{{dashboard_url}}',
+        }),
+      },
+      {
+        name: 'Documento Rechazado - In App',
+        event: 'document.rejected',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 4,
+        subject: 'Documento rechazado',
+        body: 'Tu documento {{document.type_label}} fue rechazado. Por favor sube uno nuevo.',
+        html_body: null,
+      },
+      {
+        name: 'Documentos Completos - In App',
+        event: 'documents.complete',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 5,
+        subject: 'Documentación completa',
+        body: 'Todos tus documentos han sido recibidos. Tu solicitud avanzará al siguiente paso.',
+        html_body: null,
+      },
+
+      // ═══════════════ KYC ═══════════════
+      {
+        name: 'Validación KYC Completada - In App',
+        event: 'kyc.completed',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 5,
+        subject: 'Identidad verificada',
+        body: 'Tu identidad ha sido verificada exitosamente. Tu solicitud continuará con el proceso.',
+        html_body: null,
+      },
+      {
+        name: 'Validación KYC Fallida - Email',
+        event: 'kyc.failed',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 3,
+        subject: 'Problema con la verificación de identidad',
+        body: 'Hola {{applicant.first_name}}, hubo un problema al verificar tu identidad. Intenta de nuevo.',
+        html_body: emailHtml({
+          gradient: '#ef4444 0%,#dc2626 100%',
+          heading: 'Verificación de Identidad',
+          icon: 'lock',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0 0 16px 0;color:#374151;font-size:16px;line-height:1.6">Hubo un problema al verificar tu identidad. Por favor intenta nuevamente.</p><p style="margin:0;color:#6b7280;font-size:14px">Asegúrate de que tu identificación sea legible y esté vigente.</p>',
+          ctaText: 'Intentar de Nuevo',
+          ctaUrl: '{{dashboard_url}}',
+        }),
+      },
+      {
+        name: 'Validación KYC Fallida - In App',
+        event: 'kyc.failed',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 3,
+        subject: 'Error en verificación',
+        body: 'Hubo un problema al verificar tu identidad. Por favor intenta nuevamente.',
+        html_body: null,
+      },
+
+      // ═══════════════ STAFF ═══════════════
+      {
+        name: 'Analista Asignado - Email',
+        event: 'analyst.assigned',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 5,
+        subject: 'Nueva solicitud asignada - {{application.folio}}',
+        body: 'Se te ha asignado la solicitud {{application.folio}} de {{applicant.first_name}} {{applicant.last_name}}.',
+        html_body: emailHtml({
+          gradient: '#3b82f6 0%,#2563eb 100%',
+          heading: 'Nueva Solicitud Asignada',
+          icon: 'clipboard',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Se te ha asignado una nueva solicitud para revisión.</p>',
+          details: detailRows(['Folio', '{{application.folio}}'], ['Solicitante', '{{applicant.first_name}} {{applicant.last_name}}'], ['Monto', '{{application.amount}}'], ['Producto', '{{application.product_name}}']),
+          detailsTitle: 'Datos de la Solicitud',
+          detailsTint: 'blue',
+          ctaText: 'Ver Solicitud',
+          ctaUrl: '{{dashboard_url}}',
+        }),
+      },
+      {
+        name: 'Analista Asignado - In App',
+        event: 'analyst.assigned',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 5,
+        subject: 'Solicitud asignada',
+        body: 'Se te asignó la solicitud {{application.folio}} de {{applicant.first_name}} {{applicant.last_name}}.',
+        html_body: null,
+      },
+      {
+        name: 'Comentario Agregado - In App',
+        event: 'comment.added',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 5,
+        subject: 'Nuevo comentario',
+        body: 'Se agregó un nuevo comentario en la solicitud {{application.folio}}.',
+        html_body: null,
+      },
+
+      // ═══════════════ RECORDATORIOS ═══════════════
+      {
+        name: 'Recordatorio Documentos - Email',
+        event: 'reminder.pending_docs',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 5,
+        subject: 'Recordatorio: Documentos pendientes - {{application.folio}}',
+        body: 'Hola {{applicant.first_name}}, aún tienes documentos pendientes en tu solicitud {{application.folio}}.',
+        html_body: emailHtml({
+          gradient: '#f59e0b 0%,#d97706 100%',
+          heading: 'Recordatorio',
+          icon: 'clock',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Te recordamos que aún tienes documentos pendientes en tu solicitud. Sube tus documentos lo antes posible para continuar con el proceso.</p>',
+          details: detailRows(['Folio', '{{application.folio}}']),
+          detailsTint: 'amber',
+          ctaText: 'Subir Documentos',
+          ctaUrl: '{{dashboard_url}}',
+        }),
+      },
+      {
+        name: 'Recordatorio Documentos - SMS',
+        event: 'reminder.pending_docs',
+        channel: 'SMS',
+        is_active: true,
+        priority: 5,
+        subject: null,
+        body: '{{tenant.name}}: Recordatorio - Tienes documentos pendientes en tu solicitud {{application.folio}}. Ingresa a tu cuenta.',
+        html_body: null,
+      },
+      {
+        name: 'Recordatorio Perfil - Email',
+        event: 'reminder.incomplete_profile',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 5,
+        subject: 'Completa tu perfil - {{tenant.name}}',
+        body: 'Hola {{applicant.first_name}}, tu perfil aún está incompleto. Complétalo para iniciar tu solicitud.',
+        html_body: emailHtml({
+          gradient: '#8b5cf6 0%,#7c3aed 100%',
+          heading: 'Completa tu Perfil',
+          icon: 'user-edit',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Notamos que tu perfil aún está incompleto. Completa tu información para poder iniciar tu solicitud de crédito.</p>',
+          ctaText: 'Completar Perfil',
+          ctaUrl: '{{dashboard_url}}',
+        }),
+      },
+      {
+        name: 'Recordatorio Perfil - SMS',
+        event: 'reminder.incomplete_profile',
+        channel: 'SMS',
+        is_active: true,
+        priority: 5,
+        subject: null,
+        body: '{{tenant.name}}: Tu perfil está incompleto. Ingresa para completarlo y solicitar tu crédito.',
+        html_body: null,
       },
     ]
 
-    // Create all templates
+    // Si es reemplazo, eliminar existentes primero
+    if (mode === 'replace') {
+      const existing = templates.value || []
+      for (const t of existing) {
+        await notificationTemplatesApi.delete(t.id)
+      }
+    }
+
+    // Crear todas las plantillas sugeridas
     for (const template of suggestedTemplates) {
       await notificationTemplatesApi.create(template)
     }
 
     await loadTemplates()
-    alert(`✅ Se crearon ${suggestedTemplates.length} plantillas profesionales exitosamente`)
+    showSuggestedConfirm.value = false
+    const msg = mode === 'replace'
+      ? `Se reemplazaron las plantillas anteriores y se crearon ${suggestedTemplates.length} nuevas`
+      : `Se crearon ${suggestedTemplates.length} plantillas profesionales exitosamente`
+    toast.success(msg)
   } catch (err: any) {
-    alert(err.response?.data?.message || 'Error al crear plantillas sugeridas')
+    toast.error(err.response?.data?.message || 'Error al crear plantillas sugeridas')
     console.error('Error creating suggested templates:', err)
   } finally {
     creatingSuggested.value = false
@@ -370,20 +742,27 @@ Si tienes preguntas, estamos aquí para ayudarte.
 }
 
 // Delete template
-const deleteTemplate = async (template: NotificationTemplate) => {
-  if (
-    !confirm(
-      `¿Estás seguro de eliminar la plantilla "${template.name}"? Esta acción no se puede deshacer.`
-    )
-  ) {
-    return
-  }
+const showDeleteConfirm = ref(false)
+const deleteTarget = ref<NotificationTemplate | null>(null)
+const deleting = ref(false)
 
+const openDeleteConfirm = (template: NotificationTemplate) => {
+  deleteTarget.value = template
+  showDeleteConfirm.value = true
+}
+
+const confirmDelete = async () => {
+  if (!deleteTarget.value) return
+  deleting.value = true
   try {
-    await notificationTemplatesApi.delete(template.id)
+    await notificationTemplatesApi.delete(deleteTarget.value.id)
+    showDeleteConfirm.value = false
     await loadTemplates()
+    toast.success('Plantilla eliminada exitosamente')
   } catch (err: any) {
-    alert(err.response?.data?.message || 'Error al eliminar plantilla')
+    toast.error(err.response?.data?.message || 'Error al eliminar plantilla')
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -395,7 +774,7 @@ const toggleActive = async (template: NotificationTemplate) => {
     })
     await loadTemplates()
   } catch (err: any) {
-    alert(err.response?.data?.message || 'Error al actualizar plantilla')
+    toast.error(err.response?.data?.message || 'Error al actualizar plantilla')
   }
 }
 
@@ -518,7 +897,7 @@ onMounted(() => {
         <div class="flex gap-3">
           <button
             class="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl hover:from-purple-700 hover:to-purple-800 transition-all flex items-center gap-2 shadow-lg shadow-purple-500/30"
-            @click="createSuggestedTemplates"
+            @click="showSuggestedConfirm = true"
             :disabled="creatingSuggested"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -722,6 +1101,15 @@ onMounted(() => {
                 <div class="flex items-center gap-1 flex-shrink-0">
                   <button
                     class="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                    title="Enviar prueba"
+                    @click="openSendTest(template)"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                  </button>
+                  <button
+                    class="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
                     title="Editar"
                     @click="router.push(`/admin/notificaciones/${template.id}/editar`)"
                   >
@@ -732,7 +1120,7 @@ onMounted(() => {
                   <button
                     class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                     title="Eliminar"
-                    @click="deleteTemplate(template)"
+                    @click="openDeleteConfirm(template)"
                   >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -851,5 +1239,43 @@ onMounted(() => {
         </button>
       </div>
     </div>
+
+    <!-- Send Test Modal -->
+    <SendTestModal
+      v-model:show="showSendTestModal"
+      :template="sendTestTemplate"
+    />
+
+    <ConfirmModal
+      :show="showDeleteConfirm"
+      title="Eliminar Plantilla"
+      :subtitle="deleteTarget?.name"
+      message="Esta acción no se puede deshacer."
+      icon="trash"
+      icon-color="red"
+      confirm-text="Eliminar"
+      confirm-color="red"
+      :loading="deleting"
+      @update:show="showDeleteConfirm = $event"
+      @confirm="confirmDelete"
+      @cancel="showDeleteConfirm = false"
+    />
+
+    <ConfirmModal
+      :show="showSuggestedConfirm"
+      title="Crear Plantillas Sugeridas"
+      icon="info"
+      icon-color="blue"
+      select-label="¿Qué hacer con las plantillas existentes?"
+      :select-options="suggestedModeOptions"
+      :select-required="true"
+      select-placeholder="Selecciona una opción"
+      confirm-text="Crear Plantillas"
+      confirm-color="blue"
+      :loading="creatingSuggested"
+      @update:show="showSuggestedConfirm = $event"
+      @confirm="onSuggestedConfirm"
+      @cancel="showSuggestedConfirm = false"
+    />
   </div>
 </template>

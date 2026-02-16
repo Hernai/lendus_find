@@ -30,8 +30,8 @@ class TemplateRenderer
                 'helpers' => $this->getHelpers(),
             ]);
 
-            // Create renderer function
-            $renderer = LightnCandy::prepare($phpStr);
+            // Evaluate compiled template directly (avoids tempnam() notice in PHP 8.x)
+            $renderer = eval($phpStr);
 
             // Render with variables
             return $renderer($this->flattenVariables($variables));

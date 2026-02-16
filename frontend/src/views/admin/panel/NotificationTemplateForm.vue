@@ -9,6 +9,7 @@ import {
 } from '@/services/notificationTemplates'
 import NotificationPreview from '@/components/admin/notification-templates/NotificationPreview.vue'
 import HtmlEditor from '@/components/admin/notification-templates/HtmlEditor.vue'
+import SendTestModal from '@/components/admin/notification-templates/SendTestModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,6 +22,9 @@ const template = ref<NotificationTemplate | null>(null)
 const loading = ref(false)
 const saving = ref(false)
 const error = ref<string | null>(null)
+
+// Send test modal
+const showSendTestModal = ref(false)
 
 // Form data
 const form = ref<CreateTemplateData>({
@@ -406,6 +410,17 @@ onMounted(() => {
       <!-- Actions -->
       <div class="flex items-center justify-end gap-3">
         <button
+          v-if="isEdit"
+          type="button"
+          class="px-4 py-2 border border-indigo-300 text-indigo-700 rounded-lg hover:bg-indigo-50 transition-colors flex items-center gap-2"
+          @click="showSendTestModal = true"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+          </svg>
+          Enviar Prueba
+        </button>
+        <button
           type="button"
           class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
           @click="router.push('/admin/notificaciones')"
@@ -422,5 +437,11 @@ onMounted(() => {
       </div>
     </form>
 
+    <!-- Send Test Modal -->
+    <SendTestModal
+      v-if="isEdit && template"
+      v-model:show="showSendTestModal"
+      :template="template"
+    />
   </div>
 </template>
