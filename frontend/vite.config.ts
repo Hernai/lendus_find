@@ -23,4 +23,16 @@ export default defineConfig({
       '.ngrok.io',
     ],
   },
+  optimizeDeps: {
+    exclude: ['monaco-editor'],
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          monaco: ['monaco-editor'],
+        },
+      },
+    },
+  },
 })
