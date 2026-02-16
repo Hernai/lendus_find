@@ -7,6 +7,8 @@ import {
   type TemplateConfig,
   type CreateTemplateData,
 } from '@/services/notificationTemplates'
+import NotificationPreview from '@/components/admin/notification-templates/NotificationPreview.vue'
+import HtmlEditor from '@/components/admin/notification-templates/HtmlEditor.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,11 +35,28 @@ const form = ref<CreateTemplateData>({
   metadata: null,
 })
 
-// Preview
-const showPreview = ref(false)
-const previewData = ref<Record<string, any>>({})
-const previewResult = ref<string>('')
-const previewLoading = ref(false)
+// Main view mode (Editor or Preview)
+const mainViewMode = ref<'editor' | 'preview'>('editor')
+
+// Preview data for real-time preview
+const previewData = ref<Record<string, any>>({
+  tenant: {
+    name: 'Lendus Demo',
+    slug: 'demo',
+  },
+  applicant: {
+    name: 'Juan Pérez García',
+    first_name: 'Juan',
+    email: 'juan.perez@example.com',
+  },
+  application: {
+    folio: 'APP-2024-001',
+    amount: '$50,000.00',
+  },
+  otp: {
+    code: '123456',
+  },
+})
 
 // Load config
 const loadConfig = async () => {
@@ -140,24 +159,16 @@ watch(
   }
 )
 
-// Test render preview
-const testRender = async () => {
-  if (!form.value.body) return
-
-  previewLoading.value = true
-  try {
-    const result = await notificationTemplatesApi.testRender({
-      body: form.value.body,
-      variables: previewData.value,
-    })
-    previewResult.value = result.rendered
-    showPreview.value = true
-  } catch (err: any) {
-    alert(err.response?.data?.message || 'Error al renderizar plantilla')
-  } finally {
-    previewLoading.value = false
+// Watch body changes to sync with html_body for channels that support HTML
+watch(
+  () => form.value.body,
+  (newBody) => {
+    if (supportsHtml.value && newBody) {
+      // Auto-sync body to html_body for HTML-supported channels
+      form.value.html_body = newBody
+    }
   }
-}
+)
 
 // Save template
 const save = async () => {
@@ -358,73 +369,38 @@ onMounted(() => {
           placeholder="ej. ¡Felicidades! Tu solicitud ha sido aprobada"
           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
         />
-        <p class="mt-1 text-xs text-gray-500">Puedes usar variables como {{user.first_name}}</p>
+        <p class="mt-1 text-xs text-gray-500">Puedes usar variables como {{ formatVariable('user.first_name') }}</p>
       </div>
 
-      <!-- Body -->
-      <div class="bg-white border border-gray-200 rounded-lg p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-semibold text-gray-900">
-            Contenido <span class="text-red-500">*</span>
-          </h2>
-          <div class="flex items-center gap-2 text-sm">
-            <span
-              class="text-gray-600"
-              :class="{ 'text-red-600': characterLimit && bodyCharCount > characterLimit }"
-            >
-              {{ bodyCharCount }}
-              <span v-if="characterLimit">/ {{ characterLimit }}</span>
-              caracteres
-            </span>
-            <button
-              type="button"
-              class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 transition-colors"
-              :disabled="!form.body || previewLoading"
-              @click="testRender"
-            >
-              {{ previewLoading ? 'Renderizando...' : 'Vista Previa' }}
-            </button>
-          </div>
-        </div>
-        <textarea
-          v-model="form.body"
-          required
-          rows="10"
-          placeholder="Escribe el contenido de la notificación aquí...
-
-Usa variables con doble llave: {{user.first_name}}, {{application.folio}}, etc."
-          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm"
-        ></textarea>
-
-        <!-- Variables help -->
-        <div v-if="selectedEvent" class="mt-4 p-4 bg-gray-50 rounded-lg">
-          <h3 class="text-sm font-medium text-gray-900 mb-2">Variables disponibles:</h3>
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
-            <div
-              v-for="(description, variable) in selectedEvent.available_variables"
-              :key="variable"
-              class="flex items-start gap-1"
-            >
-              <code class="bg-white px-2 py-1 rounded text-indigo-600">{{ formatVariable(variable as string) }}</code>
-              <span class="text-gray-600">{{ description }}</span>
+      <!-- Editor Area - Single Column -->
+      <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
+        <div class="bg-gradient-to-r from-slate-800 to-slate-900 px-4 py-2 flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-white">Editor de Contenido</h3>
+          <div class="flex items-center gap-4">
+            <div v-if="form.channel" class="flex items-center gap-2 px-2 py-1 bg-white/20 rounded text-xs text-white">
+              <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+              {{ form.channel }}
+            </div>
+            <div class="flex items-center gap-2 text-sm">
+              <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span :class="characterLimit && bodyCharCount > characterLimit ? 'text-red-400 font-bold' : 'text-gray-300'">
+                {{ bodyCharCount }}
+                <span v-if="characterLimit" class="text-gray-500">/ {{ characterLimit }}</span>
+              </span>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- HTML Body (only for EMAIL and IN_APP) -->
-      <div v-if="supportsHtml" class="bg-white border border-gray-200 rounded-lg p-6">
-        <h2 class="text-lg font-semibold text-gray-900 mb-4">Contenido HTML (Opcional)</h2>
-        <textarea
-          v-model="form.html_body"
-          rows="10"
-          placeholder="<h1>Hola {{user.first_name}}</h1>
-<p>Tu solicitud ha sido aprobada...</p>"
-          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm"
-        ></textarea>
-        <p class="mt-2 text-xs text-gray-500">
-          Si no se proporciona, se usará el contenido de texto plano
-        </p>
+        <HtmlEditor
+          v-model="form.body"
+          v-model:html-body="form.html_body"
+          :available-variables="selectedEvent?.available_variables"
+          :channel="form.channel"
+          :subject="form.subject"
+          :preview-variables="previewData"
+        />
       </div>
 
       <!-- Actions -->
@@ -446,35 +422,5 @@ Usa variables con doble llave: {{user.first_name}}, {{application.folio}}, etc."
       </div>
     </form>
 
-    <!-- Preview Modal -->
-    <div
-      v-if="showPreview"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-      @click.self="showPreview = false"
-    >
-      <div class="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden">
-        <div class="p-6 border-b border-gray-200 flex items-center justify-between">
-          <h3 class="text-lg font-semibold text-gray-900">Vista Previa</h3>
-          <button
-            class="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
-            @click="showPreview = false"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
-        <div class="p-6 overflow-y-auto max-h-[60vh]">
-          <div class="bg-gray-50 rounded-lg p-4 font-mono text-sm whitespace-pre-wrap">
-            {{ previewResult }}
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
