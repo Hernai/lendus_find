@@ -141,5 +141,6 @@ Detailed conventions are in `.claude/skills/`. Use when working on specific area
 | `application-lifecycle` | Working with status workflow, transitions, approval/rejection, counter-offers |
 | `ui-components` | UI component catalog: common primitives, applicant components (KYC, bank, docs), admin components (tables, modals, editors) |
 | `dev-ops` | Starting/stopping servers, installing deps, troubleshooting, scripts, env config |
+| `dev-startup` | Manual de boot/halt completo: backend, Reverb, queue, frontend web, emulador Android, simulador iOS, recetas combinadas |
 | `mobile-deploy` | Releases móviles white-label per-tenant: agregar SOFOMs, build iOS/Android, push APNs/FCM |
 | `git-workflow` | Git commits, branches, PRs, tags, versionado — Conventional Commits en español |
