@@ -72,6 +72,10 @@ class AuthController extends Controller
         // Create token with staff abilities
         $token = $account->createToken('staff-token', ['staff'])->plainTextToken;
 
+        // Expone el staff al middleware LogClientRequest para correlacionar
+        // el HTTP_REQUEST anónimo del login con su dueño.
+        request()->attributes->set('audit_user', $account);
+
         // Log successful login (user_id = null since StaffAccount is not in users table)
         AuditLog::log(
             AuditAction::LOGIN_SUCCESS->value,

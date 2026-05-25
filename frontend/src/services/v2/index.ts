@@ -38,6 +38,7 @@ import staffConfig from './config.staff.service'
 import staffApiLog from './apilog.staff.service'
 import staffTenant from './tenant.staff.service'
 import staffIntegration from './integration.staff.service'
+import staffAuditLog from './audit.staff.service'
 import person from './person.service'
 import simulator from './simulator.service'
 import publicConfig from './config.public.service'
@@ -81,6 +82,7 @@ export const v2 = {
     apiLog: staffApiLog,
     tenant: staffTenant,
     integration: staffIntegration,
+    auditLog: staffAuditLog,
   },
 
   /**
@@ -120,6 +122,7 @@ export {
   staffApiLog,
   staffTenant,
   staffIntegration,
+  staffAuditLog,
   person,
   simulator,
   publicConfig,

@@ -462,6 +462,10 @@ class ApplicantAuthService
         // Create token
         $token = $account->createToken('applicant-token', ['applicant'])->plainTextToken;
 
+        // Expone el applicant al middleware LogClientRequest para que pueda
+        // correlacionar el HTTP_REQUEST anónimo del login con su dueño.
+        request()->attributes->set('audit_user', $account);
+
         // Log successful login
         AuditLog::log(
             AuditAction::LOGIN_SUCCESS->value,

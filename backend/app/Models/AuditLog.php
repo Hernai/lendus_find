@@ -86,14 +86,29 @@ class AuditLog extends Model
             'created_at' => now(),
         ];
 
-        // Merge device info if provided
-        if (isset($options['device_info'])) {
-            $data = array_merge($data, $options['device_info']);
+        // Auto-capture device + geolocation desde MetadataService si no se pasó
+        // explícitamente. Así cada log de negocio (LOGIN_SUCCESS, OTP_VERIFIED,
+        // etc.) lleva latitude/longitude/city del request actual sin que cada
+        // caller tenga que pasarlas.
+        $deviceInfo = $options['device_info'] ?? null;
+        $geolocation = $options['geolocation'] ?? null;
+        if ($deviceInfo === null || $geolocation === null) {
+            try {
+                /** @var \App\Services\MetadataService $meta */
+                $meta = app(\App\Services\MetadataService::class);
+                $captured = $meta->capture($request);
+                $deviceInfo ??= $captured['device_info'] ?? null;
+                $geolocation ??= $captured['geolocation'] ?? null;
+            } catch (\Throwable) {
+                // Ignorar fallos de captura (ej. tests fuera de HTTP context).
+            }
         }
 
-        // Merge geolocation if provided
-        if (isset($options['geolocation'])) {
-            $data = array_merge($data, $options['geolocation']);
+        if (is_array($deviceInfo)) {
+            $data = array_merge($data, $deviceInfo);
+        }
+        if (is_array($geolocation)) {
+            $data = array_merge($data, $geolocation);
         }
 
         return static::create($data);

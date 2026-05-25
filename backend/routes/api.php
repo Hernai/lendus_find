@@ -46,6 +46,7 @@ use App\Http\Controllers\Api\V2\Staff\NotificationTemplateController as StaffNot
 use App\Http\Controllers\Api\V2\Applicant\NotificationPreferenceController as ApplicantNotificationPreferenceController;
 use App\Http\Controllers\Api\V2\Applicant\NotificationController as ApplicantNotificationController;
 use App\Http\Controllers\Api\V2\Staff\NotificationPreferenceController as StaffNotificationPreferenceController;
+use App\Http\Controllers\Api\V2\Staff\AuditLogController as StaffAuditLogController;
 
 // =============================================
 // BROADCASTING AUTH (for WebSocket channel authorization)
@@ -94,7 +95,7 @@ Route::middleware(['tenant', 'metadata'])->prefix('v2/simulator')->group(functio
 // =============================================
 // V2: STAFF AUTHENTICATION (uses StaffAccount model)
 // =============================================
-Route::middleware(['tenant', 'metadata'])->prefix('v2/staff/auth')->group(function () {
+Route::middleware(['tenant', 'metadata', 'log.request'])->prefix('v2/staff/auth')->group(function () {
     Route::post('/login', [StaffAuthController::class, 'login']);
 
     Route::middleware(['auth:sanctum'])->group(function () {
@@ -105,7 +106,7 @@ Route::middleware(['tenant', 'metadata'])->prefix('v2/staff/auth')->group(functi
 // =============================================
 // V2: APPLICANT AUTHENTICATION (uses ApplicantAccount model)
 // =============================================
-Route::middleware(['tenant', 'metadata'])->prefix('v2/applicant/auth')->group(function () {
+Route::middleware(['tenant', 'metadata', 'log.request'])->prefix('v2/applicant/auth')->group(function () {
     Route::middleware('throttle:otp')->post('/otp/request', [ApplicantAuthController::class, 'requestOtp']);
     Route::middleware('throttle:otp-verify')->post('/otp/verify', [ApplicantAuthController::class, 'verifyOtp']);
     Route::post('/check-user', [ApplicantAuthController::class, 'checkUser']);
@@ -128,7 +129,7 @@ require __DIR__ . '/api/person.php';
 // =============================================
 // V2: APPLICANT APPLICATIONS, DOCUMENTS & PROFILE
 // =============================================
-Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
+Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'log.request'])
     ->prefix('v2/applicant')
     ->group(function () {
         // =============================================
@@ -256,7 +257,7 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
 // =============================================
 // V2: STAFF APPLICATIONS & DOCUMENTS
 // =============================================
-Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff'])
+Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request'])
     ->prefix('v2/staff')
     ->group(function () {
         // =============================================
@@ -357,6 +358,8 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff'])
         Route::get('/applications/board', [StaffAppController::class, 'board']);
         Route::get('/applications/statistics', [StaffAppController::class, 'statistics']);
         Route::get('/applications/{id}', [StaffAppController::class, 'show']);
+        Route::get('/applications/{id}/audit-logs', [StaffAuditLogController::class, 'listByApplication']);
+        Route::get('/applicants/{id}/audit-logs', [StaffAuditLogController::class, 'listByApplicant']);
 
         // Applications - Actions requiring permissions
         Route::post('/applications/{id}/assign', [StaffAppController::class, 'assign'])

@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onBeforeMount, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AppButton } from '@/components/common'
 import AdminDocumentGallery from '@/components/admin/AdminDocumentGallery.vue'
+import AuditLogList from '@/components/admin/AuditLogList.vue'
 import ConfirmModal from '@/components/admin/ConfirmModal.vue'
 import {
   ReferencesSection,
@@ -389,6 +390,7 @@ const tabs = [
   { id: 'references', label: 'Referencias' },
   { id: 'bank_accounts', label: 'Cuentas Bancarias' },
   { id: 'timeline', label: 'Historial' },
+  { id: 'activity', label: 'Actividad' },
   { id: 'api_logs', label: 'Logs API' }
 ]
 
@@ -3209,6 +3211,11 @@ onUnmounted(() => {
               :events="application.timeline"
               @view-details="handleViewTimelineDetails"
             />
+          </div>
+
+          <!-- Activity Tab (audit log: acciones + peticiones HTTP con geo) -->
+          <div v-if="activeTab === 'activity'">
+            <AuditLogList :application-id="application.id" />
           </div>
 
           <!-- API Logs Tab -->

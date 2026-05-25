@@ -45,6 +45,9 @@ enum AuditAction: string
     case KYC_FACE_MATCH = 'kyc.face_match';
     case KYC_VERIFICATIONS_RECORDED = 'kyc.verifications_recorded';
 
+    // HTTP request log (cada petición autenticada del cliente)
+    case HTTP_REQUEST = 'HTTP_REQUEST';
+
     public function label(): string
     {
         return match ($this) {
@@ -86,6 +89,7 @@ enum AuditAction: string
             self::KYC_CEDULA_VALIDATION => 'Validación de Cédula Profesional',
             self::KYC_FACE_MATCH => 'Comparación de Rostro (Face Match)',
             self::KYC_VERIFICATIONS_RECORDED => 'Verificaciones registradas',
+            self::HTTP_REQUEST => 'Petición HTTP',
         };
     }
 

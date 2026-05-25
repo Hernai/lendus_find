@@ -54,6 +54,23 @@ export function registerInterceptors(): void {
       config.headers['X-App-Version'] = platform.device.appVersion()
       const deviceId = await platform.device.deviceId()
       if (deviceId) config.headers['X-Device-Id'] = deviceId
+
+      // Geolocalización: cacheada 60s para no disparar GPS en cada request.
+      // Si el usuario no dio permiso, getCurrent() devuelve null y no agregamos
+      // los headers (el backend cae a IP-based geolocation).
+      try {
+        const geo = await platform.geolocation.getCurrent({ cacheMs: 60_000, timeoutMs: 2_500 })
+        if (geo) {
+          config.headers['X-Geo-Lat'] = geo.latitude.toFixed(7)
+          config.headers['X-Geo-Lng'] = geo.longitude.toFixed(7)
+          if (geo.accuracy != null) {
+            config.headers['X-Geo-Accuracy'] = Math.round(geo.accuracy).toString()
+          }
+          config.headers['X-Geo-Timestamp'] = geo.timestamp.toString()
+        }
+      } catch {
+        // ignorar — geo es best-effort
+      }
     }
 
     const token = await platform.storage.get<string>(STORAGE_KEYS.AUTH_TOKEN)

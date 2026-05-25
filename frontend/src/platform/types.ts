@@ -124,6 +124,24 @@ export interface PlatformRealtime {
   presenceChannel(name: string): RealtimeChannel
 }
 
+export interface GeoPosition {
+  latitude: number
+  longitude: number
+  accuracy: number | null
+  /** Timestamp en ms de cuando se obtuvo. */
+  timestamp: number
+}
+
+export interface PlatformGeolocation {
+  isSupported(): boolean
+  requestPermission(): Promise<'granted' | 'denied' | 'prompt' | 'unsupported'>
+  /**
+   * Devuelve la posición actual. Si `cacheMs` se pasa y hay una posición
+   * cacheada más reciente, la reusa (evita pedir GPS en cada request).
+   */
+  getCurrent(opts?: { cacheMs?: number; timeoutMs?: number }): Promise<GeoPosition | null>
+}
+
 export interface Platforms {
   storage: PlatformStorage
   navigator: PlatformNavigator
@@ -134,4 +152,5 @@ export interface Platforms {
   share: PlatformShare
   clipboard: PlatformClipboard
   realtime: PlatformRealtime
+  geolocation: PlatformGeolocation
 }

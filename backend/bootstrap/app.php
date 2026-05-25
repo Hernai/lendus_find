@@ -22,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'staff' => \App\Http\Middleware\RequireStaff::class,
             'permission' => \App\Http\Middleware\RequirePermission::class,
             'metadata' => \App\Http\Middleware\CaptureMetadata::class,
+            'log.request' => \App\Http\Middleware\LogClientRequest::class,
         ]);
 
         // Exclude API routes from CSRF verification (they use Bearer token auth)

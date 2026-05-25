@@ -25,16 +25,52 @@ class MetadataService
         $userAgent = $request->userAgent() ?? '';
         $this->agent->setUserAgent($userAgent);
 
+        // Si el cliente envió coordenadas del dispositivo (más precisas que IP).
+        $clientGeo = $this->parseClientGeo($request);
+        $ipGeo = $this->getGeolocation($this->getRealIp($request));
+        // Si hay device geo, lo merge con city/region/country de IP (no vienen del cliente).
+        $geolocation = $clientGeo
+            ? array_merge(is_array($ipGeo) ? $ipGeo : [], $clientGeo)
+            : $ipGeo;
+
         return [
             'tenant_id' => $request->attributes->get('tenant')?->id,
             'ip_address' => $this->getRealIp($request),
             'user_agent' => $userAgent,
             'device_info' => $this->parseUserAgent($userAgent),
-            'geolocation' => $this->getGeolocation($this->getRealIp($request)),
+            'geolocation' => $geolocation,
             // Headers enviados por clientes móviles/PWA (X-Platform=web|ios|android).
             'platform' => $request->header('X-Platform'),
             'app_version' => $request->header('X-App-Version'),
             'device_id' => $request->header('X-Device-Id'),
+        ];
+    }
+
+    /**
+     * Lee `X-Geo-Lat`, `X-Geo-Lng`, `X-Geo-Accuracy`, `X-Geo-Timestamp`
+     * enviados por el cliente móvil/PWA. Devuelve null si no hay valores
+     * válidos.
+     *
+     * @return array{latitude:float,longitude:float,accuracy:?int,source:string}|null
+     */
+    public function parseClientGeo(Request $request): ?array
+    {
+        $lat = $request->header('X-Geo-Lat');
+        $lng = $request->header('X-Geo-Lng');
+        if ($lat === null || $lng === null) return null;
+
+        $latF = filter_var($lat, FILTER_VALIDATE_FLOAT);
+        $lngF = filter_var($lng, FILTER_VALIDATE_FLOAT);
+        if ($latF === false || $lngF === false) return null;
+        if ($latF < -90 || $latF > 90 || $lngF < -180 || $lngF > 180) return null;
+
+        $accuracy = filter_var($request->header('X-Geo-Accuracy'), FILTER_VALIDATE_INT);
+
+        return [
+            'latitude' => $latF,
+            'longitude' => $lngF,
+            'accuracy' => $accuracy !== false ? $accuracy : null,
+            'source' => 'device',
         ];
     }
 

@@ -23,6 +23,7 @@ import { clipboardWeb } from './web/clipboard.web'
 import { cameraWeb } from './web/camera.web'
 import { pushWeb } from './web/push.web'
 import { realtimeWeb } from './web/realtime.web'
+import { geolocationWeb } from './web/geolocation.web'
 
 // --- Native adapters ---
 // Estos imports añaden ~50 KB al bundle web pero los plugins reales solo se
@@ -36,6 +37,7 @@ import { clipboardNative } from './native/clipboard.native'
 import { cameraNative } from './native/camera.native'
 import { pushNative } from './native/push.native'
 import { realtimeNative } from './native/realtime.native'
+import { geolocationNative } from './native/geolocation.native'
 
 import type { Router } from 'vue-router'
 
@@ -51,6 +53,7 @@ const webPlatform: Platforms = {
   camera: cameraWeb,
   push: pushWeb,
   realtime: realtimeWeb,
+  geolocation: geolocationWeb,
 }
 
 const nativePlatform: Platforms = {
@@ -63,6 +66,7 @@ const nativePlatform: Platforms = {
   camera: cameraNative,
   push: pushNative,
   realtime: realtimeNative,
+  geolocation: geolocationNative,
 }
 
 export const platform: Platforms = isNative ? nativePlatform : webPlatform
