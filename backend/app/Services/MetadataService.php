@@ -31,6 +31,10 @@ class MetadataService
             'user_agent' => $userAgent,
             'device_info' => $this->parseUserAgent($userAgent),
             'geolocation' => $this->getGeolocation($this->getRealIp($request)),
+            // Headers enviados por clientes móviles/PWA (X-Platform=web|ios|android).
+            'platform' => $request->header('X-Platform'),
+            'app_version' => $request->header('X-App-Version'),
+            'device_id' => $request->header('X-Device-Id'),
         ];
     }
 

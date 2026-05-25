@@ -27,19 +27,30 @@ return [
         'https://eaac7437a876.ngrok-free.app',
         'https://*.ngrok-free.app',
         'https://*.ngrok.io',
+        // Capacitor (apps native iOS/Android)
+        'capacitor://localhost',
+        'ionic://localhost',
+        'http://localhost',
+        'https://localhost',
     ],
 
     'allowed_origins_patterns' => [
         '#^https://.*\.ngrok-free\.app$#',
         '#^https://.*\.ngrok\.io$#',
+        // Capacitor variantes con/sin puerto.
+        '#^capacitor://localhost(:\d+)?$#',
+        '#^ionic://localhost(:\d+)?$#',
+        '#^https?://localhost(:\d+)?$#',
     ],
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => [],
+    'exposed_headers' => ['X-App-Update-Available'],
 
     'max_age' => 0,
 
-    'supports_credentials' => true,
+    // El auth desde frontend es 100% Bearer (no cookies de Sanctum).
+    // Mantenemos en false para no requerir credentials en CORS preflight.
+    'supports_credentials' => false,
 
 ];

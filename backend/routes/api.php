@@ -24,6 +24,10 @@ use App\Http\Controllers\Api\V2\Applicant\AuthController as ApplicantAuthControl
 use App\Http\Controllers\Api\V2\Public\SimulatorController as V2SimulatorController;
 use App\Http\Controllers\Api\V2\Public\ConfigController as V2ConfigController;
 use App\Http\Controllers\Api\V2\Public\ManifestController as V2ManifestController;
+use App\Http\Controllers\Api\V2\Public\HealthController as V2HealthController;
+use App\Http\Controllers\Api\V2\Public\VersionController as V2VersionController;
+use App\Http\Controllers\Api\V2\Applicant\DeviceController as ApplicantDeviceController;
+use App\Http\Controllers\Api\V2\Staff\DeviceController as StaffDeviceController;
 use App\Http\Controllers\Api\V2\Applicant\ApplicationController as ApplicantAppController;
 use App\Http\Controllers\Api\V2\Applicant\CorrectionController as ApplicantCorrectionController;
 use App\Http\Controllers\Api\V2\Applicant\DocumentController as ApplicantDocController;
@@ -74,7 +78,11 @@ Route::middleware(['tenant', 'auth:sanctum'])->post('/broadcasting/auth', functi
 Route::middleware(['tenant', 'metadata'])->prefix('v2')->group(function () {
     Route::get('/config', [V2ConfigController::class, 'index']);
     Route::get('/public/manifest', V2ManifestController::class);
+    Route::get('/public/version', V2VersionController::class);
 });
+
+// Health check no requiere tenant (es status del backend).
+Route::get('v2/public/health', V2HealthController::class);
 
 // =============================================
 // V2: PUBLIC SIMULATOR (no authentication required)
@@ -123,6 +131,13 @@ require __DIR__ . '/api/person.php';
 Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
     ->prefix('v2/applicant')
     ->group(function () {
+        // =============================================
+        // Device tokens (push notifications)
+        // =============================================
+        Route::post('/devices', [ApplicantDeviceController::class, 'register']);
+        Route::delete('/devices/{token}', [ApplicantDeviceController::class, 'unregister'])
+            ->where('token', '.*');
+
         // =============================================
         // Profile Management
         // =============================================
@@ -244,6 +259,13 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
 Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff'])
     ->prefix('v2/staff')
     ->group(function () {
+        // =============================================
+        // Device tokens (push notifications)
+        // =============================================
+        Route::post('/devices', [StaffDeviceController::class, 'register']);
+        Route::delete('/devices/{token}', [StaffDeviceController::class, 'unregister'])
+            ->where('token', '.*');
+
         // =============================================
         // Users Management - Admin only
         // =============================================

@@ -17,6 +17,35 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | API & Mobile Versions
+    |--------------------------------------------------------------------------
+    |
+    | Versionado consumido por GET /api/v2/public/version. `mobile_versions`
+    | declara la versión mínima soportada (`min`) y la última publicada
+    | (`latest`) por plataforma. Si la app cliente envía `X-App-Version` por
+    | debajo del `min`, el endpoint responde con `force_update: true`.
+    |
+    */
+
+    'api_version' => env('API_VERSION', '2.0.0'),
+
+    'mobile_versions' => [
+        'default' => [
+            'min' => env('MOBILE_MIN_VERSION', '1.0.0'),
+            'latest' => env('MOBILE_LATEST_VERSION', '1.0.0'),
+        ],
+        'ios' => [
+            'min' => env('MOBILE_IOS_MIN_VERSION', env('MOBILE_MIN_VERSION', '1.0.0')),
+            'latest' => env('MOBILE_IOS_LATEST_VERSION', env('MOBILE_LATEST_VERSION', '1.0.0')),
+        ],
+        'android' => [
+            'min' => env('MOBILE_ANDROID_MIN_VERSION', env('MOBILE_MIN_VERSION', '1.0.0')),
+            'latest' => env('MOBILE_ANDROID_LATEST_VERSION', env('MOBILE_LATEST_VERSION', '1.0.0')),
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |
