@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   notificationTemplatesApi,
@@ -10,6 +10,7 @@ import SendTestModal from '@/components/admin/notification-templates/SendTestMod
 import ConfirmModal from '@/components/admin/ConfirmModal.vue'
 import { useToast } from '@/composables/useToast'
 import { emailHtml, detailRows } from '@/utils/emailHtmlHelper'
+import { SearchableSelect } from '@/components/common'
 
 const toast = useToast()
 
@@ -30,10 +31,23 @@ const openSendTest = (template: NotificationTemplate) => {
 }
 
 // Filters
-const filterEvent = ref<string>('')
-const filterChannel = ref<string>('')
-const filterStatus = ref<string>('')
+const filterEvent = ref<string | null>(null)
+const filterChannel = ref<string | null>(null)
+const filterStatus = ref<string | null>(null)
 const searchQuery = ref('')
+
+const eventOptions = computed(() =>
+  (config.value?.events ?? []).map((e: { value: string; label: string }) => ({ value: e.value, label: e.label })),
+)
+const channelOptions = computed(() =>
+  (config.value?.channels ?? []).map((c: { value: string; label: string }) => ({ value: c.value, label: c.label })),
+)
+const statusOptions = [
+  { value: 'active', label: 'Activas' },
+  { value: 'inactive', label: 'Inactivas' },
+] as const
+
+watch([filterEvent, filterChannel, filterStatus], () => loadTemplates())
 
 // Load data
 const loadTemplates = async () => {
@@ -231,6 +245,16 @@ const createSuggestedTemplates = async (mode: 'replace' | 'keep') => {
         priority: 5,
         subject: null,
         body: '{{tenant.name}}: Bienvenido/a {{applicant.first_name}}. Tu cuenta ha sido creada. Inicia sesión para continuar.',
+        html_body: null,
+      },
+      {
+        name: 'Bienvenida - In App',
+        event: 'user.registered',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 5,
+        subject: 'Bienvenido/a',
+        body: 'Tu cuenta ha sido creada. Ya puedes iniciar tu solicitud de crédito.',
         html_body: null,
       },
       {
@@ -478,6 +502,16 @@ const createSuggestedTemplates = async (mode: 'replace' | 'keep') => {
         body: '*{{tenant.name}}*\n\nHola {{applicant.first_name}}, necesitamos documentos adicionales para tu solicitud *{{application.folio}}*.\n\nIngresa a tu cuenta para subirlos.',
         html_body: null,
       },
+      {
+        name: 'Documentos Pendientes - In App',
+        event: 'application.docs_pending',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 4,
+        subject: 'Documentos pendientes',
+        body: 'Tu solicitud {{application.folio}} requiere documentación adicional.',
+        html_body: null,
+      },
 
       // ═══════════════ CORRECCIONES SOLICITADAS ═══════════════
       {
@@ -508,6 +542,16 @@ const createSuggestedTemplates = async (mode: 'replace' | 'keep') => {
         priority: 4,
         subject: null,
         body: '{{tenant.name}}: Se requieren correcciones en tu solicitud {{application.folio}}. Ingresa a tu cuenta.',
+        html_body: null,
+      },
+      {
+        name: 'Correcciones Solicitadas - In App',
+        event: 'application.corrections_requested',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 4,
+        subject: 'Correcciones requeridas',
+        body: 'Se han solicitado correcciones en tu solicitud {{application.folio}}.',
         html_body: null,
       },
 
@@ -568,6 +612,18 @@ const createSuggestedTemplates = async (mode: 'replace' | 'keep') => {
         priority: 5,
         subject: 'Documentación completa',
         body: 'Todos tus documentos han sido recibidos. Tu solicitud avanzará al siguiente paso.',
+        html_body: null,
+      },
+
+      // ═══════════════ REFERENCIAS ═══════════════
+      {
+        name: 'Referencia Verificada - In App',
+        event: 'reference.verified',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 5,
+        subject: 'Referencia verificada',
+        body: 'Una de tus referencias ha sido verificada exitosamente.',
         html_body: null,
       },
 
@@ -685,6 +741,16 @@ const createSuggestedTemplates = async (mode: 'replace' | 'keep') => {
         html_body: null,
       },
       {
+        name: 'Recordatorio Documentos - In App',
+        event: 'reminder.pending_docs',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 5,
+        subject: 'Recordatorio',
+        body: 'Aún tienes documentos pendientes en tu solicitud {{application.folio}}.',
+        html_body: null,
+      },
+      {
         name: 'Recordatorio Perfil - Email',
         event: 'reminder.incomplete_profile',
         channel: 'EMAIL',
@@ -710,6 +776,555 @@ const createSuggestedTemplates = async (mode: 'replace' | 'keep') => {
         priority: 5,
         subject: null,
         body: '{{tenant.name}}: Tu perfil está incompleto. Ingresa para completarlo y solicitar tu crédito.',
+        html_body: null,
+      },
+      {
+        name: 'Recordatorio Perfil - In App',
+        event: 'reminder.incomplete_profile',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 5,
+        subject: 'Perfil incompleto',
+        body: 'Tu perfil está incompleto. Complétalo para solicitar tu crédito.',
+        html_body: null,
+      },
+
+      // ═══════════════ SOLICITUD CANCELADA ═══════════════
+      {
+        name: 'Solicitud Cancelada - Email',
+        event: 'application.cancelled',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 3,
+        subject: 'Tu solicitud {{application.folio}} ha sido cancelada',
+        body: 'Hola {{applicant.first_name}}, tu solicitud ha sido cancelada.',
+        html_body: emailHtml({
+          gradient: '#6b7280 0%,#4b5563 100%',
+          heading: 'Solicitud Cancelada',
+          icon: 'document',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0 0 16px 0;color:#374151;font-size:16px;line-height:1.6">Tu solicitud <strong>{{application.folio}}</strong> ha sido cancelada.</p><p style="margin:0;color:#6b7280;font-size:14px">Si tienes alguna duda, no dudes en contactarnos.</p>',
+          details: detailRows(['Folio', '{{application.folio}}'], ['Producto', '{{application.product_name}}']),
+          detailsTint: 'neutral',
+        }),
+      },
+      {
+        name: 'Solicitud Cancelada - SMS',
+        event: 'application.cancelled',
+        channel: 'SMS',
+        is_active: true,
+        priority: 3,
+        subject: null,
+        body: '{{tenant.name}}: Tu solicitud {{application.folio}} ha sido cancelada. Contáctanos para más información.',
+        html_body: null,
+      },
+      {
+        name: 'Solicitud Cancelada - In App',
+        event: 'application.cancelled',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 3,
+        subject: 'Solicitud cancelada',
+        body: 'Tu solicitud {{application.folio}} ha sido cancelada.',
+        html_body: null,
+      },
+
+      // ═══════════════ CONTRAOFERTA ENVIADA ═══════════════
+      {
+        name: 'Contraoferta - Email',
+        event: 'application.counter_offered',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 2,
+        subject: 'Tienes una contraoferta - {{application.folio}}',
+        body: 'Hola {{applicant.first_name}}, hemos preparado una contraoferta para tu solicitud.',
+        html_body: emailHtml({
+          gradient: '#8b5cf6 0%,#7c3aed 100%',
+          heading: 'Contraoferta Disponible',
+          icon: 'star',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Hemos preparado una contraoferta para tu solicitud <strong>{{application.folio}}</strong>. Revisa los nuevos términos y decide si deseas aceptarla.</p>',
+          details: detailRows(['Folio', '{{application.folio}}'], ['Monto Original', '{{application.amount}}'], ['Monto Contraoferta', '{{counter_offer.amount}}'], ['Nuevo Plazo', '{{counter_offer.term_months}} meses']),
+          detailsTitle: 'Detalles de la Contraoferta',
+          detailsTint: 'purple',
+          ctaText: 'Ver Contraoferta',
+          ctaUrl: '{{dashboard_url}}',
+        }),
+      },
+      {
+        name: 'Contraoferta - SMS',
+        event: 'application.counter_offered',
+        channel: 'SMS',
+        is_active: true,
+        priority: 2,
+        subject: null,
+        body: '{{tenant.name}}: Tienes una contraoferta para tu solicitud {{application.folio}} por {{counter_offer.amount}}. Ingresa a tu cuenta.',
+        html_body: null,
+      },
+      {
+        name: 'Contraoferta - WhatsApp',
+        event: 'application.counter_offered',
+        channel: 'WHATSAPP',
+        is_active: true,
+        priority: 2,
+        subject: null,
+        body: '*{{tenant.name}}*\n\nHola {{applicant.first_name}}, tenemos una contraoferta para tu solicitud *{{application.folio}}*.\n\nMonto: {{counter_offer.amount}}\nPlazo: {{counter_offer.term_months}} meses\nPago mensual: {{counter_offer.monthly_payment}}',
+        html_body: null,
+      },
+      {
+        name: 'Contraoferta - In App',
+        event: 'application.counter_offered',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 2,
+        subject: 'Contraoferta disponible',
+        body: 'Tienes una contraoferta para tu solicitud {{application.folio}} por {{counter_offer.amount}}.',
+        html_body: null,
+      },
+
+      // ═══════════════ CONTRAOFERTA ACEPTADA ═══════════════
+      {
+        name: 'Contraoferta Aceptada - Email',
+        event: 'counter_offer.accepted',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 2,
+        subject: 'Contraoferta aceptada - {{application.folio}}',
+        body: 'Hola {{applicant.first_name}}, has aceptado la contraoferta.',
+        html_body: emailHtml({
+          gradient: '#10b981 0%,#059669 100%',
+          heading: 'Contraoferta Aceptada',
+          icon: 'celebrate',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Has aceptado la contraoferta para tu solicitud <strong>{{application.folio}}</strong>. Tu solicitud continuará con el proceso.</p>',
+          details: detailRows(['Folio', '{{application.folio}}'], ['Monto Aprobado', '{{counter_offer.amount}}'], ['Plazo', '{{counter_offer.term_months}} meses'], ['Pago Mensual', '{{counter_offer.monthly_payment}}']),
+          detailsTitle: 'Nuevos Términos',
+          detailsTint: 'green',
+          ctaText: 'Ver Mi Solicitud',
+          ctaUrl: '{{dashboard_url}}',
+        }),
+      },
+      {
+        name: 'Contraoferta Aceptada - SMS',
+        event: 'counter_offer.accepted',
+        channel: 'SMS',
+        is_active: true,
+        priority: 2,
+        subject: null,
+        body: '{{tenant.name}}: Has aceptado la contraoferta de {{application.folio}} por {{counter_offer.amount}}.',
+        html_body: null,
+      },
+      {
+        name: 'Contraoferta Aceptada - WhatsApp',
+        event: 'counter_offer.accepted',
+        channel: 'WHATSAPP',
+        is_active: true,
+        priority: 2,
+        subject: null,
+        body: '*{{tenant.name}}*\n\nHola {{applicant.first_name}}, has aceptado la contraoferta de tu solicitud *{{application.folio}}*.\n\nMonto: {{counter_offer.amount}}\nPlazo: {{counter_offer.term_months}} meses\nPago mensual: {{counter_offer.monthly_payment}}',
+        html_body: null,
+      },
+      {
+        name: 'Contraoferta Aceptada - In App',
+        event: 'counter_offer.accepted',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 2,
+        subject: 'Contraoferta aceptada',
+        body: 'Has aceptado la contraoferta de tu solicitud {{application.folio}} por {{counter_offer.amount}}.',
+        html_body: null,
+      },
+
+      // ═══════════════ CONTRAOFERTA RECHAZADA ═══════════════
+      {
+        name: 'Contraoferta Rechazada - Email',
+        event: 'counter_offer.rejected',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 4,
+        subject: 'Actualización sobre tu solicitud - {{application.folio}}',
+        body: 'Hola {{applicant.first_name}}, la contraoferta no fue aceptada.',
+        html_body: emailHtml({
+          gradient: '#6b7280 0%,#4b5563 100%',
+          heading: 'Contraoferta No Aceptada',
+          icon: 'document',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0 0 16px 0;color:#374151;font-size:16px;line-height:1.6">La contraoferta para tu solicitud <strong>{{application.folio}}</strong> no fue aceptada.</p><p style="margin:0;color:#6b7280;font-size:14px">Si deseas explorar otras opciones, no dudes en contactarnos.</p>',
+          details: detailRows(['Folio', '{{application.folio}}']),
+          detailsTint: 'neutral',
+        }),
+      },
+      {
+        name: 'Contraoferta Rechazada - In App',
+        event: 'counter_offer.rejected',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 4,
+        subject: 'Contraoferta no aceptada',
+        body: 'La contraoferta de tu solicitud {{application.folio}} no fue aceptada.',
+        html_body: null,
+      },
+
+      // ═══════════════ SOLICITUD SINCRONIZADA ═══════════════
+      {
+        name: 'Solicitud Sincronizada - In App',
+        event: 'application.synced',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 5,
+        subject: 'Solicitud en proceso',
+        body: 'Tu solicitud {{application.folio}} ha avanzado al siguiente paso del proceso.',
+        html_body: null,
+      },
+
+      // ═══════════════ CUENTA BANCARIA VERIFICADA ═══════════════
+      {
+        name: 'Cuenta Verificada - Email',
+        event: 'bank_account.verified',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 5,
+        subject: 'Cuenta bancaria verificada - {{tenant.name}}',
+        body: 'Hola {{applicant.first_name}}, tu cuenta bancaria ha sido verificada.',
+        html_body: emailHtml({
+          gradient: '#10b981 0%,#059669 100%',
+          heading: 'Cuenta Verificada',
+          icon: 'check',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Tu cuenta bancaria ha sido verificada exitosamente.</p>',
+          details: detailRows(['Banco', '{{bank_account.bank_name}}'], ['CLABE', '{{bank_account.masked_clabe}}'], ['Titular', '{{bank_account.holder_name}}']),
+          detailsTitle: 'Datos de la Cuenta',
+          detailsTint: 'green',
+        }),
+      },
+      {
+        name: 'Cuenta Verificada - In App',
+        event: 'bank_account.verified',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 5,
+        subject: 'Cuenta bancaria verificada',
+        body: 'Tu cuenta en {{bank_account.bank_name}} ({{bank_account.masked_clabe}}) ha sido verificada.',
+        html_body: null,
+      },
+
+      // ═══════════════ PIN DE SEGURIDAD CAMBIADO ═══════════════
+      {
+        name: 'PIN Cambiado - Email',
+        event: 'security.pin_changed',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 2,
+        subject: 'Alerta de seguridad - PIN modificado',
+        body: 'Hola {{applicant.first_name}}, tu PIN de seguridad ha sido cambiado. Si no fuiste tú, contáctanos.',
+        html_body: emailHtml({
+          gradient: '#ef4444 0%,#dc2626 100%',
+          heading: 'PIN Modificado',
+          icon: 'lock',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0 0 16px 0;color:#374151;font-size:16px;line-height:1.6">Tu PIN de seguridad ha sido modificado exitosamente.</p><p style="margin:0;color:#374151;font-size:16px;line-height:1.6"><strong>Si no realizaste este cambio, contacta a soporte de inmediato.</strong></p>',
+        }),
+      },
+      {
+        name: 'PIN Cambiado - SMS',
+        event: 'security.pin_changed',
+        channel: 'SMS',
+        is_active: true,
+        priority: 2,
+        subject: null,
+        body: '{{tenant.name}}: Tu PIN fue cambiado. Si no fuiste tú, contáctanos de inmediato.',
+        html_body: null,
+      },
+      {
+        name: 'PIN Cambiado - In App',
+        event: 'security.pin_changed',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 2,
+        subject: 'PIN de seguridad cambiado',
+        body: 'Tu PIN ha sido modificado. Si no realizaste este cambio, contacta a soporte.',
+        html_body: null,
+      },
+
+      // ═══════════════ CRÉDITO DESEMBOLSADO ═══════════════
+      {
+        name: 'Desembolso - Email',
+        event: 'loan.disbursed',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 1,
+        subject: '¡Tu crédito ha sido desembolsado! - {{application.folio}}',
+        body: 'Hola {{applicant.first_name}}, tu crédito ha sido desembolsado.',
+        html_body: emailHtml({
+          gradient: '#10b981 0%,#059669 100%',
+          heading: '¡Crédito Desembolsado!',
+          icon: 'celebrate',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Nos complace informarte que tu crédito ha sido desembolsado exitosamente.</p>',
+          details: detailRows(['Folio', '{{application.folio}}'], ['Monto', '{{loan.disbursed_amount}}'], ['Fecha', '{{loan.disbursement_date}}'], ['Cuenta', '{{loan.bank_account}}'], ['Referencia', '{{loan.reference}}']),
+          detailsTitle: 'Detalles del Desembolso',
+          detailsTint: 'green',
+          ctaText: 'Ver Mi Crédito',
+          ctaUrl: '{{dashboard_url}}',
+        }),
+      },
+      {
+        name: 'Desembolso - SMS',
+        event: 'loan.disbursed',
+        channel: 'SMS',
+        is_active: true,
+        priority: 1,
+        subject: null,
+        body: '{{tenant.name}}: Tu crédito {{application.folio}} por {{loan.disbursed_amount}} ha sido depositado. Ref: {{loan.reference}}',
+        html_body: null,
+      },
+      {
+        name: 'Desembolso - WhatsApp',
+        event: 'loan.disbursed',
+        channel: 'WHATSAPP',
+        is_active: true,
+        priority: 1,
+        subject: null,
+        body: '*{{tenant.name}}*\n\n¡Hola {{applicant.first_name}}! Tu crédito ha sido desembolsado.\n\nFolio: *{{application.folio}}*\nMonto: {{loan.disbursed_amount}}\nFecha: {{loan.disbursement_date}}\nReferencia: {{loan.reference}}',
+        html_body: null,
+      },
+      {
+        name: 'Desembolso - In App',
+        event: 'loan.disbursed',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 1,
+        subject: 'Crédito desembolsado',
+        body: 'Tu crédito {{application.folio}} por {{loan.disbursed_amount}} ha sido depositado en tu cuenta.',
+        html_body: null,
+      },
+
+      // ═══════════════ PAGO RECIBIDO ═══════════════
+      {
+        name: 'Pago Recibido - Email',
+        event: 'payment.received',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 3,
+        subject: 'Pago recibido - {{application.folio}}',
+        body: 'Hola {{applicant.first_name}}, hemos recibido tu pago.',
+        html_body: emailHtml({
+          gradient: '#10b981 0%,#059669 100%',
+          heading: 'Pago Recibido',
+          icon: 'check',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Hemos recibido tu pago exitosamente. Gracias por mantenerte al corriente.</p>',
+          details: detailRows(['Folio', '{{application.folio}}'], ['Monto', '{{payment.amount}}'], ['Fecha', '{{payment.date}}'], ['Método', '{{payment.method}}'], ['Saldo Restante', '{{payment.remaining_balance}}']),
+          detailsTitle: 'Detalles del Pago',
+          detailsTint: 'green',
+        }),
+      },
+      {
+        name: 'Pago Recibido - SMS',
+        event: 'payment.received',
+        channel: 'SMS',
+        is_active: true,
+        priority: 3,
+        subject: null,
+        body: '{{tenant.name}}: Pago de {{payment.amount}} recibido para {{application.folio}}. Saldo: {{payment.remaining_balance}}',
+        html_body: null,
+      },
+      {
+        name: 'Pago Recibido - WhatsApp',
+        event: 'payment.received',
+        channel: 'WHATSAPP',
+        is_active: true,
+        priority: 3,
+        subject: null,
+        body: '*{{tenant.name}}*\n\nHola {{applicant.first_name}}, hemos recibido tu pago.\n\nMonto: {{payment.amount}}\nFecha: {{payment.date}}\nSaldo restante: {{payment.remaining_balance}}',
+        html_body: null,
+      },
+      {
+        name: 'Pago Recibido - In App',
+        event: 'payment.received',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 3,
+        subject: 'Pago recibido',
+        body: 'Tu pago de {{payment.amount}} fue recibido. Saldo restante: {{payment.remaining_balance}}',
+        html_body: null,
+      },
+
+      // ═══════════════ PAGO PRÓXIMO A VENCER ═══════════════
+      {
+        name: 'Recordatorio Pago - Email',
+        event: 'payment.upcoming',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 4,
+        subject: 'Recordatorio de pago - {{application.folio}}',
+        body: 'Hola {{applicant.first_name}}, tu próximo pago está por vencer.',
+        html_body: emailHtml({
+          gradient: '#f59e0b 0%,#d97706 100%',
+          heading: 'Recordatorio de Pago',
+          icon: 'clock',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Te recordamos que tu próximo pago está por vencer. Realízalo a tiempo para evitar recargos.</p>',
+          details: detailRows(['Folio', '{{application.folio}}'], ['Pago #', '{{payment.payment_number}} de {{payment.total_payments}}'], ['Monto', '{{payment.amount}}'], ['Vence', '{{payment.due_date}}']),
+          detailsTitle: 'Próximo Pago',
+          detailsTint: 'amber',
+          ctaText: 'Realizar Pago',
+          ctaUrl: '{{dashboard_url}}',
+        }),
+      },
+      {
+        name: 'Recordatorio Pago - SMS',
+        event: 'payment.upcoming',
+        channel: 'SMS',
+        is_active: true,
+        priority: 4,
+        subject: null,
+        body: '{{tenant.name}}: Tu pago de {{payment.amount}} vence el {{payment.due_date}}. Folio: {{application.folio}}',
+        html_body: null,
+      },
+      {
+        name: 'Recordatorio Pago - In App',
+        event: 'payment.upcoming',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 4,
+        subject: 'Pago próximo a vencer',
+        body: 'Tu pago #{{payment.payment_number}} de {{payment.amount}} vence el {{payment.due_date}}.',
+        html_body: null,
+      },
+
+      // ═══════════════ PAGO VENCIDO ═══════════════
+      {
+        name: 'Pago Vencido - Email',
+        event: 'payment.overdue',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 2,
+        subject: 'Pago vencido - Atención requerida - {{application.folio}}',
+        body: 'Hola {{applicant.first_name}}, tienes un pago vencido.',
+        html_body: emailHtml({
+          gradient: '#ef4444 0%,#dc2626 100%',
+          heading: 'Pago Vencido',
+          icon: 'warning',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Tienes un pago vencido. Te recomendamos regularizarte lo antes posible para evitar recargos adicionales.</p>',
+          details: detailRows(['Folio', '{{application.folio}}'], ['Monto', '{{payment.amount}}'], ['Venció', '{{payment.due_date}}'], ['Días de atraso', '{{payment.days_overdue}}'], ['Recargo', '{{payment.late_fee}}']),
+          detailsTitle: 'Pago Vencido',
+          detailsTint: 'red',
+          ctaText: 'Realizar Pago',
+          ctaUrl: '{{dashboard_url}}',
+        }),
+      },
+      {
+        name: 'Pago Vencido - SMS',
+        event: 'payment.overdue',
+        channel: 'SMS',
+        is_active: true,
+        priority: 2,
+        subject: null,
+        body: '{{tenant.name}}: Tu pago de {{payment.amount}} está vencido ({{payment.days_overdue}} días). Folio: {{application.folio}}',
+        html_body: null,
+      },
+      {
+        name: 'Pago Vencido - In App',
+        event: 'payment.overdue',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 2,
+        subject: 'Pago vencido',
+        body: 'Tu pago de {{payment.amount}} está vencido por {{payment.days_overdue}} días. Recargo: {{payment.late_fee}}',
+        html_body: null,
+      },
+
+      // ═══════════════ CRÉDITO LIQUIDADO ═══════════════
+      {
+        name: 'Crédito Liquidado - Email',
+        event: 'loan.completed',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 3,
+        subject: '¡Felicidades! Tu crédito ha sido liquidado',
+        body: 'Hola {{applicant.first_name}}, tu crédito ha sido liquidado completamente.',
+        html_body: emailHtml({
+          gradient: '#10b981 0%,#059669 100%',
+          heading: '¡Crédito Liquidado!',
+          icon: 'celebrate',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">¡Felicidades! Tu crédito ha sido liquidado completamente. Gracias por tu confianza.</p>',
+          details: detailRows(['Folio', '{{application.folio}}'], ['Total Pagado', '{{loan.total_paid}}'], ['Fecha de Liquidación', '{{loan.completion_date}}']),
+          detailsTitle: 'Resumen del Crédito',
+          detailsTint: 'green',
+        }),
+      },
+      {
+        name: 'Crédito Liquidado - SMS',
+        event: 'loan.completed',
+        channel: 'SMS',
+        is_active: true,
+        priority: 3,
+        subject: null,
+        body: '{{tenant.name}}: ¡Felicidades {{applicant.first_name}}! Tu crédito {{application.folio}} ha sido liquidado.',
+        html_body: null,
+      },
+      {
+        name: 'Crédito Liquidado - WhatsApp',
+        event: 'loan.completed',
+        channel: 'WHATSAPP',
+        is_active: true,
+        priority: 3,
+        subject: null,
+        body: '*{{tenant.name}}*\n\n¡Felicidades *{{applicant.first_name}}*! Tu crédito *{{application.folio}}* ha sido liquidado completamente.\n\nTotal pagado: {{loan.total_paid}}\nFecha: {{loan.completion_date}}\n\n¡Gracias por tu confianza!',
+        html_body: null,
+      },
+      {
+        name: 'Crédito Liquidado - In App',
+        event: 'loan.completed',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 3,
+        subject: 'Crédito liquidado',
+        body: '¡Felicidades! Tu crédito {{application.folio}} ha sido liquidado completamente.',
+        html_body: null,
+      },
+
+      // ═══════════════ CRÉDITO EN MORA ═══════════════
+      {
+        name: 'Mora - Email',
+        event: 'loan.default',
+        channel: 'EMAIL',
+        is_active: true,
+        priority: 1,
+        subject: 'Aviso importante sobre tu crédito - {{application.folio}}',
+        body: 'Hola {{applicant.first_name}}, tu crédito presenta un atraso importante.',
+        html_body: emailHtml({
+          gradient: '#dc2626 0%,#991b1b 100%',
+          heading: 'Aviso Importante',
+          icon: 'warning',
+          greeting: 'Hola <strong>{{applicant.first_name}}</strong>,',
+          body: '<p style="margin:0;color:#374151;font-size:16px;line-height:1.6">Tu crédito presenta un atraso importante. Te exhortamos a regularizar tu situación lo antes posible para evitar consecuencias adicionales.</p>',
+          details: detailRows(['Folio', '{{application.folio}}'], ['Monto Vencido', '{{loan.overdue_amount}}'], ['Días de Atraso', '{{loan.days_overdue}}'], ['Recargos', '{{loan.late_fees}}']),
+          detailsTitle: 'Situación del Crédito',
+          detailsTint: 'red',
+        }),
+      },
+      {
+        name: 'Mora - SMS',
+        event: 'loan.default',
+        channel: 'SMS',
+        is_active: true,
+        priority: 1,
+        subject: null,
+        body: '{{tenant.name}}: Tu crédito {{application.folio}} tiene atraso de {{loan.days_overdue}} días. Contáctanos para regularizarte.',
+        html_body: null,
+      },
+      {
+        name: 'Mora - In App',
+        event: 'loan.default',
+        channel: 'IN_APP',
+        is_active: true,
+        priority: 1,
+        subject: 'Crédito en mora',
+        body: 'Tu crédito {{application.folio}} tiene atraso de {{loan.days_overdue}} días. Monto vencido: {{loan.overdue_amount}}.',
         html_body: null,
       },
     ]
@@ -828,6 +1443,42 @@ const sampleData: Record<string, any> = {
   'document.status': 'Aprobado',
   'rejection.reason': 'No cumple con los requisitos mínimos',
   'corrections.list': '- Actualizar comprobante de ingresos\n- Subir INE actualizada',
+  // Contraoferta
+  'counter_offer.amount': '$35,000.00',
+  'counter_offer.term_months': '18',
+  'counter_offer.monthly_payment': '$2,150.00',
+  'counter_offer.interest_rate': '24%',
+  'counter_offer.reason': 'Monto ajustado por capacidad de pago',
+  // Cancelación
+  'cancellation.reason': 'Solicitud duplicada',
+  // Sincronización
+  'sync.system': 'SAP Business One',
+  'sync.external_id': 'SAP-2024-00123',
+  // Cuenta bancaria
+  'bank_account.bank_name': 'BBVA México',
+  'bank_account.masked_clabe': '0121**********5678',
+  'bank_account.holder_name': 'Juan Pérez García',
+  // Préstamo
+  'loan.disbursed_amount': '$50,000.00',
+  'loan.disbursement_date': '15 de febrero de 2026',
+  'loan.bank_account': 'BBVA - ****5678',
+  'loan.reference': 'DEP-2026-001234',
+  'loan.total_paid': '$58,750.00',
+  'loan.completion_date': '15 de febrero de 2028',
+  'loan.overdue_amount': '$4,300.00',
+  'loan.days_overdue': '45',
+  'loan.late_fees': '$650.00',
+  // Pagos
+  'payment.amount': '$2,150.00',
+  'payment.date': '15 de febrero de 2026',
+  'payment.due_date': '1 de marzo de 2026',
+  'payment.method': 'Transferencia SPEI',
+  'payment.reference': 'PAG-2026-000456',
+  'payment.remaining_balance': '$42,500.00',
+  'payment.payment_number': '3',
+  'payment.total_payments': '24',
+  'payment.days_overdue': '15',
+  'payment.late_fee': '$215.00',
 }
 
 // Render preview with sample data
@@ -994,47 +1645,29 @@ onMounted(() => {
 
           <!-- Event filter -->
           <div>
-            <select
+            <SearchableSelect
               v-model="filterEvent"
-              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent appearance-none bg-white"
-              @change="loadTemplates"
-            >
-              <option value="">Todos los eventos</option>
-              <option v-for="event in config?.events" :key="event.value" :value="event.value">
-                {{ event.label }}
-              </option>
-            </select>
+              :options="eventOptions"
+              placeholder="Todos los eventos"
+            />
           </div>
 
           <!-- Channel filter -->
           <div>
-            <select
+            <SearchableSelect
               v-model="filterChannel"
-              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent appearance-none bg-white"
-              @change="loadTemplates"
-            >
-              <option value="">Todos los canales</option>
-              <option
-                v-for="channel in config?.channels"
-                :key="channel.value"
-                :value="channel.value"
-              >
-                {{ channel.label }}
-              </option>
-            </select>
+              :options="channelOptions"
+              placeholder="Todos los canales"
+            />
           </div>
 
           <!-- Status filter -->
           <div>
-            <select
+            <SearchableSelect
               v-model="filterStatus"
-              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent appearance-none bg-white"
-              @change="loadTemplates"
-            >
-              <option value="">Todos los estados</option>
-              <option value="active">Activas</option>
-              <option value="inactive">Inactivas</option>
-            </select>
+              :options="statusOptions"
+              placeholder="Todos los estados"
+            />
           </div>
         </div>
       </div>
