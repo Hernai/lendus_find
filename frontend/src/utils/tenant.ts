@@ -14,7 +14,7 @@ const RESERVED_SUBDOMAINS = ['www', 'app', 'api', 'admin', 'localhost']
 const EXCLUDED_PARENT_DOMAINS = ['ngrok-free.app', 'ngrok.io', 'localhost']
 
 // Reserved paths that are NOT tenant slugs
-const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones', 'find']
+const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones', 'find', 'm', 'mobile']
 
 /**
  * Get subdomain from current hostname

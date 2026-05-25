@@ -74,7 +74,7 @@ const NotificationTemplates = () => import('@/views/admin/panel/NotificationTemp
 const NotificationTemplateForm = () => import('@/views/admin/panel/NotificationTemplateForm.vue')
 
 // Reserved paths that are NOT tenant slugs (must match tenant.ts)
-const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones', 'find', 'notificaciones']
+const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones', 'find', 'notificaciones', 'm', 'mobile']
 
 // Helper to check if a path segment is a tenant slug
 const isTenantSlug = (segment: string): boolean => {
