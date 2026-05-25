@@ -578,7 +578,7 @@ const handleSubmit = async () => {
         </div>
 
         <!-- Sticky Footer -->
-        <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+        <div class="fixed bottom-0 left-0 right-0 p-3 bg-white border-t">
           <div class="max-w-md mx-auto">
             <AppButton
               type="submit"
@@ -587,7 +587,7 @@ const handleSubmit = async () => {
               full-width
               :loading="onboardingStore.isSaving"
             >
-              Continuar →
+              Continuar
             </AppButton>
           </div>
         </div>

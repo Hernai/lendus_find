@@ -203,10 +203,10 @@ const frequencyLabels = computed(() => {
         </div>
 
         <!-- Sticky Footer -->
-        <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+        <div class="fixed bottom-0 left-0 right-0 p-3 bg-white border-t">
           <div class="max-w-md mx-auto flex gap-3">
             <AppButton type="button" variant="outline" size="lg" class="flex-1" @click="prevStep">
-              ← Anterior
+              Atrás
             </AppButton>
             <AppButton
               type="submit"
@@ -215,7 +215,7 @@ const frequencyLabels = computed(() => {
               class="flex-1"
               :loading="onboardingStore.isSaving"
             >
-              Continuar →
+              Continuar
             </AppButton>
           </div>
         </div>

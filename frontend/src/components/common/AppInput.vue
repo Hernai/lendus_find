@@ -44,7 +44,7 @@ const errorId = computed(() => `${inputId.value}-error`)
 const hintId = computed(() => `${inputId.value}-hint`)
 
 const inputClasses = computed(() => {
-  const base = 'w-full px-4 py-3 border-2 rounded-xl transition-colors duration-200 focus:outline-none'
+  const base = 'w-full px-3 py-2 text-sm border-2 rounded-lg transition-colors duration-200 focus:outline-none'
   const state = props.error
     ? 'border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100'
     : 'border-gray-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-100'
@@ -104,9 +104,9 @@ defineExpose({ focus })
       <!-- Prefix -->
       <div
         v-if="prefix"
-        class="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none"
+        class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none"
       >
-        <span class="text-gray-500">{{ prefix }}</span>
+        <span class="text-sm text-gray-500">{{ prefix }}</span>
       </div>
 
       <!-- Input -->
@@ -124,7 +124,7 @@ defineExpose({ focus })
         :aria-required="required || undefined"
         :aria-invalid="error ? 'true' : undefined"
         :aria-describedby="error ? errorId : hint ? hintId : ariaDescribedby || undefined"
-        :class="[inputClasses, prefix ? 'pl-12' : '', suffix ? 'pr-12' : '']"
+        :class="[inputClasses, prefix ? 'pl-10' : '', suffix ? 'pr-10' : '']"
         @input="handleInput"
         @focus="handleFocus"
         @blur="handleBlur"
@@ -133,17 +133,17 @@ defineExpose({ focus })
       <!-- Suffix -->
       <div
         v-if="suffix"
-        class="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none"
+        class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none"
       >
-        <span class="text-gray-500">{{ suffix }}</span>
+        <span class="text-sm text-gray-500">{{ suffix }}</span>
       </div>
 
       <!-- Success icon when valid -->
       <div
         v-if="!error && modelValue && !isFocused"
-        class="absolute inset-y-0 right-0 flex items-center pr-3"
+        class="absolute inset-y-0 right-0 flex items-center pr-2.5"
       >
-        <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+        <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
           <path
             fill-rule="evenodd"
             d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
@@ -154,12 +154,12 @@ defineExpose({ focus })
     </div>
 
     <!-- Error message -->
-    <p v-if="error" :id="errorId" class="mt-1 text-sm text-red-600" role="alert">
+    <p v-if="error" :id="errorId" class="mt-1 text-xs text-red-600" role="alert">
       {{ error }}
     </p>
 
     <!-- Hint -->
-    <p v-else-if="hint" :id="hintId" class="mt-1 text-sm text-gray-500">
+    <p v-else-if="hint" :id="hintId" class="mt-1 text-xs text-gray-500">
       {{ hint }}
     </p>
   </div>

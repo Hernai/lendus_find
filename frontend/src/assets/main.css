@@ -104,3 +104,29 @@ body {
 .tenant-theme label {
   color: var(--tenant-text-color, #1f2937);
 }
+
+/* === Normalizar inputs type=number con type=text === */
+/* Quitar spinners (flechas arriba/abajo) en WebKit/Blink */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+/* Firefox */
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+/* Heredar tipografía explícitamente (Android Chrome a veces usa
+   fuente del sistema para number/date/tel) */
+input[type='number'],
+input[type='tel'],
+input[type='date'],
+input[type='email'],
+input[type='password'],
+input[type='url'] {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  -webkit-text-size-adjust: 100%;
+}

@@ -322,7 +322,7 @@ const sections = computed(() => {
       </div>
 
       <!-- Sticky Footer -->
-      <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+      <div class="fixed bottom-0 left-0 right-0 p-3 bg-white border-t">
         <div class="max-w-md mx-auto flex gap-3">
           <AppButton
             type="button"
@@ -331,7 +331,7 @@ const sections = computed(() => {
             class="flex-1"
             @click="prevStep"
           >
-            ← Anterior
+            Atrás
           </AppButton>
           <AppButton
             type="button"
@@ -342,7 +342,7 @@ const sections = computed(() => {
             :loading="isSubmitting"
             @click="handleSubmit"
           >
-            Enviar solicitud
+            Enviar
           </AppButton>
         </div>
       </div>

@@ -179,7 +179,7 @@ const handleSubmit = async () => {
                   inputmode="numeric"
                   autocomplete="off"
                   placeholder="18 dígitos"
-                  class="w-full px-4 py-3.5 border rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 font-mono text-lg tracking-wide"
+                  class="w-full px-3 py-2 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-500 font-mono text-sm tracking-wide"
                   :class="{
                     'border-gray-300': !clabeError && !clabeValid,
                     'border-red-500': clabeError,
@@ -207,7 +207,7 @@ const handleSubmit = async () => {
               </label>
               <!-- Auto-detected bank (readonly) -->
               <div v-if="bankNameAutoDetected" class="relative">
-                <div class="px-4 py-3.5 bg-gray-50 border border-green-300 rounded-xl text-gray-900 font-medium min-h-[50px] flex items-center">
+                <div class="px-3 py-2 bg-gray-50 border border-green-300 rounded-lg text-gray-900 text-sm font-medium min-h-[38px] flex items-center">
                   {{ bankName }}
                 </div>
                 <div class="absolute right-3 top-1/2 -translate-y-1/2">
@@ -223,7 +223,7 @@ const handleSubmit = async () => {
                 type="text"
                 autocomplete="off"
                 placeholder="Nombre del banco"
-                class="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                class="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-500"
               />
               <p v-if="!bankNameAutoDetected" class="mt-1 text-xs text-gray-500">
                 No se detectó el banco automáticamente. Ingresa el nombre manualmente.
@@ -238,7 +238,7 @@ const handleSubmit = async () => {
               <div class="relative">
                 <select
                   v-model="accountType"
-                  class="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white appearance-none cursor-pointer text-base"
+                  class="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-500 bg-white appearance-none cursor-pointer"
                 >
                   <option
                     v-for="option in accountTypeOptions"
@@ -267,7 +267,7 @@ const handleSubmit = async () => {
                 autocomplete="name"
                 autocapitalize="characters"
                 placeholder="Como aparece en el estado de cuenta"
-                class="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 uppercase text-base"
+                class="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-500 uppercase"
               />
             </div>
 
@@ -282,7 +282,7 @@ const handleSubmit = async () => {
                 autocomplete="off"
                 autocapitalize="characters"
                 placeholder="13 caracteres"
-                class="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 uppercase text-base"
+                class="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-500 uppercase"
                 maxlength="13"
               />
             </div>
@@ -295,7 +295,7 @@ const handleSubmit = async () => {
                   type="checkbox"
                   class="w-6 h-6 rounded border-gray-300 text-primary-600 focus:ring-primary-500 flex-shrink-0"
                 />
-                <span class="text-base text-gray-700">Esta cuenta está a mi nombre</span>
+                <span class="text-sm text-gray-700">Esta cuenta está a mi nombre</span>
               </label>
 
               <label class="flex items-center gap-3 cursor-pointer py-1 -mx-2 px-2 active:bg-gray-50 rounded-lg">
@@ -304,7 +304,7 @@ const handleSubmit = async () => {
                   type="checkbox"
                   class="w-6 h-6 rounded border-gray-300 text-primary-600 focus:ring-primary-500 flex-shrink-0"
                 />
-                <span class="text-base text-gray-700">Usar como cuenta principal para depósitos</span>
+                <span class="text-sm text-gray-700">Usar como cuenta principal para depósitos</span>
               </label>
             </div>
           </form>

@@ -254,7 +254,7 @@ const stepInfo = computed(() => {
             @retake="handleIneFrontRetake"
           />
 
-          <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+          <div class="fixed bottom-0 left-0 right-0 p-3 bg-white border-t">
             <div class="max-w-md mx-auto">
               <AppButton
                 variant="primary"
@@ -278,7 +278,7 @@ const stepInfo = computed(() => {
             @retake="handleIneBackRetake"
           />
 
-          <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+          <div class="fixed bottom-0 left-0 right-0 p-3 bg-white border-t">
             <div class="max-w-md mx-auto space-y-2">
               <AppButton
                 variant="primary"
@@ -309,7 +309,7 @@ const stepInfo = computed(() => {
             @retake="handleSelfieRetake"
           />
 
-          <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+          <div class="fixed bottom-0 left-0 right-0 p-3 bg-white border-t">
             <div class="max-w-md mx-auto space-y-2">
               <AppButton
                 variant="primary"
@@ -545,7 +545,7 @@ const stepInfo = computed(() => {
           </div>
 
           <!-- Actions -->
-          <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+          <div class="fixed bottom-0 left-0 right-0 p-3 bg-white border-t">
             <div class="max-w-md mx-auto space-y-2">
               <AppButton
                 v-if="allPassed"

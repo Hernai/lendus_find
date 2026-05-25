@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import AppBottomSheet from './AppBottomSheet.vue'
+import { platform } from '@/platform'
 
 interface Option {
   readonly value: string | number
@@ -31,13 +32,22 @@ const emit = defineEmits<{
 const isMobile = ref(false)
 const isOpen = ref(false)
 
-// Detect mobile on mount
+// Detect mobile on mount.
+// En Capacitor native (iOS/Android) siempre usamos BottomSheet.
+// En web caemos a media query y pointer:coarse para tablets/teléfonos.
 onMounted(() => {
-  isMobile.value = window.matchMedia('(max-width: 640px)').matches
-  const mediaQuery = window.matchMedia('(max-width: 640px)')
-  mediaQuery.addEventListener('change', (e) => {
-    isMobile.value = e.matches
-  })
+  if (platform.device.isNative() || platform.device.isMobileUserAgent()) {
+    isMobile.value = true
+    return
+  }
+  const compute = () =>
+    window.matchMedia('(max-width: 768px)').matches ||
+    window.matchMedia('(pointer: coarse)').matches
+  isMobile.value = compute()
+  const mq1 = window.matchMedia('(max-width: 768px)')
+  const mq2 = window.matchMedia('(pointer: coarse)')
+  mq1.addEventListener('change', () => (isMobile.value = compute()))
+  mq2.addEventListener('change', () => (isMobile.value = compute()))
 })
 
 const selectedLabel = computed(() => {
@@ -46,7 +56,7 @@ const selectedLabel = computed(() => {
 })
 
 const selectClasses = computed(() => {
-  const base = 'w-full px-4 py-3 border-2 rounded-xl transition-colors duration-200 focus:outline-none appearance-none bg-white cursor-pointer text-left'
+  const base = 'w-full px-3 py-2 text-sm border-2 rounded-lg transition-colors duration-200 focus:outline-none appearance-none bg-white cursor-pointer text-left'
   const state = props.error
     ? 'border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100'
     : 'border-gray-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-100'
@@ -109,7 +119,7 @@ const openSheet = () => {
             :key="option.value"
             type="button"
             :disabled="option.disabled"
-            class="w-full px-4 py-4 text-left rounded-xl transition-colors flex items-center justify-between"
+            class="w-full px-3 py-2.5 text-left rounded-lg transition-colors flex items-center justify-between"
             :class="[
               option.value === modelValue
                 ? 'bg-primary-50 text-primary-700'
@@ -118,10 +128,10 @@ const openSheet = () => {
             ]"
             @click="!option.disabled && selectOption(option.value)"
           >
-            <span class="text-base">{{ option.label }}</span>
+            <span class="text-sm">{{ option.label }}</span>
             <svg
               v-if="option.value === modelValue"
-              class="w-5 h-5 text-primary-600"
+              class="w-4 h-4 text-primary-600"
               fill="currentColor"
               viewBox="0 0 20 20"
             >
@@ -169,12 +179,12 @@ const openSheet = () => {
     </template>
 
     <!-- Error message -->
-    <p v-if="error" class="mt-1 text-sm text-red-600">
+    <p v-if="error" class="mt-1 text-xs text-red-600">
       {{ error }}
     </p>
 
     <!-- Hint -->
-    <p v-else-if="hint" class="mt-1 text-sm text-gray-500">
+    <p v-else-if="hint" class="mt-1 text-xs text-gray-500">
       {{ hint }}
     </p>
   </div>

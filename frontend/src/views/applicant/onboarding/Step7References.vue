@@ -323,7 +323,7 @@ const prevStep = () => router.push('/solicitud/paso-6')
         </div>
 
         <!-- Sticky Footer -->
-        <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+        <div class="fixed bottom-0 left-0 right-0 p-3 bg-white border-t">
           <div class="max-w-md mx-auto flex gap-3">
             <AppButton
               type="button"
@@ -332,7 +332,7 @@ const prevStep = () => router.push('/solicitud/paso-6')
               class="flex-1"
               @click="prevStep"
             >
-              ← Anterior
+              Atrás
             </AppButton>
             <AppButton
               type="submit"
@@ -341,7 +341,7 @@ const prevStep = () => router.push('/solicitud/paso-6')
               class="flex-1"
               :loading="isSaving"
             >
-              Continuar →
+              Continuar
             </AppButton>
           </div>
         </div>

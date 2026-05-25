@@ -2,10 +2,20 @@
 import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useOnboardingStore, useApplicationStore, useTenantStore, useKycStore } from '@/stores'
-import { AppButton } from '@/components/common'
+import { AppButton, AppBottomSheet } from '@/components/common'
 import { v2 } from '@/services/v2'
+import { platform } from '@/platform'
 import { logger } from '@/utils/logger'
 import type { Product } from '@/types'
+
+const isNative = platform.device.isNative()
+
+function base64ToFile(base64: string, mimeType: string, filename: string): File {
+  const binary = atob(base64)
+  const arr = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i)
+  return new File([arr], filename, { type: mimeType })
+}
 
 const log = logger.child('Step6Documents')
 
@@ -429,11 +439,73 @@ const allRequiredUploaded = computed(() => {
     .every(doc => doc.status === 'uploaded')
 })
 
-const handleFileSelect = async (doc: DocumentUpload, event: Event) => {
+// BottomSheet de origen del archivo (Cámara / Galería / PDF).
+const sourceSheetOpen = ref(false)
+const sourceDoc = ref<DocumentUpload | null>(null)
+const galleryInputRef = ref<HTMLInputElement | null>(null)
+const pdfInputRef = ref<HTMLInputElement | null>(null)
+
+const openSourceSheet = (doc: DocumentUpload) => {
+  sourceDoc.value = doc
+  sourceSheetOpen.value = true
+}
+
+const chooseCamera = async () => {
+  const doc = sourceDoc.value
+  sourceSheetOpen.value = false
+  if (!doc) return
+  await handleCameraCapture(doc)
+}
+
+const chooseGallery = () => {
+  sourceSheetOpen.value = false
+  galleryInputRef.value?.click()
+}
+
+const choosePdf = () => {
+  sourceSheetOpen.value = false
+  pdfInputRef.value?.click()
+}
+
+/**
+ * Captura desde la cámara nativa (Capacitor). Disponible solo en native.
+ * Convierte el base64 a File y delega al flujo normal de upload.
+ */
+const handleCameraCapture = async (doc: DocumentUpload) => {
+  try {
+    const captured = await platform.camera.capture({
+      facing: 'environment',
+      maxWidth: 1920,
+      maxHeight: 1080,
+      quality: 0.85,
+    })
+    if (!captured?.base64) return
+    const filename = `${doc.id.toLowerCase()}-${Date.now()}.jpg`
+    const file = base64ToFile(captured.base64, captured.mimeType || 'image/jpeg', filename)
+    await processFile(doc, file)
+  } catch (e: unknown) {
+    log.error('Camera capture failed', { error: e })
+    const msg = e instanceof Error ? e.message : String(e)
+    if (!msg.toLowerCase().includes('cancel')) {
+      error.value = 'No se pudo abrir la cámara: ' + msg
+    }
+  }
+}
+
+const handleFileSelect = async (doc: DocumentUpload | null, event: Event) => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
+  // Si no se pasó doc explícito, usar el del sheet activo.
+  const target = doc ?? sourceDoc.value
+  if (!file || !target) {
+    input.value = ''
+    return
+  }
+  await processFile(target, file)
+  input.value = ''
+}
 
-  if (!file) return
+const processFile = async (doc: DocumentUpload, file: File) => {
 
   // Validate file type
   const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
@@ -526,92 +598,89 @@ const prevStep = () => router.push('/solicitud/paso-5')
       </div>
 
       <div v-else>
-        <div class="space-y-4">
-          <div
+        <div class="space-y-3">
+          <component
+            :is="doc.status === 'pending' || doc.status === 'error' ? 'button' : 'div'"
             v-for="doc in documents"
             :key="doc.id"
-            class="bg-white rounded-xl border p-4"
+            :type="doc.status === 'pending' || doc.status === 'error' ? 'button' : undefined"
+            class="w-full text-left bg-white rounded-xl border p-4 transition-colors"
             :class="{
-              'border-gray-200': doc.status === 'pending',
+              'border-gray-200 active:bg-gray-50 cursor-pointer': doc.status === 'pending',
               'border-primary-500 bg-primary-50/30': doc.status === 'uploading',
               'border-green-500 bg-green-50/30': doc.status === 'uploaded' && !doc.fromKyc,
               'border-green-600 bg-green-100/50': doc.status === 'uploaded' && doc.fromKyc,
-              'border-red-500 bg-red-50/30': doc.status === 'error'
+              'border-red-500 bg-red-50/30 active:bg-red-50 cursor-pointer': doc.status === 'error'
             }"
+            @click="(doc.status === 'pending' || doc.status === 'error') && openSourceSheet(doc)"
           >
-          <div class="flex items-start gap-4">
-            <!-- Preview / Icon -->
-            <div class="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
-              <img
-                v-if="doc.preview"
-                :src="doc.preview"
-                :alt="doc.name"
-                class="w-full h-full object-cover"
-              >
-              <svg v-else-if="doc.status === 'uploaded'" class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <svg v-else class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-
-            <!-- Info -->
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 mb-1">
-                <h3 class="font-medium text-gray-900">{{ doc.name }}</h3>
-                <span v-if="doc.required" class="text-xs text-red-500">*</span>
-              </div>
-              <p class="text-sm text-gray-500 mb-2">{{ doc.description }}</p>
-
-              <!-- Actions -->
-              <div v-if="doc.status === 'pending' || doc.status === 'error'">
-                <label class="inline-flex items-center gap-1 text-sm text-primary-600 font-medium cursor-pointer hover:text-primary-700">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                  </svg>
-                  Subir archivo
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
-                    capture="environment"
-                    class="sr-only"
-                    @change="handleFileSelect(doc, $event)"
-                  >
-                </label>
+            <div class="flex items-center gap-3">
+              <!-- Preview / Icon -->
+              <div class="w-14 h-14 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                <img
+                  v-if="doc.preview"
+                  :src="doc.preview"
+                  :alt="doc.name"
+                  class="w-full h-full object-cover"
+                >
+                <svg v-else-if="doc.status === 'uploaded'" class="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <svg v-else class="w-7 h-7 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
               </div>
 
-              <div v-else-if="doc.status === 'uploading'" class="flex items-center gap-2 text-sm text-primary-600">
-                <div class="animate-spin w-4 h-4 border-2 border-primary-600 border-t-transparent rounded-full" />
-                Subiendo...
-              </div>
+              <!-- Info -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <h3 class="font-medium text-gray-900 text-sm truncate">{{ doc.name }}</h3>
+                  <span v-if="doc.required" class="text-xs text-red-500">*</span>
+                </div>
+                <p class="text-xs text-gray-500 truncate">{{ doc.description }}</p>
 
-              <div v-else-if="doc.status === 'uploaded'" class="flex items-center gap-3">
-                <span v-if="doc.fromKyc" class="text-sm text-green-600 flex items-center gap-1">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                  Verificado con KYC
-                </span>
-                <template v-else>
-                  <span class="text-sm text-green-600 flex items-center gap-1">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                <!-- Estado -->
+                <div v-if="doc.status === 'uploading'" class="mt-1.5 flex items-center gap-2 text-xs text-primary-600">
+                  <div class="animate-spin w-3 h-3 border-2 border-primary-600 border-t-transparent rounded-full" />
+                  Subiendo...
+                </div>
+                <div v-else-if="doc.status === 'uploaded'" class="mt-1.5 flex items-center gap-3">
+                  <span v-if="doc.fromKyc" class="text-xs text-green-600 flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
-                    Subido
+                    Verificado con KYC
                   </span>
-                  <button
-                    type="button"
-                    class="text-sm text-gray-500 hover:text-red-600"
-                    @click="removeFile(doc)"
-                  >
-                    Eliminar
-                  </button>
-                </template>
+                  <template v-else>
+                    <span class="text-xs text-green-600 flex items-center gap-1">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      Subido
+                    </span>
+                    <button
+                      type="button"
+                      class="text-xs text-gray-500 hover:text-red-600"
+                      @click.stop="removeFile(doc)"
+                    >
+                      Eliminar
+                    </button>
+                  </template>
+                </div>
+              </div>
+
+              <!-- Indicador tap (solo cuando es accionable) -->
+              <div
+                v-if="doc.status === 'pending' || doc.status === 'error'"
+                class="flex items-center gap-1 text-primary-600 flex-shrink-0"
+              >
+                <span class="text-sm font-medium">{{ doc.status === 'error' ? 'Reintentar' : 'Adjuntar' }}</span>
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
               </div>
             </div>
-          </div>
-        </div>
+          </component>
         </div>
 
         <p v-if="error" class="mt-4 text-sm text-red-500 text-center">
@@ -638,7 +707,7 @@ const prevStep = () => router.push('/solicitud/paso-5')
         </div>
 
         <!-- Sticky Footer -->
-        <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+        <div class="fixed bottom-0 left-0 right-0 p-3 bg-white border-t">
           <div class="max-w-md mx-auto flex gap-3">
             <AppButton
               type="button"
@@ -647,7 +716,7 @@ const prevStep = () => router.push('/solicitud/paso-5')
               class="flex-1"
               @click="prevStep"
             >
-              ← Anterior
+              Atrás
             </AppButton>
             <AppButton
               type="button"
@@ -658,10 +727,78 @@ const prevStep = () => router.push('/solicitud/paso-5')
               :loading="onboardingStore.isSaving"
               @click="handleSubmit"
             >
-              Continuar →
+              Continuar
             </AppButton>
           </div>
         </div>
+
+        <!-- BottomSheet: origen del archivo -->
+        <AppBottomSheet v-model="sourceSheetOpen" title="Adjuntar documento">
+          <div class="p-2">
+            <button
+              type="button"
+              class="w-full flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 active:bg-gray-100"
+              @click="chooseCamera"
+            >
+              <span class="w-9 h-9 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+                </svg>
+              </span>
+              <span class="flex-1 text-left">
+                <span class="block text-sm font-medium text-gray-900">Tomar foto</span>
+                <span class="block text-xs text-gray-500">Usar la cámara del dispositivo</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              class="w-full flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 active:bg-gray-100"
+              @click="chooseGallery"
+            >
+              <span class="w-9 h-9 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd" />
+                </svg>
+              </span>
+              <span class="flex-1 text-left">
+                <span class="block text-sm font-medium text-gray-900">Elegir de la galería</span>
+                <span class="block text-xs text-gray-500">Fotos guardadas en tu teléfono</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              class="w-full flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 active:bg-gray-100"
+              @click="choosePdf"
+            >
+              <span class="w-9 h-9 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h6l4 4v10a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm4 9a1 1 0 100 2h4a1 1 0 100-2H8zm0-3a1 1 0 100 2h4a1 1 0 100-2H8zm0-3a1 1 0 000 2h2a1 1 0 000-2H8z" clip-rule="evenodd" />
+                </svg>
+              </span>
+              <span class="flex-1 text-left">
+                <span class="block text-sm font-medium text-gray-900">Subir PDF</span>
+                <span class="block text-xs text-gray-500">Documento escaneado en PDF</span>
+              </span>
+            </button>
+          </div>
+          <div class="h-4" />
+        </AppBottomSheet>
+
+        <!-- Inputs ocultos disparados por el sheet -->
+        <input
+          ref="galleryInputRef"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          class="sr-only"
+          @change="handleFileSelect(null, $event)"
+        />
+        <input
+          ref="pdfInputRef"
+          type="file"
+          accept="application/pdf,.pdf"
+          class="sr-only"
+          @change="handleFileSelect(null, $event)"
+        />
       </div>
     </div>
   </div>
