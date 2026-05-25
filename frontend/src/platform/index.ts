@@ -1,23 +1,21 @@
 /**
  * Capa de plataforma — Factory.
  *
- * Expone `platform` con los adapters apropiados según el entorno:
- * - Web (Vite SPA, PWA): adapters de `./web/`.
- * - Native (Capacitor iOS/Android): adapters de `./native/` (Fase 3).
- *
- * La selección en runtime ocurrirá vía `Capacitor.isNativePlatform()` cuando
- * se instale `@capacitor/core` (Fase 3). Hasta entonces, este factory siempre
- * retorna la implementación web.
+ * Detecta en runtime si la app corre en native (Capacitor iOS/Android) o web.
+ * El bundle web no instancia los adapters native (los imports están aislados
+ * por la rama del condicional y Capacitor.isNativePlatform() es síncrono).
  *
  * Uso:
  *   import { platform } from '@/platform'
  *   const token = await platform.storage.get<string>(STORAGE_KEYS.AUTH_TOKEN)
- *   await platform.browser.openWhatsApp('+5215512345678', 'Hola')
  */
 
+import { Capacitor } from '@capacitor/core'
 import type { Platforms } from './types'
+
+// --- Web adapters ---
 import { storageWeb } from './web/storage.web'
-import { navigatorWeb } from './web/navigator.web'
+import { navigatorWeb, bindRouter as bindRouterWeb } from './web/navigator.web'
 import { deviceWeb } from './web/device.web'
 import { browserWeb } from './web/browser.web'
 import { shareWeb } from './web/share.web'
@@ -25,6 +23,23 @@ import { clipboardWeb } from './web/clipboard.web'
 import { cameraWeb } from './web/camera.web'
 import { pushWeb } from './web/push.web'
 import { realtimeWeb } from './web/realtime.web'
+
+// --- Native adapters ---
+// Estos imports añaden ~50 KB al bundle web pero los plugins reales solo se
+// inicializan en native. Tree-shaking se encarga del resto.
+import { storageNative } from './native/storage.native'
+import { navigatorNative, bindRouter as bindRouterNative } from './native/navigator.native'
+import { deviceNative } from './native/device.native'
+import { browserNative } from './native/browser.native'
+import { shareNative } from './native/share.native'
+import { clipboardNative } from './native/clipboard.native'
+import { cameraNative } from './native/camera.native'
+import { pushNative } from './native/push.native'
+import { realtimeNative } from './native/realtime.native'
+
+import type { Router } from 'vue-router'
+
+const isNative = Capacitor.isNativePlatform()
 
 const webPlatform: Platforms = {
   storage: storageWeb,
@@ -38,16 +53,34 @@ const webPlatform: Platforms = {
   realtime: realtimeWeb,
 }
 
+const nativePlatform: Platforms = {
+  storage: storageNative,
+  navigator: navigatorNative,
+  device: deviceNative,
+  browser: browserNative,
+  share: shareNative,
+  clipboard: clipboardNative,
+  camera: cameraNative,
+  push: pushNative,
+  realtime: realtimeNative,
+}
+
+export const platform: Platforms = isNative ? nativePlatform : webPlatform
+
 /**
- * Instancia global de adapters de plataforma.
- *
- * En Fase 3 (Capacitor) este export pasará a evaluar
- * `Capacitor.isNativePlatform()` y devolver `nativePlatform` o `webPlatform`.
+ * Vincula el router de Vue. Llamar una sola vez desde `main.ts` antes del mount.
+ * En native habilita el botón hardware Android. En web, permite que
+ * `platform.navigator.navigate()` use vue-router en lugar de window.location.
  */
-export const platform: Platforms = webPlatform
+export function bindRouter(router: Router): void {
+  if (isNative) {
+    bindRouterNative(router)
+  } else {
+    bindRouterWeb(router)
+  }
+}
 
 export * from './types'
-export { bindRouter } from './web/navigator.web'
 export {
   requestStream as requestCameraStream,
   stopStream as stopCameraStream,
