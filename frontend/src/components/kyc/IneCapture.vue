@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue'
 import { useDocumentCapture } from '@/composables/useDeviceCapture'
+import { platform } from '@/platform'
 import AppButton from '@/components/common/AppButton.vue'
 
 interface Props {
@@ -118,9 +119,24 @@ const retake = () => {
 }
 
 /**
- * Trigger native file input (for mobile or fallback)
+ * Trigger native file input (web mobile) o plugin Capacitor (native).
  */
-const triggerFileInput = () => {
+const triggerFileInput = async () => {
+  if (platform.device.isNative()) {
+    // En Capacitor iOS/Android usamos @capacitor/camera (cámara nativa real).
+    const captured = await platform.camera.capture({
+      facing: 'environment',
+      maxWidth: 1920,
+      maxHeight: 1080,
+      quality: 0.9,
+    })
+    if (captured?.base64) {
+      capturedPreview.value = `data:${captured.mimeType};base64,${captured.base64}`
+      emit('captured', captured.base64)
+    }
+    return
+  }
+  // Web móvil: input[capture] abre el picker del navegador.
   fileInputRef.value?.click()
 }
 
