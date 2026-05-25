@@ -114,40 +114,48 @@ const getRequiredDocuments = (): DocumentUpload[] => {
   const requiredDocs = productFromConfig?.required_documents ?? productFromConfig?.required_docs ??
                        product?.required_documents ?? product?.required_docs ?? []
 
-  // Check if using new structure {nationals: [], foreigners: []}
-  if (requiredDocs && typeof requiredDocs === 'object' && ('nationals' in requiredDocs || 'foreigners' in requiredDocs)) {
-    // Select appropriate document list based on nationality
-    const docList = isForeigner.value ? requiredDocs.foreigners : requiredDocs.nationals
+  type RawDoc = { type: string; required?: boolean; description?: string } | string
+
+  const mapDocs = (docList: RawDoc[]): DocumentUpload[] =>
+    docList
+      .filter((doc) => {
+        const docType = typeof doc === 'string' ? doc : doc.type
+        return !EXCLUDED_DOCUMENT_TYPES.includes(docType)
+      })
+      .map((doc) => {
+        const docType = typeof doc === 'string' ? doc : doc.type
+        const isRequired = typeof doc === 'string' ? true : (doc.required ?? true)
+        return {
+          id: docType,
+          name: getDocumentLabel(docType),
+          description: typeof doc === 'object' && doc.description ? doc.description : '',
+          required: isRequired,
+          file: null,
+          preview: null,
+          status: 'pending' as const
+        }
+      })
+
+  // New structure {nationals: [], foreigners: []}
+  if (requiredDocs && typeof requiredDocs === 'object' && !Array.isArray(requiredDocs) && ('nationals' in requiredDocs || 'foreigners' in requiredDocs)) {
+    const structured = requiredDocs as { nationals?: RawDoc[]; foreigners?: RawDoc[] }
+    const docList = isForeigner.value ? structured.foreigners : structured.nationals
     log.debug('Using new document structure', {
       isForeigner: isForeigner.value,
       selectedList: isForeigner.value ? 'foreigners' : 'nationals',
       docList,
       requiredDocs
     })
-
     if (docList && docList.length > 0) {
-      return docList
-        .filter((doc: { type: string; required: boolean; description?: string } | string) => {
-          // Exclude document types that are handled elsewhere (e.g., signature in Step 8)
-          const docType = typeof doc === 'string' ? doc : doc.type
-          return !EXCLUDED_DOCUMENT_TYPES.includes(docType)
-        })
-        .map((doc: { type: string; required: boolean; description?: string } | string) => {
-          const docType = typeof doc === 'string' ? doc : doc.type
-          const isRequired = typeof doc === 'string' ? true : (doc.required ?? true)
-          const label = getDocumentLabel(docType)
-
-          return {
-            id: docType,
-            name: label,
-            description: typeof doc === 'object' && doc.description ? doc.description : '',
-            required: isRequired,
-            file: null,
-            preview: null,
-            status: 'pending' as const
-          }
-        })
+      return mapDocs(docList)
     }
+  }
+
+  // Legacy/flat-array format (e.g. ["INE_FRONT", "PAYSLIP"] or [{type, required, description}])
+  const flatList = requiredDocs as unknown
+  if (Array.isArray(flatList) && flatList.length > 0) {
+    log.debug('Using legacy flat-array document structure', { requiredDocs: flatList })
+    return mapDocs(flatList as RawDoc[])
   }
 
   // Fallback to basic documents if no product info available
