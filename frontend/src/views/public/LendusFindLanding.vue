@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { platform } from '@/platform'
 
 // LendusFind Landing Page - Platform showcase for financial institutions
 
@@ -108,15 +109,15 @@ const customerBenefits = [
 ]
 
 const openWhatsApp = () => {
-  window.open('https://wa.me/525544159403?text=Hola,%20me%20interesa%20conocer%20más%20sobre%20LendusFind', '_blank')
+  platform.browser.openWhatsApp('525544159403', 'Hola, me interesa conocer más sobre LendusFind')
 }
 
 const openEmail = () => {
-  window.location.href = 'mailto:consultoria@lendus.com.mx?subject=Información%20sobre%20LendusFind'
+  platform.browser.openEmail('consultoria@lendus.com.mx', 'Información sobre LendusFind')
 }
 
 const goToLendus = () => {
-  window.open('https://lendus.com.mx', '_blank')
+  platform.browser.open('https://lendus.com.mx', { external: true })
 }
 </script>
 

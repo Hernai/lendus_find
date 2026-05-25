@@ -13,6 +13,7 @@ import {
   ApplicantDataSection,
 } from '@/components/admin/application-detail'
 import { v2, type V2ApiLogEntry } from '@/services/v2'
+import { platform } from '@/platform'
 import { useWebSocket, useToast, useDocumentTypes } from '@/composables'
 import { useTenantStore } from '@/stores/tenant'
 import { useAuthStore } from '@/stores/auth'
@@ -1458,7 +1459,7 @@ const viewDocument = async (doc: Document) => {
     docViewerMimeType.value = data.mime_type || doc.mime_type || ''
 
     if (docViewerMimeType.value === 'application/pdf') {
-      window.open(docViewerUrl.value, '_blank')
+      platform.browser.open(docViewerUrl.value, { external: true })
     } else {
       showDocViewerModal.value = true
     }

@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { v2 } from '@/services/v2'
 import { useAuthStore, useTenantStore } from '@/stores'
+import { platform } from '@/platform'
 import { logger } from '@/utils/logger'
 
 const log = logger.child('TenantSwitcher')
@@ -65,12 +66,12 @@ const selectTenant = async (tenant: Tenant | null): Promise<void> => {
     isOpen.value = false
 
     // Reload the current page to apply new tenant context
-    window.location.reload()
+    platform.navigator.reload()
   } catch (error) {
     log.error('Failed to switch tenant', { error })
     // Still close dropdown and reload to reset state
     isOpen.value = false
-    window.location.reload()
+    platform.navigator.reload()
   }
 }
 

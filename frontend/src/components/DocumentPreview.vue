@@ -2,6 +2,7 @@
 import { ref, computed, onUnmounted, onBeforeMount } from 'vue'
 import { v2 } from '@/services/v2'
 import { useDocumentTypes } from '@/composables'
+import { platform } from '@/platform'
 import ImageViewer from './ImageViewer.vue'
 
 const { loadDocumentTypes, getDocumentTypeLabel } = useDocumentTypes()
@@ -98,7 +99,7 @@ const openPreview = async () => {
     try {
       const response = await v2.applicant.document.download(props.document.id)
       if (response.success && response.data?.url) {
-        window.open(response.data.url, '_blank')
+        platform.browser.open(response.data.url, { external: true })
       }
     } catch (e) {
       console.error('Failed to get PDF download URL:', e)

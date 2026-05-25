@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeMount, onBeforeUnmount, watch } from 'vue'
-import { api } from '@/services/api'
+import { api } from '@/http'
+import { platform } from '@/platform'
 import { logger } from '@/utils/logger'
 import { useToast, useDocumentTypes } from '@/composables'
 import { formatDateTime } from '@/utils/formatters'
@@ -294,7 +295,7 @@ const viewDocument = async (doc: Document) => {
       const response = await api.get<{ url: string }>(
         `/v2/staff/applications/${props.applicationId}/documents/${doc.id}/url`
       )
-      window.open(response.data.url, '_blank')
+      platform.browser.open(response.data.url, { external: true })
     } else {
       // For images, use the cached thumbnail or fetch as blob
       const cachedUrl = documentThumbnails.value[doc.id]

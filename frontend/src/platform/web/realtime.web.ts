@@ -6,9 +6,18 @@ import { logger } from '@/utils/logger'
 const log = logger.child('Realtime')
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type EchoInstance = Echo<any>
+export type EchoInstance = Echo<any>
 
 let echoInstance: EchoInstance | null = null
+
+/**
+ * Acceso a la instancia Echo subyacente. Solo se usa desde el shim legacy
+ * `plugins/echo.ts` para mantener compatibilidad con `useWebSocket` y
+ * `DataCorrectionsView`. Código nuevo debe usar `platform.realtime`.
+ */
+export function getRawEchoInstance(): EchoInstance | null {
+  return echoInstance
+}
 
 // Pusher debe estar en window para laravel-echo en browser. La asignación se
 // hace una sola vez al primer `connect()` para evitar leaks en SSR/tests.

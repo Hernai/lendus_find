@@ -1,5 +1,12 @@
 import { ref, onUnmounted } from 'vue'
 import { logger } from '@/utils/logger'
+import { platform } from '@/platform'
+import {
+  requestCameraStream,
+  stopCameraStream,
+  captureFromVideoElement,
+  fileToCapturedImage,
+} from '@/platform'
 
 const log = logger.child('DeviceCapture')
 
@@ -42,17 +49,20 @@ export interface UseCaptureReturn {
 }
 
 /**
- * Composable for handling image capture across mobile and desktop devices.
+ * Composable para captura de imágenes (cámara/galería) en web y móvil.
  *
- * On mobile: Uses native camera via input[type=file][capture]
- * On desktop: Uses getUserMedia() for webcam with fallback to file upload
+ * Toda la lógica de bajo nivel (getUserMedia, canvas, resize) vive en
+ * `src/platform/web/camera.web.ts`. Este composable solo expone helpers
+ * convenientes para vistas con preview en `<video>`. En Capacitor, la
+ * implementación nativa de `platform.camera` reemplazará a estos helpers
+ * web-only sin que las vistas que usen el composable se enteren.
  */
 export function useDeviceCapture(options: CaptureOptions = {}): UseCaptureReturn {
   const {
     facingMode = 'environment',
     maxWidth = 1920,
     maxHeight = 1080,
-    quality = 0.85
+    quality = 0.85,
   } = options
 
   // State
@@ -61,23 +71,13 @@ export function useDeviceCapture(options: CaptureOptions = {}): UseCaptureReturn
   const error = ref<string | null>(null)
   const isLoading = ref(false)
 
-  // Device detection - evaluated once at composable creation
-  const isMobile = (() => {
-    if (typeof window === 'undefined') return false
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-      navigator.userAgent
-    )
-  })()
+  // Device detection — delegamos a la capa de plataforma.
+  const isMobile = platform.device.isMobileUserAgent()
+  // Disponibilidad de cámara — evaluación síncrona razonable para web; en
+  // native el adapter siempre será true.
+  const hasWebcam =
+    typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
 
-  // Check for webcam support - evaluated once at composable creation
-  const hasWebcam = (() => {
-    if (typeof navigator === 'undefined') return false
-    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
-  })()
-
-  /**
-   * Start webcam stream and attach to video element
-   */
   const startWebcam = async (videoElement: HTMLVideoElement): Promise<boolean> => {
     if (!hasWebcam) {
       error.value = 'Tu navegador no soporta acceso a la cámara'
@@ -88,22 +88,13 @@ export function useDeviceCapture(options: CaptureOptions = {}): UseCaptureReturn
     error.value = null
 
     try {
-      const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode,
-          width: { ideal: maxWidth },
-          height: { ideal: maxHeight }
-        },
-        audio: false
-      }
-
-      stream.value = await navigator.mediaDevices.getUserMedia(constraints)
+      stream.value = await requestCameraStream({ facing: facingMode, maxWidth, maxHeight })
       videoElement.srcObject = stream.value
 
-      // Wait for video to be ready
       await new Promise<void>((resolve, reject) => {
         videoElement.onloadedmetadata = () => {
-          videoElement.play()
+          videoElement
+            .play()
             .then(() => resolve())
             .catch(reject)
         }
@@ -135,66 +126,26 @@ export function useDeviceCapture(options: CaptureOptions = {}): UseCaptureReturn
     }
   }
 
-  /**
-   * Stop webcam stream
-   */
   const stopWebcam = () => {
-    if (stream.value) {
-      stream.value.getTracks().forEach(track => track.stop())
-      stream.value = null
-    }
+    stopCameraStream(stream.value)
+    stream.value = null
     isWebcamActive.value = false
   }
 
-  /**
-   * Capture photo from active webcam stream
-   */
   const captureFromWebcam = async (videoElement: HTMLVideoElement): Promise<string | null> => {
     if (!isWebcamActive.value || !videoElement.videoWidth) {
       error.value = 'La cámara no está activa'
       return null
     }
-
     try {
-      const canvas = document.createElement('canvas')
-      const ctx = canvas.getContext('2d')
-
-      if (!ctx) {
-        error.value = 'Error al crear canvas'
-        return null
-      }
-
-      // Calculate dimensions maintaining aspect ratio
-      let width = videoElement.videoWidth
-      let height = videoElement.videoHeight
-
-      if (width > maxWidth) {
-        height = (height * maxWidth) / width
-        width = maxWidth
-      }
-      if (height > maxHeight) {
-        width = (width * maxHeight) / height
-        height = maxHeight
-      }
-
-      canvas.width = width
-      canvas.height = height
-
-      // For front camera (selfie), mirror the image horizontally
-      // This matches what the user sees in the preview
-      if (facingMode === 'user') {
-        ctx.translate(width, 0)
-        ctx.scale(-1, 1)
-      }
-
-      // Draw video frame to canvas
-      ctx.drawImage(videoElement, 0, 0, width, height)
-
-      // Convert to base64
-      const base64 = canvas.toDataURL('image/jpeg', quality)
-
-      // Return just the base64 data (without data:image/jpeg;base64, prefix)
-      return base64.split(',')[1] || null
+      const captured = captureFromVideoElement(videoElement, {
+        facing: facingMode,
+        maxWidth,
+        maxHeight,
+        quality,
+        mirror: facingMode === 'user',
+      })
+      return captured?.base64 ?? null
     } catch (err) {
       log.error('Failed to capture from webcam:', err)
       error.value = 'Error al capturar la imagen'
@@ -202,79 +153,22 @@ export function useDeviceCapture(options: CaptureOptions = {}): UseCaptureReturn
     }
   }
 
-  /**
-   * Convert File/Blob to base64 with optional resizing
-   * For selfie mode (facingMode === 'user'), mirrors the image horizontally
-   */
-  const imageToBase64 = (file: File | Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-
-      reader.onload = (e) => {
-        const img = new Image()
-
-        img.onload = () => {
-          const canvas = document.createElement('canvas')
-          const ctx = canvas.getContext('2d')
-
-          if (!ctx) {
-            reject(new Error('Failed to create canvas context'))
-            return
-          }
-
-          // Calculate dimensions maintaining aspect ratio
-          let width = img.width
-          let height = img.height
-
-          if (width > maxWidth) {
-            height = (height * maxWidth) / width
-            width = maxWidth
-          }
-          if (height > maxHeight) {
-            width = (width * maxHeight) / height
-            height = maxHeight
-          }
-
-          canvas.width = width
-          canvas.height = height
-
-          // For front camera (selfie), mirror the image horizontally
-          if (facingMode === 'user') {
-            ctx.translate(width, 0)
-            ctx.scale(-1, 1)
-          }
-
-          // Draw image to canvas
-          ctx.drawImage(img, 0, 0, width, height)
-
-          // Convert to base64 (without prefix)
-          const base64 = canvas.toDataURL('image/jpeg', quality)
-          const base64Data = base64.split(',')[1]
-          if (base64Data) {
-            resolve(base64Data)
-          } else {
-            reject(new Error('Failed to extract base64 data'))
-          }
-        }
-
-        img.onerror = () => reject(new Error('Failed to load image'))
-        img.src = e.target?.result as string
-      }
-
-      reader.onerror = () => reject(new Error('Failed to read file'))
-      reader.readAsDataURL(file)
+  const imageToBase64 = async (file: File | Blob): Promise<string> => {
+    const captured = await fileToCapturedImage(file, {
+      facing: facingMode,
+      maxWidth,
+      maxHeight,
+      quality,
+      mirror: facingMode === 'user',
     })
+    return captured.base64
   }
 
-  /**
-   * Process file from input element
-   */
   const processFileInput = async (file: File): Promise<string | null> => {
     if (!file) {
       error.value = 'No se seleccionó ningún archivo'
       return null
     }
-
     if (!file.type.startsWith('image/')) {
       error.value = 'El archivo debe ser una imagen'
       return null
@@ -284,8 +178,7 @@ export function useDeviceCapture(options: CaptureOptions = {}): UseCaptureReturn
     error.value = null
 
     try {
-      const base64 = await imageToBase64(file)
-      return base64
+      return await imageToBase64(file)
     } catch (err) {
       log.error('Failed to process file:', err)
       error.value = 'Error al procesar la imagen'
@@ -295,18 +188,11 @@ export function useDeviceCapture(options: CaptureOptions = {}): UseCaptureReturn
     }
   }
 
-  /**
-   * Get native capture attributes for input element
-   * On mobile, this will open the native camera
-   */
-  const getNativeCaptureAttributes = (): { accept: string; capture: string | undefined } => {
-    return {
-      accept: 'image/*',
-      capture: isMobile ? (facingMode === 'user' ? 'user' : 'environment') : undefined
-    }
-  }
+  const getNativeCaptureAttributes = (): { accept: string; capture: string | undefined } => ({
+    accept: 'image/*',
+    capture: isMobile ? (facingMode === 'user' ? 'user' : 'environment') : undefined,
+  })
 
-  // Cleanup on unmount
   onUnmounted(() => {
     stopWebcam()
   })
@@ -323,7 +209,7 @@ export function useDeviceCapture(options: CaptureOptions = {}): UseCaptureReturn
     captureFromWebcam,
     processFileInput,
     imageToBase64,
-    getNativeCaptureAttributes
+    getNativeCaptureAttributes,
   }
 }
 

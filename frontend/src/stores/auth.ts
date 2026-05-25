@@ -2,9 +2,14 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { v2 } from '@/services/v2'
 import type { User, OtpMethod, SendOtpResponse, VerifyOtpResponse } from '@/types'
-import { initializeEcho, disconnectEcho } from '@/plugins/echo'
+import { platform } from '@/platform'
 import { logger } from '@/utils/logger'
 import { storage, STORAGE_KEYS } from '@/utils/storage'
+import { detectTenantSlug } from '@/utils/tenant'
+
+const connectRealtime = (token: string) =>
+  platform.realtime.connect(token, { tenantSlug: detectTenantSlug() })
+const disconnectRealtime = () => platform.realtime.disconnect()
 
 const authLogger = logger.child('Auth')
 
@@ -252,7 +257,7 @@ export const useAuthStore = defineStore('auth', () => {
         otpExpiresAt.value = null
 
         // Initialize WebSocket
-        initializeEcho(authData.token)
+        connectRealtime(authData.token)
 
         return {
           success: true,
@@ -336,7 +341,7 @@ export const useAuthStore = defineStore('auth', () => {
       otpExpiresAt.value = null
 
       // Desconectar WebSocket
-      disconnectEcho()
+      disconnectRealtime()
     }
   }
 
@@ -346,7 +351,7 @@ export const useAuthStore = defineStore('auth', () => {
     // If already checked and user exists, skip (unless forced)
     if (!force && authChecked.value && user.value) {
       // Just check route access
-      const pathToCheck = targetPath || window.location.pathname
+      const pathToCheck = targetPath || platform.navigator.currentPath()
       const isAdminRoute = pathToCheck.startsWith('/admin')
       if (isAdminRoute && !isStaff.value) {
         return false
@@ -477,7 +482,7 @@ export const useAuthStore = defineStore('auth', () => {
       authChecked.value = true
 
       // Check if user has access to target route
-      const pathToCheck = targetPath || window.location.pathname
+      const pathToCheck = targetPath || platform.navigator.currentPath()
       const isAdminRoute = pathToCheck.startsWith('/admin')
 
       if (isAdminRoute && !apiUser.is_staff) {
@@ -580,7 +585,7 @@ export const useAuthStore = defineStore('auth', () => {
         needsPinSetup.value = false
 
         // Initialize WebSocket
-        initializeEcho(authData.token)
+        connectRealtime(authData.token)
 
         return { success: true }
       }
@@ -706,7 +711,7 @@ export const useAuthStore = defineStore('auth', () => {
         storage.set(STORAGE_KEYS.CURRENT_USER_TYPE, 'staff')
 
         // Initialize WebSocket
-        initializeEcho(apiToken)
+        connectRealtime(apiToken)
 
         return { success: true }
       }
@@ -791,8 +796,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Inicializar WebSocket si ya hay un token al cargar el store
   if (token.value) {
-    authLogger.debug('Initializing Echo with existing token')
-    initializeEcho(token.value)
+    authLogger.debug('Initializing realtime with existing token')
+    connectRealtime(token.value)
   }
 
   return {

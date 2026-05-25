@@ -5,7 +5,8 @@ import { createPinia } from 'pinia'
 
 import App from './App.vue'
 import router from './router'
-import { initCsrf } from './services/api'
+import { bindRouter } from './platform'
+import { onAuthEvent } from './services/auth-events'
 
 // Configure Monaco Editor web workers
 import * as monaco from 'monaco-editor'
@@ -33,8 +34,15 @@ self.MonacoEnvironment = {
   }
 }
 
-// Initialize CSRF cookie for Sanctum before mounting app
-initCsrf()
+bindRouter(router)
+
+// Cuando la capa HTTP detecte 401 fuera de endpoints de auth, redirigir al login
+// vía router (en vez de window.location.href).
+onAuthEvent('auth:unauthorized', () => {
+  if (router.currentRoute.value.path !== '/auth') {
+    router.replace('/auth')
+  }
+})
 
 const app = createApp(App)
 
