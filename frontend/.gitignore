@@ -38,6 +38,9 @@ __screenshots__/
 # Capacitor — snapshot del tenant activo (lo regenera scripts/build-tenant.mjs).
 capacitor.tenant.json
 
+# .env.local generado por build-tenant.mjs — efímero por build.
+.env.local
+
 # Assets copiados desde tenants/<slug>/ a la raíz en cada build per-tenant.
 /assets/icon.png
 /assets/splash.png

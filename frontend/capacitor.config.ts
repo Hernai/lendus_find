@@ -43,6 +43,13 @@ const config: CapacitorConfig = {
     iosScheme: 'https',
   },
   plugins: {
+    // Rutea fetch/XMLHttpRequest por código nativo en lugar del WebView.
+    // Esto evita restricciones de Mixed Content (HTTPS → HTTP) y CORS en
+    // builds nativas: axios y fetch siguen funcionando idénticos para el
+    // código de la app.
+    CapacitorHttp: {
+      enabled: true,
+    },
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },

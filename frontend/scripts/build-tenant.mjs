@@ -61,22 +61,39 @@ writeFileSync(
   ),
 )
 
-// Variables Vite expuestas al build.
-const env = {
-  ...process.env,
-  TENANT: tenant.slug,
-  VITE_TENANT_SLUG: tenant.slug,
-  VITE_API_URL: `${tenant.apiBaseUrl}/api`,
-  VITE_REVERB_HOST: tenant.reverbHost,
-  VITE_REVERB_PORT: String(tenant.reverbPort),
-  VITE_REVERB_SCHEME: tenant.reverbScheme,
-  VITE_REVERB_APP_KEY: tenant.reverbAppKey,
-  VITE_APP_NAME: tenant.appName,
-  VITE_THEME_PRIMARY: tenant.theme.primary,
-}
+// Vite solo inyecta variables VITE_* desde archivos `.env*`. Escribimos un
+// `.env.local` temporal antes del build y lo eliminamos al final. (No usamos
+// process.env porque Vite no lo lee directamente.)
+const envFile = join(frontendRoot, '.env.local')
+const envLines = [
+  `# Generado por scripts/build-tenant.mjs para tenant=${tenant.slug}. NO commitear.`,
+  `VITE_TENANT_SLUG=${tenant.slug}`,
+  `VITE_API_URL=${tenant.apiBaseUrl}/api`,
+  `VITE_REVERB_HOST=${tenant.reverbHost}`,
+  `VITE_REVERB_PORT=${tenant.reverbPort}`,
+  `VITE_REVERB_SCHEME=${tenant.reverbScheme}`,
+  `VITE_REVERB_APP_KEY=${tenant.reverbAppKey}`,
+  `VITE_APP_NAME=${tenant.appName}`,
+  `VITE_THEME_PRIMARY=${tenant.theme.primary}`,
+]
+writeFileSync(envFile, envLines.join('\n') + '\n')
+
+const env = { ...process.env, TENANT: tenant.slug }
 
 // Vite build
-await runCommand('npm', ['run', 'build-only'], { env })
+try {
+  await runCommand('npm', ['run', 'build-only'], { env })
+} finally {
+  // Limpiar el .env.local para no confundir builds posteriores manuales.
+  try {
+    if (existsSync(envFile)) {
+      const { unlinkSync } = await import('node:fs')
+      unlinkSync(envFile)
+    }
+  } catch {
+    /* noop */
+  }
+}
 
 // Copiar assets a la raíz para que @capacitor/assets los encuentre.
 const assetsRoot = join(frontendRoot, 'assets')

@@ -88,7 +88,11 @@ export function detectTenantSlug(): string {
   }
 
   // 3. Fall back to environment variable (only if explicitly set)
-  const envTenant = import.meta.env.VITE_TENANT_ID
+  // VITE_TENANT_SLUG es inyectado por scripts/build-tenant.mjs (Capacitor native).
+  // VITE_TENANT_ID es legacy para builds web por env.
+  const envTenant =
+    (import.meta.env.VITE_TENANT_SLUG as string | undefined) ||
+    (import.meta.env.VITE_TENANT_ID as string | undefined)
   if (envTenant) {
     return envTenant
   }

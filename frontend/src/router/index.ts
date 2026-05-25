@@ -4,6 +4,12 @@ import { useAuthStore } from '@/stores/auth'
 import { useTenantStore } from '@/stores/tenant'
 import { detectTenantSlug } from '@/utils/tenant'
 import { storage, STORAGE_KEYS } from '@/utils/storage'
+import { platform } from '@/platform'
+
+// ==============================================
+// MOBILE VIEWS (Capacitor native)
+// ==============================================
+const MobileWelcome = () => import('@/views/mobile/MobileWelcome.vue')
 
 // ==============================================
 // PUBLIC VIEWS (no authentication required)
@@ -76,6 +82,16 @@ const isTenantSlug = (segment: string): boolean => {
 }
 
 const routes: RouteRecordRaw[] = [
+  // ==============================================
+  // MOBILE WELCOME (entry-point en Capacitor native)
+  // ==============================================
+  {
+    path: '/m',
+    name: 'mobile-welcome',
+    component: MobileWelcome,
+    meta: { public: true, mobileEntry: true },
+  },
+
   // ==============================================
   // TENANT-PREFIXED ROUTES (e.g., /demo/simulador)
   // These must come BEFORE the non-prefixed routes
@@ -481,6 +497,27 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   const tenantStore = useTenantStore()
+
+  // ==============================================
+  // NATIVE MOBILE: redirigir landing pública a /m
+  // ==============================================
+  // En Capacitor la app no debe abrir en la landing de marketing (LendusFind o
+  // landing del tenant). Se desvía al entry-point móvil donde el usuario ve
+  // directo el CTA "Solicita tu crédito" con el producto destacado.
+  // Si ya está autenticado, va al dashboard del aplicante.
+  if (platform.device.isNative() && !to.meta.mobileEntry) {
+    const isMarketingLanding =
+      to.path === '/' ||
+      to.name === 'find-landing' ||
+      to.name === 'tenant-landing'
+    if (isMarketingLanding) {
+      if (authStore.isAuthenticated) {
+        const slug = tenantStore.slug || detectTenantSlug() || 'demo'
+        return next({ path: `/${slug}/dashboard`, replace: true })
+      }
+      return next({ path: '/m', replace: true })
+    }
+  }
 
   // Load tenant config on navigation (for public/applicant routes)
   // Skip for admin routes and noTenant routes (like /find)

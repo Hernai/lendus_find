@@ -11,8 +11,11 @@ const config: TenantConfig = {
   slug: 'demo',
   appId: 'mx.lendus.demo',
   appName: 'Lendus Demo',
-  apiBaseUrl: 'http://localhost:8000',
-  reverbHost: 'localhost',
+  // 10.0.2.2 es la IP especial del emulador Android para llegar al host Mac.
+  // En iOS simulator usa localhost (acepta también 127.0.0.1).
+  // Para device físico cambia a la IP LAN de tu Mac o a un túnel ngrok HTTPS.
+  apiBaseUrl: 'http://10.0.2.2:8000',
+  reverbHost: '10.0.2.2',
   reverbPort: 8080,
   reverbScheme: 'http',
   reverbAppKey: 'local',
