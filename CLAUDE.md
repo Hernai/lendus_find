@@ -139,5 +139,6 @@ Detailed conventions are in `.claude/skills/`. Use when working on specific area
 | `notification-system` | Working with templates, channels, email delivery, SendNotificationJob |
 | `multitenancy` | Working with tenant scoping, branding, TenantApiConfig, identification |
 | `application-lifecycle` | Working with status workflow, transitions, approval/rejection, counter-offers |
+| `ui-components` | UI component catalog: common primitives, applicant components (KYC, bank, docs), admin components (tables, modals, editors) |
 | `dev-ops` | Starting/stopping servers, installing deps, troubleshooting, scripts, env config |
 | `git-workflow` | Git commits, branches, PRs, tags, versionado — Conventional Commits en español |
