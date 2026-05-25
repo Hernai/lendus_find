@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted } from 'vue'
 import { RouterView } from 'vue-router'
 import { useUiStore } from '@/stores'
+import InstallPwaBanner from '@/components/common/InstallPwaBanner.vue'
 
 const uiStore = useUiStore()
 
@@ -16,6 +17,7 @@ onUnmounted(() => {
 
 <template>
   <RouterView />
+  <InstallPwaBanner />
 </template>
 
 <style>

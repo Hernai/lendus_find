@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\V2\Staff\AuthController as StaffAuthController;
 use App\Http\Controllers\Api\V2\Applicant\AuthController as ApplicantAuthController;
 use App\Http\Controllers\Api\V2\Public\SimulatorController as V2SimulatorController;
 use App\Http\Controllers\Api\V2\Public\ConfigController as V2ConfigController;
+use App\Http\Controllers\Api\V2\Public\ManifestController as V2ManifestController;
 use App\Http\Controllers\Api\V2\Applicant\ApplicationController as ApplicantAppController;
 use App\Http\Controllers\Api\V2\Applicant\CorrectionController as ApplicantCorrectionController;
 use App\Http\Controllers\Api\V2\Applicant\DocumentController as ApplicantDocController;
@@ -72,6 +73,7 @@ Route::middleware(['tenant', 'auth:sanctum'])->post('/broadcasting/auth', functi
 // =============================================
 Route::middleware(['tenant', 'metadata'])->prefix('v2')->group(function () {
     Route::get('/config', [V2ConfigController::class, 'index']);
+    Route::get('/public/manifest', V2ManifestController::class);
 });
 
 // =============================================

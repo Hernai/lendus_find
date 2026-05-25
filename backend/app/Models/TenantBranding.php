@@ -29,6 +29,13 @@ class TenantBranding extends Model
         'border_radius',
         'button_style',
         'custom_css',
+        'icon_192_url',
+        'icon_512_url',
+        'maskable_icon_url',
+        'pwa_name',
+        'pwa_short_name',
+        'pwa_theme_color',
+        'pwa_background_color',
         'created_by',
         'updated_by',
     ];
