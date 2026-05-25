@@ -1,16 +1,42 @@
 import type { CapacitorConfig } from '@capacitor/cli'
+import { readFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
 
 /**
- * Capacitor base config.
+ * Capacitor config.
  *
- * En Fase 4 este archivo se vuelve dinámico por tenant (lee
- * `process.env.TENANT` y sobreescribe `appId`, `appName`, splash color
- * y push). Por ahora es un placeholder que permite probar localmente con
- * un tenant genérico.
+ * Lee `capacitor.tenant.json` generado por `scripts/build-tenant.mjs`.
+ * Si no existe (primer arranque, dev local) usa valores placeholder.
+ *
+ * Para construir un tenant específico:
+ *   TENANT=<slug> npm run tenant:build
+ *   (esto genera el JSON antes de invocar cualquier comando `cap`)
  */
-const config: CapacitorConfig = {
+
+interface TenantSnapshot {
+  appId: string
+  appName: string
+  splashColor: string
+}
+
+let snapshot: TenantSnapshot = {
   appId: 'mx.lendus.app',
   appName: 'LendusFind',
+  splashColor: '#FFFFFF',
+}
+
+const snapshotPath = join(process.cwd(), 'capacitor.tenant.json')
+if (existsSync(snapshotPath)) {
+  try {
+    snapshot = { ...snapshot, ...JSON.parse(readFileSync(snapshotPath, 'utf-8')) }
+  } catch {
+    // Fallback silencioso a placeholders.
+  }
+}
+
+const config: CapacitorConfig = {
+  appId: snapshot.appId,
+  appName: snapshot.appName,
   webDir: 'dist',
   server: {
     androidScheme: 'https',
@@ -22,7 +48,7 @@ const config: CapacitorConfig = {
     },
     SplashScreen: {
       launchShowDuration: 1500,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: snapshot.splashColor,
       showSpinner: false,
     },
   },

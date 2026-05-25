@@ -13,7 +13,12 @@
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
     "lint": "eslint . --fix --cache",
-    "format": "prettier --write --experimental-cli src/"
+    "format": "prettier --write --experimental-cli src/",
+    "tenant:build": "node scripts/build-tenant.mjs",
+    "tenant:ios": "node scripts/build-tenant.mjs $TENANT && npx cap open ios",
+    "tenant:android": "node scripts/build-tenant.mjs $TENANT && npx cap open android",
+    "cap:add:ios": "npx cap add ios",
+    "cap:add:android": "npx cap add android"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.0",

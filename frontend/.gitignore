@@ -34,3 +34,11 @@ coverage
 
 # Vitest
 __screenshots__/
+
+# Capacitor — snapshot del tenant activo (lo regenera scripts/build-tenant.mjs).
+capacitor.tenant.json
+
+# Assets copiados desde tenants/<slug>/ a la raíz en cada build per-tenant.
+/assets/icon.png
+/assets/splash.png
+/assets/splash-dark.png
