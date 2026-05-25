@@ -15,6 +15,7 @@ enum NotificationChannel: string
     case WHATSAPP = 'WHATSAPP';
     case EMAIL = 'EMAIL';
     case IN_APP = 'IN_APP';
+    case PUSH = 'PUSH';
 
     public function label(): string
     {
@@ -23,6 +24,7 @@ enum NotificationChannel: string
             self::WHATSAPP => 'WhatsApp',
             self::EMAIL => 'Correo Electrónico',
             self::IN_APP => 'Notificación Interna',
+            self::PUSH => 'Notificación Push',
         };
     }
 
@@ -53,6 +55,8 @@ enum NotificationChannel: string
         return match ($this) {
             self::SMS => 160,
             self::WHATSAPP => 4096,
+            // Push notifications: title ~50 chars, body ~150 chars total seguro.
+            self::PUSH => 200,
             default => null,
         };
     }

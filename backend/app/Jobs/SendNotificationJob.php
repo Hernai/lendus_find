@@ -9,8 +9,11 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use App\Models\ApplicantAccount;
+use App\Models\StaffAccount;
 use App\Models\TenantApiConfig;
 use App\Services\ExternalApi\SmtpService;
+use App\Services\Notifications\PushService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Twilio\Rest\Client as TwilioClient;
@@ -59,6 +62,7 @@ class SendNotificationJob implements ShouldQueue
                 NotificationChannel::WHATSAPP => $this->sendWhatsApp(),
                 NotificationChannel::EMAIL => $this->sendEmail(),
                 NotificationChannel::IN_APP => $this->sendInApp(),
+                NotificationChannel::PUSH => $this->sendPush(),
             };
 
             if ($result['success']) {
@@ -327,6 +331,53 @@ class SendNotificationJob implements ShouldQueue
             }
 
             return ['success' => true];
+        } catch (\Exception $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Send push notification (APNs/FCM) to dispositivos registrados del destinatario.
+     */
+    protected function sendPush(): array
+    {
+        try {
+            $ownerType = $this->log->recipient_type === 'APPLICANT'
+                ? ApplicantAccount::class
+                : StaffAccount::class;
+
+            $title = $this->log->subject ?: $this->log->tenant->name ?? 'Notificación';
+            $body = $this->log->body ?: '';
+            $data = [
+                'log_id' => (string) $this->log->id,
+                'event' => (string) ($this->log->event ?? ''),
+                'channel' => 'PUSH',
+            ];
+
+            /** @var PushService $service */
+            $service = app(PushService::class);
+            $result = $service->sendTo(
+                tenantId: (string) $this->log->tenant_id,
+                ownerType: $ownerType,
+                ownerId: (string) $this->log->recipient_id,
+                title: $title,
+                body: $body,
+                data: $data,
+            );
+
+            if ($result['sent'] === 0 && $result['failed'] === 0 && $result['revoked'] === 0) {
+                // No había device tokens activos — esto NO es error; lo registramos como sent
+                // (el destinatario simplemente no tiene apps instaladas).
+                return ['success' => true, 'external_id' => 'no_devices'];
+            }
+
+            // Considerar exitoso si al menos un envío llegó. Los revocados son normales
+            // (logout, app desinstalada) y no deben fallar el job.
+            if ($result['sent'] > 0 || ($result['failed'] === 0 && $result['revoked'] > 0)) {
+                return ['success' => true, 'external_id' => "sent={$result['sent']}/revoked={$result['revoked']}"];
+            }
+
+            return ['success' => false, 'error' => "Push failed: {$result['failed']} fallos"];
         } catch (\Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }

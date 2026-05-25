@@ -67,6 +67,8 @@ class TenantApiConfig extends Model
         'onfido' => 'Onfido',
         'jumio' => 'Jumio',
         'smtp' => 'SMTP (Correo propio)',
+        'fcm' => 'Firebase Cloud Messaging',
+        'apns' => 'Apple Push Notifications',
     ];
 
     /**
@@ -79,6 +81,7 @@ class TenantApiConfig extends Model
         'kyc' => 'KYC/Identidad',
         'credit_bureau' => 'Buró de Crédito',
         'document_validation' => 'Validación de Documentos',
+        'push' => 'Push Notifications',
     ];
 
     /**
