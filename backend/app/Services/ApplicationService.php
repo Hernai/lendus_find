@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\NotificationEvent;
 use App\Models\ApplicantAccount;
 use App\Models\Application;
 use App\Models\Person;
@@ -11,6 +12,7 @@ use App\Models\Tenant;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ApplicationService
 {
@@ -20,7 +22,8 @@ class ApplicationService
 
     public function __construct(
         protected LoanCalculationService $loanCalculator,
-        protected DocumentService $documentService
+        protected DocumentService $documentService,
+        protected NotificationService $notificationService
     ) {}
 
     // =====================================================
@@ -164,6 +167,8 @@ class ApplicationService
             $application->submit($submittedBy->id, $ip, $device);
         });
 
+        $this->sendNotification(NotificationEvent::APPLICATION_SUBMITTED->value, $application);
+
         return $application->fresh();
     }
 
@@ -247,6 +252,16 @@ class ApplicationService
     ): Application {
         $application->changeStatus($newStatus, $changedBy->id, StaffAccount::class, $notes);
 
+        $statusEventMap = [
+            'IN_REVIEW' => NotificationEvent::APPLICATION_IN_REVIEW,
+            'DOCS_PENDING' => NotificationEvent::APPLICATION_DOCS_PENDING,
+            'CORRECTIONS_PENDING' => NotificationEvent::APPLICATION_CORRECTIONS_REQUESTED,
+        ];
+
+        if (isset($statusEventMap[$newStatus])) {
+            $this->sendNotification($statusEventMap[$newStatus]->value, $application);
+        }
+
         return $application->fresh();
     }
 
@@ -263,6 +278,8 @@ class ApplicationService
     ): Application {
         $application->approve($approvedBy->id, $amount, $termMonths, $interestRate, $notes);
 
+        $this->sendNotification(NotificationEvent::APPLICATION_APPROVED->value, $application);
+
         return $application->fresh();
     }
 
@@ -276,6 +293,8 @@ class ApplicationService
         ?string $notes = null
     ): Application {
         $application->reject($rejectedBy->id, $reason, $notes);
+
+        $this->sendNotification(NotificationEvent::APPLICATION_REJECTED->value, $application);
 
         return $application->fresh();
     }
@@ -397,6 +416,58 @@ class ApplicationService
         $application->setRiskAssessment($level, $data);
 
         return $application->fresh();
+    }
+
+    // =====================================================
+    // Notifications
+    // =====================================================
+
+    /**
+     * Send a notification for an application lifecycle event.
+     */
+    protected function sendNotification(string $event, Application $application): void
+    {
+        try {
+            $applicant = $application->submittedByAccount;
+            if (!$applicant) {
+                return;
+            }
+
+            $person = $applicant->person ?? $applicant->getPersonOrFind();
+
+            $variables = [
+                'applicant' => [
+                    'first_name' => $person?->first_name ?? '',
+                    'last_name' => $person?->last_name_1 ?? '',
+                    'full_name' => $person?->full_name ?? '',
+                    'email' => $applicant->primary_email ?? '',
+                    'phone' => $applicant->primary_phone ?? '',
+                ],
+                'application' => [
+                    'id' => $application->id,
+                    'folio' => $application->folio,
+                    'amount' => '$' . number_format($application->requested_amount ?? 0, 2),
+                    'term_months' => $application->requested_term_months,
+                    'product_name' => $application->product?->name ?? '',
+                    'status' => $application->status,
+                    'status_label' => Application::statuses()[$application->status] ?? $application->status,
+                ],
+                'tenant' => [
+                    'name' => $application->tenant?->name ?? '',
+                    'phone' => $application->tenant?->phone ?? '',
+                    'email' => $application->tenant?->email ?? '',
+                    'website' => $application->tenant?->website ?? '',
+                ],
+            ];
+
+            $this->notificationService->send($event, $applicant, $variables);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to send notification', [
+                'event' => $event,
+                'application_id' => $application->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     // =====================================================

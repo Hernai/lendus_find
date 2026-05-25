@@ -321,8 +321,11 @@ class SendNotificationJob implements ShouldQueue
     protected function sendInApp(): array
     {
         try {
-            // In-app notifications are already created in NotificationLog
-            // Just mark as sent
+            // Broadcast al canal del aplicante para actualización en tiempo real
+            if ($this->log->recipient_id && $this->log->recipient_type === 'APPLICANT') {
+                broadcast(new \App\Events\NotificationReceived($this->log))->toOthers();
+            }
+
             return ['success' => true];
         } catch (\Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];

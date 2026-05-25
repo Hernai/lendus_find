@@ -43,6 +43,7 @@ const ApplicationStatusView = () => import('@/views/applicant/dashboard/Applicat
 const DocumentsUploadView = () => import('@/views/applicant/dashboard/DocumentsUploadView.vue')
 const DataCorrectionsView = () => import('@/views/applicant/dashboard/DataCorrectionsView.vue')
 const ProfileView = () => import('@/views/applicant/dashboard/ProfileView.vue')
+const NotificationsView = () => import('@/views/applicant/dashboard/NotificationsView.vue')
 
 // ==============================================
 // ADMIN VIEWS (staff: agents, analysts, admins)
@@ -67,7 +68,7 @@ const NotificationTemplates = () => import('@/views/admin/panel/NotificationTemp
 const NotificationTemplateForm = () => import('@/views/admin/panel/NotificationTemplateForm.vue')
 
 // Reserved paths that are NOT tenant slugs (must match tenant.ts)
-const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones', 'find']
+const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones', 'find', 'notificaciones']
 
 // Helper to check if a path segment is a tenant slug
 const isTenantSlug = (segment: string): boolean => {
@@ -181,6 +182,12 @@ const routes: RouteRecordRaw[] = [
     path: '/:tenant/perfil',
     name: 'tenant-profile',
     component: ProfileView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/:tenant/notificaciones',
+    name: 'tenant-notifications',
+    component: NotificationsView,
     meta: { requiresAuth: true }
   },
 
@@ -354,6 +361,12 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/notificaciones',
+    name: 'notifications',
+    component: NotificationsView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/notificaciones/preferencias',
     name: 'notification-preferences',
     component: () => import('../views/applicant/NotificationPreferences.vue'),
     meta: { requiresAuth: true }
@@ -482,7 +495,7 @@ router.beforeEach(async (to, from, next) => {
   // IMPORTANT: Only redirect if there's a tenant detected in the current URL
   const currentTenantSlug = detectTenantSlug()
   if (!isAdminRoute && !to.params.tenant && currentTenantSlug && tenantStore.slug) {
-    const nonPrefixedPaths = ['/auth', '/solicitud', '/dashboard', '/correcciones', '/perfil', '/simulador']
+    const nonPrefixedPaths = ['/auth', '/solicitud', '/dashboard', '/correcciones', '/perfil', '/simulador', '/notificaciones']
     const matchingPath = nonPrefixedPaths.find(p => to.path.startsWith(p) || to.path === p)
     if (matchingPath) {
       const newPath = `/${tenantStore.slug}${to.path}`

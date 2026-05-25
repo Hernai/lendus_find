@@ -39,6 +39,7 @@ use App\Http\Controllers\Api\V2\Staff\TenantController as StaffTenantController;
 use App\Http\Controllers\Api\V2\Staff\IntegrationController as StaffIntegrationController;
 use App\Http\Controllers\Api\V2\Staff\NotificationTemplateController as StaffNotificationTemplateController;
 use App\Http\Controllers\Api\V2\Applicant\NotificationPreferenceController as ApplicantNotificationPreferenceController;
+use App\Http\Controllers\Api\V2\Applicant\NotificationController as ApplicantNotificationController;
 use App\Http\Controllers\Api\V2\Staff\NotificationPreferenceController as StaffNotificationPreferenceController;
 
 // =============================================
@@ -222,6 +223,16 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum'])
             Route::put('/', [ApplicantNotificationPreferenceController::class, 'update']);
             Route::post('/events/{event}/disable', [ApplicantNotificationPreferenceController::class, 'disableEvent']);
             Route::post('/events/{event}/enable', [ApplicantNotificationPreferenceController::class, 'enableEvent']);
+        });
+
+        // =============================================
+        // Notifications (In-App)
+        // =============================================
+        Route::prefix('notifications')->group(function () {
+            Route::get('/', [ApplicantNotificationController::class, 'index']);
+            Route::get('/unread-count', [ApplicantNotificationController::class, 'unreadCount']);
+            Route::patch('/{id}/read', [ApplicantNotificationController::class, 'markAsRead']);
+            Route::post('/mark-all-read', [ApplicantNotificationController::class, 'markAllAsRead']);
         });
     });
 

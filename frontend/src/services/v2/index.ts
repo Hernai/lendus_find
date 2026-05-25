@@ -31,6 +31,7 @@ import applicantDocument from './document.applicant.service'
 import staffDocument from './document.staff.service'
 import applicantProfile from './profile.service'
 import applicantKyc from './kyc.applicant.service'
+import applicantNotification from './notification.applicant.service'
 import staffUser from './user.staff.service'
 import staffProduct from './product.staff.service'
 import staffConfig from './config.staff.service'
@@ -64,6 +65,7 @@ export const v2 = {
     document: applicantDocument,
     profile: applicantProfile,
     kyc: applicantKyc,
+    notification: applicantNotification,
   },
 
   /**
@@ -111,6 +113,7 @@ export {
   staffDocument,
   applicantProfile,
   applicantKyc,
+  applicantNotification,
   staffUser,
   staffProduct,
   staffConfig,

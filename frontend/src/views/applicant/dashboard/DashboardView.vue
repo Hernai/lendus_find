@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore, useTenantStore, useProfileStore, useApplicationStore, useOnboardingStore } from '@/stores'
+import { useAuthStore, useTenantStore, useProfileStore, useApplicationStore, useOnboardingStore, useNotificationStore } from '@/stores'
 import { AppButton } from '@/components/common'
 import { v2, type V2Application } from '@/services/v2'
 import { useWebSocket } from '@/composables/useWebSocket'
-import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent } from '@/types/realtime'
+import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent, NotificationReceivedEvent } from '@/types/realtime'
 import { logger } from '@/utils/logger'
 import { formatMoney, formatDateShort } from '@/utils/formatters'
 
@@ -16,6 +16,7 @@ const tenantStore = useTenantStore()
 const profileStore = useProfileStore()
 const applicationStore = useApplicationStore()
 const onboardingStore = useOnboardingStore()
+const notificationStore = useNotificationStore()
 
 interface PendingDocument {
   type: string
@@ -79,6 +80,19 @@ useWebSocket({
     log.info('Documento actualizado:', { type: event.type, status: event.new_status })
     loadApplications() // Recargar lista
   },
+  onNotificationReceived: (event: NotificationReceivedEvent) => {
+    log.info('Notificación recibida:', event.id)
+    notificationStore.addNotification({
+      id: event.id,
+      event: event.event,
+      subject: event.subject,
+      body: event.body,
+      read_at: null,
+      is_read: false,
+      created_at: event.created_at,
+      metadata: event.metadata,
+    })
+  },
 })
 
 // Load applications from API
@@ -116,8 +130,11 @@ onMounted(async () => {
   // Load profile data to get the user's name
   await profileStore.loadProfile()
 
-  // Load applications
-  await loadApplications()
+  // Load applications and unread count
+  await Promise.all([
+    loadApplications(),
+    notificationStore.fetchUnreadCount(),
+  ])
 
   isLoading.value = false
 })
@@ -477,6 +494,17 @@ const handleCancelApplication = async () => {
             <span class="text-white font-semibold text-sm">{{ tenantName }}</span>
           </div>
           <div class="flex items-center gap-1.5">
+            <router-link
+              to="/notificaciones"
+              class="relative flex items-center gap-1.5 px-2.5 py-1.5 bg-white/10 rounded-lg text-white text-xs hover:bg-white/20 transition-colors"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              <span v-if="notificationStore.hasUnread" class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[10px] font-bold flex items-center justify-center">
+                {{ notificationStore.unreadCount > 9 ? '9+' : notificationStore.unreadCount }}
+              </span>
+            </router-link>
             <router-link
               to="/perfil"
               class="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/10 rounded-lg text-white text-xs hover:bg-white/20 transition-colors"

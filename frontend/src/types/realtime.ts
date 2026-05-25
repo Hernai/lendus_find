@@ -107,3 +107,12 @@ export interface BankAccountVerifiedEvent {
   }
   verified_at: string
 }
+
+export interface NotificationReceivedEvent {
+  id: string
+  event: string
+  subject: string | null
+  body: string
+  created_at: string
+  metadata: Record<string, unknown> | null
+}
