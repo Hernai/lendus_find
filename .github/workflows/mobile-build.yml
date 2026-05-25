@@ -1,0 +1,201 @@
+name: Mobile builds (per tenant)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tenant:
+        description: 'Tenant slug a buildear (debe existir frontend/tenants/<slug>.tenant.ts). Usa "all" para hacer matriz.'
+        required: true
+        default: 'demo'
+      platform:
+        description: 'Plataforma'
+        required: true
+        default: 'both'
+        type: choice
+        options: [ios, android, both]
+
+concurrency:
+  group: mobile-${{ github.workflow }}-${{ inputs.tenant }}
+  cancel-in-progress: true
+
+jobs:
+  discover-tenants:
+    name: Resolver lista de tenants
+    runs-on: ubuntu-latest
+    outputs:
+      tenants: ${{ steps.list.outputs.tenants }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        shell: bash
+        run: |
+          if [ "${{ inputs.tenant }}" = "all" ]; then
+            slugs=$(find frontend/tenants -maxdepth 1 -type f -name '*.tenant.ts' \
+              ! -name '_template.tenant.ts' \
+              -exec basename {} .tenant.ts \; | jq -R . | jq -sc .)
+          else
+            slugs='["${{ inputs.tenant }}"]'
+          fi
+          echo "tenants=$slugs" >> "$GITHUB_OUTPUT"
+          echo "Tenants a construir: $slugs"
+
+  android:
+    name: Android — ${{ matrix.tenant }}
+    if: inputs.platform == 'android' || inputs.platform == 'both'
+    needs: discover-tenants
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tenant: ${{ fromJSON(needs.discover-tenants.outputs.tenants) }}
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build web del tenant
+        run: npm run tenant:build -- ${{ matrix.tenant }}
+
+      - name: Existe proyecto android/?
+        id: check_android
+        run: |
+          if [ -d android ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "⚠ frontend/android/ no existe. Ejecutar localmente una vez:" >&2
+            echo "    TENANT=${{ matrix.tenant }} npx cap add android" >&2
+            echo "    git add android && git commit -m 'chore(android): scaffold inicial'" >&2
+          fi
+
+      - name: Capacitor sync
+        if: steps.check_android.outputs.exists == 'true'
+        env:
+          TENANT: ${{ matrix.tenant }}
+        run: npx cap sync android
+
+      - name: Decode keystore
+        if: steps.check_android.outputs.exists == 'true' && env.ANDROID_KEYSTORE_BASE64 != ''
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+
+      - name: Build release AAB
+        if: steps.check_android.outputs.exists == 'true'
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          cd android
+          ./gradlew bundleRelease
+
+      - name: Upload AAB
+        if: steps.check_android.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ matrix.tenant }}
+          path: frontend/android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: warn
+
+  ios:
+    name: iOS — ${{ matrix.tenant }}
+    if: inputs.platform == 'ios' || inputs.platform == 'both'
+    needs: discover-tenants
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        tenant: ${{ fromJSON(needs.discover-tenants.outputs.tenants) }}
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build web del tenant
+        run: npm run tenant:build -- ${{ matrix.tenant }}
+
+      - name: Existe proyecto ios/?
+        id: check_ios
+        run: |
+          if [ -d ios ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "⚠ frontend/ios/ no existe. Ejecutar localmente una vez:" >&2
+            echo "    TENANT=${{ matrix.tenant }} npx cap add ios" >&2
+            echo "    git add ios && git commit -m 'chore(ios): scaffold inicial'" >&2
+          fi
+
+      - name: Capacitor sync
+        if: steps.check_ios.outputs.exists == 'true'
+        env:
+          TENANT: ${{ matrix.tenant }}
+        run: npx cap sync ios
+
+      - name: CocoaPods install
+        if: steps.check_ios.outputs.exists == 'true'
+        run: |
+          cd ios/App
+          pod install --repo-update
+
+      - name: Import signing certificate
+        if: steps.check_ios.outputs.exists == 'true' && env.IOS_CERTIFICATE_BASE64 != ''
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$IOS_CERTIFICATE_BASE64" | base64 -d > /tmp/cert.p12
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          security import /tmp/cert.p12 -k build.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
+
+      - name: Archive
+        if: steps.check_ios.outputs.exists == 'true'
+        run: |
+          cd ios/App
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -archivePath build/App.xcarchive \
+            archive CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload archive
+        if: steps.check_ios.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-${{ matrix.tenant }}
+          path: frontend/ios/App/build/App.xcarchive
+          if-no-files-found: warn
