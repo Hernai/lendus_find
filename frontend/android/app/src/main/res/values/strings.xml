@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Lendus Demo</string>
+    <string name="title_activity_main">Lendus Demo</string>
+    <string name="package_name">mx.lendus.demo</string>
+    <string name="custom_url_scheme">mx.lendus.demo</string>
+</resources>
