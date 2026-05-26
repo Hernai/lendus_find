@@ -84,6 +84,12 @@ interface OnboardingData {
   step5: Step5Data
   step6: Step6Data
   step7: Step7Data
+  /**
+   * Datos del onboarding configurable por producto (MoneyCapital y similares).
+   * Cada step persiste su valor bajo su `step.id` (ej. education, marital, location)
+   * y opcionalmente campos individuales (state, city, education_level, salary_range, etc.).
+   */
+  dynamic: Record<string, unknown>
 }
 
 const STORAGE_KEY = 'onboarding_draft'
@@ -162,7 +168,8 @@ const getDefaultData = (): OnboardingData => ({
   },
   step7: {
     references: []
-  }
+  },
+  dynamic: {}
 })
 
 export const useOnboardingStore = defineStore('onboarding', () => {
@@ -656,6 +663,39 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     }
   }
 
+  // ============================================================
+  // Dynamic onboarding (configurable por producto, MoneyCapital y similares)
+  // ============================================================
+  const dynamicData = computed<Record<string, unknown>>(() => data.value.dynamic ?? {})
+
+  const setDynamicField = (key: string, value: unknown): void => {
+    if (!data.value.dynamic) data.value.dynamic = {}
+    data.value.dynamic[key] = value
+    saveToStorage()
+  }
+
+  /**
+   * Persistir los datos dinámicos al backend dentro de la Application
+   * actual (en `Application.dynamic_data` JSONB). Si aún no hay
+   * Application, solo guarda en localStorage (se enviará al hacer submit).
+   */
+  const persistDynamic = async (): Promise<void> => {
+    saveToStorage()
+    const appId = applicationStore.currentApplication?.id
+    if (!appId) return
+    try {
+      await applicationStore.updateApplication({
+        dynamic_data: {
+          ...(applicationStore.currentApplication?.dynamic_data ?? {}),
+          ...data.value.dynamic,
+        },
+      })
+      lastSavedAt.value = new Date()
+    } catch (e) {
+      onboardingLogger.warn('persistDynamic failed', { error: e })
+    }
+  }
+
   return {
     // State
     data,
@@ -668,6 +708,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     progress,
     isStepCompleted,
     canNavigateToStep,
+    dynamicData,
     // Actions
     init,
     loadFromBackend,
@@ -677,6 +718,8 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     nextStep,
     prevStep,
     updateStepData,
+    setDynamicField,
+    persistDynamic,
     reset,
     handleApplicationNotFound
   }

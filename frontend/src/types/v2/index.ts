@@ -855,6 +855,8 @@ export interface V2Product {
   allowed_payment_frequencies: V2PaymentFrequency[]
   required_documents: string[]
   eligibility_rules: Record<string, unknown> | null
+  /** Pipeline declarativo de onboarding (configurable por producto). */
+  onboarding_steps?: Array<Record<string, unknown>> | null
   is_active: boolean
   created_at: string
   updated_at: string

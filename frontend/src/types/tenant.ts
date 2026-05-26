@@ -83,6 +83,8 @@ export interface Product {
   rules?: ProductRules
   required_docs?: (RequiredDocument | string)[]
   extra_fields?: DynamicField[]
+  /** Pipeline declarativo de onboarding (configurable por producto). */
+  onboarding_steps?: Array<Record<string, unknown>> | null
   is_active: boolean
   applications_count?: number
   created_at?: string

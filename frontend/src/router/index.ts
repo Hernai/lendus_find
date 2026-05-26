@@ -10,6 +10,7 @@ import { platform } from '@/platform'
 // MOBILE VIEWS (Capacitor native)
 // ==============================================
 const MobileWelcome = () => import('@/views/mobile/MobileWelcome.vue')
+const DynamicOnboardingView = () => import('@/views/applicant/onboarding/DynamicOnboardingView.vue')
 
 // ==============================================
 // PUBLIC VIEWS (no authentication required)
@@ -90,6 +91,14 @@ const routes: RouteRecordRaw[] = [
     name: 'mobile-welcome',
     component: MobileWelcome,
     meta: { public: true, mobileEntry: true },
+  },
+  // Onboarding dinámico (configurable por producto, ej. MoneyCapital).
+  // El productorequiere autenticación y un selectedProduct previo.
+  {
+    path: '/m/solicitud/:stepId?',
+    name: 'm-onboarding-step',
+    component: DynamicOnboardingView,
+    meta: { requiresAuth: true, mobileEntry: true },
   },
 
   // ==============================================

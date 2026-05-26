@@ -102,6 +102,7 @@ class ConfigController extends Controller
             'educationLevel' => EducationLevel::toOptions(),
             'housingType' => HousingType::toOptions(),
             'employmentType' => EmploymentType::toOptions(),
+            'salaryRange' => \App\Enums\SalaryRange::toOptions(),
             'bankAccountType' => BankAccountType::toOptions(),
             'mexicanState' => MexicanState::toOptions(),
             // Reference enums
