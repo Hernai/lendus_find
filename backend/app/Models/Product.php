@@ -41,6 +41,7 @@ class Product extends Model
         'rules',
         'required_docs',
         'extra_fields',
+        'onboarding_steps',
         'is_active',
         'display_order',
         'created_by',
@@ -61,6 +62,7 @@ class Product extends Model
         'rules' => 'array',
         'required_docs' => 'array',
         'extra_fields' => 'array',
+        'onboarding_steps' => 'array',
         'is_active' => 'boolean',
     ];
 

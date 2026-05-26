@@ -21,6 +21,7 @@ class Tenant extends Model
         'rfc',
         'branding',
         'settings',
+        'features',
         'webhook_config',
         'email',
         'phone',
@@ -36,6 +37,7 @@ class Tenant extends Model
     protected $casts = [
         'branding' => 'array',
         'settings' => 'array',
+        'features' => 'array',
         'webhook_config' => 'array',
         'is_active' => 'boolean',
         'activated_at' => 'datetime',
@@ -80,6 +82,20 @@ class Tenant extends Model
     public function brandingConfig(): HasOne
     {
         return $this->hasOne(TenantBranding::class);
+    }
+
+    /**
+     * Check si una feature flag está habilitada para este tenant.
+     *
+     * Flags reconocidas:
+     *  - loan_portfolio
+     *  - unified_consent_screen
+     *  - phone_score_enabled
+     *  - auto_disbursement
+     */
+    public function hasFeature(string $flag): bool
+    {
+        return (bool) data_get($this->features ?? [], $flag, false);
     }
 
     /**

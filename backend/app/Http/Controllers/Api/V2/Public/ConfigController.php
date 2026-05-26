@@ -57,6 +57,7 @@ class ConfigController extends Controller
                 'branding' => $branding,
                 'webhook_config' => $tenant->webhook_config,
                 'settings' => $this->formatSettings($tenant->settings),
+                'features' => $tenant->features ?? [],
                 'contact' => [
                     'email' => $tenant->email,
                     'phone' => $tenant->phone,
@@ -79,6 +80,7 @@ class ConfigController extends Controller
                 'required_docs' => $this->formatRequiredDocs($p->required_documents ?? $p->required_docs),
                 'extra_fields' => $p->extra_fields ?? [],
                 'eligibility_rules' => $p->eligibility_rules ?? [],
+                'onboarding_steps' => $p->onboarding_steps,
                 'late_fee_rate' => $p->late_fee_rate,
                 'display_order' => $p->display_order,
                 'is_active' => $p->is_active,
