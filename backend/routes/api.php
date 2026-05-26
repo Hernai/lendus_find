@@ -47,6 +47,8 @@ use App\Http\Controllers\Api\V2\Applicant\NotificationPreferenceController as Ap
 use App\Http\Controllers\Api\V2\Applicant\NotificationController as ApplicantNotificationController;
 use App\Http\Controllers\Api\V2\Staff\NotificationPreferenceController as StaffNotificationPreferenceController;
 use App\Http\Controllers\Api\V2\Staff\AuditLogController as StaffAuditLogController;
+use App\Http\Controllers\Api\V2\Applicant\LoanController as ApplicantLoanController;
+use App\Http\Controllers\Api\V2\Staff\LoanController as StaffLoanController;
 
 // =============================================
 // BROADCASTING AUTH (for WebSocket channel authorization)
@@ -138,6 +140,15 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'log.request'])
         Route::post('/devices', [ApplicantDeviceController::class, 'register']);
         Route::delete('/devices/{token}', [ApplicantDeviceController::class, 'unregister'])
             ->where('token', '.*');
+
+        // =============================================
+        // Loan Portfolio (applicant) — opt-in por tenant.features.loan_portfolio
+        // =============================================
+        Route::get('/loans', [ApplicantLoanController::class, 'index']);
+        Route::get('/loans/{id}', [ApplicantLoanController::class, 'show']);
+        Route::post('/loans/{id}/extension/quote', [ApplicantLoanController::class, 'quoteExtension']);
+        Route::post('/loans/{id}/extension', [ApplicantLoanController::class, 'requestExtension']);
+        Route::post('/loans/{id}/pay', [ApplicantLoanController::class, 'pay']);
 
         // =============================================
         // Profile Management
@@ -360,6 +371,12 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
         Route::get('/applications/{id}', [StaffAppController::class, 'show']);
         Route::get('/applications/{id}/audit-logs', [StaffAuditLogController::class, 'listByApplication']);
         Route::get('/applicants/{id}/audit-logs', [StaffAuditLogController::class, 'listByApplicant']);
+
+        // Loan Portfolio (staff)
+        Route::get('/loans', [StaffLoanController::class, 'index']);
+        Route::get('/loans/{id}', [StaffLoanController::class, 'show']);
+        Route::post('/loans/{id}/payments', [StaffLoanController::class, 'recordPayment']);
+        Route::post('/loans/{loanId}/extensions/{extensionId}/approve', [StaffLoanController::class, 'approveExtension']);
 
         // Applications - Actions requiring permissions
         Route::post('/applications/{id}/assign', [StaffAppController::class, 'assign'])
