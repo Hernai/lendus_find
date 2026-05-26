@@ -833,6 +833,9 @@ export interface V2ApplicationUpdatePayload {
 export interface V2CounterOfferResponsePayload {
   accept: boolean
   reason?: string
+  // Para módulo loan_portfolio (MoneyCapital): ajustes finales a la oferta
+  amount?: number
+  term_days?: number
 }
 
 // =====================================================
