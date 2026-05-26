@@ -52,12 +52,14 @@ enum NotificationEvent: string
     case SECURITY_PIN_CHANGED = 'security.pin_changed';
 
     // Loan & Payments
+    case LOAN_PREAPPROVED = 'loan.preapproved';
     case LOAN_DISBURSED = 'loan.disbursed';
     case PAYMENT_RECEIVED = 'payment.received';
     case PAYMENT_UPCOMING = 'payment.upcoming';
     case PAYMENT_OVERDUE = 'payment.overdue';
     case LOAN_COMPLETED = 'loan.completed';
     case LOAN_DEFAULT = 'loan.default';
+    case LOAN_EXTENSION_GRANTED = 'loan.extension_granted';
 
     // System
     case WEBHOOK_FAILED = 'webhook.failed';
@@ -101,12 +103,14 @@ enum NotificationEvent: string
             self::BANK_ACCOUNT_VERIFIED => 'Cuenta Bancaria Verificada',
             self::SECURITY_PIN_CHANGED => 'PIN de Seguridad Cambiado',
 
+            self::LOAN_PREAPPROVED => 'Crédito Preaprobado',
             self::LOAN_DISBURSED => 'Crédito Desembolsado',
             self::PAYMENT_RECEIVED => 'Pago Recibido',
             self::PAYMENT_UPCOMING => 'Pago Próximo a Vencer',
             self::PAYMENT_OVERDUE => 'Pago Vencido',
             self::LOAN_COMPLETED => 'Crédito Liquidado',
             self::LOAN_DEFAULT => 'Crédito en Mora',
+            self::LOAN_EXTENSION_GRANTED => 'Prórroga Aprobada',
 
             self::WEBHOOK_FAILED => 'Webhook Fallido',
             self::REMINDER_PENDING_DOCS => 'Recordatorio: Documentos Pendientes',
