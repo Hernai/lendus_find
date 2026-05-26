@@ -69,6 +69,10 @@ class TenantApiConfig extends Model
         'smtp' => 'SMTP (Correo propio)',
         'fcm' => 'Firebase Cloud Messaging',
         'apns' => 'Apple Push Notifications',
+        'nubarium_phone_score' => 'Nubarium Phone Score',
+        'stp' => 'STP — Dispersión',
+        'conekta' => 'Conekta — Cobranza',
+        'openpay' => 'OpenPay — Cobranza',
     ];
 
     /**
@@ -82,6 +86,9 @@ class TenantApiConfig extends Model
         'credit_bureau' => 'Buró de Crédito',
         'document_validation' => 'Validación de Documentos',
         'push' => 'Push Notifications',
+        'phone_score' => 'Phone Score',
+        'loan_disbursement' => 'Dispersión de préstamos',
+        'payment_collection' => 'Cobranza',
     ];
 
     /**
