@@ -42,6 +42,8 @@ import staffAuditLog from './audit.staff.service'
 import person from './person.service'
 import simulator from './simulator.service'
 import publicConfig from './config.public.service'
+import applicantLoan from './loan.applicant.service'
+import staffLoan from './loan.staff.service'
 
 // =====================================================
 // Organized V2 API Namespace
@@ -67,6 +69,7 @@ export const v2 = {
     profile: applicantProfile,
     kyc: applicantKyc,
     notification: applicantNotification,
+    loan: applicantLoan,
   },
 
   /**
@@ -83,6 +86,7 @@ export const v2 = {
     tenant: staffTenant,
     integration: staffIntegration,
     auditLog: staffAuditLog,
+    loan: staffLoan,
   },
 
   /**
@@ -116,6 +120,8 @@ export {
   applicantProfile,
   applicantKyc,
   applicantNotification,
+  applicantLoan,
+  staffLoan,
   staffUser,
   staffProduct,
   staffConfig,

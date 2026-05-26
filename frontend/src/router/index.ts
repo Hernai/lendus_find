@@ -12,6 +12,10 @@ import { platform } from '@/platform'
 const MobileWelcome = () => import('@/views/mobile/MobileWelcome.vue')
 const WelcomeConsentView = () => import('@/views/mobile/WelcomeConsentView.vue')
 const DynamicOnboardingView = () => import('@/views/applicant/onboarding/DynamicOnboardingView.vue')
+const ProcessingView = () => import('@/views/applicant/onboarding/ProcessingView.vue')
+const LoanOfferView = () => import('@/views/applicant/loans/LoanOfferView.vue')
+const LoanDashboardView = () => import('@/views/applicant/loans/LoanDashboardView.vue')
+const LoanDetailView = () => import('@/views/applicant/loans/LoanDetailView.vue')
 
 // ==============================================
 // PUBLIC VIEWS (no authentication required)
@@ -76,7 +80,7 @@ const NotificationTemplates = () => import('@/views/admin/panel/NotificationTemp
 const NotificationTemplateForm = () => import('@/views/admin/panel/NotificationTemplateForm.vue')
 
 // Reserved paths that are NOT tenant slugs (must match tenant.ts)
-const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones', 'find', 'notificaciones', 'm', 'mobile']
+const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones', 'find', 'notificaciones', 'm', 'mobile', 'moneycapital']
 
 // Helper to check if a path segment is a tenant slug
 const isTenantSlug = (segment: string): boolean => {
@@ -109,6 +113,30 @@ const routes: RouteRecordRaw[] = [
     name: 'm-onboarding-step',
     component: DynamicOnboardingView,
     meta: { requiresAuth: true, mobileEntry: true },
+  },
+  {
+    path: '/m/solicitud/:id/procesando',
+    name: 'm-processing',
+    component: ProcessingView,
+    meta: { requiresAuth: true, mobileEntry: true },
+  },
+  {
+    path: '/m/solicitud/:id/oferta',
+    name: 'm-loan-offer',
+    component: LoanOfferView,
+    meta: { requiresAuth: true, mobileEntry: true },
+  },
+  {
+    path: '/m/prestamos',
+    name: 'm-loan-dashboard',
+    component: LoanDashboardView,
+    meta: { requiresAuth: true, mobileEntry: true, requiresLoanPortfolio: true },
+  },
+  {
+    path: '/m/prestamos/:id',
+    name: 'm-loan-detail',
+    component: LoanDetailView,
+    meta: { requiresAuth: true, mobileEntry: true, requiresLoanPortfolio: true },
   },
 
   // ==============================================
@@ -236,6 +264,20 @@ const routes: RouteRecordRaw[] = [
     name: 'lendusfind-landing',
     component: LendusFindLanding,
     meta: { public: true, noTenant: true }
+  },
+
+  // Landings comerciales MoneyCapital (no requieren tenant prefix)
+  {
+    path: '/moneycapital/sin-buro',
+    name: 'moneycapital-sin-buro',
+    component: () => import('@/views/public/moneycapital/SinBuroLanding.vue'),
+    meta: { public: true, noTenant: true },
+  },
+  {
+    path: '/moneycapital/liquidez',
+    name: 'moneycapital-liquidez',
+    component: () => import('@/views/public/moneycapital/LiquidezUrgenteLanding.vue'),
+    meta: { public: true, noTenant: true },
   },
 
   // Public routes
@@ -472,6 +514,16 @@ const routes: RouteRecordRaw[] = [
         component: AdminTenants
       },
       {
+        path: 'prestamos',
+        name: 'admin-loans',
+        component: () => import('@/views/admin/panel/AdminLoans.vue')
+      },
+      {
+        path: 'prestamos/:id',
+        name: 'admin-loan-detail',
+        component: () => import('@/views/admin/panel/AdminLoanDetail.vue')
+      },
+      {
         path: 'notificaciones',
         name: 'admin-notification-templates',
         component: NotificationTemplates
@@ -572,6 +624,14 @@ router.beforeEach(async (to, from, next) => {
     // Also handle root path - but only if a tenant is in the URL
     if (to.path === '/' && currentTenantSlug) {
       return next({ path: `/${tenantStore.slug}`, replace: true })
+    }
+  }
+
+  // Feature flag: loan_portfolio (módulo opt-in MoneyCapital)
+  if (to.matched.some(record => record.meta.requiresLoanPortfolio)) {
+    const features = (tenantStore.tenant?.features ?? {}) as Record<string, boolean>
+    if (!features.loan_portfolio) {
+      return next({ path: '/dashboard', replace: true })
     }
   }
 
