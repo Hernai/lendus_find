@@ -48,6 +48,14 @@ export interface Tenant {
   branding: Branding
   webhook_config: WebhookConfig
   settings: TenantSettings
+  /**
+   * Feature flags por SOFOM. Reconocidas:
+   *  - loan_portfolio
+   *  - unified_consent_screen
+   *  - phone_score_enabled
+   *  - auto_disbursement
+   */
+  features?: Record<string, boolean>
   contact?: TenantContact
   is_active: boolean
   created_at: string

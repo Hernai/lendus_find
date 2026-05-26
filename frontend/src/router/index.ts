@@ -10,6 +10,7 @@ import { platform } from '@/platform'
 // MOBILE VIEWS (Capacitor native)
 // ==============================================
 const MobileWelcome = () => import('@/views/mobile/MobileWelcome.vue')
+const WelcomeConsentView = () => import('@/views/mobile/WelcomeConsentView.vue')
 const DynamicOnboardingView = () => import('@/views/applicant/onboarding/DynamicOnboardingView.vue')
 
 // ==============================================
@@ -92,8 +93,17 @@ const routes: RouteRecordRaw[] = [
     component: MobileWelcome,
     meta: { public: true, mobileEntry: true },
   },
+  // Welcome con consentimiento unificado (MoneyCapital). El guard global
+  // redirige aquí si tenant.features.unified_consent_screen es true y no
+  // hay consents persistidos todavía.
+  {
+    path: '/m/welcome-consent',
+    name: 'mobile-welcome-consent',
+    component: WelcomeConsentView,
+    meta: { public: true, mobileEntry: true },
+  },
   // Onboarding dinámico (configurable por producto, ej. MoneyCapital).
-  // El productorequiere autenticación y un selectedProduct previo.
+  // Requiere autenticación y un selectedProduct previo.
   {
     path: '/m/solicitud/:stepId?',
     name: 'm-onboarding-step',
@@ -523,6 +533,18 @@ router.beforeEach(async (to, from, next) => {
       if (authStore.isAuthenticated) {
         const slug = tenantStore.slug || detectTenantSlug() || 'demo'
         return next({ path: `/${slug}/dashboard`, replace: true })
+      }
+      // Si el tenant pide consentimiento unificado (MoneyCapital) y aún no
+      // hay consents persistidos, redirigir a /m/welcome-consent en vez de /m.
+      try {
+        await tenantStore.loadConfig()
+      } catch {
+        // ignore — sigue al fallback /m
+      }
+      const features = (tenantStore.tenant?.features ?? {}) as Record<string, boolean>
+      const hasConsents = !!storage.get('consents')
+      if (features.unified_consent_screen && !hasConsents) {
+        return next({ path: '/m/welcome-consent', replace: true })
       }
       return next({ path: '/m', replace: true })
     }
