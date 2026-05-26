@@ -77,6 +77,7 @@ class BankAccount extends Model
         'clabe',
         'account_number_last4',
         'card_number_last4',
+        'card_number_encrypted',
         'account_type',
         'currency',
         'holder_name',
@@ -107,7 +108,47 @@ class BankAccount extends Model
             'is_verified' => 'boolean',
             'verification_data' => 'array',
             'metadata' => 'array',
+            'card_number_encrypted' => 'encrypted',
         ];
+    }
+
+    /**
+     * Setter conveniente: recibe el PAN completo (16 dígitos), valida Luhn,
+     * persiste `card_number_encrypted` (Laravel lo cifra via cast) y deja
+     * solo los últimos 4 visibles en `card_number_last4`.
+     */
+    public function setCardNumber(string $pan): void
+    {
+        $digits = preg_replace('/\D/', '', $pan);
+        if (! $digits || strlen($digits) !== 16) {
+            throw new \InvalidArgumentException('La tarjeta debe tener 16 dígitos');
+        }
+        if (! static::isValidLuhn($digits)) {
+            throw new \InvalidArgumentException('Número de tarjeta inválido (Luhn check fallido)');
+        }
+        $this->card_number_encrypted = $digits;
+        $this->card_number_last4 = substr($digits, -4);
+    }
+
+    /**
+     * Algoritmo de Luhn — válido para tarjetas de crédito/débito.
+     */
+    public static function isValidLuhn(string $pan): bool
+    {
+        $digits = preg_replace('/\D/', '', $pan);
+        if (! $digits || strlen($digits) < 12) return false;
+        $sum = 0;
+        $alt = false;
+        for ($i = strlen($digits) - 1; $i >= 0; $i--) {
+            $n = (int) $digits[$i];
+            if ($alt) {
+                $n *= 2;
+                if ($n > 9) $n -= 9;
+            }
+            $sum += $n;
+            $alt = ! $alt;
+        }
+        return $sum % 10 === 0;
     }
 
     // =====================================================

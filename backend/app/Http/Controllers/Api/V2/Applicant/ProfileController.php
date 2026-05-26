@@ -848,7 +848,9 @@ class ProfileController extends Controller
     public function storeBankAccount(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'clabe' => 'required|string|size:18',
+            'clabe' => 'nullable|string|size:18|required_without:card_number',
+            'card_number' => 'nullable|string|size:16|required_without:clabe',
+            'bank_name' => 'nullable|string|max:100',
             'holder_name' => 'required|string|max:100',
             'account_type' => 'nullable|string',
         ]);
@@ -868,18 +870,35 @@ class ProfileController extends Controller
             $accountType = $normalized;
         }
 
-        // Validate CLABE
-        $clabeValidation = $this->profileService->validateClabe($validated['clabe']);
-        if (!$clabeValidation['is_valid']) {
-            return $this->validationError('La CLABE no es válida', [
-                'clabe' => ['El dígito verificador de la CLABE es incorrecto'],
-            ]);
-        }
+        $isCard = !empty($validated['card_number']);
+        $clabeValidation = null;
 
-        // Check if CLABE already exists for this person
-        $existing = $person->bankAccounts()->where('clabe', $validated['clabe'])->first();
-        if ($existing) {
-            return $this->badRequest('DUPLICATE_CLABE', 'Ya tienes una cuenta con esta CLABE registrada.');
+        if ($isCard) {
+            // Validar Luhn de la tarjeta
+            if (! \App\Models\BankAccount::isValidLuhn($validated['card_number'])) {
+                return $this->validationError('Tarjeta inválida', [
+                    'card_number' => ['El número de tarjeta no es válido (Luhn check fallido)'],
+                ]);
+            }
+            $last4 = substr($validated['card_number'], -4);
+            $existing = $person->bankAccounts()->where('card_number_last4', $last4)->first();
+            if ($existing) {
+                return $this->badRequest('DUPLICATE_CARD', 'Ya tienes una cuenta con esta tarjeta registrada.');
+            }
+        } else {
+            // Validate CLABE
+            $clabeValidation = $this->profileService->validateClabe($validated['clabe']);
+            if (!$clabeValidation['is_valid']) {
+                return $this->validationError('La CLABE no es válida', [
+                    'clabe' => ['El dígito verificador de la CLABE es incorrecto'],
+                ]);
+            }
+
+            // Check if CLABE already exists for this person
+            $existing = $person->bankAccounts()->where('clabe', $validated['clabe'])->first();
+            if ($existing) {
+                return $this->badRequest('DUPLICATE_CLABE', 'Ya tienes una cuenta con esta CLABE registrada.');
+            }
         }
 
         // Create bank account
@@ -887,14 +906,21 @@ class ProfileController extends Controller
         $bankAccount = $person->bankAccounts()->create([
             'tenant_id' => $account->tenant_id,
             'entity_type' => 'persons',
-            'bank_code' => $clabeValidation['bank_code'],
-            'bank_name' => $clabeValidation['bank_name'],
-            'clabe' => $validated['clabe'],
+            'bank_code' => $clabeValidation['bank_code'] ?? null,
+            'bank_name' => $clabeValidation['bank_name'] ?? $validated['bank_name'] ?? 'Sin especificar',
+            'clabe' => $validated['clabe'] ?? null,
+            'card_number_last4' => $isCard ? substr($validated['card_number'], -4) : null,
             'holder_name' => strtoupper($validated['holder_name']),
             'account_type' => $accountType->value,
             'is_primary' => $isFirst,
             'status' => 'ACTIVE',
         ]);
+
+        // Si es tarjeta, persistir el PAN cifrado via setter (que valida y guarda)
+        if ($isCard) {
+            $bankAccount->setCardNumber($validated['card_number']);
+            $bankAccount->save();
+        }
 
         // Record event if there's an active application
         $application = $this->getCurrentApplication($person);
