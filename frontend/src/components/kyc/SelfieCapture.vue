@@ -198,7 +198,7 @@ onUnmounted(() => {
           class="w-full h-full object-cover scale-x-[-1]"
         />
 
-        <!-- Circular guide overlay -->
+        <!-- Circular guide overlay (con marco color tenant) -->
         <div class="absolute inset-0 pointer-events-none">
           <svg class="w-full h-full" viewBox="0 0 100 100">
             <defs>
@@ -208,7 +208,7 @@ onUnmounted(() => {
               </mask>
             </defs>
             <rect width="100" height="100" fill="rgba(0,0,0,0.6)" mask="url(#selfie-hole)" />
-            <circle cx="50" cy="50" r="45" fill="none" stroke="white" stroke-width="1" stroke-dasharray="4,4" />
+            <circle cx="50" cy="50" r="45" fill="none" stroke="var(--tenant-primary, #5B21B6)" stroke-width="1.2" stroke-dasharray="4,4" />
           </svg>
         </div>
 
