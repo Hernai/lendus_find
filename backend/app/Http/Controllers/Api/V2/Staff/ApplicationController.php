@@ -29,6 +29,22 @@ class ApplicationController extends Controller
     ) {}
 
     /**
+     * Tenant scope para queries:
+     * - SUPER_ADMIN puede ver cualquier tenant vía X-Tenant-ID (TenantSwitcher).
+     * - Cualquier otro rol queda scoped a su propio tenant.
+     */
+    private function scopedTenantId(StaffAccount $staff): string
+    {
+        if ($staff->isSuperAdmin()) {
+            $tenant = app('tenant');
+            if ($tenant && isset($tenant->id)) {
+                return (string) $tenant->id;
+            }
+        }
+        return (string) $staff->tenant_id;
+    }
+
+    /**
      * List applications with filters.
      *
      * GET /v2/staff/applications
@@ -68,8 +84,12 @@ class ApplicationController extends Controller
             $validated['assigned_to'] = $staff->id;
         }
 
+        // Super admin puede listar aplicaciones de cualquier tenant usando el
+        // header X-Tenant-ID (TenantSwitcher). El resto queda scoped a su tenant.
+        $scopeTenant = $staff->isSuperAdmin() ? app('tenant') : $staff->tenant;
+
         $applications = $this->service->list(
-            $staff->tenant,
+            $scopeTenant,
             $validated,
             $validated['per_page'] ?? 20
         );
@@ -124,8 +144,9 @@ class ApplicationController extends Controller
             $assignedTo = $validated['assigned_to'];
         }
 
+        $scopeTenant = $staff->isSuperAdmin() ? app('tenant') : $staff->tenant;
         $boardData = $this->service->getBoardData(
-            $staff->tenant,
+            $scopeTenant,
             $columns,
             $limitPerColumn,
             $assignedTo,
@@ -152,7 +173,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $stats = $this->service->getStatistics(
-            $staff->tenant,
+            $staff->isSuperAdmin() ? app('tenant') : $staff->tenant,
             $validated['date_from'] ?? null,
             $validated['date_to'] ?? null
         );
@@ -170,7 +191,7 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $applications = $this->service->getUnassigned($staff->tenant);
+        $applications = $this->service->getUnassigned($staff->isSuperAdmin() ? app('tenant') : $staff->tenant);
 
         return $this->success([
             'applications' => $applications->map(fn($app) => $this->formatApplication($app)),
@@ -207,7 +228,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $id)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->with([
                 'product',
                 'person.identifications',
@@ -246,7 +267,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $id)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->first();
 
         if (!$application) {
@@ -254,7 +275,7 @@ class ApplicationController extends Controller
         }
 
         $assignee = StaffAccount::where('id', $validated['user_id'])
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->first();
 
         if (!$assignee) {
@@ -284,7 +305,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $id)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->first();
 
         if (!$application) {
@@ -315,7 +336,8 @@ class ApplicationController extends Controller
     public function approve(Request $request, string $id): JsonResponse
     {
         $validated = $request->validate([
-            'amount' => 'nullable|numeric|min:1000',
+            // El mínimo real lo valida el producto; aquí solo evitamos 0/negativos.
+            'amount' => 'nullable|numeric|min:1',
             'term_months' => 'nullable|integer|min:1|max:120',
             'interest_rate' => 'nullable|numeric|min:0|max:100',
             'notes' => 'nullable|string|max:1000',
@@ -325,7 +347,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $id)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->first();
 
         if (!$application) {
@@ -366,7 +388,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $id)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->first();
 
         if (!$application) {
@@ -397,7 +419,7 @@ class ApplicationController extends Controller
     public function sendCounterOffer(Request $request, string $id): JsonResponse
     {
         $validated = $request->validate([
-            'amount' => 'required|numeric|min:1000',
+            'amount' => 'required|numeric|min:1',
             'term_months' => 'required|integer|min:1|max:120',
             'interest_rate' => 'nullable|numeric|min:0|max:100',
             'reason' => 'nullable|string|max:500',
@@ -407,7 +429,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $id)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->first();
 
         if (!$application) {
@@ -446,7 +468,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $id)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->first();
 
         if (!$application) {
@@ -481,7 +503,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $id)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->first();
 
         if (!$application) {
@@ -514,7 +536,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $id)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->first();
 
         if (!$application) {
@@ -607,6 +629,8 @@ class ApplicationController extends Controller
             ],
             'requested_amount' => $app->requested_amount,
             'requested_term_months' => $app->requested_term_months,
+            'requested_term_days' => $app->requested_term_days,
+            'term_in_days' => (bool) ($app->product?->rules['term_in_days'] ?? false),
             'monthly_payment' => $app->monthly_payment,
             'risk_level' => $app->risk_level,
             'assigned_to' => $app->assignedTo ? [
@@ -663,6 +687,9 @@ class ApplicationController extends Controller
             // Requested by applicant
             'requested_amount' => $app->requested_amount,
             'requested_term_months' => $app->requested_term_months,
+            'requested_term_days' => $app->requested_term_days,
+            'term_in_days' => (bool) ($app->product?->rules['term_in_days'] ?? false),
+            'payment_frequency' => $app->product?->payment_frequencies[0] ?? null,
             'purpose' => $app->purpose,
             'purpose_label' => $app->purpose ? (\App\Enums\LoanPurpose::tryFrom($app->purpose)?->label() ?? $app->purpose) : null,
             'purpose_description' => $app->purpose_description,
@@ -852,7 +879,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $id)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->first();
 
         if (!$application) {
@@ -886,7 +913,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $id)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->first();
 
         if (!$application) {
@@ -945,7 +972,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $appId)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->first();
 
         if (!$application) {
@@ -983,7 +1010,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $appId)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->with('person')
             ->first();
 
@@ -1101,7 +1128,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $appId)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->with('person')
             ->first();
 
@@ -1135,7 +1162,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $appId)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->with('person')
             ->first();
 
@@ -1198,7 +1225,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $appId)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->with('person')
             ->first();
 
@@ -1287,7 +1314,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $appId)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->with('person')
             ->first();
 
@@ -1349,7 +1376,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $appId)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->with('person.references')
             ->first();
 
@@ -1419,7 +1446,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $appId)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->with('person.bankAccounts')
             ->first();
 
@@ -1470,7 +1497,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $appId)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->with('person.bankAccounts')
             ->first();
 
@@ -2318,7 +2345,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $id)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->with(['person.employments', 'person.addresses', 'person.references', 'person.bankAccounts', 'person.identifications'])
             ->first();
 
@@ -2441,7 +2468,7 @@ class ApplicationController extends Controller
         $staff = $request->user();
 
         $application = Application::where('id', $id)
-            ->where('tenant_id', $staff->tenant_id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
             ->with('person.account')
             ->first();
 
@@ -2453,7 +2480,7 @@ class ApplicationController extends Controller
         $personId = $application->person_id;
         $accountId = $application->person?->account?->id;
 
-        $logs = \App\Models\ApiLog::where('tenant_id', $staff->tenant_id)
+        $logs = \App\Models\ApiLog::where('tenant_id', $this->scopedTenantId($staff))
             ->where(function ($q) use ($application, $personId, $accountId) {
                 // Search by application_id
                 $q->where('application_id', $application->id);

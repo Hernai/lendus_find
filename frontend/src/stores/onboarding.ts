@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useProfileStore } from './profile'
+import * as profileService from '@/services/v2/profile.service'
+import documentService from '@/services/v2/document.applicant.service'
+import * as applicationService from '@/services/v2/application.applicant.service'
 import { useApplicationStore } from './application'
 import { logger } from '@/utils/logger'
 import { isValidRfc } from '@/utils/validators'
@@ -213,10 +216,35 @@ export const useOnboardingStore = defineStore('onboarding', () => {
   }
 
   // Save to localStorage
+  // Reemplaza recursivamente los data: URLs (imágenes base64 de la cámara) por
+  // null antes de serializar a localStorage. Las imágenes pesan MB y reventarían
+  // la cuota (~5MB) de localStorage; además ya se suben como documentos al
+  // backend, así que no necesitan persistir en el draft local.
+  const stripDataUrls = (value: unknown): unknown => {
+    if (typeof value === 'string') {
+      return value.startsWith('data:') ? null : value
+    }
+    if (Array.isArray(value)) {
+      return value.map(stripDataUrls)
+    }
+    if (value && typeof value === 'object') {
+      const out: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        out[k] = stripDataUrls(v)
+      }
+      return out
+    }
+    return value
+  }
+
   const saveToStorage = () => {
     try {
+      const lightData = {
+        ...data.value,
+        dynamic: stripDataUrls(data.value.dynamic ?? {}),
+      }
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        data: data.value,
+        data: lightData,
         completedSteps: completedSteps.value,
         currentStep: currentStep.value,
         savedAt: new Date().toISOString()
@@ -455,8 +483,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
             seniority_months: Number(s4.seniority_months) || 0,
             work_phone: s4.work_phone || undefined
           }
-          console.log('[OnboardingStore] saveStepToBackend step 4 - Employment payload:', employmentPayload)
-          console.trace('[OnboardingStore] Call stack for employment save')
+          onboardingLogger.debug('saveStepToBackend step 4 - Employment payload', employmentPayload)
           await profileStore.updateEmployment(employmentPayload)
           break
         }
@@ -674,25 +701,262 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     saveToStorage()
   }
 
+  // Salary range → monthly_income midpoint (alineado con backend SalaryRange::midpoint())
+  const SALARY_MIDPOINT: Record<string, number> = {
+    LT_3000: 2000,
+    R_3001_6000: 4500,
+    R_6001_9000: 7500,
+    R_9001_12000: 10500,
+    R_12001_15000: 13500,
+    GT_15000: 20000,
+  }
+
+  // Mapeo housing_type frontend → backend enum
+  const HOUSING_MAP: Record<string, 'OWNED' | 'RENTED' | 'FAMILY' | 'MORTGAGED' | 'EMPLOYER'> = {
+    OWN: 'OWNED',
+    RENT: 'RENTED',
+    FAMILY: 'FAMILY',
+    OTHER: 'EMPLOYER',
+  }
+
+  // Hash del último payload persistido por step, para no re-ejecutar (y no
+  // duplicar POSTs de referencias/cuentas) al retroceder y avanzar sin cambios.
+  const persistedHashes = new Map<string, string>()
+  const inFlightSteps = new Set<string>()
+  const hashOf = (payload: unknown): string => {
+    try { return JSON.stringify(stripDataUrls(payload ?? null)) } catch { return Math.random().toString() }
+  }
+  // Algún sub-POST falló durante el step actual → no marcar como persistido.
+  let stepHadError = false
+
   /**
-   * Persistir los datos dinámicos al backend dentro de la Application
-   * actual (en `Application.dynamic_data` JSONB). Si aún no hay
-   * Application, solo guarda en localStorage (se enviará al hacer submit).
+   * Persistir el step recién completado contra el endpoint correcto del
+   * profile API. Reutiliza los mismos endpoints que el flow legacy de
+   * LendusFind (`/v2/applicant/profile/*`).
+   *
+   * `payload` es el valor del step (lo que se le pasa al renderer como
+   * modelValue). `stepId` y `stepType` identifican qué dispatcher usar.
+   *
+   * Idempotente y serializado:
+   *  - Si el payload no cambió desde la última persistencia EXITOSA, se omite.
+   *  - Si ya hay una persistencia en curso para ese step, se ignora (evita
+   *    duplicar POSTs de referencias/cuentas por llamadas concurrentes).
+   *  - Solo marca el hash si NINGÚN sub-POST falló (evita marcar como guardado
+   *    algo que en realidad falló).
    */
-  const persistDynamic = async (): Promise<void> => {
+  const persistDynamic = async (stepId?: string, stepType?: string, payload?: unknown): Promise<void> => {
     saveToStorage()
-    const appId = applicationStore.currentApplication?.id
-    if (!appId) return
+    if (!stepId || !stepType) return // backward-compat: si se llama sin args, solo cache local
+
+    const hash = hashOf(payload)
+    if (persistedHashes.get(stepId) === hash) return // sin cambios → no re-persistir
+    if (inFlightSteps.has(stepId)) return // ya hay una persistencia en curso para este step
+
+    inFlightSteps.add(stepId)
+    stepHadError = false
     try {
-      await applicationStore.updateApplication({
-        dynamic_data: {
-          ...(applicationStore.currentApplication?.dynamic_data ?? {}),
-          ...data.value.dynamic,
-        },
-      })
+      isSaving.value = true
+      switch (stepType) {
+        case 'select': {
+          // Education / Marital / Employment_type / SalaryRange comparten el patrón.
+          if (stepId === 'education') {
+            await profileStore.updatePersonalData({ education_level: String(payload || '') })
+          } else if (stepId === 'marital') {
+            await profileStore.updatePersonalData({ marital_status: String(payload || '') })
+          } else if (stepId === 'employment') {
+            const dyn = data.value.dynamic || {}
+            const salaryCode = String(dyn.salary_range || '')
+            await profileStore.updateEmployment({
+              employment_type: String(payload || ''),
+              monthly_income: SALARY_MIDPOINT[salaryCode] ?? 0,
+            } as never)
+          } else if (stepId === 'salary_range') {
+            const dyn = data.value.dynamic || {}
+            const empType = String(dyn.employment_type || '')
+            if (empType) {
+              await profileStore.updateEmployment({
+                employment_type: empType,
+                monthly_income: SALARY_MIDPOINT[String(payload || '')] ?? 0,
+              } as never)
+            }
+            // Si todavía no hay employment_type, solo cache.
+          }
+          break
+        }
+        case 'state_city': {
+          // Guardar en cache para mandarlo cuando el step `address` complete los demás campos.
+          break
+        }
+        case 'number_select': {
+          // online_loans_count → se guarda en Application.metadata (no tiene modelo propio).
+          const appId = applicationStore.currentApplication?.id
+          if (appId && payload !== null && payload !== undefined) {
+            try {
+              await applicationService.update(appId, {
+                metadata: { [stepId]: payload },
+              } as never)
+            } catch (e) {
+              stepHadError = true
+              onboardingLogger.warn('update metadata failed', { error: e, stepId })
+            }
+          }
+          break
+        }
+        case 'review':
+          break
+        case 'references': {
+          const refs = Array.isArray(payload) ? (payload as Array<{ type: string; name: string; phone: string }>) : []
+          // Borrar las referencias existentes para no duplicar al reeditar/retroceder.
+          try {
+            const existing = await profileService.listReferences()
+            const list = existing.data ?? []
+            for (const r of list) {
+              try { await profileService.deleteReference(r.id) } catch { stepHadError = true }
+            }
+          } catch { stepHadError = true }
+          for (const r of refs) {
+            if (!r?.name || !r?.phone) continue
+            // Split del nombre completo: 1ª palabra como nombre, resto como
+            // apellido. Si solo hay una palabra, el apellido queda vacío (NO se
+            // duplica el nombre como apellido).
+            const parts = r.name.trim().split(/\s+/)
+            const first = parts[0] ?? r.name
+            const last = parts.length > 1 ? parts.slice(1).join(' ') : ''
+            // El backend solo soporta type PERSONAL|WORK; el parentesco real va en relationship.
+            const relationship = r.type === 'FAMILY' ? 'FAMILIAR' : 'AMIGO'
+            try {
+              await profileService.addReference({
+                type: 'PERSONAL',
+                first_name: first,
+                last_name_1: last,
+                phone: r.phone.replace(/\D/g, ''),
+                relationship,
+              } as never)
+            } catch (e) {
+              stepHadError = true
+              onboardingLogger.warn('addReference failed', { error: e, ref: r })
+            }
+          }
+          break
+        }
+        case 'bank_account': {
+          const ba = payload as { type?: string; bank_code?: string; account_number?: string } | null
+          if (ba?.bank_code && ba?.account_number) {
+            const num = ba.account_number.replace(/\D/g, '')
+            const pd = profileStore.profile?.personal_data
+            const holder = [pd?.first_name, pd?.last_name_1, pd?.last_name_2]
+              .filter(Boolean).join(' ').trim() || 'Titular'
+            // Borrar cuentas existentes para no duplicar al reeditar/retroceder.
+            try {
+              const existing = await profileService.listBankAccounts()
+              const list = existing.data?.bank_accounts ?? []
+              for (const b of list) {
+                try { await profileService.deleteBankAccount(b.id) } catch { stepHadError = true }
+              }
+            } catch { stepHadError = true }
+            try {
+              // POST /profile/bank-accounts (plural). Para CLABE manda `clabe`;
+              // para tarjeta manda el número como `card_number`.
+              const isCard = ba.type === 'CARD'
+              await profileService.createBankAccount({
+                clabe: isCard ? '' : num,
+                card_number: isCard ? num : undefined,
+                holder_name: holder,
+                account_type: isCard ? 'TARJETA' : 'DEBITO',
+              } as never)
+            } catch (e) {
+              stepHadError = true
+              onboardingLogger.warn('createBankAccount failed', { error: e })
+            }
+          }
+          break
+        }
+        case 'kyc_ine': {
+          const k = payload as { front_image?: string; back_image?: string; personal?: Record<string, unknown> } | null
+          const p = k?.personal ?? {}
+          // Solo IDENTIFICADORES del INE (CURP + clave de elector + OCR + folio),
+          // los mismos campos que Nubarium extrae por OCR. Nombre/fecha/etc. se
+          // guardan en el step `personal_data`.
+          const ineIds: Record<string, unknown> = {}
+          if (p.curp) ineIds.curp = String(p.curp).toUpperCase()
+          if (p.clave_elector) ineIds.ine_clave = String(p.clave_elector).toUpperCase()
+          if (p.numero_ocr) ineIds.ine_ocr = String(p.numero_ocr)
+          if (p.folio_ine) ineIds.ine_folio = String(p.folio_ine)
+          if (Object.keys(ineIds).length > 0) {
+            await profileStore.updateIdentifications(ineIds as never)
+          }
+          // Subir imágenes del INE (base64 desde la cámara).
+          if (k?.front_image?.startsWith('data:')) {
+            try { await documentService.uploadBase64(k.front_image, 'INE_FRONT', { file_name: 'ine_front.jpg' }) }
+            catch (e) { stepHadError = true; onboardingLogger.warn('upload INE_FRONT failed', { error: e }) }
+          }
+          if (k?.back_image?.startsWith('data:')) {
+            try { await documentService.uploadBase64(k.back_image, 'INE_BACK', { file_name: 'ine_back.jpg' }) }
+            catch (e) { stepHadError = true; onboardingLogger.warn('upload INE_BACK failed', { error: e }) }
+          }
+          break
+        }
+        case 'personal_data': {
+          const pd = payload as Record<string, unknown> | null
+          if (!pd) break
+          const personalPayload: Record<string, unknown> = {}
+          if (pd.first_name) personalPayload.first_name = pd.first_name
+          if (pd.last_name) personalPayload.last_name_1 = pd.last_name
+          if (pd.second_last_name) personalPayload.last_name_2 = pd.second_last_name
+          if (pd.birth_date) personalPayload.birth_date = pd.birth_date
+          if (pd.gender) personalPayload.gender = pd.gender
+          if (pd.birth_state) personalPayload.birth_state = pd.birth_state
+          if (pd.nationality) personalPayload.nationality = pd.nationality
+          if (Object.keys(personalPayload).length > 0) {
+            await profileStore.updatePersonalData(personalPayload as never)
+          }
+          if (pd.rfc) {
+            await profileStore.updateIdentifications({ rfc: String(pd.rfc).toUpperCase() } as never)
+          }
+          break
+        }
+        case 'address': {
+          const ad = payload as Record<string, unknown> | null
+          if (!ad) break
+          const housing = HOUSING_MAP[String(ad.housing_type || '')] || 'FAMILY'
+          await profileStore.updateAddress({
+            street: String(ad.street || ''),
+            ext_number: String(ad.ext_number || '') || undefined,
+            int_number: String(ad.int_number || '') || undefined,
+            neighborhood: String(ad.neighborhood || ''),
+            municipality: String(ad.municipality || '') || undefined,
+            city: String(ad.city || ad.municipality || ''),
+            state: String(ad.state || ''),
+            postal_code: String(ad.postal_code || ''),
+            housing_type: housing,
+            years_at_address: Number(ad.years_at_address || 0),
+            months_at_address: Number(ad.months_at_address || 0),
+          } as never)
+          break
+        }
+        case 'kyc_selfie': {
+          // El selfie llega como base64 (string) o { image } según el renderer.
+          const img = typeof payload === 'string'
+            ? payload
+            : (payload as { image?: string } | null)?.image
+          if (img?.startsWith('data:')) {
+            try { await documentService.uploadBase64(img, 'SELFIE', { file_name: 'selfie.jpg' }) }
+            catch (e) { stepHadError = true; onboardingLogger.warn('upload SELFIE failed', { error: e }) }
+          }
+          break
+        }
+        case 'review_full':
+          break
+      }
       lastSavedAt.value = new Date()
+      // Marca como persistido SOLO si ningún sub-POST falló (así se reintenta
+      // en el siguiente avance si algo falló silenciosamente).
+      if (!stepHadError) persistedHashes.set(stepId, hash)
     } catch (e) {
-      onboardingLogger.warn('persistDynamic failed', { error: e })
+      onboardingLogger.warn('persistDynamic dispatcher failed', { error: e, stepId, stepType })
+    } finally {
+      inFlightSteps.delete(stepId)
+      isSaving.value = false
     }
   }
 

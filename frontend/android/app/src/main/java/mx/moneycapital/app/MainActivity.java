@@ -1,4 +1,4 @@
-package mx.lendus.demo;
+package mx.moneycapital.app;
 
 import com.getcapacitor.BridgeActivity;
 

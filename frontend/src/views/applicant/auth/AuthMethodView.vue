@@ -2,10 +2,18 @@
 import { useTenantStore } from '@/stores'
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import UnifiedAuthView from '@/views/mobile/UnifiedAuthView.vue'
 
 const route = useRoute()
 const tenantStore = useTenantStore()
 const tenantName = computed(() => tenantStore.name || 'LendusFind')
+
+// Tenants white-label (MoneyCapital y similares) usan una sola pantalla de
+// auth que combina celular + OTP + método. Se activa con feature flag.
+const useUnifiedAuth = computed(() => {
+  const features = (tenantStore.tenant?.features ?? {}) as Record<string, boolean>
+  return !!features.unified_auth_screen
+})
 
 // Get tenant slug from route params or store
 const getTenantSlug = (): string | undefined => {
@@ -43,7 +51,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 flex flex-col">
+  <UnifiedAuthView v-if="useUnifiedAuth" />
+  <div v-else class="min-h-screen bg-gray-50 flex flex-col">
     <!-- Content -->
     <div class="flex-1 flex flex-col justify-center px-6 py-12">
       <div class="mx-auto w-full max-w-md">

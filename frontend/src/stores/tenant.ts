@@ -190,6 +190,12 @@ export const useTenantStore = defineStore('tenant', () => {
   const settings = computed(() => tenant.value?.settings ?? null)
   const contact = computed(() => tenant.value?.contact ?? null)
 
+  // Integraciones activas del tenant (expuestas por GET /v2/config).
+  const integrations = computed(
+    () => (tenant.value as { integrations?: Record<string, boolean> } | null)?.integrations ?? {},
+  )
+  const hasKycProvider = computed(() => !!integrations.value.has_kyc_provider)
+
   const activeProducts = computed(() =>
     products.value.filter(p => p.is_active)
   )
@@ -301,6 +307,15 @@ export const useTenantStore = defineStore('tenant', () => {
         root.style.setProperty(`--primary-${shade}-rgb`, rgbTriplet)
       }
       root.style.setProperty('--tenant-primary', b.primary_color)
+
+      // Surface tokens: lavandas neutrales (baja saturación) usados para
+      // cards lavanda y badges de iconos en todo el flujo white-label.
+      // No dependen del primary saturado — son casi gris-lavanda.
+      const { h } = hexToHSL(b.primary_color)
+      const surfaceSoft = hslToRgbTriplet(h, 30, 96)       // ~#F3F2FA con tinte tenant
+      const surfaceSoftBorder = hslToRgbTriplet(h, 25, 92) // borde apenas visible
+      root.style.setProperty('--surface-soft-rgb', surfaceSoft)
+      root.style.setProperty('--surface-soft-border-rgb', surfaceSoftBorder)
 
       // Generate dark tinted color for footer/dark sections
       const darkTinted = generateDarkTinted(b.primary_color)
@@ -463,6 +478,8 @@ export const useTenantStore = defineStore('tenant', () => {
     isActive,
     settings,
     contact,
+    integrations,
+    hasKycProvider,
     activeProducts,
     getProductById,
     // Actions

@@ -16,6 +16,8 @@ export type OnboardingStepType =
   | 'kyc_selfie'
   | 'review'
   | 'review_full'
+  | 'personal_data'
+  | 'address'
 
 export interface OnboardingStepBase {
   id: string
@@ -71,6 +73,14 @@ export interface ReviewFullStep extends OnboardingStepBase {
   type: 'review_full'
 }
 
+export interface PersonalDataStep extends OnboardingStepBase {
+  type: 'personal_data'
+}
+
+export interface AddressStep extends OnboardingStepBase {
+  type: 'address'
+}
+
 export type OnboardingStep =
   | SelectStep
   | StateCityStep
@@ -81,3 +91,5 @@ export type OnboardingStep =
   | KycSelfieStep
   | ReviewStep
   | ReviewFullStep
+  | PersonalDataStep
+  | AddressStep

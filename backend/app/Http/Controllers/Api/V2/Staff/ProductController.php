@@ -91,13 +91,24 @@ class ProductController extends Controller
             'opening_commission' => 'nullable|numeric|min:0|max:100',
             'late_fee_rate' => 'nullable|numeric|min:0|max:100',
             'payment_frequencies' => 'required|array|min:1',
-            'payment_frequencies.*' => 'string|in:WEEKLY,BIWEEKLY,MONTHLY',
+            'payment_frequencies.*' => 'string|in:WEEKLY,BIWEEKLY,MONTHLY,SINGLE',
             'term_config' => 'nullable|array',
             'required_documents' => 'nullable|array',
             'required_documents.nationals' => 'sometimes|array',
-            'required_documents.nationals.*' => ['string', Rule::in(DocumentType::values())],
+            'required_documents.nationals.*' => [function ($attribute, $value, $fail) {
+                $code = is_array($value) ? ($value['type'] ?? null) : $value;
+                if (!is_string($code) || !in_array($code, DocumentType::values(), true)) {
+                    $fail("$attribute tiene un tipo de documento inválido.");
+                }
+            }],
             'required_documents.foreigners' => 'sometimes|array',
-            'required_documents.foreigners.*' => ['string', Rule::in(DocumentType::values())],
+            'required_documents.foreigners.*' => [function ($attribute, $value, $fail) {
+                $code = is_array($value) ? ($value['type'] ?? null) : $value;
+                if (!is_string($code) || !in_array($code, DocumentType::values(), true)) {
+                    $fail("$attribute tiene un tipo de documento inválido.");
+                }
+            }],
+            'rules' => 'nullable|array',
             'eligibility_rules' => 'nullable|array',
             'is_active' => 'boolean',
         ]);
@@ -109,6 +120,18 @@ class ProductController extends Controller
         $data = $validator->validated();
         $data['code'] = strtoupper($data['code']);
         $data['tenant_id'] = app('tenant.id');
+
+        // Normaliza required_documents: si vienen objetos {type, required, description}, conservar
+        // como objetos. Si vienen strings, convertir a objetos { type, required: true }.
+        if (isset($data['required_documents'])) {
+            foreach (['nationals', 'foreigners'] as $grp) {
+                if (!isset($data['required_documents'][$grp]) || !is_array($data['required_documents'][$grp])) continue;
+                $data['required_documents'][$grp] = array_values(array_map(function ($item) {
+                    if (is_string($item)) return ['type' => $item, 'required' => true];
+                    return $item;
+                }, $data['required_documents'][$grp]));
+            }
+        }
 
         // Set default values
         $data['opening_commission'] = $data['opening_commission'] ?? 0;
@@ -179,13 +202,24 @@ class ProductController extends Controller
             'opening_commission' => 'nullable|numeric|min:0|max:100',
             'late_fee_rate' => 'nullable|numeric|min:0|max:100',
             'payment_frequencies' => 'sometimes|required|array|min:1',
-            'payment_frequencies.*' => 'string|in:WEEKLY,BIWEEKLY,MONTHLY',
+            'payment_frequencies.*' => 'string|in:WEEKLY,BIWEEKLY,MONTHLY,SINGLE',
             'term_config' => 'nullable|array',
             'required_documents' => 'nullable|array',
             'required_documents.nationals' => 'sometimes|array',
-            'required_documents.nationals.*' => ['string', Rule::in(DocumentType::values())],
+            'required_documents.nationals.*' => [function ($attribute, $value, $fail) {
+                $code = is_array($value) ? ($value['type'] ?? null) : $value;
+                if (!is_string($code) || !in_array($code, DocumentType::values(), true)) {
+                    $fail("$attribute tiene un tipo de documento inválido.");
+                }
+            }],
             'required_documents.foreigners' => 'sometimes|array',
-            'required_documents.foreigners.*' => ['string', Rule::in(DocumentType::values())],
+            'required_documents.foreigners.*' => [function ($attribute, $value, $fail) {
+                $code = is_array($value) ? ($value['type'] ?? null) : $value;
+                if (!is_string($code) || !in_array($code, DocumentType::values(), true)) {
+                    $fail("$attribute tiene un tipo de documento inválido.");
+                }
+            }],
+            'rules' => 'nullable|array',
             'eligibility_rules' => 'nullable|array',
             'is_active' => 'boolean',
         ]);
@@ -200,9 +234,25 @@ class ProductController extends Controller
             $data['code'] = strtoupper($data['code']);
         }
 
+        // Normaliza required_documents igual que en create.
+        if (isset($data['required_documents'])) {
+            foreach (['nationals', 'foreigners'] as $grp) {
+                if (!isset($data['required_documents'][$grp]) || !is_array($data['required_documents'][$grp])) continue;
+                $data['required_documents'][$grp] = array_values(array_map(function ($item) {
+                    if (is_string($item)) return ['type' => $item, 'required' => true];
+                    return $item;
+                }, $data['required_documents'][$grp]));
+            }
+        }
+
+        // Merge `rules` enviadas con las existentes (no perder onboarding_steps u otras claves).
+        if (isset($data['rules'])) {
+            $data['rules'] = array_merge($product->rules ?? [], $data['rules']);
+        }
+
         // Store term_config in rules JSONB
         if (isset($data['term_config'])) {
-            $rules = $product->rules ?? [];
+            $rules = $data['rules'] ?? ($product->rules ?? []);
             $rules['term_config'] = $data['term_config'];
             $data['rules'] = $rules;
             unset($data['term_config']);
@@ -259,6 +309,7 @@ class ProductController extends Controller
             'late_fee_rate' => (float) ($product->late_fee_rate ?? 0),
             'payment_frequencies' => $product->payment_frequencies ?? [],
             'term_config' => $rules['term_config'] ?? null,
+            'rules' => $rules,
             'required_documents' => $product->required_documents ?? [],
             'eligibility_rules' => $product->eligibility_rules ?? [],
             'is_active' => (bool) $product->is_active,

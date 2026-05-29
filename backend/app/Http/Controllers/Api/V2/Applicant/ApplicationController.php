@@ -58,16 +58,19 @@ class ApplicationController extends Controller
     {
         $validated = $request->validate([
             'product_id' => 'required|uuid|exists:products,id',
-            // Accept both 'amount' and 'requested_amount' for compatibility
-            'amount' => 'required_without:requested_amount|numeric|min:1000',
-            'requested_amount' => 'required_without:amount|numeric|min:1000',
+            // El monto mínimo real lo valida el producto (isAmountValid), por eso
+            // aquí solo exigimos > 0; productos como MoneyCapital permiten desde $300.
+            'amount' => 'required_without:requested_amount|numeric|min:1',
+            'requested_amount' => 'required_without:amount|numeric|min:1',
             'term_months' => 'required|integer|min:1|max:120',
+            // Plazo en días para productos BULLET (term_in_days).
+            'requested_term_days' => 'nullable|integer|min:1|max:365',
             // Purpose is optional, defaults to 'PERSONAL'
             'purpose' => 'nullable|string|max:50',
             'purpose_description' => 'nullable|string|max:500',
             // Accept both 'frequency' and 'payment_frequency' for compatibility
-            'frequency' => 'nullable|string|in:WEEKLY,BIWEEKLY,MONTHLY',
-            'payment_frequency' => 'nullable|string|in:WEEKLY,BIWEEKLY,MONTHLY',
+            'frequency' => 'nullable|string|in:WEEKLY,BIWEEKLY,MONTHLY,SINGLE',
+            'payment_frequency' => 'nullable|string|in:WEEKLY,BIWEEKLY,MONTHLY,SINGLE',
             // Allow passing simulation data for reference
             'simulation_data' => 'nullable|array',
         ]);
@@ -129,6 +132,7 @@ class ApplicationController extends Controller
             [
                 'amount' => $validated['amount'],
                 'term_months' => $validated['term_months'],
+                'term_days' => $validated['requested_term_days'] ?? null,
                 'purpose' => $validated['purpose'],
                 'purpose_description' => $validated['purpose_description'] ?? null,
                 'frequency' => $validated['frequency'] ?? 'MONTHLY',
@@ -183,11 +187,15 @@ class ApplicationController extends Controller
     public function update(Request $request, string $id): JsonResponse
     {
         $validated = $request->validate([
-            'amount' => 'sometimes|numeric|min:1000',
+            'amount' => 'sometimes|numeric|min:1',
             'term_months' => 'sometimes|integer|min:1|max:120',
+            'requested_term_days' => 'sometimes|integer|min:1|max:365',
             'purpose' => 'sometimes|string|max:50',
             'purpose_description' => 'nullable|string|max:500',
-            'frequency' => 'nullable|string|in:WEEKLY,BIWEEKLY,MONTHLY',
+            'frequency' => 'nullable|string|in:WEEKLY,BIWEEKLY,MONTHLY,SINGLE',
+            // Datos extra del onboarding que no tienen modelo propio (ej. historial
+            // de préstamos en línea previos). Se mergean en applications.metadata.
+            'metadata' => 'sometimes|array',
         ]);
 
         /** @var ApplicantAccount $account */
@@ -223,6 +231,13 @@ class ApplicationController extends Controller
 
         if (!$product->isTermValid($newTerm)) {
             return $this->error('INVALID_TERM', "El plazo debe estar entre {$product->min_term_months} y {$product->max_term_months} meses.", 422);
+        }
+
+        // Merge metadata sin perder lo existente.
+        if (isset($validated['metadata'])) {
+            $application->metadata = array_merge($application->metadata ?? [], $validated['metadata']);
+            $application->save();
+            unset($validated['metadata']);
         }
 
         $application = $this->service->updateLoanTerms($application, $validated);

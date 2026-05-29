@@ -110,12 +110,35 @@ class DocumentController extends Controller
             }
         }
 
-        $validated = $request->validate([
+        // Soporte para apps nativas (Capacitor): la cámara entrega base64 y
+        // CapacitorHttp no maneja multipart/form-data con archivos de forma
+        // confiable. Si viene `file_base64`, lo validamos como string y lo
+        // convertimos a UploadedFile temporal para el flujo de upload.
+        $isBase64 = !$request->hasFile('file') && $request->filled('file_base64');
+
+        $rules = [
             'type' => 'required|string|in:' . implode(',', Document::validTypes()),
-            'file' => 'required|file|mimes:jpg,jpeg,png,pdf|max:10240', // 10MB
             'identification_id' => 'nullable|uuid|exists:person_identifications,id',
             'metadata' => 'nullable|array',
-        ]);
+        ];
+        if ($isBase64) {
+            $rules['file_base64'] = 'required|string';
+        } else {
+            $rules['file'] = 'required|file|mimes:jpg,jpeg,png,pdf|max:10240'; // 10MB
+        }
+
+        $validated = $request->validate($rules);
+
+        $uploadedFile = $isBase64
+            ? $this->base64ToUploadedFile(
+                (string) $request->input('file_base64'),
+                (string) $request->input('file_name', 'upload.jpg')
+            )
+            : $request->file('file');
+
+        if (!$uploadedFile) {
+            return $this->badRequest('INVALID_FILE', 'No se pudo procesar el archivo enviado.');
+        }
 
         /** @var ApplicantAccount $account */
         $account = $request->user();
@@ -156,7 +179,7 @@ class DocumentController extends Controller
                 $account->tenant,
                 $documentable,
                 $validated['type'],
-                $request->file('file'),
+                $uploadedFile,
                 $options
             );
 
@@ -187,6 +210,8 @@ class DocumentController extends Controller
             ], 'Documento subido exitosamente.');
         } catch (\InvalidArgumentException $e) {
             return $this->badRequest('UPLOAD_FAILED', $e->getMessage());
+        } finally {
+            $this->cleanupTempFiles();
         }
     }
 
@@ -692,5 +717,76 @@ class DocumentController extends Controller
                 'document_type' => $document->type,
             ]);
         }); // End transaction
+    }
+
+    /** Tipos MIME permitidos para documentos. */
+    private const ALLOWED_DOC_MIMES = ['image/jpeg', 'image/png', 'application/pdf'];
+    private const MAX_DOC_BYTES = 10 * 1024 * 1024; // 10 MB
+
+    /** Rutas temporales a limpiar al terminar el request. */
+    private array $tempFilesToCleanup = [];
+
+    /**
+     * Convierte un string base64 (con o sin prefijo data:) en un UploadedFile
+     * temporal para reutilizar el flujo de upload basado en archivos.
+     *
+     * Valida tamaño y tipo MIME real (no el declarado por el cliente) para
+     * evitar DoS por payload gigante y bypass de la validación de mimes.
+     * El archivo temporal se registra para limpieza al final del request.
+     */
+    private function base64ToUploadedFile(string $base64, string $fileName): ?\Illuminate\Http\UploadedFile
+    {
+        if (preg_match('/^data:([\w\/\-\.]+);base64,(.*)$/s', $base64, $m)) {
+            $base64 = $m[2];
+        }
+
+        $binary = base64_decode($base64, true);
+        if ($binary === false || $binary === '') {
+            return null;
+        }
+
+        // Límite de tamaño (anti-DoS).
+        if (strlen($binary) > self::MAX_DOC_BYTES) {
+            return null;
+        }
+
+        $tmpPath = tempnam(sys_get_temp_dir(), 'doc_');
+        if ($tmpPath === false) {
+            return null;
+        }
+        file_put_contents($tmpPath, $binary);
+        $this->tempFilesToCleanup[] = $tmpPath;
+
+        // MIME real desde el contenido (no confiar en el prefijo del cliente).
+        $realMime = function_exists('finfo_open')
+            ? (new \finfo(FILEINFO_MIME_TYPE))->file($tmpPath) ?: 'application/octet-stream'
+            : (mime_content_type($tmpPath) ?: 'application/octet-stream');
+
+        if (!in_array($realMime, self::ALLOWED_DOC_MIMES, true)) {
+            return null;
+        }
+
+        $ext = match ($realMime) {
+            'image/png' => 'png',
+            'application/pdf' => 'pdf',
+            default => 'jpg',
+        };
+        // basename() evita cualquier intento de path traversal en el nombre.
+        $base = basename($fileName);
+        $safeName = pathinfo($base, PATHINFO_EXTENSION) ? $base : "upload.$ext";
+
+        // test=true → no valida que sea un upload HTTP real (lo es programático).
+        return new \Illuminate\Http\UploadedFile($tmpPath, $safeName, $realMime, null, true);
+    }
+
+    /** Limpia los archivos temporales creados desde base64. */
+    private function cleanupTempFiles(): void
+    {
+        foreach ($this->tempFilesToCleanup as $path) {
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
+        $this->tempFilesToCleanup = [];
     }
 }

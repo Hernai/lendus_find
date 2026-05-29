@@ -306,7 +306,7 @@ export interface V2AddressPayload {
 
 export type V2EmploymentType = 'EMPLOYED' | 'SELF_EMPLOYED' | 'BUSINESS_OWNER' | 'RETIRED' | 'UNEMPLOYED' | 'STUDENT' | 'OTHER'
 export type V2ContractType = 'PERMANENT' | 'TEMPORARY' | 'FREELANCE' | 'CONTRACT' | 'OTHER'
-export type V2PaymentFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'OTHER'
+export type V2PaymentFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'SINGLE' | 'OTHER'
 
 export interface V2Employment {
   id: string
@@ -817,6 +817,7 @@ export interface V2ApplicationCreatePayload {
   product_id: string
   requested_amount: number
   term_months: number
+  requested_term_days?: number
   payment_frequency?: V2PaymentFrequency
   purpose?: string
   purpose_description?: string
@@ -828,6 +829,7 @@ export interface V2ApplicationUpdatePayload {
   term_months?: number
   payment_frequency?: V2PaymentFrequency
   purpose?: string
+  metadata?: Record<string, unknown>
 }
 
 export interface V2CounterOfferResponsePayload {

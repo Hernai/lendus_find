@@ -197,6 +197,9 @@ const form = ref({
   late_fee_rate: 2,
   payment_frequencies: ['MONTHLY'] as string[],
   term_config: { MONTHLY: { available_terms: [3, 6, 12, 18, 24, 36, 48] } } as Record<string, TermConfig>,
+  term_in_days: false,
+  min_term_days: 1,
+  max_term_days: 30,
   required_documents: {
     nationals: [] as string[],
     foreigners: [] as string[]
@@ -313,6 +316,9 @@ const openCreateModal = () => {
     late_fee_rate: 2,
     payment_frequencies: ['MONTHLY'],
     term_config: { MONTHLY: { available_terms: [3, 6, 12, 18, 24, 36, 48] } },
+    term_in_days: false,
+    min_term_days: 1,
+    max_term_days: 30,
     required_documents: {
       nationals: ['INE_FRONT', 'INE_BACK', 'PROOF_OF_ADDRESS'],
       foreigners: ['PASSPORT', 'RESIDENCE_CARD', 'PROOF_OF_ADDRESS']
@@ -372,6 +378,9 @@ const openEditModal = (product: Product) => {
     late_fee_rate: product.late_fee_rate || 0,
     payment_frequencies: frequencies,
     term_config: termConfig,
+    term_in_days: !!product.rules?.term_in_days,
+    min_term_days: Number(product.rules?.min_term_days ?? 1),
+    max_term_days: Number(product.rules?.max_term_days ?? 30),
     required_documents: normalizeRequiredDocuments(product.required_documents),
     is_active: product.is_active
   }
@@ -421,12 +430,20 @@ const validateForm = (): boolean => {
     formErrors.value.max_amount = 'Debe ser mayor al monto mínimo'
   }
 
-  if (form.value.min_term_months <= 0) {
-    formErrors.value.min_term_months = 'Debe ser mayor a 0'
-  }
-
-  if (form.value.max_term_months <= form.value.min_term_months) {
-    formErrors.value.max_term_months = 'Debe ser mayor al plazo mínimo'
+  if (form.value.term_in_days) {
+    if (form.value.min_term_days <= 0) {
+      formErrors.value.min_term_days = 'Debe ser mayor a 0'
+    }
+    if (form.value.max_term_days < form.value.min_term_days) {
+      formErrors.value.max_term_days = 'Debe ser >= al plazo mínimo'
+    }
+  } else {
+    if (form.value.min_term_months <= 0) {
+      formErrors.value.min_term_months = 'Debe ser mayor a 0'
+    }
+    if (form.value.max_term_months < form.value.min_term_months) {
+      formErrors.value.max_term_months = 'Debe ser >= al plazo mínimo'
+    }
   }
 
   if (form.value.interest_rate < 0 || form.value.interest_rate > 100) {
@@ -437,8 +454,9 @@ const validateForm = (): boolean => {
     formErrors.value.payment_frequencies = 'Selecciona al menos una frecuencia'
   }
 
-  // Validate term config for each selected frequency
+  // Validate term config solo para frecuencias recurrentes (SINGLE no necesita)
   for (const freq of form.value.payment_frequencies) {
+    if (freq === 'SINGLE') continue
     const config = form.value.term_config[freq]
     if (!config || !config.available_terms || config.available_terms.length === 0) {
       formErrors.value[`term_${freq}`] = 'Agrega al menos un plazo'
@@ -456,9 +474,31 @@ const submitForm = async () => {
   formError.value = ''
 
   try {
+    // Inyecta rules con plazo en días + amortización cuando aplica.
+    // Esto preserva el contrato con el flujo dinámico (frontend lee rules.term_in_days).
+    const existingRules = (editingProduct.value?.rules ?? {}) as Record<string, unknown>
+    const rules: Record<string, unknown> = {
+      ...existingRules,
+      min_amount: form.value.min_amount,
+      max_amount: form.value.max_amount,
+      annual_rate: form.value.interest_rate,
+      opening_commission: form.value.opening_commission,
+      payment_frequencies: form.value.payment_frequencies,
+      term_in_days: !!form.value.term_in_days,
+    }
+    if (form.value.term_in_days) {
+      rules.min_term_days = form.value.min_term_days
+      rules.max_term_days = form.value.max_term_days
+      rules.default_term_days = form.value.min_term_days
+    }
+    if (form.value.payment_frequencies.includes('SINGLE')) {
+      rules.amortization_type = 'BULLET'
+    }
+
     const payload = {
       ...form.value,
-      code: form.value.code.toUpperCase()
+      code: form.value.code.toUpperCase(),
+      rules,
     }
 
     if (editingProduct.value) {
@@ -539,41 +579,62 @@ onBeforeUnmount(() => {
 
 // Toggle frequency
 const toggleFrequency = (freq: string) => {
+  // SINGLE (pago único) es excluyente: al activarse desactiva las demás y
+  // viceversa cuando se selecciona alguna recurrente.
+  if (freq === 'SINGLE') {
+    if (form.value.payment_frequencies.includes('SINGLE')) {
+      form.value.payment_frequencies = []
+    } else {
+      form.value.payment_frequencies = ['SINGLE']
+      form.value.term_config = {} as Record<string, TermConfig>
+    }
+    return
+  }
+
+  // Si se elige una recurrente, retirar SINGLE si estaba activa.
+  if (form.value.payment_frequencies.includes('SINGLE')) {
+    form.value.payment_frequencies = []
+  }
+
   const index = form.value.payment_frequencies.indexOf(freq)
   if (index >= 0) {
-    // Remove frequency and its term config
     form.value.payment_frequencies.splice(index, 1)
     delete form.value.term_config[freq]
     delete newTermInput.value[freq]
   } else {
-    // Add frequency with default term config (copy the array)
     form.value.payment_frequencies.push(freq)
     form.value.term_config[freq] = { available_terms: [...(defaultTermConfig[freq]?.available_terms || [])] }
-    // Initialize input for reactivity
     newTermInput.value[freq] = null
   }
 }
 
 // Normalize required documents to new structure
 const normalizeRequiredDocuments = (docs: any) => {
+  // Helper: convierte cada item a string (DocumentType code) — el backend
+  // viejo emite objetos {type, required, description}, pero el form trabaja con strings.
+  const toStringCodes = (arr: unknown[]): string[] =>
+    arr
+      .map((d) => (typeof d === 'string' ? d : (d && typeof d === 'object' && 'type' in (d as object) ? String((d as { type: string }).type) : null)))
+      .filter((v): v is string => !!v)
+
   // If already in new format
   if (docs && typeof docs === 'object' && ('nationals' in docs || 'foreigners' in docs)) {
     return {
-      nationals: Array.isArray(docs.nationals) ? docs.nationals : [],
-      foreigners: Array.isArray(docs.foreigners) ? docs.foreigners : []
+      nationals: Array.isArray(docs.nationals) ? toStringCodes(docs.nationals) : [],
+      foreigners: Array.isArray(docs.foreigners) ? toStringCodes(docs.foreigners) : []
     }
   }
 
   // If old format (array), convert to new format
   if (Array.isArray(docs)) {
-    // Map INE to PASSPORT for foreigners
-    const foreignerDocs = docs.map(doc => {
+    const strDocs = toStringCodes(docs)
+    const foreignerDocs = strDocs.map(doc => {
       if (doc === 'INE_FRONT') return 'PASSPORT'
       if (doc === 'INE_BACK') return 'RESIDENCE_CARD'
       return doc
     })
     return {
-      nationals: docs,
+      nationals: strDocs,
       foreigners: foreignerDocs
     }
   }
@@ -755,7 +816,12 @@ onMounted(fetchProducts)
           <div>
             <p class="text-xs text-gray-500 mb-1">Plazo</p>
             <p class="text-sm font-medium text-gray-900">
-              {{ product.min_term_months }} - {{ product.max_term_months }} meses
+              <template v-if="product.rules?.term_in_days">
+                {{ product.rules.min_term_days ?? product.min_term_months }} - {{ product.rules.max_term_days ?? product.max_term_months }} días
+              </template>
+              <template v-else>
+                {{ product.min_term_months }} - {{ product.max_term_months }} meses
+              </template>
             </p>
           </div>
           <div>
@@ -1019,15 +1085,39 @@ onMounted(fetchProducts)
                     </div>
                   </div>
 
-                  <!-- Term Range (in months - global) -->
+                  <!-- Term Range -->
                   <div class="bg-gray-50 rounded-xl p-4">
-                    <h4 class="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
-                      <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      Rango de Plazos (meses)
-                    </h4>
-                    <div class="grid grid-cols-2 gap-3">
+                    <div class="flex items-center justify-between mb-3">
+                      <h4 class="text-sm font-medium text-gray-900 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Rango de Plazos ({{ form.term_in_days ? 'días' : 'meses' }})
+                      </h4>
+                      <label class="inline-flex items-center gap-2 cursor-pointer text-xs text-gray-600">
+                        <input type="checkbox" v-model="form.term_in_days" class="w-4 h-4 text-primary-600 rounded" />
+                        Plazo en días
+                      </label>
+                    </div>
+                    <div v-if="form.term_in_days" class="grid grid-cols-2 gap-3">
+                      <div>
+                        <label class="block text-xs text-gray-500 mb-1">Mín. (días) *</label>
+                        <input
+                          v-model.number="form.min_term_days"
+                          type="number" min="1" max="365"
+                          class="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white transition-colors"
+                        />
+                      </div>
+                      <div>
+                        <label class="block text-xs text-gray-500 mb-1">Máx. (días) *</label>
+                        <input
+                          v-model.number="form.max_term_days"
+                          type="number" min="1" max="365"
+                          class="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white transition-colors"
+                        />
+                      </div>
+                    </div>
+                    <div v-else class="grid grid-cols-2 gap-3">
                       <div>
                         <label class="block text-xs text-gray-500 mb-1">Mínimo *</label>
                         <input
@@ -1092,14 +1182,32 @@ onMounted(fetchProducts)
 
                 <!-- Payment Frequencies with Term Config - Simplified Design -->
                 <div class="bg-gray-50 rounded-xl p-4">
-                  <h4 class="text-sm font-medium text-gray-900 mb-4 flex items-center gap-2">
-                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                    Frecuencias de Pago y Plazos
-                  </h4>
+                  <div class="flex items-center justify-between mb-4">
+                    <h4 class="text-sm font-medium text-gray-900 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      Frecuencias de Pago y Plazos
+                    </h4>
+                    <label class="inline-flex items-center gap-2 cursor-pointer text-xs text-gray-600">
+                      <input
+                        type="checkbox"
+                        :checked="form.payment_frequencies.includes('SINGLE')"
+                        class="w-4 h-4 text-primary-600 rounded"
+                        @change="toggleFrequency('SINGLE')"
+                      />
+                      Pago único (BULLET)
+                    </label>
+                  </div>
 
-                  <div class="space-y-4">
+                  <!-- Cuando es SINGLE no se muestran las frecuencias en cuotas -->
+                  <div v-if="form.payment_frequencies.includes('SINGLE')" class="bg-white rounded-lg border border-primary-300 px-4 py-4 text-sm text-gray-700">
+                    El crédito se liquida en <strong>un solo pago</strong> al vencimiento del plazo
+                    ({{ form.term_in_days ? `${form.min_term_days} – ${form.max_term_days} días` : `${form.min_term_months} – ${form.max_term_months} meses` }}).
+                    No se generan amortizaciones intermedias.
+                  </div>
+
+                  <div v-else class="space-y-4">
                     <!-- Frequency: Semanal -->
                     <div class="bg-white rounded-lg border" :class="form.payment_frequencies.includes('WEEKLY') ? 'border-primary-300' : 'border-gray-200'">
                       <div class="flex items-center justify-between px-4 py-3">

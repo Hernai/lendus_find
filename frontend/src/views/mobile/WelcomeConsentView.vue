@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useTenantStore } from '@/stores/tenant'
 import { detectTenantSlug } from '@/utils/tenant'
 import { platform } from '@/platform'
-import { storage, STORAGE_KEYS } from '@/utils/storage'
+import { storage } from '@/utils/storage'
 import { logger } from '@/utils/logger'
 
 /**
@@ -20,6 +20,11 @@ import { logger } from '@/utils/logger'
  *    cámara, ubicación) y luego navega al login.
  *
  * Los consents se guardan en localStorage para no volver a pedirlos.
+ *
+ * Visual alineado al mock pantalla 1 de MoneyCapital: header blanco con
+ * marca, cards con badges circulares lavanda, card de requisitos con
+ * fondo lavanda. Usa `var(--tenant-primary)` y `rgb(var(--primary-N-rgb))`
+ * para respetar el branding de cualquier tenant que active el flag.
  */
 
 const log = logger.child('WelcomeConsent')
@@ -40,26 +45,23 @@ onMounted(async () => {
 
 const tenantName = computed(() => tenantStore.tenant?.name || 'MoneyCapital')
 const supportEmail = computed(() => tenantStore.tenant?.contact?.email || 'contacto@moneycapital.mx')
+const brandLogoUrl = computed(() => tenantStore.tenant?.branding?.logo_url || '')
 
 async function handleContinue() {
   if (!accepted.value || isRequestingPermissions.value) return
   isRequestingPermissions.value = true
   try {
-    // Pedir permisos en orden — cada uno muestra su prompt del sistema.
     if (platform.push.isSupported()) {
       await platform.push.requestPermission()
     }
     if (platform.geolocation.isSupported()) {
       const state = await platform.geolocation.requestPermission()
       if (state === 'granted' || state === 'prompt') {
-        // Disparar getCurrent para que aparezca el prompt en web
         await platform.geolocation.getCurrent({ cacheMs: 60_000, timeoutMs: 4_000 })
       }
     }
-    // Cámara: capabilities check (no muestra prompt hasta usarse).
     await platform.camera.isAvailable()
 
-    // Persistir consents — se leen al iniciar la app para no volver a pedir.
     await storage.set('consents', {
       terms_accepted_at: new Date().toISOString(),
       privacy_accepted_at: new Date().toISOString(),
@@ -72,7 +74,6 @@ async function handleContinue() {
     isRequestingPermissions.value = false
   }
 
-  // Navegar al login
   const slug = tenantSlug.value
   await router.replace(slug ? `/${slug}/auth` : '/auth')
 }
@@ -80,17 +81,17 @@ async function handleContinue() {
 
 <template>
   <div class="wc-screen">
-    <!-- Brand header -->
+    <!-- Brand header (blanco, logo + nombre en color tenant) -->
     <header class="brand-bar">
       <div class="brand">
-        <img
-          v-if="tenantStore.tenant?.branding?.logo_url"
-          :src="tenantStore.tenant.branding.logo_url"
-          :alt="tenantName"
-          class="brand-logo"
-        />
-        <div v-else class="brand-mark">
-          {{ tenantName.slice(0, 2).toUpperCase() }}
+        <div class="brand-mark">
+          <img v-if="brandLogoUrl" :src="brandLogoUrl" :alt="tenantName" />
+          <svg v-else viewBox="0 0 40 40" fill="none" aria-hidden="true">
+            <circle cx="20" cy="20" r="20" fill="currentColor" />
+            <rect x="11" y="15" width="4.5" height="10" rx="2.25" fill="white" />
+            <rect x="17.75" y="10" width="4.5" height="20" rx="2.25" fill="white" />
+            <rect x="24.5" y="15" width="4.5" height="10" rx="2.25" fill="white" />
+          </svg>
         </div>
         <span class="brand-name">{{ tenantName }}</span>
       </div>
@@ -103,54 +104,89 @@ async function handleContinue() {
       </p>
 
       <!-- Permisos y aceptación inicial -->
-      <section class="consent-card">
-        <div class="consent-header">
-          <span class="consent-icon">
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+      <section class="card consent-card">
+        <div class="card-row">
+          <span class="badge badge-lg badge-shield" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M12 2.5c2.5 1.6 5 2.4 7.5 2.4v6.6c0 4.6-3.2 8.4-7.5 9.5-4.3-1.1-7.5-4.9-7.5-9.5V4.9c2.5 0 5-.8 7.5-2.4z" fill="white" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+              <path d="M8 12.2l2.6 2.6 5.2-5.2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </span>
-          <h3>Permisos y aceptación inicial</h3>
+          <div class="card-body">
+            <h3 class="card-title">Permisos y aceptación inicial</h3>
+            <p class="card-text">
+              Al continuar, autorizas los permisos y validaciones necesarias para procesar
+              tu solicitud, incluyendo notificaciones, cámara/fotos, ubicación y validación
+              de datos, conforme a nuestro Aviso de privacidad y Términos y condiciones.
+            </p>
+          </div>
         </div>
-        <p class="consent-body">
-          Al continuar, autorizas los permisos y validaciones necesarias para procesar tu solicitud:
-          notificaciones, cámara/fotos, ubicación y validación de datos, conforme a nuestro Aviso
-          de privacidad y Términos y condiciones.
-        </p>
-        <ul class="consent-links">
+
+        <ul class="link-list">
           <li>
-            <button type="button" class="link" @click="showPrivacy = true">
-              Aviso de privacidad
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+            <button type="button" class="link-row" @click="showPrivacy = true">
+              <span class="badge badge-sm" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M6 3h9l4 4v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+                  <path d="M15 3v4h4" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+                  <path d="M12 11l3 1v2.2c0 1.6-1.3 3-3 3.3-1.7-.3-3-1.7-3-3.3V12l3-1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+                  <path d="M10.7 14l1 1 1.6-1.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="link-label">Aviso de privacidad</span>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
             </button>
           </li>
           <li>
-            <button type="button" class="link" @click="showTerms = true">
-              Términos y condiciones
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+            <button type="button" class="link-row" @click="showTerms = true">
+              <span class="badge badge-sm" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M6 3h9l4 4v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+                  <path d="M15 3v4h4" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+                  <path d="M8 12h7M8 15h7M8 18h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                </svg>
+              </span>
+              <span class="link-label">Términos y condiciones</span>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
             </button>
           </li>
         </ul>
+
         <label class="consent-checkbox">
           <input v-model="accepted" type="checkbox" />
-          <span>He leído y acepto para continuar</span>
+          <span class="checkbox-box" aria-hidden="true">
+            <svg v-if="accepted" viewBox="0 0 24 24" fill="none">
+              <path d="M5 12l5 5L20 7" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
+          <span class="checkbox-label">He leído y acepto para continuar</span>
         </label>
       </section>
 
-      <!-- Requisitos básicos -->
-      <section class="requirements-card">
-        <div class="req-header">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <h3>Requisitos básicos</h3>
+      <!-- Requisitos básicos (card con fondo lavanda) -->
+      <section class="card requirements-card">
+        <div class="card-row">
+          <span class="badge badge-lg" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <rect x="5" y="4.5" width="14" height="17" rx="2.5" stroke="currentColor" stroke-width="1.6" />
+              <rect x="8.5" y="2.5" width="7" height="4" rx="1.2" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+              <path d="M8.5 11h7M8.5 14h7M8.5 17h4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            </svg>
+          </span>
+          <div class="card-body">
+            <h3 class="card-title">Requisitos básicos</h3>
+            <ul class="req-list">
+              <li>Ser mayor de 18 años</li>
+              <li>Ser mexicano y residir en México</li>
+              <li>Contar con INE / IFE vigente</li>
+              <li>Tener cuenta bancaria a tu nombre</li>
+            </ul>
+          </div>
         </div>
-        <ul class="req-list">
-          <li>Ser mayor de 18 años</li>
-          <li>Ser mexicano y residir en México</li>
-          <li>Contar con INE / IFE vigente</li>
-          <li>Tener cuenta bancaria a tu nombre</li>
-        </ul>
       </section>
     </main>
 
@@ -205,88 +241,326 @@ async function handleContinue() {
 
 <style scoped>
 .wc-screen {
-  min-height: 100vh; min-height: 100dvh;
-  background: #f8fafc;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: #ffffff;
   padding-top: env(safe-area-inset-top);
   padding-bottom: calc(20px + env(safe-area-inset-bottom));
-  display: flex; flex-direction: column;
+  display: flex;
+  flex-direction: column;
+  color: #0f172a;
 }
 
+/* Header: blanco con marca a la izquierda */
 .brand-bar {
-  background: var(--tenant-primary, #5B21B6);
-  color: #fff;
-  padding: 18px 20px;
+  padding: 18px 22px 4px;
+  background: #ffffff;
 }
-.brand { display: flex; align-items: center; gap: 10px; }
-.brand-logo { height: 36px; width: auto; border-radius: 8px; background: #fff; padding: 4px; }
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 .brand-mark {
-  width: 36px; height: 36px; border-radius: 10px;
-  background: rgba(255, 255, 255, 0.18);
-  font-weight: 700; display: grid; place-items: center;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  color: var(--tenant-primary, #5B21B6);
+  flex-shrink: 0;
+}
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 999px;
+}
+.brand-mark svg {
+  width: 100%;
+  height: 100%;
+}
+.brand-name {
+  font-weight: 500;
+  font-size: 20px;
+  letter-spacing: -0.2px;
+  color: var(--tenant-primary, #5B21B6);
+}
+
+.wc-main {
+  flex: 1;
+  padding: 8px 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.welcome-title {
+  font-size: 25px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 2px 0 0;
+  letter-spacing: -0.4px;
+  line-height: 1.15;
+}
+.welcome-sub {
   font-size: 14px;
+  color: #475569;
+  margin: 0;
+  line-height: 1.5;
 }
-.brand-name { font-weight: 600; font-size: 15px; }
 
-.wc-main { flex: 1; padding: 24px 20px; display: flex; flex-direction: column; gap: 20px; }
-
-.welcome-title { font-size: 24px; font-weight: 700; color: #0f172a; margin: 0; letter-spacing: -0.3px; }
-.welcome-sub { font-size: 14px; color: #64748b; margin: 0; line-height: 1.5; }
-
-.consent-card, .requirements-card {
-  background: #fff;
+/* Cards */
+.card {
   border-radius: 16px;
-  padding: 16px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-  display: flex; flex-direction: column; gap: 12px;
+  padding: 14px 14px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 10px rgba(15, 23, 42, 0.04);
 }
-.consent-header, .req-header { display: flex; align-items: center; gap: 8px; color: var(--tenant-primary, #5B21B6); }
-.consent-header h3, .req-header h3 { font-size: 14px; font-weight: 700; color: #0f172a; margin: 0; }
-.consent-body { font-size: 13px; color: #475569; line-height: 1.5; margin: 0; }
-.consent-links { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
-.consent-links .link {
-  display: flex; justify-content: space-between; align-items: center;
-  width: 100%; background: transparent; border: none;
-  padding: 10px 4px; font-size: 13px; color: #0f172a; cursor: pointer;
+.consent-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-.consent-checkbox { display: flex; align-items: center; gap: 10px; padding-top: 6px; font-size: 13px; color: #0f172a; cursor: pointer; }
-.consent-checkbox input { width: 18px; height: 18px; accent-color: var(--tenant-primary, #5B21B6); }
+.requirements-card {
+  background: rgb(var(--surface-soft-rgb, 243 242 250) / 1);
+  box-shadow: none;
+  border: 1px solid rgb(var(--surface-soft-border-rgb, 232 229 243) / 1);
+}
+.requirements-card .card-title {
+  color: var(--tenant-primary, #5B21B6);
+  font-weight: 600;
+}
 
-.req-list { list-style: disc; padding-left: 20px; margin: 0; font-size: 13px; color: #475569; line-height: 1.7; }
+.card-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.card-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 2px 0 0;
+}
+.card-text {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
+  margin: 0;
+}
 
-.wc-footer { padding: 12px 20px 0; }
+/* Badges circulares lavanda con icono morado */
+.badge {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(var(--surface-soft-rgb, 243 242 250) / 1);
+  color: var(--tenant-primary, #5B21B6);
+  border-radius: 999px;
+}
+.badge-lg {
+  width: 46px;
+  height: 46px;
+}
+.badge-lg svg {
+  width: 26px;
+  height: 26px;
+}
+.badge-sm {
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border-radius: 0;
+}
+.badge-sm svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* Links de privacidad / T&C */
+.link-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 1px solid #f1f5f9;
+}
+.link-list li + li {
+  border-top: 1px solid #f1f5f9;
+}
+.link-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #0f172a;
+  -webkit-tap-highlight-color: transparent;
+}
+.link-label {
+  flex: 1;
+  text-align: left;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--tenant-primary, #5B21B6);
+}
+.chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--tenant-primary, #5B21B6);
+  flex-shrink: 0;
+}
+
+/* Checkbox custom */
+.consent-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding-top: 2px;
+  font-size: 13.5px;
+  color: #0f172a;
+}
+.consent-checkbox input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.checkbox-box {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  border: 2px solid rgb(var(--primary-200-rgb, 221 214 254) / 1);
+  background: #ffffff;
+  display: grid;
+  place-items: center;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.checkbox-box svg {
+  width: 14px;
+  height: 14px;
+}
+.consent-checkbox input:checked + .checkbox-box {
+  background: var(--tenant-primary, #5B21B6);
+  border-color: var(--tenant-primary, #5B21B6);
+}
+.checkbox-label {
+  font-weight: 500;
+}
+
+/* Lista de requisitos: bullets con color tenant */
+.req-list {
+  list-style: none;
+  padding: 0;
+  margin: 2px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.req-list li {
+  position: relative;
+  padding-left: 14px;
+  font-size: 13px;
+  color: #313133;
+  line-height: 1.45;
+}
+.req-list li::before {
+  content: '•';
+  position: absolute;
+  left: 2px;
+  top: 0;
+  color: var(--tenant-primary, #5B21B6);
+  font-weight: 800;
+}
+
+/* Footer botón */
+.wc-footer {
+  padding: 8px 20px 0;
+}
 .btn-continue {
   width: 100%;
   background: var(--tenant-primary, #5B21B6);
-  color: #fff; border: none;
-  border-radius: 14px;
-  padding: 16px;
-  font-size: 16px; font-weight: 600;
+  color: #ffffff;
+  border: none;
+  border-radius: 16px;
+  padding: 15px;
+  font-size: 16px;
+  font-weight: 700;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: opacity 120ms ease;
+  transition: opacity 120ms ease, transform 120ms ease;
+  box-shadow: 0 8px 18px -8px rgb(var(--primary-500-rgb, 139 92 246) / 0.55);
 }
-.btn-continue:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-continue:not(:disabled):active { opacity: 0.92; }
+.btn-continue:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.btn-continue:not(:disabled):active {
+  transform: translateY(1px);
+  opacity: 0.94;
+}
 
+/* Modales */
 .modal-overlay {
-  position: fixed; inset: 0;
+  position: fixed;
+  inset: 0;
   background: rgba(15, 23, 42, 0.5);
-  display: grid; place-items: end center;
+  display: grid;
+  place-items: end center;
   z-index: 50;
   animation: fadeIn 140ms ease;
 }
 .modal {
-  background: #fff;
-  width: 100%; max-width: 480px;
+  background: #ffffff;
+  width: 100%;
+  max-width: 480px;
   max-height: 85vh;
-  border-radius: 20px 20px 0 0;
-  display: flex; flex-direction: column;
+  border-radius: 22px 22px 0 0;
+  display: flex;
+  flex-direction: column;
   animation: slideUp 200ms ease;
 }
-.modal header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #e2e8f0; }
-.modal header h2 { font-size: 16px; font-weight: 700; color: #0f172a; margin: 0; }
-.modal header button { background: transparent; border: none; font-size: 18px; color: #64748b; cursor: pointer; }
-.modal-body { padding: 16px 20px; overflow-y: auto; font-size: 14px; color: #475569; line-height: 1.6; display: flex; flex-direction: column; gap: 12px; }
+.modal header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.modal header h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+.modal header button {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  color: #64748b;
+  cursor: pointer;
+}
+.modal-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 </style>

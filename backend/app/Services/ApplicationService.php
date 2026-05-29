@@ -61,13 +61,22 @@ class ApplicationService
         array $loanData,
         ?ApplicantAccount $submittedBy = null
     ): Application {
-        // Calculate loan terms
+        // Plazo en días: explícito o derivado de rules.default_term_days si el
+        // producto se mide en días (BULLET / MoneyCapital).
+        $rules = $product->rules ?? [];
+        $termDays = $loanData['term_days'] ?? null;
+        if ($termDays === null && !empty($rules['term_in_days'])) {
+            $termDays = $rules['default_term_days'] ?? $rules['min_term_days'] ?? null;
+        }
+
+        // Calculate loan terms (pasa term_days para cálculo BULLET correcto)
         $calculation = $this->loanCalculator->calculateSimulation(
             $loanData['amount'],
             $loanData['term_months'],
             $loanData['frequency'] ?? 'MONTHLY',
             $product->annual_rate,
-            $product->opening_commission_rate ?? 0
+            $product->opening_commission_rate ?? 0,
+            $termDays !== null ? (int) $termDays : null
         );
 
         return Application::create([
@@ -78,6 +87,7 @@ class ApplicationService
             'submitted_by_account_id' => $submittedBy?->id,
             'requested_amount' => $loanData['amount'],
             'requested_term_months' => $loanData['term_months'],
+            'requested_term_days' => $termDays,
             'purpose' => $loanData['purpose'] ?? null,
             'purpose_description' => $loanData['purpose_description'] ?? null,
             'interest_rate' => $product->annual_rate,
@@ -106,19 +116,23 @@ class ApplicationService
         $product = $application->product;
         $amount = $loanData['amount'] ?? $application->requested_amount;
         $termMonths = $loanData['term_months'] ?? $application->requested_term_months;
-        $frequency = $loanData['frequency'] ?? 'MONTHLY';
+        $termDays = $loanData['requested_term_days'] ?? $application->requested_term_days;
+        $frequency = $loanData['frequency']
+            ?? ($product->payment_frequencies[0] ?? 'MONTHLY');
 
         $calculation = $this->loanCalculator->calculateSimulation(
             $amount,
             $termMonths,
             $frequency,
             $product->annual_rate,
-            $product->opening_commission_rate ?? 0
+            $product->opening_commission_rate ?? 0,
+            $termDays !== null ? (int) $termDays : null
         );
 
         $application->update([
             'requested_amount' => $amount,
             'requested_term_months' => $termMonths,
+            'requested_term_days' => $termDays,
             'monthly_payment' => $calculation['payment_amount'],
             'total_interest' => $calculation['total_interest'],
             'total_amount' => $calculation['total_to_pay'],
@@ -184,19 +198,28 @@ class ApplicationService
             $errors[] = 'Person data is missing';
         }
 
-        // Validate purpose
-        if (empty($application->purpose)) {
-            $errors[] = 'Loan purpose is required';
-        }
-
-        // Validate required documents
         $product = $application->product;
-        $requiredDocs = $product->required_documents ?? [];
+        // Si el producto define un onboarding dinámico (flow MoneyCapital y similares),
+        // purpose y documentos formales se omiten porque van dentro de dynamic_data.
+        $hasDynamicOnboarding = !empty($product->onboarding_steps ?? null);
 
-        if (!empty($requiredDocs) && $application->person) {
-            $missingDocs = $this->documentService->getMissingRequired($application->person, $requiredDocs);
-            if (!empty($missingDocs)) {
-                $errors[] = 'Missing required documents: ' . implode(', ', $missingDocs);
+        if (!$hasDynamicOnboarding) {
+            // Validate purpose
+            if (empty($application->purpose)) {
+                $errors[] = 'Loan purpose is required';
+            }
+
+            // Validate required documents
+            $requiredDocs = $product->required_documents ?? [];
+            if (!empty($requiredDocs) && $application->person) {
+                $missingDocs = $this->documentService->getMissingRequired($application->person, $requiredDocs);
+                if (!empty($missingDocs)) {
+                    $names = array_map(
+                        fn ($d) => is_array($d) ? ($d['type'] ?? $d['description'] ?? json_encode($d)) : (string) $d,
+                        $missingDocs,
+                    );
+                    $errors[] = 'Missing required documents: ' . implode(', ', $names);
+                }
             }
         }
 

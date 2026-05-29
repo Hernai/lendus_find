@@ -205,6 +205,8 @@ export interface BankAccountResponse {
 export interface CreateBankAccountPayload {
   clabe: string
   holder_name: string
+  // Para cuentas de tipo tarjeta (sin CLABE).
+  card_number?: string
   // Account type - validated by backend BankAccountType enum
   account_type?: string
 }

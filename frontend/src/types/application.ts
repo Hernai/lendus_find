@@ -98,6 +98,7 @@ export interface CreateApplicationParams {
   product_id: string
   requested_amount: number
   term_months: number
+  requested_term_days?: number
   payment_frequency: PaymentFrequency
 }
 

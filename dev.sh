@@ -26,9 +26,11 @@ print_header() {
 start_backend() {
     echo -e "${GREEN}▶ Starting Laravel Backend...${NC}"
     cd "$BACKEND_DIR"
-    php artisan serve --host=localhost --port=8000 &
+    # Bind a 0.0.0.0 para que el emulador Android (10.0.2.2) y dispositivos
+    # físicos en la LAN puedan llegar al backend durante desarrollo.
+    php artisan serve --host=0.0.0.0 --port=8000 &
     echo $! > "$PROJECT_DIR/.backend.pid"
-    echo -e "${GREEN}✓ Backend running at http://localhost:8000${NC}"
+    echo -e "${GREEN}✓ Backend running at http://0.0.0.0:8000${NC}"
 }
 
 start_frontend() {

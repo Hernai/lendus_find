@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore, useLoanStore, useTenantStore } from '@/stores'
 import LoanExtensionSheet from './LoanExtensionSheet.vue'
 import LoanPayModal from './LoanPayModal.vue'
+import MobileBottomNav from '@/components/mobile/MobileBottomNav.vue'
 
 const loanStore = useLoanStore()
 const authStore = useAuthStore()
@@ -55,17 +56,22 @@ const goToDetail = (id: string) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 pb-24">
-    <header class="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
-      <h1 class="text-base font-semibold text-gray-900">{{ greeting }}</h1>
-      <button
-        v-if="active"
-        type="button"
-        class="text-xs text-primary-600 font-semibold"
-        @click="goToDetail(active.id)"
-      >
-        Ver contrato
-      </button>
+  <div class="min-h-screen bg-gray-50 pb-32">
+    <header class="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-lg font-bold text-gray-900">Mis préstamos</h1>
+          <p class="text-xs text-gray-500">{{ greeting }}</p>
+        </div>
+        <button
+          v-if="active"
+          type="button"
+          class="text-xs text-primary-600 font-semibold"
+          @click="goToDetail(active.id)"
+        >
+          Ver contrato
+        </button>
+      </div>
     </header>
 
     <div v-if="loanStore.isLoading && !loanStore.loans.length" class="flex justify-center pt-20">
@@ -196,5 +202,7 @@ const goToDetail = (id: string) => {
       @close="showPay = false"
       @success="loanStore.fetchAll()"
     />
+
+    <MobileBottomNav />
   </div>
 </template>

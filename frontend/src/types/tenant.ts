@@ -121,7 +121,7 @@ export interface ProductRules {
 
 export type AmortizationType = 'FRENCH' | 'GERMAN' | 'AMERICAN' | 'BULLET'
 
-export type PaymentFrequency = 'SEMANAL' | 'WEEKLY' | 'BIWEEKLY' | 'QUINCENAL' | 'MONTHLY' | 'MENSUAL'
+export type PaymentFrequency = 'SEMANAL' | 'WEEKLY' | 'BIWEEKLY' | 'QUINCENAL' | 'MONTHLY' | 'MENSUAL' | 'SINGLE'
 
 export interface TermConfig {
   available_terms: number[]

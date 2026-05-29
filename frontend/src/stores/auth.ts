@@ -105,6 +105,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Applicant state
   const hasApplicant = ref(false)
+  const onboardingCompleted = ref(false)
+  const onboardingStep = ref(0)
 
   // Permissions state (for staff users)
   const permissions = ref<UserPermissions | null>(null)
@@ -209,12 +211,14 @@ export const useAuthStore = defineStore('auth', () => {
       // - Legacy/Direct: { success: true, token, user }
       const rawResponse = response as unknown as {
         success: boolean
-        data?: { token: string; user: import('@/types/v2').V2ApplicantUser }
+        data?: { token: string; user: import('@/types/v2').V2ApplicantUser; is_new_user?: boolean }
         token?: string
         user?: import('@/types/v2').V2ApplicantUser
+        is_new_user?: boolean
       }
 
       const authData = rawResponse.data || (rawResponse.token && rawResponse.user ? { token: rawResponse.token, user: rawResponse.user } : null)
+      const isNewUser = !!(rawResponse.data?.is_new_user ?? rawResponse.is_new_user)
 
       if (response.success && authData) {
         // Cast to V2ApplicantUser since we're using applicant auth
@@ -263,7 +267,8 @@ export const useAuthStore = defineStore('auth', () => {
           success: true,
           token: authData.token,
           user: mappedUser,
-          needsPinSetup: isPhoneAuth
+          needsPinSetup: isPhoneAuth,
+          isNewUser,
         }
       }
 
@@ -380,6 +385,8 @@ export const useAuthStore = defineStore('auth', () => {
         is_staff: boolean
         has_pin?: boolean
         applicant?: unknown
+        onboarding_completed?: boolean
+        onboarding_step?: number
         permissions?: UserPermissions
       }
 
@@ -428,7 +435,9 @@ export const useAuthStore = defineStore('auth', () => {
           is_admin: false,
           is_staff: false,
           has_pin: appUser.has_pin,
-          applicant: appUser.person_id ? { id: appUser.person_id } : null
+          applicant: appUser.person_id ? { id: appUser.person_id } : null,
+          onboarding_completed: !!appUser.onboarding_completed,
+          onboarding_step: appUser.onboarding_step ?? 0,
         }
       }
 
@@ -469,6 +478,8 @@ export const useAuthStore = defineStore('auth', () => {
       // Set applicant state (only for applicants)
       if (!apiUser.is_staff) {
         hasApplicant.value = !!apiUser.applicant
+        onboardingCompleted.value = !!apiUser.onboarding_completed
+        onboardingStep.value = apiUser.onboarding_step ?? 0
       }
 
       // Set PIN state (only for applicants with phone, not email-only users)
@@ -814,6 +825,8 @@ export const useAuthStore = defineStore('auth', () => {
     pinLockoutMinutes,
     // Applicant State
     hasApplicant,
+    onboardingCompleted,
+    onboardingStep,
     // Super Admin Tenant Switching
     selectedTenantId,
     // Getters

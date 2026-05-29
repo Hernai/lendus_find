@@ -38,6 +38,7 @@ export interface VerifyOtpResponse {
   token?: string
   user?: User
   needsPinSetup?: boolean
+  isNewUser?: boolean
 }
 
 export interface AuthState {

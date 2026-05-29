@@ -422,6 +422,7 @@ class ApplicantAuthService
         ]);
 
         $identity = ApplicantIdentity::create([
+            'tenant_id' => $tenantId,
             'account_id' => $account->id,
             'type' => $type,
             'identifier' => $identifier,

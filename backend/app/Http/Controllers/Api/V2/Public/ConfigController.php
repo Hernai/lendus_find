@@ -49,6 +49,26 @@ class ConfigController extends Controller
             ? $tenant->brandingConfig->toApiArray()
             : $this->formatBranding($tenant->branding);
 
+        // Detectar integraciones activas para que el frontend decida flows
+        // condicionales (ej. saltar paso "personal_data" si hay proveedor KYC
+        // que extrae los datos automáticamente del INE).
+        $activeIntegrations = \App\Models\TenantApiConfig::where('tenant_id', $tenant->id)
+            ->where('is_active', true)
+            ->get(['provider', 'service_type'])
+            ->map(fn ($c) => strtolower($c->service_type . ':' . $c->provider))
+            ->values()
+            ->all();
+
+        $integrations = [
+            'has_kyc_provider' => collect($activeIntegrations)
+                ->contains(fn ($i) => str_starts_with($i, 'kyc:')),
+            'has_phone_score' => collect($activeIntegrations)
+                ->contains(fn ($i) => str_starts_with($i, 'phone_score:')),
+            'has_disbursement' => collect($activeIntegrations)
+                ->contains(fn ($i) => str_starts_with($i, 'disbursement:')),
+            'active' => $activeIntegrations,
+        ];
+
         return $this->success([
             'tenant' => [
                 'id' => $tenant->id,
@@ -58,6 +78,7 @@ class ConfigController extends Controller
                 'webhook_config' => $tenant->webhook_config,
                 'settings' => $this->formatSettings($tenant->settings),
                 'features' => $tenant->features ?? [],
+                'integrations' => $integrations,
                 'contact' => [
                     'email' => $tenant->email,
                     'phone' => $tenant->phone,

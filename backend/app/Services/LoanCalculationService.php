@@ -64,6 +64,7 @@ class LoanCalculationService
         $totalPeriods = match ($normalizedFrequency) {
             self::FREQUENCY_WEEKLY => $termMonths * 4.33,
             self::FREQUENCY_BIWEEKLY => $termMonths * 2,
+            'SINGLE' => 1, // BULLET: un único pago al vencimiento
             default => $termMonths,
         };
 
@@ -242,8 +243,39 @@ class LoanCalculationService
         int $termMonths,
         string $frequency,
         float $annualRate,
-        float $commissionRate = 0
+        float $commissionRate = 0,
+        ?int $termDays = null
     ): array {
+        $isSingle = PaymentFrequency::normalize($frequency)?->value === 'SINGLE';
+
+        // BULLET / Pago único: interés simple sobre el plazo real en días
+        // (base 360). Un solo pago = principal + interés. CAT anualizado.
+        if ($isSingle) {
+            $days = $termDays ?? max(1, (int) round($termMonths * 30));
+            $openingCommission = $this->calculateOpeningCommission($amount, $commissionRate);
+            $netAmount = $this->calculateNetAmount($amount, $openingCommission);
+            $totalInterest = round($amount * ($annualRate / 100) * ($days / 360), 2);
+            $totalToPay = round($amount + $totalInterest, 2);
+            $cat = $this->calculateCATForDays($amount, $totalToPay, $openingCommission, $days);
+
+            return [
+                'requested_amount' => $amount,
+                'term_months' => $termMonths,
+                'term_days' => $days,
+                'payment_frequency' => 'SINGLE',
+                'annual_rate' => $annualRate,
+                'periodic_rate' => round(($annualRate / 360) * $days, 4),
+                'total_periods' => 1,
+                'payment_amount' => $totalToPay, // pago único
+                'opening_commission_rate' => $commissionRate,
+                'opening_commission' => $openingCommission,
+                'net_amount' => $netAmount,
+                'total_to_pay' => $totalToPay,
+                'total_interest' => $totalInterest,
+                'cat' => $cat,
+            ];
+        }
+
         $totalPeriods = $this->calculateTotalPeriods($termMonths, $frequency);
         $periodicRate = $this->calculatePeriodicRate($annualRate, $frequency);
         $payment = $this->calculatePayment($amount, $annualRate, $termMonths, $frequency);
@@ -268,6 +300,30 @@ class LoanCalculationService
             'total_interest' => $totalInterest,
             'cat' => $cat,
         ];
+    }
+
+    /**
+     * CAT anualizado para créditos de pago único (BULLET) medidos en días.
+     * Anualiza el costo total efectivo: ((totalCost/principal)^(360/días) - 1) * 100.
+     */
+    public function calculateCATForDays(
+        float $principal,
+        float $totalToPay,
+        float $openingCommission,
+        int $days
+    ): float {
+        if ($days <= 0 || $principal <= 0) {
+            return 0;
+        }
+        $totalCost = $totalToPay + $openingCommission;
+        $factor = $totalCost / $principal; // > 1
+        $cat = (pow($factor, 360 / $days) - 1) * 100;
+
+        // Cap defensivo: plazos de 1-2 días producen CAT astronómicos que
+        // desbordarían la columna. Se topa a un valor alto pero almacenable.
+        $cat = min($cat, 9999999.0);
+
+        return round($cat, 2);
     }
 
     /**

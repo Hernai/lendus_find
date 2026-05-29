@@ -27,12 +27,13 @@ const renderers = {
   state_city: defineAsyncComponent(() => import('@/components/onboarding/steps/StateCityStepRenderer.vue')),
   number_select: defineAsyncComponent(() => import('@/components/onboarding/steps/NumberSelectStepRenderer.vue')),
   review: defineAsyncComponent(() => import('@/components/onboarding/steps/ReviewStepRenderer.vue')),
-  // Los siguientes se implementan en sus fases respectivas (4, 5, 8).
-  references: PendingStepRenderer,
-  bank_account: PendingStepRenderer,
-  kyc_ine: PendingStepRenderer,
-  kyc_selfie: PendingStepRenderer,
-  review_full: PendingStepRenderer,
+  references: defineAsyncComponent(() => import('@/components/onboarding/steps/ReferencesStepRenderer.vue')),
+  bank_account: defineAsyncComponent(() => import('@/components/onboarding/steps/BankAccountStepRenderer.vue')),
+  kyc_ine: defineAsyncComponent(() => import('@/components/onboarding/steps/KycIneStepRenderer.vue')),
+  kyc_selfie: defineAsyncComponent(() => import('@/components/onboarding/steps/KycSelfieStepRenderer.vue')),
+  review_full: defineAsyncComponent(() => import('@/components/onboarding/steps/ReviewStepRenderer.vue')),
+  personal_data: defineAsyncComponent(() => import('@/components/onboarding/steps/PersonalDataStepRenderer.vue')),
+  address: defineAsyncComponent(() => import('@/components/onboarding/steps/AddressStepRenderer.vue')),
 } as const
 
 function rendererFor(type: OnboardingStep['type']) {

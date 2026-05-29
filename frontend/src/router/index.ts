@@ -13,6 +13,7 @@ const MobileWelcome = () => import('@/views/mobile/MobileWelcome.vue')
 const WelcomeConsentView = () => import('@/views/mobile/WelcomeConsentView.vue')
 const DynamicOnboardingView = () => import('@/views/applicant/onboarding/DynamicOnboardingView.vue')
 const ProcessingView = () => import('@/views/applicant/onboarding/ProcessingView.vue')
+const MobileHomeView = () => import('@/views/mobile/MobileHomeView.vue')
 const LoanOfferView = () => import('@/views/applicant/loans/LoanOfferView.vue')
 const LoanDashboardView = () => import('@/views/applicant/loans/LoanDashboardView.vue')
 const LoanDetailView = () => import('@/views/applicant/loans/LoanDetailView.vue')
@@ -112,6 +113,12 @@ const routes: RouteRecordRaw[] = [
     path: '/m/solicitud/:stepId?',
     name: 'm-onboarding-step',
     component: DynamicOnboardingView,
+    meta: { requiresAuth: true, mobileEntry: true },
+  },
+  {
+    path: '/m/home',
+    name: 'm-home',
+    component: MobileHomeView,
     meta: { requiresAuth: true, mobileEntry: true },
   },
   {
@@ -586,8 +593,10 @@ router.beforeEach(async (to, from, next) => {
         const slug = tenantStore.slug || detectTenantSlug() || 'demo'
         return next({ path: `/${slug}/dashboard`, replace: true })
       }
-      // Si el tenant pide consentimiento unificado (MoneyCapital) y aún no
-      // hay consents persistidos, redirigir a /m/welcome-consent en vez de /m.
+      // Si el tenant tiene `unified_auth_screen` (MoneyCapital y similares),
+      // saltamos cualquier pantalla intermedia y aterrizamos directo en el
+      // unified auth (registro / login). Si además tiene `unified_consent_screen`
+      // sin consents firmados aún, vamos al welcome-consent.
       try {
         await tenantStore.loadConfig()
       } catch {
@@ -595,8 +604,15 @@ router.beforeEach(async (to, from, next) => {
       }
       const features = (tenantStore.tenant?.features ?? {}) as Record<string, boolean>
       const hasConsents = !!storage.get('consents')
+      // 1) Si el tenant pide consentimiento unificado y aún no se firmó,
+      //    mostrarlo primero (es la pantalla de entrada en cold-start).
       if (features.unified_consent_screen && !hasConsents) {
         return next({ path: '/m/welcome-consent', replace: true })
+      }
+      // 2) Tras consents, si tiene auth unificada, ir directo al login/registro.
+      if (features.unified_auth_screen) {
+        const slug = tenantStore.slug || detectTenantSlug() || 'demo'
+        return next({ path: `/${slug}/auth`, replace: true })
       }
       return next({ path: '/m', replace: true })
     }
@@ -717,9 +733,18 @@ router.beforeEach(async (to, from, next) => {
       }
     }
 
-    // Check if user needs to setup PIN (for applicants only, not staff)
-    if (!requiresStaff && authStore.needsPinSetup && to.name !== 'auth-pin-setup' && to.name !== 'tenant-auth-pin-setup') {
-      // Use tenant-prefixed route if tenant is available
+    // Check if user needs to setup PIN (for applicants only, not staff).
+    // Tenants white-label con `unified_auth_screen` activan PIN como
+    // configuración opcional desde el perfil — no como bloqueo post-OTP.
+    const tenantFeatures = (tenantStore.tenant?.features ?? {}) as Record<string, boolean>
+    const skipForcedPinSetup = !!tenantFeatures.unified_auth_screen
+    if (
+      !requiresStaff &&
+      !skipForcedPinSetup &&
+      authStore.needsPinSetup &&
+      to.name !== 'auth-pin-setup' &&
+      to.name !== 'tenant-auth-pin-setup'
+    ) {
       const tenantSlug = to.params.tenant as string || tenantStore.slug
       if (tenantSlug) {
         return next({ name: 'tenant-auth-pin-setup', params: { tenant: tenantSlug }, query: { redirect: to.fullPath } })

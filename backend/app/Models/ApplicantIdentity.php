@@ -34,6 +34,7 @@ class ApplicantIdentity extends Model
     protected $table = 'applicant_identities';
 
     protected $fillable = [
+        'tenant_id',
         'account_id',
         'type',
         'identifier',

@@ -27,6 +27,16 @@ const log = logger.child('AdminApplicationDetail')
 const toast = useToast()
 const { loadDocumentTypes, getDocumentTypeLabel } = useDocumentTypes()
 
+const paymentFrequencyLabel = (freq?: string | null): string => {
+  switch (freq) {
+    case 'WEEKLY': case 'SEMANAL': return 'Semanal'
+    case 'BIWEEKLY': case 'QUINCENAL': return 'Quincenal'
+    case 'MONTHLY': case 'MENSUAL': return 'Mensual'
+    case 'SINGLE': return 'Pago único'
+    default: return 'Mensual'
+  }
+}
+
 // Load document types from backend on mount
 onBeforeMount(async () => {
   await loadDocumentTypes()
@@ -2147,7 +2157,10 @@ onUnmounted(() => {
               </div>
               <div class="bg-gray-50 rounded px-3 py-2">
                 <p class="text-xs text-gray-500">Plazo</p>
-                <p class="text-lg font-bold text-gray-900">{{ application.loan.term_months }} meses</p>
+                <p class="text-lg font-bold text-gray-900">
+                  <template v-if="application.loan.term_in_days">{{ application.loan.requested_term_days }} días</template>
+                  <template v-else>{{ application.loan.term_months ?? application.loan.requested_term_months }} meses</template>
+                </p>
               </div>
               <div class="bg-gray-50 rounded px-3 py-2">
                 <p class="text-xs text-gray-500">Tasa</p>
@@ -3099,11 +3112,14 @@ onUnmounted(() => {
                   </div>
                   <div>
                     <p class="text-xs text-gray-500">Plazo</p>
-                    <p class="font-medium text-gray-900">{{ application.loan.term_months }} meses</p>
+                    <p class="font-medium text-gray-900">
+                      <template v-if="application.loan.term_in_days">{{ application.loan.requested_term_days }} días</template>
+                      <template v-else>{{ application.loan.term_months ?? application.loan.requested_term_months }} meses</template>
+                    </p>
                   </div>
                   <div>
                     <p class="text-xs text-gray-500">Frecuencia</p>
-                    <p class="font-medium text-gray-900">{{ application.loan.payment_frequency === 'QUINCENAL' ? 'Quincenal' : 'Mensual' }}</p>
+                    <p class="font-medium text-gray-900">{{ paymentFrequencyLabel(application.loan.payment_frequency) }}</p>
                   </div>
                   <div>
                     <p class="text-xs text-gray-500">Tasa</p>

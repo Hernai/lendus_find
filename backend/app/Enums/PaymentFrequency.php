@@ -17,6 +17,7 @@ enum PaymentFrequency: string
     case WEEKLY = 'WEEKLY';
     case BIWEEKLY = 'BIWEEKLY';
     case MONTHLY = 'MONTHLY';
+    case SINGLE = 'SINGLE';
 
     /**
      * Get the display label in Spanish.
@@ -27,11 +28,13 @@ enum PaymentFrequency: string
             self::WEEKLY => 'Semanal',
             self::BIWEEKLY => 'Quincenal',
             self::MONTHLY => 'Mensual',
+            self::SINGLE => 'Pago único',
         };
     }
 
     /**
      * Get the number of periods per year.
+     * SINGLE (bullet) se trata como 1 periodo en cálculos anualizados.
      */
     public function periodsPerYear(): int
     {
@@ -39,6 +42,7 @@ enum PaymentFrequency: string
             self::WEEKLY => 52,
             self::BIWEEKLY => 24,
             self::MONTHLY => 12,
+            self::SINGLE => 1,
         };
     }
 
@@ -71,6 +75,7 @@ enum PaymentFrequency: string
             'SEMANAL' => self::WEEKLY,
             'QUINCENAL' => self::BIWEEKLY,
             'MENSUAL' => self::MONTHLY,
+            'PAGO_UNICO', 'PAGO UNICO', 'BULLET', 'UNICO' => self::SINGLE,
             default => null,
         };
     }

@@ -59,6 +59,26 @@ export async function upload(
 }
 
 /**
+ * Upload a document from a base64 data URL (native apps / Capacitor camera).
+ * El backend acepta `file_base64` y lo convierte a archivo (CapacitorHttp no
+ * maneja multipart/form-data con archivos de forma confiable).
+ */
+export async function uploadBase64(
+  base64: string,
+  type: string,
+  options?: { file_name?: string; identification_id?: string; metadata?: Record<string, unknown> }
+): Promise<V2ApiResponse<{ document: V2Document }>> {
+  const response = await api.post<V2ApiResponse<{ document: V2Document }>>(BASE_PATH, {
+    type,
+    file_base64: base64,
+    file_name: options?.file_name ?? `${type.toLowerCase()}.jpg`,
+    identification_id: options?.identification_id,
+    metadata: options?.metadata,
+  })
+  return response.data
+}
+
+/**
  * Get available document types.
  */
 export async function getTypes(): Promise<V2ApiResponse<{ types: Record<string, string>; categories: Record<string, string> }>> {
@@ -133,6 +153,7 @@ export async function remove(id: string): Promise<V2ApiResponse<{ message: strin
 export default {
   list,
   upload,
+  uploadBase64,
   getTypes,
   getRejected,
   getMissing,
