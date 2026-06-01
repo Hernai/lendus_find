@@ -4,7 +4,53 @@ Guía completa para desplegar el backend de **LendusFind** (Laravel 12 API) en u
 
 ---
 
-## 1. Stack completo
+## 0. Stack completo del proyecto
+
+Panorama general de **todas las capas** de LendusFind (no solo del backend que se despliega aquí).
+
+### Backend — API REST
+| Capa | Tecnología |
+|------|-----------|
+| Lenguaje | **PHP 8.2+** |
+| Framework | **Laravel 12** (Sanctum auth) |
+| Base de datos | **PostgreSQL 15+** (campos JSONB) |
+| Cache / Colas / Sesiones | **Redis 7** (Predis / phpredis) |
+| WebSocket | **Laravel Reverb** (broadcasting en tiempo real) |
+| Storage | **S3 / MinIO** (URLs firmadas) |
+| Templates notif. | **Handlebars** (LightnCandy) |
+
+### Frontend — SPA
+| Capa | Tecnología |
+|------|-----------|
+| Framework | **Vue.js 3** (Composition API) |
+| Lenguaje | **TypeScript** |
+| Estilos | **Tailwind CSS 3** (mobile-first) |
+| Build | **Vite** → estáticos (Node 20.19+ / 22.12+ solo para compilar) |
+| Estado | **Pinia** (auth, tenant, application, onboarding, kyc, ui) |
+| Móvil | **Capacitor** (PWA + iOS + Android white-label) |
+
+### Integraciones externas
+- **Twilio** — SMS / WhatsApp
+- **Nubarium** — KYC (CURP, RFC, INE, biometría, OFAC/PLD)
+- **SMTP / SendGrid / Mailgun** — email (por tenant vía `TenantApiConfig`)
+- **Webhooks** — envía JSON estandarizado a sistemas externos (SAP, Core Banking…)
+
+### Infraestructura de producción (AlmaLinux 9)
+- **Nginx + php-fpm** — servidor web / reverse proxy
+- **Supervisor** — procesos long-running: queue worker + Reverb
+- **Cron** — scheduler de Laravel
+- **Certbot** — SSL Let's Encrypt
+
+### Arquitectura clave
+- **Multi-tenant**: una sola DB con tenant scoping (trait `HasTenant`), identificación por subdominio o header `X-Tenant-ID`
+- **White-label**: branding y subdominios por SOFOM
+- **API V2**: rutas `public/`, `applicant/`, `staff/` con respuesta estándar `{ success, data, message, error }`
+- **IDs**: UUIDs en todo
+- **Idioma UI**: español
+
+---
+
+## 1. Stack del backend (lo que se despliega aquí)
 
 | Componente | Versión | Rol |
 |------------|---------|-----|
