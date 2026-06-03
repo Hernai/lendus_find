@@ -32,6 +32,8 @@ return [
         'ionic://localhost',
         'http://localhost',
         'https://localhost',
+        // Producción: frontends per-tenant en *.lendus.app llaman a apifind.lendus.app.
+        'https://lendus.app',
     ],
 
     'allowed_origins_patterns' => [
@@ -41,6 +43,9 @@ return [
         '#^capacitor://localhost(:\d+)?$#',
         '#^ionic://localhost(:\d+)?$#',
         '#^https?://localhost(:\d+)?$#',
+        // Producción: cualquier subdominio de lendus.app (moneycapital, finatea,
+        // demo, etc.) puede llamar al backend en apifind.lendus.app.
+        '#^https://[a-z0-9-]+\.lendus\.app$#',
     ],
 
     'allowed_headers' => ['*'],

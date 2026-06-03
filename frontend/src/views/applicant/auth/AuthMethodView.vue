@@ -38,7 +38,7 @@ const showWhatsapp = computed(() => allowedMethods.value.includes('whatsapp'))
 const showEmail = computed(() => allowedMethods.value.includes('email'))
 
 // Base path: '/:tenant' cuando el tenant viene por path; '' cuando viene
-// por subdomain (moneycapital.lendusfind.app). Así los links no agregan
+// por subdomain (moneycapital.lendus.app). Así los links no agregan
 // '/moneycapital' redundante cuando el subdominio ya identifica al tenant.
 const basePath = computed(() => getTenantBasePath())
 

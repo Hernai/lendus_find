@@ -12,8 +12,12 @@ class IdentifyTenant
 {
     /**
      * Reserved subdomains that should not be treated as tenant slugs.
+     *
+     * `apifind` es el host del backend en producción (apifind.lendus.app); las
+     * llamadas API identifican el tenant por el header `X-Tenant-ID`, no por
+     * el subdominio del backend.
      */
-    private const RESERVED_SUBDOMAINS = ['www', 'api', 'admin', 'app', 'mail', 'smtp'];
+    private const RESERVED_SUBDOMAINS = ['www', 'api', 'apifind', 'admin', 'app', 'mail', 'smtp'];
 
     /**
      * Handle an incoming request.

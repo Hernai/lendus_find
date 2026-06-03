@@ -32,7 +32,48 @@ $tenant = $request->attributes->get('tenant');
 $tenant = app('tenant');
 ```
 
-Subdomains reservados: `www`, `api`, `admin`, `app`, `mail`, `smtp`
+Subdomains reservados: `www`, `api`, `apifind`, `admin`, `app`, `mail`, `smtp`
+
+## Arquitectura DNS en producción (lendus.app)
+
+El backend y el frontend viven en **subdominios distintos** bajo `lendus.app`:
+
+| Host | Rol |
+|------|-----|
+| `apifind.lendus.app` | Backend Laravel (API + Reverb) — único host para todos los tenants |
+| `moneycapital.lendus.app` | Frontend Vue de MoneyCapital |
+| `finatea.lendus.app` | Frontend Vue de Finatea |
+| `demo.lendus.app` | Frontend Vue de demo |
+| `lendus.app` (apex) | Landing institucional / sitio corporativo |
+
+**Flujo de identificación del tenant**:
+
+1. El usuario entra a `moneycapital.lendus.app`. El frontend detecta el slug `moneycapital` con `detectTenantSlug()` ([utils/tenant.ts](../../../frontend/src/utils/tenant.ts)).
+2. Cada request HTTP del frontend va a `https://apifind.lendus.app/api/...` (`VITE_API_URL`).
+3. El interceptor de Axios ([http/interceptors.ts](../../../frontend/src/http/interceptors.ts)) agrega `X-Tenant-ID: moneycapital` automáticamente en cada request.
+4. El backend (`IdentifyTenant`) lee el header (prioridad 1) e ignora el subdominio `apifind` (que está reservado).
+
+**No usar** `apimoneycapital.lendus.app`, `apifinatea.lendus.app`, etc. — un solo backend sirve a todos los tenants distinguidos por header. Eso evita N certificados, N pipelines de deploy y replicación de config.
+
+### Config requerida en backend (producción)
+
+```env
+APP_URL=https://apifind.lendus.app
+SANCTUM_STATEFUL_DOMAINS=lendus.app,moneycapital.lendus.app,finatea.lendus.app,demo.lendus.app
+```
+
+CORS ([config/cors.php](../../../backend/config/cors.php)) ya tiene patrón `^https://[a-z0-9-]+\.lendus\.app$` que cubre todos los subdominios de tenants.
+
+### Config requerida en frontend (producción)
+
+```env
+VITE_API_URL=https://apifind.lendus.app/api
+# NO setear VITE_TENANT_ID en prod: el subdominio del frontend lo resuelve.
+```
+
+### Super admin global
+
+`SUPER_ADMIN` tiene `tenant_id = NULL`. Aunque sea global, las rutas `/v2/staff/...` corren con middleware `tenant`, así que el login del super admin **igual requiere un `X-Tenant-ID`** (cualquier slug válido). Tras login, `/v2/staff/tenants` devuelve los tenants administrables y el frontend permite cambiar de contexto.
 
 ## HasTenant Trait
 

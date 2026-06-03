@@ -2,13 +2,15 @@
  * Hybrid Tenant Detection Utility
  *
  * Detects tenant from (in order of priority):
- * 1. Subdomain (e.g., demo.lendus.com) - for production
+ * 1. Subdomain (e.g., moneycapital.lendus.app) - for production
  * 2. Path prefix (e.g., /demo/...) - for development with ngrok
  * 3. Environment variable VITE_TENANT_ID - fallback
  */
 
-// Reserved subdomains that are NOT tenant slugs
-const RESERVED_SUBDOMAINS = ['www', 'app', 'api', 'admin', 'localhost']
+// Reserved subdomains that are NOT tenant slugs.
+// `apifind` es el host del backend en producción (apifind.lendus.app); el
+// front no debe interpretarlo como tenant si por error se navega allí.
+const RESERVED_SUBDOMAINS = ['www', 'app', 'api', 'apifind', 'admin', 'localhost']
 
 // Domains where the subdomain is NOT a tenant slug (e.g., ngrok random IDs)
 const EXCLUDED_PARENT_DOMAINS = ['ngrok-free.app', 'ngrok.io', 'localhost']
@@ -18,7 +20,7 @@ const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 
 
 /**
  * Get subdomain from current hostname
- * e.g., demo.lendus.com -> 'demo'
+ * e.g., moneycapital.lendus.app -> 'moneycapital'
  */
 function getSubdomain(): string | null {
   const hostname = window.location.hostname
