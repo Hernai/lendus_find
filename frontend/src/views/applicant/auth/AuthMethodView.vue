@@ -4,6 +4,7 @@ import { computed, onMounted, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import UnifiedAuthView from '@/views/mobile/UnifiedAuthView.vue'
 import { getTenantConfig, type AuthMethod } from '@tenants'
+import { getTenantBasePath } from '@/utils/tenant'
 
 const DEFAULT_METHODS: AuthMethod[] = ['phone', 'whatsapp', 'email']
 
@@ -36,26 +37,15 @@ const showPhone = computed(() => allowedMethods.value.includes('phone'))
 const showWhatsapp = computed(() => allowedMethods.value.includes('whatsapp'))
 const showEmail = computed(() => allowedMethods.value.includes('email'))
 
-// Computed paths for navigation
-const phonePath = computed(() => {
-  const tenantSlug = getTenantSlug()
-  return tenantSlug ? `/${tenantSlug}/auth/phone` : '/auth/phone'
-})
+// Base path: '/:tenant' cuando el tenant viene por path; '' cuando viene
+// por subdomain (moneycapital.lendusfind.app). Así los links no agregan
+// '/moneycapital' redundante cuando el subdominio ya identifica al tenant.
+const basePath = computed(() => getTenantBasePath())
 
-const whatsappPath = computed(() => {
-  const tenantSlug = getTenantSlug()
-  return tenantSlug ? `/${tenantSlug}/auth/phone?method=whatsapp` : '/auth/phone?method=whatsapp'
-})
-
-const emailPath = computed(() => {
-  const tenantSlug = getTenantSlug()
-  return tenantSlug ? `/${tenantSlug}/auth/email` : '/auth/email'
-})
-
-const homePath = computed(() => {
-  const tenantSlug = getTenantSlug()
-  return tenantSlug ? `/${tenantSlug}` : '/'
-})
+const phonePath = computed(() => `${basePath.value}/auth/phone`)
+const whatsappPath = computed(() => `${basePath.value}/auth/phone?method=whatsapp`)
+const emailPath = computed(() => `${basePath.value}/auth/email`)
+const homePath = computed(() => basePath.value || '/')
 
 // Si el tenant solo permite 1 método, redirige automáticamente.
 const pathForMethod = (method: AuthMethod): string | null => {

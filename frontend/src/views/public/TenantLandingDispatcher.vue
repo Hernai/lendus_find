@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, type Component } from 'vue'
 import { useRoute } from 'vue-router'
 import { getTenantConfig, type TenantLandingComponent } from '@tenants'
+import { detectTenantSlug } from '@/utils/tenant'
 import LandingView from './LandingView.vue'
 
 /**
@@ -21,7 +22,17 @@ const LANDING_COMPONENTS: Record<TenantLandingComponent, Component> = {
 
 const route = useRoute()
 
-const tenantSlug = computed(() => (route.params.tenant as string | undefined) ?? null)
+/**
+ * Resuelve el slug del tenant en este orden:
+ * 1. `route.params.tenant` (cuando la ruta es `/:tenant`, path-based)
+ * 2. `detectTenantSlug()` — usa subdominio (`moneycapital.lendusfind.app`)
+ *    o path fallback. Útil cuando el dispatcher se monta en `/` sin params.
+ */
+const tenantSlug = computed(() => {
+  const fromPath = route.params.tenant as string | undefined
+  if (fromPath) return fromPath
+  return detectTenantSlug() || null
+})
 
 const resolvedComponent = computed<Component>(() => {
   const config = getTenantConfig(tenantSlug.value)

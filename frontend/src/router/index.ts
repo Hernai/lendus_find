@@ -292,7 +292,9 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'landing',
-    component: LandingView,
+    // Dispatcher resuelve el componente real según el subdominio (producción)
+    // o el tenant detectado. Si no hay tenant → LandingView genérica.
+    component: TenantLandingDispatcher,
     meta: { public: true }
   },
   {

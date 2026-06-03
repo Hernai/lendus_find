@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTenantStore } from '@/stores'
+import { getTenantBasePath } from '@/utils/tenant'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 import { AppButton } from '@/components/common'
@@ -9,14 +10,13 @@ import { AppButton } from '@/components/common'
 const router = useRouter()
 const tenantStore = useTenantStore()
 
-const tenantSlug = computed(() => tenantStore.slug ?? 'finatea')
-
+// '/:tenant' (path-based) o '' (subdomain) — evita prefix redundante.
 const goToAuth = () => {
-  router.push(`/${tenantSlug.value}/auth`)
+  router.push(`${getTenantBasePath()}/auth`)
 }
 
 const goToSimulator = () => {
-  router.push(`/${tenantSlug.value}/simulador`)
+  router.push(`${getTenantBasePath()}/simulador`)
 }
 
 onMounted(async () => {
