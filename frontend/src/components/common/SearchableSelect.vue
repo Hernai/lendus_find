@@ -74,7 +74,8 @@ const onKeydown = (e: KeyboardEvent) => {
     scrollToHighlighted()
   } else if (e.key === 'Enter' && highlightIndex.value >= 0) {
     e.preventDefault()
-    select(filteredOptions.value[highlightIndex.value])
+    const opt = filteredOptions.value[highlightIndex.value]
+    if (opt) select(opt)
   } else if (e.key === 'Escape') {
     close()
   }

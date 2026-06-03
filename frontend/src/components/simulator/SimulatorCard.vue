@@ -62,7 +62,10 @@ const frequencyMultiplier: Record<PaymentFrequency, number> = {
   BIWEEKLY: 2,
   QUINCENAL: 2,
   MONTHLY: 1,
-  MENSUAL: 1
+  MENSUAL: 1,
+  // SINGLE = pago único; el multiplier no se usa para conversión mensual,
+  // pero hay que declararlo para satisfacer Record<PaymentFrequency, …>.
+  SINGLE: 0,
 }
 
 // Normalize frequency key for term_config lookup (admin saves with English keys)

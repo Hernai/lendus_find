@@ -279,3 +279,9 @@ async function save() {
 3. **No tipar refs** — Siempre `ref<Type>()`
 4. **Usar `isApiError()`** — El nombre correcto es `isAxiosError()` en `src/types/api.ts`
 5. **Asumir `data` no es opcional** — En `V2ApiResponse<T>`, `data` es `T | undefined`
+6. **Colgar estado de UI en objetos del backend** — No asignes props sintéticas como `_collapsed`, `_htmlExpanded`, etc. directamente sobre items de un `ref<T[]>()`/`reactive<T>()` tipado del backend. Rompe el contrato del type y vue-tsc lo reporta como `Property '_xxx' does not exist`. Patrón correcto: `Map` reactivo separado indexado por id/key.
+   ```ts
+   const collapsedEvents = reactive(new Map<string, boolean>())
+   const isCollapsed = (k: string) => collapsedEvents.get(k) ?? false
+   const toggleCollapsed = (k: string) => collapsedEvents.set(k, !isCollapsed(k))
+   ```

@@ -22,6 +22,9 @@ export type OnboardingStepType =
 export interface OnboardingStepBase {
   id: string
   type: OnboardingStepType
+  // El backend guarda los steps como JSONB en `products.onboarding_steps`;
+  // `label` no es obligatorio en el esquema, así que lo mantenemos opcional.
+  // Los renderers deben defaultear a string vacío cuando lo lean.
   label?: string
   required?: boolean
 }

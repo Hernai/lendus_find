@@ -496,7 +496,7 @@ export const useKycStore = defineStore('kyc', () => {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const validateRfc = async (rfc: string, _applicantId?: string): Promise<{ valid: boolean; razon_social?: string; error?: string }> => {
     if (!rfc || rfc.length < 12) {
       return { valid: false, error: 'RFC debe tener al menos 12 caracteres' }

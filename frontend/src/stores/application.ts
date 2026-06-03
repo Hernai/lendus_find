@@ -33,11 +33,10 @@ const toV2PaymentFrequency = (freq: PaymentFrequency): V2PaymentFrequency => {
   return map[freq] || 'MONTHLY'
 }
 
-// Convert to simulator-specific frequency (excludes 'OTHER')
+// Convert to simulator-specific frequency (excludes 'OTHER' y 'SINGLE')
 const toSimulatorFrequency = (freq: PaymentFrequency): SimulatorPaymentFrequency => {
   const result = toV2PaymentFrequency(freq)
-  // Simulator doesn't support 'OTHER', default to MONTHLY
-  if (result === 'OTHER') return 'MONTHLY'
+  if (result === 'OTHER' || result === 'SINGLE') return 'MONTHLY'
   return result
 }
 
@@ -105,11 +104,14 @@ export const useApplicationStore = defineStore('application', () => {
 
       const data = response.data.simulation
 
+      // Mapeo directo de campos del backend V2 (V2SimulationResult) al shape
+      // local SimulationResult. Los nombres son los reales que devuelve
+      // LoanCalculationService::calculateSimulation.
       simulation.value = {
         requested_amount: data.requested_amount,
         term_months: data.term_months,
         payment_frequency: data.payment_frequency as 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY',
-        total_periods: data.total_periods,
+        total_periods: data.total_periods ?? data.term_months,
         annual_rate: data.annual_rate,
         periodic_rate: data.periodic_rate,
         opening_commission: data.opening_commission,

@@ -71,7 +71,7 @@ const extractTemplateVariables = (template: NotificationTemplate): string[] => {
   const allText = texts.join(' ')
   const matches = allText.matchAll(/\{\{([^#/^}]+?)\}\}/g)
   const helpers = ['currency', 'date', 'upper', 'lower', 'if', 'unless', 'each', 'with']
-  return [...new Set([...matches].map(m => m[1].trim().split(' ').pop()!))]
+  return [...new Set([...matches].map(m => m[1]!.trim().split(' ').pop()!))]
     .filter(v => !helpers.includes(v) && v !== 'else')
 }
 
@@ -87,9 +87,9 @@ const populateVariables = () => {
     const example = def?.example ?? key.split('.').pop()!.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())
     const parts = key.split('.')
     if (parts.length === 2) {
-      const [group, field] = parts
+      const [group, field] = parts as [string, string]
       if (!vars[group]) vars[group] = {}
-      vars[group][field] = example
+      vars[group]![field] = example
     } else {
       if (!vars['_root']) vars['_root'] = {}
       vars['_root'][key] = example
@@ -105,7 +105,7 @@ const fillTestData = () => {
     for (const field of Object.keys(fields)) {
       const key = group === '_root' ? field : `${group}.${field}`
       const def = notificationVariables.find((v) => v.key === key)
-      variables.value[group][field] = def?.example ?? field.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())
+      variables.value[group]![field] = def?.example ?? field.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())
     }
   }
 }
@@ -308,7 +308,7 @@ const categoryLabels: Record<string, string> = {
                           {{ group === '_root' ? field : `${group}.${field}` }}
                         </label>
                         <input
-                          v-model="variables[group][field]"
+                          v-model="variables[group]![field]"
                           type="text"
                           class="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-transparent"
                         />

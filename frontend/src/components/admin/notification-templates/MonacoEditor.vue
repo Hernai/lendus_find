@@ -31,8 +31,13 @@ let editor: monaco.editor.IStandaloneCodeEditor | null = null
 onMounted(async () => {
   if (!editorContainer.value) return
 
-  // Configure Monaco
-  monaco.languages.html.htmlDefaults.setOptions({
+  // Monaco 0.45+ marcó `languages.html.htmlDefaults` como deprecated y lo
+  // movió al worker. Las opciones de formato se siguen aceptando pero el
+  // type oficial ya no las expone, así que casteamos para mantener el setup.
+  const htmlLang = (monaco.languages as unknown as {
+    html?: { htmlDefaults?: { setOptions: (opts: unknown) => void } }
+  }).html
+  htmlLang?.htmlDefaults?.setOptions({
     format: {
       tabSize: 4,
       insertSpaces: true,

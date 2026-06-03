@@ -119,6 +119,8 @@ export interface V2ConfigOptions {
   userType: V2EnumOption[]
   rejectionReason: V2EnumOption[]
   documentRejectionReason: V2EnumOption[]
+  // mexicanState: catálogo de estados de la república; opcional porque solo lo expone el endpoint público completo.
+  mexicanState?: V2EnumOption[]
 }
 
 export interface V2ConfigResponse {

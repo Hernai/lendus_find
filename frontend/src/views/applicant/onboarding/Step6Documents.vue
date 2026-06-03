@@ -234,7 +234,7 @@ const initDocuments = async () => {
   }
 
   // Fetch existing documents from backend to check which are KYC-verified
-  let uploadedKycDocs = new Map<string, { id: string; preview?: string }>()
+  const uploadedKycDocs = new Map<string, { id: string; preview?: string }>()
   try {
     const response = await v2.applicant.document.list()
     if (response.success && response.data?.documents) {

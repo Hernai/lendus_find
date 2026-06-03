@@ -489,6 +489,11 @@ export interface V2ApplicationPerson {
     birth_state: string | null
     gender: string | null
     nationality: string | null
+    nationality_info?: {
+      code?: string
+      name?: string
+      flag?: string
+    } | null
     marital_status: string | null
     education_level: string | null
     dependents_count: number
@@ -496,6 +501,12 @@ export interface V2ApplicationPerson {
   identifications: {
     curp: string | null
     rfc: string | null
+    ine_clave?: string | null
+    ine_ocr?: string | null
+    ine_folio?: string | null
+    passport_number?: string | null
+    passport_issue_date?: string | null
+    passport_expiry_date?: string | null
   }
   contact: {
     email: string | null
@@ -901,6 +912,8 @@ export interface V2Document {
   download_url?: string
   // KYC lock indicator (from backend)
   is_kyc_locked?: boolean
+  // metadata: payload arbitrario asociado al documento (flags KYC, OCR auxiliar, etc.).
+  metadata?: Record<string, unknown> | null
 }
 
 export interface V2DocumentUploadPayload {
@@ -1142,12 +1155,24 @@ export interface V2PersonalData {
   dependents_count: number | null
 }
 
+/**
+ * Identifications devueltas por endpoints de perfil (ProfileController.show,
+ * patch /profile/identifications, CorrectionController). El backend serializa
+ * los datos de INE como campos planos (`ine_clave`, `ine_ocr`, `ine_folio`,
+ * `ine_verified`) — el objeto anidado `ine` es legacy y solo lo dejamos
+ * declarado como opcional por si algún endpoint viejo lo expone.
+ */
 export interface V2Identifications {
   curp: string | null
   curp_verified: boolean
   rfc: string | null
   rfc_verified: boolean
-  ine: {
+  ine_clave?: string | null
+  ine_ocr?: string | null
+  ine_folio?: string | null
+  ine_verified?: boolean
+  // Legacy: shape anidado. Algunos consumidores defensivos lo siguen leyendo.
+  ine?: {
     clave_elector: string | null
     ocr: string | null
     folio: string | null

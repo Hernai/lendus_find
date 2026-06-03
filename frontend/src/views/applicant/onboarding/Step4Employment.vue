@@ -66,7 +66,8 @@ onMounted(async () => {
   // Convert monthly_income from string to number if needed
   // Backend returns "35000.00" as string, we need it as number for formatting
   if (typeof form.monthly_income === 'string') {
-    form.monthly_income = parseFloat(form.monthly_income.replace(/[^0-9.]/g, '')) || 0
+    const rawIncome = form.monthly_income as string
+    form.monthly_income = parseFloat(rawIncome.replace(/[^0-9.]/g, '')) || 0
   }
 })
 

@@ -137,3 +137,12 @@ canConfigureTenant()            // SUPER_ADMIN only
 | Admin | admin@lendus.mx | password |
 | Analyst | patricia.moreno@lendus.mx | password |
 | Supervisor | carlos.ramirez@lendus.mx | password |
+
+## Shape drift: `required_documents`
+
+Los recursos `V2Product`, `V2ProductCreatePayload`, `V2ProductUpdatePayload` y endpoints de `Application` aceptan dos formatos en `required_documents`:
+
+- **Legacy plano**: `string[]` (por ejemplo `['INE_FRONT', 'PROOF_OF_INCOME']`).
+- **Segmentado por tipo de persona**: `{ nationals: string[]; foreigners: string[] }`.
+
+Los tipos en `src/types/v2/index.ts` y `src/services/v2/product.staff.service.ts` declaran la unión `string[] | { nationals: string[]; foreigners: string[] }`. En consumidores (composables y views), normalizá con un guard `Array.isArray(requiredDocs)` antes de operar.

@@ -37,17 +37,28 @@ export interface V2SimulationPayload {
 export interface V2SimulationResult {
   product_id: string
   product_name: string
-  amount: number
+  // El backend devuelve `requested_amount` (no `amount`) — ver
+  // LoanCalculationService::calculateSimulation. Mantenemos el nombre del
+  // backend para que el shape sea fiel a la respuesta real.
+  requested_amount: number
   term_months: number
+  // term_days y total_periods sólo vienen en pago único (SINGLE) y planes
+  // periódicos respectivamente; son opcionales por seguridad.
+  term_days?: number
+  total_periods?: number
   payment_frequency: string
   annual_rate: number
-  monthly_rate: number
+  // periodic_rate: tasa por periodo (porcentual). El backend NO devuelve
+  // `monthly_rate`; este es el nombre real.
+  periodic_rate: number
+  opening_commission_rate?: number
   opening_commission: number
-  opening_commission_amount: number
   net_amount: number
   payment_amount: number
   total_interest: number
-  total_amount: number
+  // total_to_pay: monto total a pagar (principal + intereses). El backend NO
+  // devuelve `total_amount` en este endpoint.
+  total_to_pay: number
   cat: number
 }
 

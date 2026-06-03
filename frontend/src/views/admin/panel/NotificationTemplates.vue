@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   notificationTemplatesApi,
@@ -20,6 +20,19 @@ const templates = ref<NotificationTemplate[]>([])
 const config = ref<TemplateConfig | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+
+// Estado de UI fuera del modelo: evitamos colgar props sintéticas (`_collapsed`, `_htmlExpanded`)
+// del array/template del backend. Maps reactivos indexados por event/template-id.
+const collapsedEvents = reactive(new Map<string, boolean>())
+const expandedHtml = reactive(new Map<string, boolean>())
+const isEventCollapsed = (event: string): boolean => collapsedEvents.get(event) ?? false
+const toggleEventCollapsed = (event: string): void => {
+  collapsedEvents.set(event, !isEventCollapsed(event))
+}
+const isHtmlExpanded = (templateId: string): boolean => expandedHtml.get(templateId) ?? false
+const toggleHtmlExpanded = (templateId: string): void => {
+  expandedHtml.set(templateId, !isHtmlExpanded(templateId))
+}
 
 // Send test modal
 const showSendTestModal = ref(false)
@@ -101,10 +114,8 @@ const templatesByEvent = computed(() => {
   const filtered = filteredTemplates.value || []
 
   filtered.forEach((template) => {
-    if (!groups[template.event]) {
-      groups[template.event] = []
-    }
-    groups[template.event].push(template)
+    const bucket = groups[template.event] ?? (groups[template.event] = [])
+    bucket.push(template)
   })
   return groups
 })
@@ -1502,7 +1513,7 @@ const stripHtml = (html: string): string => {
   if (!html) return ''
 
   // Replace block-level elements with newlines BEFORE parsing
-  let processed = html
+  const processed = html
     // Add double newlines for block elements
     .replace(/<\/(p|div|h[1-6]|li|tr|br)>/gi, '\n\n')
     .replace(/<br\s*\/?>/gi, '\n')
@@ -1693,13 +1704,13 @@ onMounted(() => {
         <!-- Event Header - Collapsible -->
         <div class="mb-4">
           <button
-            @click="eventTemplates._collapsed = !eventTemplates._collapsed"
+            @click="toggleEventCollapsed(String(event))"
             class="w-full flex items-center gap-3 hover:bg-gray-50 rounded-lg p-3 transition-colors group"
           >
             <!-- Collapse indicator -->
             <svg
               class="w-5 h-5 text-gray-400 group-hover:text-indigo-600 transition-transform"
-              :class="eventTemplates._collapsed ? '' : 'rotate-90'"
+              :class="isEventCollapsed(String(event)) ? '' : 'rotate-90'"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -1709,7 +1720,7 @@ onMounted(() => {
 
             <div class="w-1 h-6 bg-gradient-to-b from-indigo-500 to-purple-600 rounded-full"></div>
             <h2 class="text-xl font-bold text-gray-900 flex-1 text-left">
-              {{ eventTemplates[0].event_label }}
+              {{ eventTemplates[0]?.event_label ?? '' }}
             </h2>
             <span class="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">
               {{ eventTemplates.length }}
@@ -1719,7 +1730,7 @@ onMounted(() => {
 
         <!-- Template Cards Grid - 3 columns (Collapsible) -->
         <div
-          v-show="!eventTemplates._collapsed"
+          v-show="!isEventCollapsed(String(event))"
           class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6"
         >
           <div
@@ -1803,18 +1814,18 @@ onMounted(() => {
               <!-- Expand HTML Preview Button (only for emails with HTML) -->
               <button
                 v-if="template.channel === 'EMAIL' && template.html_body"
-                @click="template._htmlExpanded = !template._htmlExpanded"
+                @click="toggleHtmlExpanded(template.id)"
                 class="w-full py-2 px-3 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors flex items-center justify-center gap-2"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
-                {{ template._htmlExpanded ? 'Ocultar' : 'Ver' }} vista previa HTML
+                {{ isHtmlExpanded(template.id) ? 'Ocultar' : 'Ver' }} vista previa HTML
               </button>
 
               <!-- Expanded HTML Preview -->
-              <div v-if="template._htmlExpanded && template.channel === 'EMAIL' && template.html_body" class="mt-3 bg-gray-50 rounded-lg p-3 border border-gray-200">
+              <div v-if="isHtmlExpanded(template.id) && template.channel === 'EMAIL' && template.html_body" class="mt-3 bg-gray-50 rounded-lg p-3 border border-gray-200">
                 <div class="bg-white rounded overflow-hidden border border-gray-300" style="height: 200px;">
                   <iframe
                     :srcdoc="renderPreview(template.html_body)"

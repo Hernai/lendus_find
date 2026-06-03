@@ -137,11 +137,12 @@ interface Application {
     birth_date: string
     birth_state?: string
     nationality: string
+    // nationality_info: subcampos opcionales — el backend puede no enviar bandera/código todavía.
     nationality_info?: {
-      code: string
-      name: string
-      flag: string
-    }
+      code?: string
+      name?: string
+      flag?: string
+    } | null
     gender: string
     passport_number?: string
     passport_issue_date?: string
@@ -178,6 +179,11 @@ interface Application {
     total_to_pay: number
     purpose: string
     purpose_label?: string
+    // term_in_days: bandera que indica si el préstamo usa plazo en días (productos short-term).
+    term_in_days?: boolean
+    // requested_term_days / requested_term_months: el backend manda ambos según el formato del producto.
+    requested_term_days?: number
+    requested_term_months?: number
   }
   documents: Document[]
   references: Reference[]
@@ -189,30 +195,31 @@ interface Application {
     description: string
     author: string
     created_at: string
+    // metadata: el backend puede mandar campos como null o ausentes; aceptamos string | null en los opcionales.
     metadata?: {
-      ip_address?: string
-      user_agent?: string
-      location?: string
-      old_value?: string
-      new_value?: string
-      changes?: Record<string, string>
-      reason?: string
-      field_name?: string
-      field_label?: string
-      event_type?: string
-      action?: string
-      document_type?: string
-      document_type_label?: string
-      step_number?: number
-      step_label?: string
-      changed_fields?: string[]
-      bank_name?: string
-      reference_type?: string
-      employment_type?: string
-      postal_code?: string
-      score?: number
-      is_valid?: boolean
-      matched?: boolean
+      ip_address?: string | null
+      user_agent?: string | null
+      location?: string | null
+      old_value?: string | null
+      new_value?: string | null
+      changes?: Record<string, string> | null
+      reason?: string | null
+      field_name?: string | null
+      field_label?: string | null
+      event_type?: string | null
+      action?: string | null
+      document_type?: string | null
+      document_type_label?: string | null
+      step_number?: number | null
+      step_label?: string | null
+      changed_fields?: string[] | null
+      bank_name?: string | null
+      reference_type?: string | null
+      employment_type?: string | null
+      postal_code?: string | null
+      score?: number | null
+      is_valid?: boolean | null
+      matched?: boolean | null
       geolocation?: {
         latitude?: number
         longitude?: number
@@ -446,6 +453,21 @@ const error = ref('')
 // Computed refs for WebSocket (to allow reactive reconnection when tenant loads)
 const tenantIdRef = computed(() => tenantStore.tenant?.id)
 
+// timelineForSection: normaliza metadata para TimelineSection, que define el shape sin `| null`.
+// Convertimos null → undefined en strings/numbers, dejando booleans coercibles.
+const timelineForSection = computed(() => {
+  const events = application.value?.timeline ?? []
+  return events.map((ev) => {
+    if (!ev.metadata) return ev as unknown as { id: string; action: string; description: string; author: string; created_at: string; metadata?: Record<string, unknown> }
+    const m = ev.metadata
+    const cleaned: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(m)) {
+      cleaned[k] = v === null ? undefined : v
+    }
+    return { ...ev, metadata: cleaned }
+  }) as unknown as Array<{ id: string; action: string; description: string; author: string; created_at: string; metadata?: Record<string, unknown> }>
+})
+
 // WebSocket connection for real-time updates
 useWebSocket({
   tenantId: tenantIdRef,
@@ -506,16 +528,17 @@ const fetchApplication = async () => {
     const personReferences = person?.references || []
     const personBankAccounts = person?.bank_accounts || []
 
-    // Calculate approved documents that are in the required list
-    const requiredDocTypesRaw = data.required_documents || []
-    // Handle new structure: {nationals: [], foreigners: []} or legacy flat array
+    // Calculate approved documents that are in the required list.
+    // El backend devuelve string[] (legacy) o { nationals: string[]; foreigners: string[] }
+    // — el type V2 está pegado al legacy, así que reinterpretamos a runtime.
+    const requiredDocTypesRaw = (data.required_documents || []) as unknown as
+      | string[]
+      | { nationals: string[]; foreigners: string[] }
     const isForeigner = person?.personal_data?.nationality !== 'MX'
     let requiredDocsArray: string[] = []
     if (Array.isArray(requiredDocTypesRaw)) {
-      // Legacy format: flat array
       requiredDocsArray = requiredDocTypesRaw
     } else if (typeof requiredDocTypesRaw === 'object' && requiredDocTypesRaw !== null) {
-      // New format: {nationals: [], foreigners: []}
       requiredDocsArray = isForeigner
         ? (requiredDocTypesRaw.foreigners || [])
         : (requiredDocTypesRaw.nationals || [])
@@ -1300,9 +1323,13 @@ const requiresSignature = computed(() => {
     requiredDocsArray = requiredDocs
   } else if (typeof requiredDocs === 'object' && requiredDocs !== null) {
     // New format: {nationals: [], foreigners: []}
-    requiredDocsArray = isForeigner.value
-      ? (requiredDocs.foreigners || [])
-      : (requiredDocs.nationals || [])
+    const byNationality = requiredDocs as {
+      nationals?: (string | { type: string })[]
+      foreigners?: (string | { type: string })[]
+    }
+    requiredDocsArray = isForeigner
+      ? (byNationality.foreigners || [])
+      : (byNationality.nationals || [])
   }
 
   return requiredDocsArray.some((doc: { type: string } | string) => {
@@ -3222,9 +3249,11 @@ onUnmounted(() => {
           </div>
 
           <!-- Timeline Tab -->
+          <!-- TimelineSection define su propio TimelineEvent (strings sin null); el backend devuelve null
+               en algunos campos opcionales, por eso normalizamos via timelineForSection. -->
           <div v-if="activeTab === 'timeline'">
             <TimelineSection
-              :events="application.timeline"
+              :events="timelineForSection"
               @view-details="handleViewTimelineDetails"
             />
           </div>

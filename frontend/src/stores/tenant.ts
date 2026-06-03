@@ -249,7 +249,11 @@ export const useTenantStore = defineStore('tenant', () => {
 
         tenant.value = response.data.tenant as unknown as Tenant
         products.value = response.data.products as unknown as Product[]
-        options.value = response.data.options ?? defaultOptions
+        // Garantizamos mexicanState (default vacío) ya que en V2ConfigOptions es opcional
+        // pero el shape local EnumOptions lo requiere.
+        options.value = response.data.options
+          ? { mexicanState: [], ...response.data.options }
+          : defaultOptions
 
         // Initialize formatters with enum options from backend
         if (response.data.options) {

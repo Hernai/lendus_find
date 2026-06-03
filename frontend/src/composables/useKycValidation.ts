@@ -79,7 +79,8 @@ export function useKycValidation(): UseKycValidationReturn {
       docsToCheck = requiredDocs
     } else if (requiredDocs && typeof requiredDocs === 'object') {
       // New structure: combine both nationals and foreigners
-      docsToCheck = [...(requiredDocs.nationals || []), ...(requiredDocs.foreigners || [])]
+      const segmented = requiredDocs as unknown as { nationals?: unknown[]; foreigners?: unknown[] }
+      docsToCheck = [...(segmented.nationals ?? []), ...(segmented.foreigners ?? [])]
     }
 
     return docsToCheck.some((doc) => {

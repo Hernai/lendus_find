@@ -42,10 +42,12 @@ function rendererFor(type: OnboardingStep['type']) {
 </script>
 
 <template>
+  <!-- modelValue se declara como `unknown` aquí porque cada renderer interpreta su shape específico.
+       El cast a `any` en el template es intencional: el contrato de cada renderer valida su payload. -->
   <component
     :is="rendererFor(step.type)"
-    :step="step"
-    :model-value="modelValue"
+    :step="(step as any)"
+    :model-value="(modelValue as any)"
     :form-data="formData"
     @update:model-value="$emit('update:modelValue', $event)"
   />

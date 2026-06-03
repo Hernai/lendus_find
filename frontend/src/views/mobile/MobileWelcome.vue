@@ -29,8 +29,9 @@ onMounted(async () => {
     tenantStore.applyTheme()
     // Pre-selecciona el primer producto activo en el applicationStore para que
     // SimulatorCard use sus reglas.
-    if (!applicationStore.selectedProduct && tenantStore.activeProducts.length > 0) {
-      applicationStore.setSelectedProduct(tenantStore.activeProducts[0])
+    if (!applicationStore.selectedProduct) {
+      const firstActive = tenantStore.activeProducts[0]
+      if (firstActive) applicationStore.setSelectedProduct(firstActive)
     }
   } catch (e) {
     log.error('No se pudo cargar la configuración del tenant', { error: e })

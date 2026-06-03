@@ -86,7 +86,8 @@ export const detailRows = (...pairs: [string, string][]): string =>
  * Genera una plantilla HTML de email profesional con secciones bien definidas.
  */
 export const emailHtml = (opts: EmailTemplateOptions): string => {
-  const tint = tintColors[opts.detailsTint || 'neutral']
+  // tint puede ser undefined si detailsTint cae fuera del catálogo conocido; usamos neutral como fallback seguro.
+  const tint = tintColors[opts.detailsTint || 'neutral'] ?? tintColors.neutral!
 
   const detailsBlock = opts.details
     ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${tint.bg};border:1px solid ${tint.border};border-radius:12px;overflow:hidden;margin:24px 0">

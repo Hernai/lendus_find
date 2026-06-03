@@ -31,8 +31,12 @@ export interface V2Product {
   late_fee_rate: number
   payment_frequencies: string[]
   term_config: Record<string, V2TermConfig> | null
-  required_documents: string[]
+  // required_documents acepta el formato legacy (string[]) y el nuevo segmentado por tipo de persona
+  // ({ nationals, foreigners }) que distingue documentación para nacionales vs extranjeros.
+  required_documents: string[] | { nationals: string[]; foreigners: string[] }
   eligibility_rules: Record<string, unknown>
+  // rules: configuración declarativa del producto (term_in_days, amortization_type, etc.).
+  rules?: Record<string, unknown> | null
   is_active: boolean
   display_order: number
   applications_count: number
@@ -54,8 +58,11 @@ export interface V2ProductCreatePayload {
   late_fee_rate?: number
   payment_frequencies: string[]
   term_config?: Record<string, V2TermConfig>
-  required_documents?: string[]
+  // required_documents acepta legacy plano o segmentado por tipo de persona (nacional/extranjero).
+  required_documents?: string[] | { nationals: string[]; foreigners: string[] }
   eligibility_rules?: Record<string, unknown>
+  // rules: payload de configuración declarativa (term_in_days, amortization_type, etc.).
+  rules?: Record<string, unknown>
   is_active?: boolean
 }
 
@@ -73,8 +80,11 @@ export interface V2ProductUpdatePayload {
   late_fee_rate?: number
   payment_frequencies?: string[]
   term_config?: Record<string, V2TermConfig>
-  required_documents?: string[]
+  // required_documents acepta legacy plano o segmentado por tipo de persona (nacional/extranjero).
+  required_documents?: string[] | { nationals: string[]; foreigners: string[] }
   eligibility_rules?: Record<string, unknown>
+  // rules: payload de configuración declarativa (term_in_days, amortization_type, etc.).
+  rules?: Record<string, unknown>
   is_active?: boolean
 }
 

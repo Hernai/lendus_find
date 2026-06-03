@@ -87,7 +87,7 @@ const daysLeft = computed(() => {
 })
 
 const extensionCost = computed(() => {
-  const total = Number(activeLoan.value?.total_amount ?? 0)
+  const total = Number(activeLoan.value?.total_to_pay ?? 0)
   // Costo de prórroga: estimación 5% por 7 días, 10% por 15.
   const rate = extensionDays.value === 7 ? 0.05 : 0.1
   return total * rate
@@ -113,8 +113,10 @@ async function refresh() {
   try {
     const list = await v2.applicant.application.list()
     const items = (list.data?.applications ?? []) as Array<{ id: string; status: string; created_at?: string }>
-    if (items.length > 0) {
-      const latest = [...items].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0]
+    const latest = items.length > 0
+      ? [...items].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0]
+      : null
+    if (latest) {
       application.value = latest
       if (latest.status === 'IN_REVIEW') progress.value = Math.min(80, progress.value + 1)
       else if (latest.status === 'PRE_APPROVED' || latest.status === 'APPROVED') progress.value = 100
@@ -313,7 +315,7 @@ function logout() {
           </div>
           <div class="loan-amount-row">
             <span class="amount-label">Total a pagar</span>
-            <span class="amount-value">{{ formatMoney(activeLoan.total_amount) }}</span>
+            <span class="amount-value">{{ formatMoney(activeLoan.total_to_pay) }}</span>
           </div>
           <div class="loan-meta-row">
             <span class="days-pill"><span class="dot" />Restan {{ daysLeft }} días</span>
@@ -411,7 +413,7 @@ function logout() {
               <span class="lr-sub">Vence: {{ formatDate(loan.due_date) }}</span>
             </div>
             <div class="lr-right">
-              <span class="lr-amount">{{ formatMoney(loan.total_amount) }}</span>
+              <span class="lr-amount">{{ formatMoney(loan.total_to_pay) }}</span>
               <svg viewBox="0 0 24 24" fill="none" class="lr-chev">
                 <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
               </svg>

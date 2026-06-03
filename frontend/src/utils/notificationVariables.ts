@@ -265,10 +265,8 @@ export const notificationVariables: VariableDefinition[] = [
  */
 export const variablesByCategory = notificationVariables.reduce(
   (acc, variable) => {
-    if (!acc[variable.category]) {
-      acc[variable.category] = []
-    }
-    acc[variable.category].push(variable)
+    const bucket = acc[variable.category] ?? (acc[variable.category] = [])
+    bucket.push(variable)
     return acc
   },
   {} as Record<string, VariableDefinition[]>

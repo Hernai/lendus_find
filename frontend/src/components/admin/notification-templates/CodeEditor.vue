@@ -81,7 +81,9 @@ const lineNumbers = computed(() => {
 const highlightedHtml = computed(() => {
   try {
     if (!localValue.value) return ''
-    const highlighted = Prism.highlight(localValue.value, Prism.languages.markup || Prism.languages.html, 'html')
+    // Prism.languages.markup/html siempre vienen cargados pero TypeScript los declara opcionales.
+    const grammar = (Prism.languages.markup || Prism.languages.html)!
+    const highlighted = Prism.highlight(localValue.value, grammar, 'html')
     return highlighted
   } catch (e) {
     console.error('Prism highlighting error:', e)
