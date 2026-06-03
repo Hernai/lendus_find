@@ -89,7 +89,10 @@ class MoneyCapitalNotificationSeeder extends Seeder
         ];
 
         foreach ($templates as $i => $tpl) {
-            NotificationTemplate::updateOrCreate(
+            // firstOrCreate respeta ediciones del cliente desde la UI:
+            // si el template ya existe (mismo tenant + event + channel +
+            // name), no toca su contenido. Solo crea los faltantes.
+            NotificationTemplate::firstOrCreate(
                 [
                     'tenant_id' => $tenant->id,
                     'event' => $tpl['event'],

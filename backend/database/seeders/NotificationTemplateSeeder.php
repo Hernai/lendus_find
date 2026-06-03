@@ -659,18 +659,26 @@ Saludos,
             // Get available variables for this event
             $availableVariables = $event->getAvailableVariables();
 
-            NotificationTemplate::create([
-                'tenant_id' => $tenant->id,
-                'name' => $templateData['name'],
-                'event' => $event->value,
-                'channel' => $channel->value,
-                'is_active' => $event->isEnabledByDefault(),
-                'priority' => $templateData['priority'],
-                'subject' => $templateData['subject'],
-                'body' => $templateData['body'],
-                'html_body' => $templateData['html_body'] ?? null,
-                'available_variables' => $availableVariables,
-            ]);
+            // Idempotente y seguro en producción: firstOrCreate respeta
+            // ediciones del cliente. Si el template ya existe (mismo
+            // tenant + event + channel + name), no toca su body/subject.
+            // Solo crea los faltantes.
+            NotificationTemplate::firstOrCreate(
+                [
+                    'tenant_id' => $tenant->id,
+                    'event' => $event->value,
+                    'channel' => $channel->value,
+                    'name' => $templateData['name'],
+                ],
+                [
+                    'is_active' => $event->isEnabledByDefault(),
+                    'priority' => $templateData['priority'],
+                    'subject' => $templateData['subject'],
+                    'body' => $templateData['body'],
+                    'html_body' => $templateData['html_body'] ?? null,
+                    'available_variables' => $availableVariables,
+                ],
+            );
 
             // Don't output each template, too verbose for multiple tenants
         }

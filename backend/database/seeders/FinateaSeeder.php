@@ -1,0 +1,200 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\Product;
+use App\Models\StaffAccount;
+use App\Models\StaffProfile;
+use App\Models\Tenant;
+use App\Models\TenantBranding;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+
+/**
+ * Seeder de tenant Finatea.
+ *
+ * Crea:
+ *  - Tenant `finatea` con branding teal (#0D9488)
+ *  - TenantBranding con colores y PWA settings
+ *  - Producto base de crédito personal con onboarding estándar
+ *  - Staff accounts (super admin, admin, supervisor, analyst)
+ *
+ * Idempotente — se puede correr varias veces sin duplicar.
+ */
+class FinateaSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $tenant = $this->createTenant();
+        $this->createBranding($tenant);
+        $this->createProduct($tenant);
+        $this->createStaff($tenant);
+
+        $this->command->info("✓ Tenant Finatea seedeado (slug={$tenant->slug})");
+    }
+
+    private function createTenant(): Tenant
+    {
+        return Tenant::updateOrCreate(
+            ['slug' => 'finatea'],
+            [
+                'id' => Tenant::where('slug', 'finatea')->value('id') ?? Str::uuid(),
+                'name' => 'Finatea',
+                'legal_name' => 'Finatea S.A. de C.V. SOFOM E.N.R.',
+                'rfc' => 'FIN260101AAA',
+                'branding' => [
+                    'primary_color' => '#0D9488',
+                    'secondary_color' => '#0F766E',
+                ],
+                'settings' => [
+                    'otp_provider' => 'twilio',
+                    'kyc_provider' => 'nubarium',
+                    'currency' => 'MXN',
+                    'timezone' => 'America/Mexico_City',
+                    'min_loan_amount' => 5000,
+                    'max_loan_amount' => 300000,
+                ],
+                'features' => [
+                    'loan_portfolio' => false,
+                    'unified_consent_screen' => false,
+                    'unified_auth_screen' => false,
+                    'phone_score_enabled' => false,
+                    'auto_disbursement' => false,
+                ],
+                'email' => 'contacto@finatea.mx',
+                'phone' => '5555550100',
+                'website' => 'https://finatea.mx',
+                'is_active' => true,
+                'activated_at' => now(),
+            ],
+        );
+    }
+
+    private function createBranding(Tenant $tenant): void
+    {
+        TenantBranding::updateOrCreate(
+            ['tenant_id' => $tenant->id],
+            [
+                'id' => TenantBranding::where('tenant_id', $tenant->id)->value('id') ?? Str::uuid(),
+                'primary_color' => '#0D9488',
+                'secondary_color' => '#0F766E',
+                'accent_color' => '#F59E0B',
+                'background_color' => '#FFFFFF',
+                'text_color' => '#1F2937',
+                'font_family' => 'Inter, sans-serif',
+                'border_radius' => '12px',
+                'button_style' => 'rounded',
+                'pwa_name' => 'Finatea',
+                'pwa_short_name' => 'Finatea',
+                'pwa_theme_color' => '#0D9488',
+                'pwa_background_color' => '#FFFFFF',
+            ],
+        );
+    }
+
+    private function createProduct(Tenant $tenant): void
+    {
+        Product::updateOrCreate(
+            ['tenant_id' => $tenant->id, 'code' => 'FIN-PERSONAL'],
+            [
+                'id' => Product::where('tenant_id', $tenant->id)
+                    ->where('code', 'FIN-PERSONAL')
+                    ->value('id') ?? Str::uuid(),
+                'name' => 'Crédito Personal Finatea',
+                'type' => 'PERSONAL',
+                'description' => 'Crédito personal hasta $300,000 con aprobación digital en minutos. Solicita por WhatsApp y firma 100% online.',
+                'icon' => 'user',
+                'min_amount' => 5000,
+                'max_amount' => 300000,
+                'min_term_months' => 3,
+                'max_term_months' => 36,
+                'interest_rate' => 28,
+                'opening_commission' => 3,
+                'late_fee_rate' => 5,
+                'payment_frequencies' => ['MONTHLY', 'BIWEEKLY'],
+                'rules' => [
+                    'min_amount' => 5000,
+                    'max_amount' => 300000,
+                    'default_amount' => 30000,
+                    'min_term_months' => 3,
+                    'max_term_months' => 36,
+                    'default_term_months' => 12,
+                    'annual_rate' => 28,
+                    'opening_commission' => 3,
+                    'amortization_type' => 'FRENCH',
+                    'payment_frequencies' => ['MONTHLY', 'BIWEEKLY'],
+                ],
+                'required_documents' => [
+                    'nationals' => [
+                        ['type' => 'INE_FRONT', 'required' => true, 'description' => 'INE (Frente)'],
+                        ['type' => 'INE_BACK', 'required' => true, 'description' => 'INE (Reverso)'],
+                        ['type' => 'SELFIE', 'required' => true, 'description' => 'Selfie de validación facial'],
+                        ['type' => 'PROOF_OF_ADDRESS', 'required' => true, 'description' => 'Comprobante de domicilio'],
+                        ['type' => 'PROOF_OF_INCOME', 'required' => true, 'description' => 'Comprobante de ingresos'],
+                    ],
+                    'foreigners' => [
+                        ['type' => 'PASSPORT', 'required' => true, 'description' => 'Pasaporte'],
+                        ['type' => 'RESIDENCE_CARD', 'required' => true, 'description' => 'Tarjeta de Residente'],
+                        ['type' => 'SELFIE', 'required' => true, 'description' => 'Selfie de validación facial'],
+                        ['type' => 'PROOF_OF_ADDRESS', 'required' => true, 'description' => 'Comprobante de domicilio'],
+                        ['type' => 'PROOF_OF_INCOME', 'required' => true, 'description' => 'Comprobante de ingresos'],
+                    ],
+                ],
+                'extra_fields' => [],
+                'eligibility_rules' => [
+                    'min_age' => 18,
+                    'max_age' => 70,
+                    'requires_mexican_id' => true,
+                ],
+                'onboarding_steps' => null,
+                'is_active' => true,
+                'display_order' => 1,
+            ],
+        );
+    }
+
+    private function createStaff(Tenant $tenant): void
+    {
+        $users = [
+            [
+                'email' => 'superadmin@finatea.mx',
+                'role' => StaffAccount::ROLE_SUPER_ADMIN,
+                'profile' => ['first_name' => 'Super', 'last_name' => 'Admin', 'phone' => '5500002000', 'title' => 'Super Administrador'],
+            ],
+            [
+                'email' => 'admin@finatea.mx',
+                'role' => StaffAccount::ROLE_ADMIN,
+                'profile' => ['first_name' => 'Admin', 'last_name' => 'Finatea', 'phone' => '5500002001', 'title' => 'Administrador'],
+            ],
+            [
+                'email' => 'supervisor@finatea.mx',
+                'role' => StaffAccount::ROLE_SUPERVISOR,
+                'profile' => ['first_name' => 'Supervisor', 'last_name' => 'Finatea', 'phone' => '5500002002', 'title' => 'Supervisor de Crédito'],
+            ],
+            [
+                'email' => 'analista@finatea.mx',
+                'role' => StaffAccount::ROLE_ANALYST,
+                'profile' => ['first_name' => 'Analista', 'last_name' => 'Finatea', 'phone' => '5500002003', 'title' => 'Analista de Crédito'],
+            ],
+        ];
+
+        foreach ($users as $u) {
+            $existing = StaffAccount::where('email', $u['email'])
+                ->where('tenant_id', $tenant->id)
+                ->first();
+            if ($existing) continue;
+
+            $account = StaffAccount::create([
+                'tenant_id' => $tenant->id,
+                'email' => $u['email'],
+                'password' => Hash::make('password'),
+                'role' => $u['role'],
+                'is_active' => true,
+                'email_verified_at' => now(),
+            ]);
+
+            StaffProfile::create(array_merge(['account_id' => $account->id], $u['profile']));
+        }
+    }
+}

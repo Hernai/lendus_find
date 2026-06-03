@@ -2,59 +2,110 @@
 
 namespace Database\Seeders;
 
-use App\Models\Address;
-use App\Models\Applicant;
-use App\Models\Application;
-use App\Models\ApplicationNote;
-use App\Models\BankAccount;
-use App\Models\Document;
-use App\Models\EmploymentRecord;
 use App\Models\Product;
-use App\Models\Reference;
+use App\Models\StaffAccount;
+use App\Models\StaffProfile;
 use App\Models\Tenant;
-use App\Models\User;
+use App\Models\TenantBranding;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
+/**
+ * Seeder del tenant demo (Lendus Demo).
+ *
+ * Crea:
+ *  - Tenant `demo` con branding azul
+ *  - TenantBranding con colores y PWA settings
+ *  - 3 productos: Crédito Personal, Crédito Nómina, Arrendamiento
+ *  - Staff: super admin, admin, 2 supervisores, 2 analistas
+ *
+ * Idempotente — usa updateOrCreate y verifica existencia antes de crear staff.
+ */
 class DemoDataSeeder extends Seeder
 {
     public function run(): void
     {
-        // Create Demo Tenant
-        $tenant = Tenant::create([
-            'id' => Str::uuid(),
-            'name' => 'Lendus Demo',
-            'slug' => 'demo',
-            'legal_name' => 'Lendus Financiera S.A. de C.V. SOFOM E.N.R.',
-            'rfc' => 'LFI180101ABC',
-            'branding' => [
-                'primary_color' => '#2563eb',
-                'secondary_color' => '#1e40af',
-                'logo_url' => null, // Uses default LendusFind logo when null
-            ],
-            'settings' => [
-                'otp_provider' => 'twilio',
-                'kyc_provider' => 'mati',
-                'max_loan_amount' => 500000,
-                'min_loan_amount' => 5000,
-            ],
-            'email' => 'contacto@lendus.mx',
-            'phone' => '5555555555',
-            'website' => 'https://lendus.mx',
-            'is_active' => true,
-            'activated_at' => now(),
-        ]);
+        $tenant = $this->createTenant();
+        $this->createBranding($tenant);
+        $this->createProducts($tenant);
+        $this->createStaff($tenant);
 
-        // Create Products
+        $this->command->info('✓ Tenant demo seedeado (slug=demo)');
+        $this->command->info('  Super Admin: superadmin@lendus.mx');
+        $this->command->info('  Admin: admin@lendus.mx');
+        $this->command->info('  Supervisor: carlos.ramirez@lendus.mx');
+        $this->command->info('  Analista: patricia.moreno@lendus.mx');
+        $this->command->info('  (password: password)');
+    }
+
+    private function createTenant(): Tenant
+    {
+        return Tenant::updateOrCreate(
+            ['slug' => 'demo'],
+            [
+                'id' => Tenant::where('slug', 'demo')->value('id') ?? Str::uuid(),
+                'name' => 'Lendus Demo',
+                'legal_name' => 'Lendus Financiera S.A. de C.V. SOFOM E.N.R.',
+                'rfc' => 'LFI180101ABC',
+                'branding' => [
+                    'primary_color' => '#2563EB',
+                    'secondary_color' => '#1E40AF',
+                    'accent_color' => '#F59E0B',
+                    'logo_url' => null,
+                    'favicon_url' => null,
+                    'font_family' => 'Inter, sans-serif',
+                    'border_radius' => '12px',
+                ],
+                'settings' => [
+                    'otp_provider' => 'twilio',
+                    'kyc_provider' => 'mati',
+                    'currency' => 'MXN',
+                    'timezone' => 'America/Mexico_City',
+                    'min_loan_amount' => 5000,
+                    'max_loan_amount' => 500000,
+                ],
+                'features' => null,
+                'email' => 'contacto@lendus.mx',
+                'phone' => '5555555555',
+                'website' => 'https://lendus.mx',
+                'is_active' => true,
+                'activated_at' => now(),
+            ],
+        );
+    }
+
+    private function createBranding(Tenant $tenant): void
+    {
+        TenantBranding::updateOrCreate(
+            ['tenant_id' => $tenant->id],
+            [
+                'id' => TenantBranding::where('tenant_id', $tenant->id)->value('id') ?? Str::uuid(),
+                'primary_color' => '#2563EB',
+                'secondary_color' => '#1E40AF',
+                'accent_color' => '#F59E0B',
+                'background_color' => '#FFFFFF',
+                'text_color' => '#1F2937',
+                'font_family' => 'Inter, sans-serif',
+                'border_radius' => '12px',
+                'button_style' => 'rounded',
+                'pwa_name' => 'Lendus Demo',
+                'pwa_short_name' => 'Demo',
+                'pwa_theme_color' => '#2563EB',
+                'pwa_background_color' => '#FFFFFF',
+            ],
+        );
+    }
+
+    private function createProducts(Tenant $tenant): void
+    {
         $products = [
             [
-                'id' => Str::uuid(),
-                'tenant_id' => $tenant->id,
-                'name' => 'Crédito Personal',
                 'code' => 'PERS-001',
+                'name' => 'Crédito Personal',
                 'type' => 'PERSONAL',
                 'description' => 'Crédito personal para cualquier necesidad',
+                'icon' => 'user',
                 'min_amount' => 5000,
                 'max_amount' => 150000,
                 'min_term_months' => 3,
@@ -63,17 +114,14 @@ class DemoDataSeeder extends Seeder
                 'opening_commission' => 3.0,
                 'late_fee_rate' => 5.0,
                 'payment_frequencies' => ['WEEKLY', 'BIWEEKLY', 'MONTHLY'],
-                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_OF_ADDRESS', 'PAYSLIP'],
-                'is_active' => true,
                 'display_order' => 1,
             ],
             [
-                'id' => Str::uuid(),
-                'tenant_id' => $tenant->id,
-                'name' => 'Crédito Nómina',
                 'code' => 'NOMI-001',
+                'name' => 'Crédito Nómina',
                 'type' => 'NOMINA',
                 'description' => 'Crédito con descuento vía nómina',
+                'icon' => 'briefcase',
                 'min_amount' => 10000,
                 'max_amount' => 300000,
                 'min_term_months' => 6,
@@ -82,17 +130,14 @@ class DemoDataSeeder extends Seeder
                 'opening_commission' => 2.0,
                 'late_fee_rate' => 3.0,
                 'payment_frequencies' => ['BIWEEKLY', 'MONTHLY'],
-                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_OF_ADDRESS', 'PAYSLIP_1', 'PAYSLIP_2', 'PAYSLIP_3'],
-                'is_active' => true,
                 'display_order' => 2,
             ],
             [
-                'id' => Str::uuid(),
-                'tenant_id' => $tenant->id,
-                'name' => 'Arrendamiento',
                 'code' => 'ARRE-001',
+                'name' => 'Arrendamiento',
                 'type' => 'ARRENDAMIENTO',
                 'description' => 'Arrendamiento de vehículos y maquinaria',
+                'icon' => 'truck',
                 'min_amount' => 50000,
                 'max_amount' => 1000000,
                 'min_term_months' => 12,
@@ -101,170 +146,103 @@ class DemoDataSeeder extends Seeder
                 'opening_commission' => 2.5,
                 'late_fee_rate' => 4.0,
                 'payment_frequencies' => ['MONTHLY'],
-                'required_documents' => ['INE_FRONT', 'INE_BACK', 'PROOF_OF_ADDRESS', 'PAYSLIP', 'VEHICLE_INVOICE'],
-                'is_active' => true,
                 'display_order' => 3,
             ],
         ];
 
-        foreach ($products as $productData) {
-            Product::create($productData);
+        foreach ($products as $p) {
+            Product::updateOrCreate(
+                ['tenant_id' => $tenant->id, 'code' => $p['code']],
+                array_merge($p, [
+                    'id' => Product::where('tenant_id', $tenant->id)->where('code', $p['code'])->value('id') ?? Str::uuid(),
+                    'tenant_id' => $tenant->id,
+                    'rules' => [
+                        'min_amount' => $p['min_amount'],
+                        'max_amount' => $p['max_amount'],
+                        'min_term_months' => $p['min_term_months'],
+                        'max_term_months' => $p['max_term_months'],
+                        'default_term_months' => $p['min_term_months'],
+                        'annual_rate' => $p['interest_rate'],
+                        'opening_commission' => $p['opening_commission'],
+                        'amortization_type' => 'FRENCH',
+                        'payment_frequencies' => $p['payment_frequencies'],
+                    ],
+                    'required_documents' => [
+                        'nationals' => [
+                            ['type' => 'INE_FRONT', 'required' => true, 'description' => 'INE (Frente)'],
+                            ['type' => 'INE_BACK', 'required' => true, 'description' => 'INE (Reverso)'],
+                            ['type' => 'PROOF_OF_ADDRESS', 'required' => true, 'description' => 'Comprobante de domicilio'],
+                            ['type' => 'PROOF_OF_INCOME', 'required' => true, 'description' => 'Comprobante de ingresos'],
+                            ['type' => 'SELFIE', 'required' => true, 'description' => 'Selfie de validación facial'],
+                        ],
+                        'foreigners' => [
+                            ['type' => 'PASSPORT', 'required' => true, 'description' => 'Pasaporte'],
+                            ['type' => 'RESIDENCE_CARD', 'required' => true, 'description' => 'Tarjeta de Residente'],
+                            ['type' => 'PROOF_OF_ADDRESS', 'required' => true, 'description' => 'Comprobante de domicilio'],
+                            ['type' => 'PROOF_OF_INCOME', 'required' => true, 'description' => 'Comprobante de ingresos'],
+                            ['type' => 'SELFIE', 'required' => true, 'description' => 'Selfie de validación facial'],
+                        ],
+                    ],
+                    'extra_fields' => [],
+                    'eligibility_rules' => ['min_age' => 18, 'max_age' => 75, 'requires_mexican_id' => true],
+                    'onboarding_steps' => null,
+                    'is_active' => true,
+                ]),
+            );
         }
-
-        $personalProduct = Product::where('type', 'PERSONAL')->first();
-        $nominaProduct = Product::where('type', 'NOMINA')->first();
-
-        // Create Super Admin User
-        $superAdminUser = User::create([
-            'name' => 'Super Admin',
-            'first_name' => 'Super',
-            'last_name' => 'Admin',
-            'email' => 'superadmin@lendus.mx',
-            'phone' => '5500000000',
-            'password' => Hash::make('password'),
-            'tenant_id' => $tenant->id,
-            'type' => 'SUPER_ADMIN',
-            'is_active' => true,
-            'email_verified_at' => now(),
-            'phone_verified_at' => now(),
-        ]);
-
-        // Create Admin User
-        $adminUser = User::create([
-            'name' => 'Admin Demo',
-            'first_name' => 'Admin',
-            'last_name' => 'Demo',
-            'email' => 'admin@lendus.mx',
-            'phone' => '5500000001',
-            'password' => Hash::make('password'),
-            'tenant_id' => $tenant->id,
-            'type' => 'ADMIN',
-            'is_active' => true,
-            'email_verified_at' => now(),
-            'phone_verified_at' => now(),
-        ]);
-
-        // Create Analyst Users
-        $analysts = [];
-        $analystNames = [
-            ['Patricia', 'Moreno', 'Ruiz'],
-            ['Fernando', 'Díaz', 'Castro'],
-        ];
-
-        foreach ($analystNames as $index => $nameParts) {
-            $analysts[] = User::create([
-                'name' => "{$nameParts[0]} {$nameParts[1]}",
-                'first_name' => $nameParts[0],
-                'last_name' => $nameParts[1],
-                'email' => strtolower($nameParts[0]) . '.' . strtolower($nameParts[1]) . '@lendus.mx',
-                'phone' => '550000010' . ($index + 1),
-                'password' => Hash::make('password'),
-                'tenant_id' => $tenant->id,
-                'type' => 'ANALYST',
-                'is_active' => true,
-                'email_verified_at' => now(),
-                'phone_verified_at' => now(),
-            ]);
-        }
-
-        // Create Agent Users (Promotores)
-        $agents = [];
-        $agentNames = [
-            ['Carlos', 'Ramírez', 'López'],
-            ['María', 'López', 'García'],
-            ['Juan', 'Hernández', 'Martínez'],
-            ['Ana', 'García', 'Sánchez'],
-        ];
-
-        foreach ($agentNames as $index => $nameParts) {
-            $agents[] = User::create([
-                'name' => "{$nameParts[0]} {$nameParts[1]}",
-                'first_name' => $nameParts[0],
-                'last_name' => $nameParts[1],
-                'email' => strtolower($nameParts[0]) . '.' . strtolower($nameParts[1]) . '@lendus.mx',
-                'phone' => '550000000' . ($index + 2),
-                'password' => Hash::make('password'),
-                'tenant_id' => $tenant->id,
-                'type' => 'SUPERVISOR',
-                'is_active' => true,
-                'email_verified_at' => now(),
-                'phone_verified_at' => now(),
-            ]);
-        }
-
-        // Applicants, Applications, Documents, References se crean desde el flujo de onboarding
-        // No crear datos de prueba para mantener el sistema limpio
-
-        $this->command->info('Demo data seeded successfully!');
-        $this->command->info("Tenant slug: demo");
-        $this->command->info("");
-        $this->command->info("Staff Credentials (password: 'password'):");
-        $this->command->info("  Super Admin: superadmin@lendus.mx");
-        $this->command->info("  Admin: admin@lendus.mx");
-        $this->command->info("  Analista: patricia.moreno@lendus.mx");
-        $this->command->info("  Analista: fernando.diaz@lendus.mx");
-        $this->command->info("  Supervisor: carlos.ramirez@lendus.mx");
-        $this->command->info("  Supervisor: maria.lopez@lendus.mx");
     }
 
-    /**
-     * Create a placeholder image file for demo documents.
-     */
-    private function createPlaceholderImage(string $filePath, string $docType): void
+    private function createStaff(Tenant $tenant): void
     {
-        // Create a simple placeholder image (PNG) that looks like a document
-        $width = 800;
-        $height = 1000;
-        $image = imagecreatetruecolor($width, $height);
-
-        // Colors
-        $white = imagecolorallocate($image, 255, 255, 255);
-        $gray = imagecolorallocate($image, 200, 200, 200);
-        $darkGray = imagecolorallocate($image, 100, 100, 100);
-        $primary = imagecolorallocate($image, 59, 130, 246); // Blue
-
-        // Background
-        imagefill($image, 0, 0, $white);
-
-        // Border
-        imagerectangle($image, 0, 0, $width - 1, $height - 1, $gray);
-
-        // Header area
-        imagefilledrectangle($image, 0, 0, $width, 80, $primary);
-
-        // Document type text
-        $labels = [
-            'INE_FRONT' => 'INE - Frente',
-            'INE_BACK' => 'INE - Reverso',
-            'PROOF_OF_ADDRESS' => 'Comprobante de Domicilio',
-            'PAYSLIP' => 'Recibo de Nómina',
+        $users = [
+            [
+                'email' => 'superadmin@lendus.mx',
+                'role' => StaffAccount::ROLE_SUPER_ADMIN,
+                'profile' => ['first_name' => 'Super', 'last_name' => 'Admin', 'phone' => '5500000000', 'title' => 'Super Administrador'],
+            ],
+            [
+                'email' => 'admin@lendus.mx',
+                'role' => StaffAccount::ROLE_ADMIN,
+                'profile' => ['first_name' => 'Admin', 'last_name' => 'Demo', 'phone' => '5500000001', 'title' => 'Administrador'],
+            ],
+            [
+                'email' => 'carlos.ramirez@lendus.mx',
+                'role' => StaffAccount::ROLE_SUPERVISOR,
+                'profile' => ['first_name' => 'Carlos', 'last_name' => 'Ramírez', 'phone' => '5500000002', 'title' => 'Supervisor de Crédito'],
+            ],
+            [
+                'email' => 'maria.lopez@lendus.mx',
+                'role' => StaffAccount::ROLE_SUPERVISOR,
+                'profile' => ['first_name' => 'María', 'last_name' => 'López', 'phone' => '5500000003', 'title' => 'Supervisor de Crédito'],
+            ],
+            [
+                'email' => 'patricia.moreno@lendus.mx',
+                'role' => StaffAccount::ROLE_ANALYST,
+                'profile' => ['first_name' => 'Patricia', 'last_name' => 'Moreno', 'phone' => '5500000101', 'title' => 'Analista de Crédito'],
+            ],
+            [
+                'email' => 'fernando.diaz@lendus.mx',
+                'role' => StaffAccount::ROLE_ANALYST,
+                'profile' => ['first_name' => 'Fernando', 'last_name' => 'Díaz', 'phone' => '5500000102', 'title' => 'Analista de Crédito'],
+            ],
         ];
-        $label = $labels[$docType] ?? $docType;
 
-        // Title in header
-        imagestring($image, 5, 20, 30, 'DOCUMENTO DE PRUEBA', $white);
-        imagestring($image, 4, 20, 50, $label, $white);
+        foreach ($users as $u) {
+            $existing = StaffAccount::where('email', $u['email'])
+                ->where('tenant_id', $tenant->id)
+                ->first();
+            if ($existing) continue;
 
-        // Placeholder content
-        imagestring($image, 3, 50, 150, 'Este es un documento de prueba generado', $darkGray);
-        imagestring($image, 3, 50, 180, 'automaticamente para fines de desarrollo.', $darkGray);
+            $account = StaffAccount::create([
+                'tenant_id' => $tenant->id,
+                'email' => $u['email'],
+                'password' => Hash::make('password'),
+                'role' => $u['role'],
+                'is_active' => true,
+                'email_verified_at' => now(),
+            ]);
 
-        // Fake document structure
-        for ($i = 0; $i < 15; $i++) {
-            $y = 250 + ($i * 40);
-            $lineWidth = rand(200, 600);
-            imagefilledrectangle($image, 50, $y, 50 + $lineWidth, $y + 10, $gray);
+            StaffProfile::create(array_merge(['account_id' => $account->id], $u['profile']));
         }
-
-        // Save as PNG first
-        $tempPath = sys_get_temp_dir() . '/' . uniqid('doc_') . '.png';
-        imagepng($image, $tempPath);
-        imagedestroy($image);
-
-        // Store in Laravel storage
-        \Storage::disk('local')->put($filePath, file_get_contents($tempPath));
-
-        // Clean up temp file
-        unlink($tempPath);
     }
 }
