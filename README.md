@@ -106,7 +106,54 @@ cd backend && composer install && php artisan migrate --seed && php artisan serv
 cd frontend && npm install && npm run dev
 ```
 
-Credenciales de prueba tras `db:seed`:
-- Admin: `admin@lendus.mx` / `password`
-- Analyst: `patricia.moreno@lendus.mx` / `password`
-- Supervisor: `carlos.ramirez@lendus.mx` / `password`
+## Tenants y seeders
+
+### Seed default (fresh install)
+`php artisan db:seed` solo crea el tenant **demo** con sus 3 productos, staff y
+notification templates profesionales. Listo para desarrollo, QA y como base
+inicial de producción.
+
+```bash
+php artisan migrate --force
+php artisan db:seed --force
+```
+
+### Activar tenants adicionales
+Cuando un SOFOM se incorpora, ejecuta su seeder específico:
+
+```bash
+# MoneyCapital
+php artisan db:seed --class=MoneyCapitalSeeder --force
+php artisan db:seed --class=NotificationTemplateSeeder --force      # templates pro
+php artisan db:seed --class=MoneyCapitalNotificationSeeder --force  # templates MC
+
+# Finatea
+php artisan db:seed --class=FinateaSeeder --force
+php artisan db:seed --class=NotificationTemplateSeeder --force
+```
+
+Todos los seeders son **idempotentes** (re-ejecutar no duplica) y los de
+notification templates usan `firstOrCreate` para **respetar ediciones del
+cliente** desde la UI.
+
+### Credenciales de prueba (password: `password`)
+
+| Tenant | Email | Rol |
+|--------|-------|-----|
+| demo | `superadmin@lendus.mx` | SUPER_ADMIN |
+| demo | `admin@lendus.mx` | ADMIN |
+| demo | `carlos.ramirez@lendus.mx` | SUPERVISOR |
+| demo | `patricia.moreno@lendus.mx` | ANALYST |
+| moneycapital | `superadmin@moneycapital.mx` · `admin@moneycapital.mx` | SUPER_ADMIN · ADMIN |
+| finatea | `superadmin@finatea.mx` · `admin@finatea.mx` | SUPER_ADMIN · ADMIN |
+
+### White-label per-tenant
+Cada tenant declara su landing y métodos de login en `frontend/tenants/<slug>.tenant.ts`:
+
+```ts
+landingComponent: 'MoneyCapitalLanding' | 'FinateaLanding' | 'DemoLanding' | 'GenericLanding'
+auth: { methods: ['phone' | 'whatsapp' | 'email' | 'pin' | 'biometric'] }
+```
+
+`TenantLandingDispatcher` resuelve la landing en `/:tenant`, y `AuthMethodView`
+muestra solo los métodos habilitados (con auto-redirect si solo hay 1).

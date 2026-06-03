@@ -279,13 +279,31 @@ TWILIO_WHATSAPP_FROM=
 
 ```bash
 php artisan migrate --force
-php artisan db:seed --force          # Solo en el primer despliegue
+php artisan db:seed --force          # Crea SOLO el tenant `demo` con productos,
+                                     # staff y notification templates pro.
 php artisan storage:link
 
 # Cachear configuración, rutas y eventos para producción
 php artisan config:cache
 php artisan route:cache
 php artisan event:cache
+```
+
+> **Re-ejecutar `db:seed` es seguro**: todos los seeders son idempotentes
+> (`updateOrCreate` para tenants/products/staff, `firstOrCreate` para templates
+> que respeta ediciones del cliente desde la UI).
+
+#### Activar tenants reales (cuando un SOFOM se incorpora)
+
+```bash
+# MoneyCapital
+php artisan db:seed --class=MoneyCapitalSeeder --force
+php artisan db:seed --class=NotificationTemplateSeeder --force
+php artisan db:seed --class=MoneyCapitalNotificationSeeder --force
+
+# Finatea
+php artisan db:seed --class=FinateaSeeder --force
+php artisan db:seed --class=NotificationTemplateSeeder --force
 ```
 
 ---
