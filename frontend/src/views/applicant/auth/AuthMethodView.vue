@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { useTenantStore } from '@/stores'
-import { computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, watchEffect } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import UnifiedAuthView from '@/views/mobile/UnifiedAuthView.vue'
+import { getTenantConfig, type AuthMethod } from '@tenants'
+
+const DEFAULT_METHODS: AuthMethod[] = ['phone', 'whatsapp', 'email']
 
 const route = useRoute()
+const router = useRouter()
 const tenantStore = useTenantStore()
 const tenantName = computed(() => tenantStore.name || 'LendusFind')
 
@@ -20,6 +24,17 @@ const getTenantSlug = (): string | undefined => {
   const routeTenant = route.params.tenant as string
   return routeTenant || tenantStore.slug || undefined
 }
+
+// Métodos permitidos por el tenant. Cae al default si no hay config front-side.
+const allowedMethods = computed<AuthMethod[]>(() => {
+  const config = getTenantConfig(getTenantSlug() ?? null)
+  const methods = config?.auth?.methods
+  return methods && methods.length > 0 ? methods : DEFAULT_METHODS
+})
+
+const showPhone = computed(() => allowedMethods.value.includes('phone'))
+const showWhatsapp = computed(() => allowedMethods.value.includes('whatsapp'))
+const showEmail = computed(() => allowedMethods.value.includes('email'))
 
 // Computed paths for navigation
 const phonePath = computed(() => {
@@ -40,6 +55,23 @@ const emailPath = computed(() => {
 const homePath = computed(() => {
   const tenantSlug = getTenantSlug()
   return tenantSlug ? `/${tenantSlug}` : '/'
+})
+
+// Si el tenant solo permite 1 método, redirige automáticamente.
+const pathForMethod = (method: AuthMethod): string | null => {
+  switch (method) {
+    case 'phone': return phonePath.value
+    case 'whatsapp': return whatsappPath.value
+    case 'email': return emailPath.value
+    default: return null
+  }
+}
+
+watchEffect(() => {
+  if (allowedMethods.value.length === 1) {
+    const target = pathForMethod(allowedMethods.value[0]!)
+    if (target) router.replace(target)
+  }
 })
 
 onMounted(async () => {
@@ -80,6 +112,7 @@ onMounted(async () => {
         <div class="space-y-3">
           <!-- SMS Option -->
           <router-link
+            v-if="showPhone"
             :to="phonePath"
             class="w-full p-4 bg-white border-2 border-primary-500 rounded-xl flex items-center gap-4 transition hover:bg-primary-50"
           >
@@ -99,6 +132,7 @@ onMounted(async () => {
 
           <!-- WhatsApp Option -->
           <router-link
+            v-if="showWhatsapp"
             :to="whatsappPath"
             class="w-full p-4 bg-white border-2 border-gray-200 rounded-xl flex items-center gap-4 transition hover:border-green-300 hover:bg-green-50"
           >
@@ -118,6 +152,7 @@ onMounted(async () => {
 
           <!-- Email Option -->
           <router-link
+            v-if="showEmail"
             :to="emailPath"
             class="w-full p-4 bg-white border-2 border-gray-200 rounded-xl flex items-center gap-4 transition hover:border-blue-300 hover:bg-blue-50"
           >

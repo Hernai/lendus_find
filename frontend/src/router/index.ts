@@ -22,6 +22,7 @@ const LoanDetailView = () => import('@/views/applicant/loans/LoanDetailView.vue'
 // PUBLIC VIEWS (no authentication required)
 // ==============================================
 const LandingView = () => import('@/views/public/LandingView.vue')
+const TenantLandingDispatcher = () => import('@/views/public/TenantLandingDispatcher.vue')
 const SimulatorView = () => import('@/views/public/SimulatorView.vue')
 const LendusFindLanding = () => import('@/views/public/LendusFindLanding.vue')
 
@@ -80,8 +81,8 @@ const AdminUnderConstruction = () => import('@/views/admin/panel/AdminUnderConst
 const NotificationTemplates = () => import('@/views/admin/panel/NotificationTemplates.vue')
 const NotificationTemplateForm = () => import('@/views/admin/panel/NotificationTemplateForm.vue')
 
-// Reserved paths that are NOT tenant slugs (must match tenant.ts)
-const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones', 'find', 'notificaciones', 'm', 'mobile', 'moneycapital']
+// Reserved paths that are NOT tenant slugs (must match utils/tenant.ts)
+const RESERVED_PATHS = ['auth', 'admin', 'solicitud', 'dashboard', 'simulador', 'perfil', 'correcciones', 'find', 'notificaciones', 'm', 'mobile', 'sin-buro', 'liquidez-urgente']
 
 // Helper to check if a path segment is a tenant slug
 const isTenantSlug = (segment: string): boolean => {
@@ -153,7 +154,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/:tenant',
     name: 'tenant-landing',
-    component: LandingView,
+    component: TenantLandingDispatcher,
     meta: { public: true },
     beforeEnter: (to, _from, next) => {
       // Only allow if it's a valid tenant slug

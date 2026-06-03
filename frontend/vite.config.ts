@@ -62,7 +62,8 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@tenants': fileURLToPath(new URL('./tenants', import.meta.url))
     },
   },
   server: {

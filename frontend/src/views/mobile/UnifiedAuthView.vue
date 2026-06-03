@@ -357,6 +357,35 @@ watch(method, () => {
   color: #0f172a;
 }
 
+/* En desktop, centramos el contenido y le damos un ancho de tarjeta. */
+.brand-bar,
+.ua-main {
+  width: 100%;
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (min-width: 768px) {
+  .ua-screen {
+    background: #f8fafc;
+    padding-top: max(env(safe-area-inset-top), 48px);
+    padding-bottom: 48px;
+    align-items: center;
+    justify-content: flex-start;
+  }
+  .brand-bar {
+    background: transparent;
+    padding-bottom: 8px;
+  }
+  .ua-main {
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.15);
+    padding: 28px 32px 32px;
+  }
+}
+
 .brand-bar {
   padding: 18px 22px 4px;
   background: #ffffff;

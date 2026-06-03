@@ -30,6 +30,11 @@ const config: TenantConfig = {
   },
   // push se configurará en Fase 6 cuando haya credenciales reales.
   deepLinkHost: 'demo.lendus.mx',
+  landingComponent: 'DemoLanding',
+  auth: {
+    methods: ['phone', 'whatsapp', 'email'],
+    defaultMethod: 'phone',
+  },
 }
 
 export default config

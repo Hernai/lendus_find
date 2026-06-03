@@ -7,6 +7,20 @@
  * credenciales push propios.
  */
 
+/** Métodos de autenticación que puede habilitar un tenant. */
+export type AuthMethod = 'phone' | 'whatsapp' | 'email' | 'pin' | 'biometric'
+
+/**
+ * Identificador del componente Vue que sirve como landing del tenant.
+ * El router lo resuelve en `router/tenantLandings.ts`. Si se omite, se
+ * usa la landing genérica (`LandingView`).
+ */
+export type TenantLandingComponent =
+  | 'GenericLanding'
+  | 'DemoLanding'
+  | 'MoneyCapitalLanding'
+  | 'FinateaLanding'
+
 export interface TenantConfig {
   /** Slug del tenant (mismo valor que `X-Tenant-ID`). */
   slug: string
@@ -65,4 +79,18 @@ export interface TenantConfig {
 
   /** Dominio público para deep links (Universal Links / App Links). */
   deepLinkHost?: string
+
+  /**
+   * Componente de landing del tenant. Si se omite, el dispatcher usa la
+   * landing genérica (`LandingView`).
+   */
+  landingComponent?: TenantLandingComponent
+
+  /** Configuración del flujo de autenticación per-tenant. */
+  auth?: {
+    /** Métodos permitidos en `/:tenant/auth`. Si solo hay 1, se redirige directo. */
+    methods: AuthMethod[]
+    /** Método preseleccionado en el selector cuando hay varios. */
+    defaultMethod?: AuthMethod
+  }
 }

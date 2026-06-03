@@ -1,5 +1,5 @@
 import { platform } from '@/platform'
-import { detectTenantSlug } from '@/utils/tenant'
+import { detectTenantSlug, hasTenantInUrl } from '@/utils/tenant'
 import { STORAGE_KEYS } from '@/utils/storage'
 import { logger } from '@/utils/logger'
 import { emitAuthEvent } from '@/services/auth-events'
@@ -11,11 +11,17 @@ const log = logger.child('HTTP')
  * Resuelve el tenant slug a enviar como `X-Tenant-ID`.
  *
  * Prioridad:
- * 1. Si hay sesión y un tenant seleccionado en storage (super admin), usar ese.
- * 2. Si hay un override persistido (caso native), usar ese.
- * 3. Fallback a `detectTenantSlug()` (web: subdomain, path, o env).
+ * 1. Slug explícito en la URL (subdominio o path) — siempre gana en web para
+ *    evitar que un override persistido apunte al tenant equivocado al navegar
+ *    entre /demo, /moneycapital, /finatea, etc.
+ * 2. Si hay sesión y un tenant seleccionado en storage (super admin), usar ese.
+ * 3. Si hay un override persistido (caso native), usar ese.
+ * 4. Fallback a `detectTenantSlug()` (env var).
  */
 async function resolveTenantSlug(): Promise<string> {
+  if (hasTenantInUrl()) {
+    return detectTenantSlug()
+  }
   const authToken = await platform.storage.get<string>(STORAGE_KEYS.AUTH_TOKEN)
   if (authToken) {
     const selectedTenantId =

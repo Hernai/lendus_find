@@ -29,6 +29,11 @@ const config: TenantConfig = {
   },
   // push se configurará cuando MoneyCapital provea credenciales reales.
   deepLinkHost: 'app.moneycapital.mx',
+  landingComponent: 'MoneyCapitalLanding',
+  auth: {
+    methods: ['phone', 'email'],
+    defaultMethod: 'phone',
+  },
 }
 
 export default config
