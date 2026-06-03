@@ -156,12 +156,9 @@ class FinateaSeeder extends Seeder
 
     private function createStaff(Tenant $tenant): void
     {
+        // Nota: el SUPER_ADMIN es global (sin tenant) y se crea con
+        // GlobalSuperAdminSeeder. Aquí solo staff per-tenant.
         $users = [
-            [
-                'email' => 'superadmin@finatea.mx',
-                'role' => StaffAccount::ROLE_SUPER_ADMIN,
-                'profile' => ['first_name' => 'Super', 'last_name' => 'Admin', 'phone' => '5500002000', 'title' => 'Super Administrador'],
-            ],
             [
                 'email' => 'admin@finatea.mx',
                 'role' => StaffAccount::ROLE_ADMIN,

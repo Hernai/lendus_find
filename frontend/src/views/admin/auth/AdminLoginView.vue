@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore, useTenantStore } from '@/stores'
 import { AppButton, AppInput } from '@/components/common'
+import TenantSelectorModal from '@/components/admin/TenantSelectorModal.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -12,6 +13,18 @@ const email = ref('')
 const password = ref('')
 const error = ref('')
 const showPassword = ref(false)
+
+// Selector de tenant para super admin global (se activa si el backend
+// devuelve requiresTenantSelection en el login response).
+const tenantsToChoose = ref<Array<{ id: string; slug: string; name: string }>>([])
+const showTenantSelector = computed(() => tenantsToChoose.value.length > 0)
+
+const onTenantSelected = async () => {
+  tenantsToChoose.value = []
+  // Recarga el tenant store con el slug recién seleccionado y entra al panel.
+  await tenantStore.loadConfig()
+  router.push('/admin')
+}
 
 const isValidEmail = computed(() => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -33,6 +46,11 @@ const handleSubmit = async () => {
   const result = await authStore.loginWithPassword(email.value, password.value)
 
   if (result.success) {
+    // Super admin global con más de 1 tenant → modal de selección.
+    if (result.requiresTenantSelection && result.availableTenants?.length) {
+      tenantsToChoose.value = result.availableTenants
+      return
+    }
     router.push('/admin')
   } else {
     switch (result.error) {
@@ -155,5 +173,12 @@ const handleSubmit = async () => {
         </p>
       </div>
     </div>
+
+    <!-- Selector de tenant para super admin global -->
+    <TenantSelectorModal
+      v-if="showTenantSelector"
+      :tenants="tenantsToChoose"
+      @selected="onTenantSelected"
+    />
   </div>
 </template>

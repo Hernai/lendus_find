@@ -11,14 +11,20 @@ const log = logger.child('HTTP')
  * Resuelve el tenant slug a enviar como `X-Tenant-ID`.
  *
  * Prioridad:
- * 1. Slug explícito en la URL (subdominio o path) — siempre gana en web para
- *    evitar que un override persistido apunte al tenant equivocado al navegar
- *    entre /demo, /moneycapital, /finatea, etc.
- * 2. Si hay sesión y un tenant seleccionado en storage (super admin), usar ese.
- * 3. Si hay un override persistido (caso native), usar ese.
+ * 1. Super admin global con tenant seleccionado en storage → siempre gana
+ *    (cambia entre tenants vía el dropdown del backoffice).
+ * 2. Slug en la URL (subdominio o path) — gana en web para evitar overrides
+ *    persistidos cuando se navega entre /demo, /moneycapital, /finatea.
+ * 3. Sesión con `selected_tenant_id` (legacy super admin) o override (native).
  * 4. Fallback a `detectTenantSlug()` (env var).
  */
 async function resolveTenantSlug(): Promise<string> {
+  const isSuperAdminGlobal = await platform.storage.get<boolean>(STORAGE_KEYS.IS_SUPER_ADMIN_GLOBAL)
+  if (isSuperAdminGlobal) {
+    const selected = await platform.storage.get<string>(STORAGE_KEYS.CURRENT_TENANT_SLUG)
+    if (selected) return selected
+  }
+
   if (hasTenantInUrl()) {
     return detectTenantSlug()
   }

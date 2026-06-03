@@ -31,6 +31,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             DemoDataSeeder::class,
+            GlobalSuperAdminSeeder::class,   // SUPER_ADMIN global (sin tenant)
             NotificationTemplateSeeder::class,
         ]);
     }

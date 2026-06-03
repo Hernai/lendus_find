@@ -31,9 +31,20 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        $account = StaffAccount::where('email', $request->email)
-            ->where('tenant_id', app('tenant.id'))
+        // 1. Buscar super admin global (sin tenant_id). Si existe y la
+        //    contraseña coincide, gana sobre cualquier match per-tenant.
+        // 2. Si no, buscar staff per-tenant por (email, tenant_id).
+        $account = StaffAccount::withoutGlobalScope('tenant')
+            ->where('email', $request->email)
+            ->whereNull('tenant_id')
+            ->where('role', StaffAccount::ROLE_SUPER_ADMIN)
             ->first();
+
+        if (!$account) {
+            $account = StaffAccount::where('email', $request->email)
+                ->where('tenant_id', app('tenant.id'))
+                ->first();
+        }
 
         if (!$account) {
             return $this->error('INVALID_CREDENTIALS', 'Correo o contraseña incorrectos', 401);
@@ -164,17 +175,77 @@ class AuthController extends Controller
     }
 
     /**
+     * Lista de tenants accesibles para el usuario autenticado.
+     *
+     * - SUPER_ADMIN global → todos los tenants activos
+     * - Staff per-tenant → solo el suyo
+     *
+     * Usado por el selector de tenant del backoffice.
+     */
+    public function availableTenants(Request $request): JsonResponse
+    {
+        $account = $request->user();
+
+        if (!$account instanceof StaffAccount) {
+            return $this->unauthorized('Token no válido para esta ruta');
+        }
+
+        $isSuperAdmin = $account->isSuperAdmin() && $account->tenant_id === null;
+
+        if ($isSuperAdmin) {
+            $tenants = \App\Models\Tenant::where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'slug', 'name'])
+                ->map(fn ($t) => ['id' => $t->id, 'slug' => $t->slug, 'name' => $t->name])
+                ->all();
+        } else {
+            $tenants = [];
+            if ($account->tenant_id) {
+                $tenant = \App\Models\Tenant::find($account->tenant_id);
+                if ($tenant) {
+                    $tenants[] = ['id' => $tenant->id, 'slug' => $tenant->slug, 'name' => $tenant->name];
+                }
+            }
+        }
+
+        return $this->success(['tenants' => $tenants]);
+    }
+
+    /**
      * Format staff account response.
      */
     protected function formatStaffResponse(StaffAccount $account): array
     {
         $account->loadMissing('profile');
 
+        $isSuperAdmin = $account->isSuperAdmin() && $account->tenant_id === null;
+
+        // Super admin global: lista de tenants disponibles para el selector.
+        // Staff per-tenant: solo su tenant asignado.
+        if ($isSuperAdmin) {
+            $availableTenants = \App\Models\Tenant::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'slug', 'name'])
+                ->map(fn ($t) => ['id' => $t->id, 'slug' => $t->slug, 'name' => $t->name])
+                ->all();
+        } else {
+            $availableTenants = [];
+            if ($account->tenant_id) {
+                $tenant = \App\Models\Tenant::find($account->tenant_id);
+                if ($tenant) {
+                    $availableTenants[] = ['id' => $tenant->id, 'slug' => $tenant->slug, 'name' => $tenant->name];
+                }
+            }
+        }
+
         return [
             'id' => $account->id,
             'email' => $account->email,
             'role' => $account->role,
+            'tenant_id' => $account->tenant_id,
             'is_staff' => true,
+            'is_super_admin_global' => $isSuperAdmin,
             'is_active' => $account->is_active,
             'profile' => $account->profile ? [
                 'first_name' => $account->profile->first_name,
@@ -188,6 +259,7 @@ class AuthController extends Controller
             ] : null,
             'last_login_at' => $account->last_login_at?->toIso8601String(),
             'permissions' => $account->getPermissionsArray(),
+            'available_tenants' => $availableTenants,
         ];
     }
 }

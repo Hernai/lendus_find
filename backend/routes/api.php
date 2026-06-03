@@ -272,6 +272,12 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
     ->prefix('v2/staff')
     ->group(function () {
         // =============================================
+        // Selector de tenant del usuario autenticado
+        // (super admin global → todos; staff per-tenant → solo el suyo)
+        // =============================================
+        Route::get('/me/tenants', [\App\Http\Controllers\Api\V2\Staff\AuthController::class, 'availableTenants']);
+
+        // =============================================
         // Device tokens (push notifications)
         // =============================================
         Route::post('/devices', [StaffDeviceController::class, 'register']);

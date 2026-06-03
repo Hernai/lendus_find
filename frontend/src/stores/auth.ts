@@ -128,20 +128,32 @@ export const useAuthStore = defineStore('auth', () => {
   const isSuperAdmin = computed(() => user.value?.role === 'SUPER_ADMIN')
   const isStaff = computed(() => ['SUPERVISOR', 'ANALYST', 'ADMIN', 'SUPER_ADMIN'].includes(user.value?.role || ''))
 
-  // Actions for tenant switching (super admin only)
-  const setSelectedTenant = (tenantId: string | null) => {
-    selectedTenantId.value = tenantId
-    if (tenantId) {
-      storage.set(STORAGE_KEYS.CURRENT_TENANT_ID, tenantId)
-    } else {
+  // Actions for tenant switching (super admin only).
+  // Acepta el objeto tenant completo (id + slug) para persistir ambos: el
+  // slug lo necesita el interceptor de Axios (X-Tenant-ID) y el id queda
+  // como referencia. Backward compatible: si se pasa solo string lo usa
+  // como id sin slug.
+  const setSelectedTenant = (tenantOrId: string | { id: string; slug: string } | null) => {
+    if (tenantOrId === null) {
+      selectedTenantId.value = null
       storage.remove(STORAGE_KEYS.CURRENT_TENANT_ID)
+      storage.remove(STORAGE_KEYS.SELECTED_TENANT_ID)
+      storage.remove(STORAGE_KEYS.CURRENT_TENANT_SLUG)
+      return
     }
+    if (typeof tenantOrId === 'string') {
+      selectedTenantId.value = tenantOrId
+      storage.set(STORAGE_KEYS.CURRENT_TENANT_ID, tenantOrId)
+      storage.set(STORAGE_KEYS.SELECTED_TENANT_ID, tenantOrId)
+      return
+    }
+    selectedTenantId.value = tenantOrId.id
+    storage.set(STORAGE_KEYS.CURRENT_TENANT_ID, tenantOrId.id)
+    storage.set(STORAGE_KEYS.SELECTED_TENANT_ID, tenantOrId.id)
+    storage.set(STORAGE_KEYS.CURRENT_TENANT_SLUG, tenantOrId.slug)
   }
 
-  const clearSelectedTenant = () => {
-    selectedTenantId.value = null
-    storage.remove(STORAGE_KEYS.CURRENT_TENANT_ID)
-  }
+  const clearSelectedTenant = () => setSelectedTenant(null)
 
   // Helper to map backend user type to frontend role
   const mapUserType = (type: string, isAdmin: boolean): User['role'] => {
@@ -674,7 +686,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const loginWithPassword = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  const loginWithPassword = async (email: string, password: string): Promise<{ success: boolean; error?: string; requiresTenantSelection?: boolean; availableTenants?: Array<{id: string; slug: string; name: string}> }> => {
     isLoading.value = true
     try {
       const response = await v2.staff.auth.login({ email, password })
@@ -685,8 +697,10 @@ export const useAuthStore = defineStore('auth', () => {
           id: string
           email: string
           role: string
-          tenant_id?: string
+          tenant_id?: string | null
           is_active: boolean
+          is_super_admin_global?: boolean
+          available_tenants?: Array<{id: string; slug: string; name: string}>
           profile?: { full_name: string; phone?: string }
           permissions: Record<string, boolean>
           created_at?: string
@@ -720,6 +734,23 @@ export const useAuthStore = defineStore('auth', () => {
         storage.set(STORAGE_KEYS.AUTH_TOKEN, apiToken)
         storage.set(STORAGE_KEYS.CURRENT_USER_ID, apiUser.id)
         storage.set(STORAGE_KEYS.CURRENT_USER_TYPE, 'staff')
+
+        // Super admin global: persistir flag y lista de tenants para el
+        // dropdown del header. Si solo hay 1, auto-seleccionarlo.
+        const isSuperAdmin = !!apiUser.is_super_admin_global
+        const tenants = apiUser.available_tenants ?? []
+        storage.set(STORAGE_KEYS.IS_SUPER_ADMIN_GLOBAL, isSuperAdmin)
+        storage.set(STORAGE_KEYS.AVAILABLE_TENANTS, tenants)
+
+        if (isSuperAdmin) {
+          if (tenants.length === 1) {
+            storage.set(STORAGE_KEYS.CURRENT_TENANT_SLUG, tenants[0]!.slug)
+            storage.set(STORAGE_KEYS.SELECTED_TENANT_ID, tenants[0]!.id)
+          } else if (tenants.length > 1) {
+            // UI debe mostrar el modal de selección antes de continuar.
+            return { success: true, requiresTenantSelection: true, availableTenants: tenants }
+          }
+        }
 
         // Initialize WebSocket
         connectRealtime(apiToken)

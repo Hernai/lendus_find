@@ -56,8 +56,9 @@ const loadTenants = async (): Promise<void> => {
 const selectTenant = async (tenant: Tenant | null): Promise<void> => {
   try {
     if (tenant) {
-      authStore.setSelectedTenant(tenant.id)
-      // Reload tenant config for the selected tenant
+      // Pasamos el objeto completo para que el store persista también el
+      // slug — lo necesita el interceptor para X-Tenant-ID.
+      authStore.setSelectedTenant({ id: tenant.id, slug: tenant.slug })
       await tenantStore.loadConfig()
     } else {
       authStore.clearSelectedTenant()

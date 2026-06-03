@@ -32,7 +32,6 @@ class DemoDataSeeder extends Seeder
         $this->createStaff($tenant);
 
         $this->command->info('✓ Tenant demo seedeado (slug=demo)');
-        $this->command->info('  Super Admin: superadmin@lendus.mx');
         $this->command->info('  Admin: admin@lendus.mx');
         $this->command->info('  Supervisor: carlos.ramirez@lendus.mx');
         $this->command->info('  Analista: patricia.moreno@lendus.mx');
@@ -194,12 +193,9 @@ class DemoDataSeeder extends Seeder
 
     private function createStaff(Tenant $tenant): void
     {
+        // Nota: el SUPER_ADMIN global (sin tenant_id) lo crea
+        // GlobalSuperAdminSeeder. Aquí solo creamos staff per-tenant.
         $users = [
-            [
-                'email' => 'superadmin@lendus.mx',
-                'role' => StaffAccount::ROLE_SUPER_ADMIN,
-                'profile' => ['first_name' => 'Super', 'last_name' => 'Admin', 'phone' => '5500000000', 'title' => 'Super Administrador'],
-            ],
             [
                 'email' => 'admin@lendus.mx',
                 'role' => StaffAccount::ROLE_ADMIN,
