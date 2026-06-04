@@ -16,11 +16,8 @@ const config: TenantConfig = {
   slug: 'template',
   appId: 'mx.template.lendus',
   appName: 'Template Créditos',
-  apiBaseUrl: 'https://api.lendus.mx',
-  reverbHost: 'reverb.lendus.mx',
-  reverbPort: 443,
-  reverbScheme: 'https',
-  reverbAppKey: 'CHANGE_ME',
+  // Backend (VITE_API_URL) y Reverb (VITE_REVERB_*) viven en `.env*` —
+  // son compartidos en la arquitectura B, no per-tenant.
   assets: {
     icon: 'tenants/template/icon.png',
     splash: 'tenants/template/splash.png',

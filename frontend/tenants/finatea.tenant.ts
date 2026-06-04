@@ -13,11 +13,8 @@ const config: TenantConfig = {
   slug: 'finatea',
   appId: 'mx.finatea.app',
   appName: 'Finatea',
-  apiBaseUrl: 'http://10.0.2.2:8000',
-  reverbHost: '10.0.2.2',
-  reverbPort: 8080,
-  reverbScheme: 'http',
-  reverbAppKey: 'local',
+  // Backend (VITE_API_URL) y Reverb (VITE_REVERB_*) viven en `.env*` —
+  // son compartidos en la arquitectura B, no per-tenant.
   assets: {
     icon: 'tenants/finatea/icon.png',
     splash: 'tenants/finatea/splash.png',

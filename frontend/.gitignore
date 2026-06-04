@@ -41,6 +41,10 @@ capacitor.tenant.json
 # .env.local generado por build-tenant.mjs — efímero por build.
 .env.local
 
+# .env.production sólo se monta en el servidor/CI (contiene URLs/secrets reales).
+.env.production
+.env.production.local
+
 # Assets copiados desde tenants/<slug>/ a la raíz en cada build per-tenant.
 /assets/icon.png
 /assets/splash.png

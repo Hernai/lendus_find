@@ -31,20 +31,11 @@ export interface TenantConfig {
   /** Nombre comercial que aparece debajo del icono. */
   appName: string
 
-  /** URL del backend público (sin trailing slash, sin /api). */
-  apiBaseUrl: string
-
-  /** Host del WebSocket Reverb público. */
-  reverbHost: string
-
-  /** Puerto Reverb (típicamente 443). */
-  reverbPort: number
-
-  /** Esquema Reverb (`https` o `http`). */
-  reverbScheme: 'https' | 'http'
-
-  /** Reverb app key (mismo valor que VITE_REVERB_APP_KEY del .env del tenant). */
-  reverbAppKey: string
+  // Nota: la URL del backend (`VITE_API_URL`) y la config del WebSocket
+  // (`VITE_REVERB_*`) NO se declaran aquí porque son infraestructura
+  // compartida en la arquitectura B (un solo backend `apifind.lendus.app`
+  // que distingue tenants por el header `X-Tenant-ID`). Esos valores se
+  // toman directamente del `.env*` que Vite carga durante el build.
 
   /** Rutas a los assets para `@capacitor/assets` (relativas a `frontend/`). */
   assets: {

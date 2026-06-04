@@ -34,9 +34,15 @@ Editar `<slug>.tenant.ts`. Campos críticos:
 - `slug`: kebab-case, mismo valor que `X-Tenant-ID` y backend `tenants.slug`.
 - `appId`: bundle ID iOS/applicationId Android. Ej: `mx.acme.lendus`.
 - `appName`: nombre comercial (≤30 chars para no truncarse en iOS).
-- `apiBaseUrl`: backend público (sin `/api`).
-- `reverbHost`, `reverbPort`, `reverbScheme`, `reverbAppKey`: WebSocket.
 - `theme.primary`: hex del color de marca.
+- `assets`, `landingComponent`, `auth.methods`, `push`, `deepLinkHost`.
+
+> **Nota**: la URL del backend (`VITE_API_URL`) y la config de WebSocket
+> (`VITE_REVERB_*`) **no van** en `<slug>.tenant.ts` — son infraestructura
+> compartida. Viven en `frontend/.env` (dev), `.env.local` (overrides
+> locales, p. ej. `10.0.2.2` para emulador Android) y `.env.production`
+> en el servidor de build. Ver `.env.production.example` para los valores
+> canónicos de producción.
 
 ### 2. Colocar assets
 
@@ -239,8 +245,9 @@ La app móvil consulta `/api/v2/public/version` al arrancar y muestra un bloqueo
 - Reiniciar app después de aceptar permiso (iOS cachea agresivamente).
 
 ### WebSocket no conecta en native
-- Confirmar que `reverbHost` apunta a un dominio público (no `localhost` ni IP local).
-- Verificar `reverbScheme: 'https'` y `forceTLS: true`.
+- Confirmar que `VITE_REVERB_HOST` (en `.env`/`.env.production`) apunta a un
+  dominio público (no `localhost` ni IP local).
+- Verificar `VITE_REVERB_SCHEME=https` y `forceTLS: true` en el cliente Echo.
 
 ## Convenciones de versionado mobile
 

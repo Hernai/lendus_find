@@ -7,7 +7,11 @@
  *
  * Pasos:
  * 1. Carga `tenants/<slug>.tenant.ts` con jiti (TS en Node).
- * 2. Exporta variables VITE_* derivadas de la config (apiBaseUrl, reverb*).
+ * 2. Genera variables VITE_* per-tenant (slug, app name, color de marca) en
+ *    un `.env.local` temporal. La URL del backend (`VITE_API_URL`) y los
+ *    `VITE_REVERB_*` los toma Vite directamente de `.env`/`.env.production`
+ *    porque son infraestructura compartida (arquitectura B: un solo backend
+ *    en `apifind.lendus.app`).
  * 3. Ejecuta `vite build`.
  * 4. Copia assets PNG del tenant a `assets/` para que `@capacitor/assets` los
  *    use al regenerar iconos/splash (paso opcional, solo si la dep está
@@ -62,17 +66,15 @@ writeFileSync(
 )
 
 // Vite solo inyecta variables VITE_* desde archivos `.env*`. Escribimos un
-// `.env.local` temporal antes del build y lo eliminamos al final. (No usamos
-// process.env porque Vite no lo lee directamente.)
+// `.env.local` temporal con las vars per-tenant (slug, app name, color) y
+// lo eliminamos al final. La URL del backend (`VITE_API_URL`) y los
+// `VITE_REVERB_*` NO se generan acá: Vite los lee de `.env`/`.env.production`
+// porque son infraestructura compartida en la arquitectura B (un solo backend
+// que distingue tenants por el header `X-Tenant-ID`).
 const envFile = join(frontendRoot, '.env.local')
 const envLines = [
   `# Generado por scripts/build-tenant.mjs para tenant=${tenant.slug}. NO commitear.`,
   `VITE_TENANT_SLUG=${tenant.slug}`,
-  `VITE_API_URL=${tenant.apiBaseUrl}/api`,
-  `VITE_REVERB_HOST=${tenant.reverbHost}`,
-  `VITE_REVERB_PORT=${tenant.reverbPort}`,
-  `VITE_REVERB_SCHEME=${tenant.reverbScheme}`,
-  `VITE_REVERB_APP_KEY=${tenant.reverbAppKey}`,
   `VITE_APP_NAME=${tenant.appName}`,
   `VITE_THEME_PRIMARY=${tenant.theme.primary}`,
 ]

@@ -4,21 +4,14 @@ import type { TenantConfig } from './_types'
  * Tenant DEMO — usado para validar el pipeline white-label end-to-end.
  *
  * Los assets bajo `frontend/tenants/demo/` son placeholders. Reemplázalos
- * con los reales del tenant cuando se publique. El `reverbAppKey` debe
- * coincidir con el `.env` del backend para que el WebSocket funcione.
+ * con los reales del tenant cuando se publique.
  */
 const config: TenantConfig = {
   slug: 'demo',
   appId: 'mx.lendus.demo',
   appName: 'Lendus Demo',
-  // 10.0.2.2 es la IP especial del emulador Android para llegar al host Mac.
-  // En iOS simulator usa localhost (acepta también 127.0.0.1).
-  // Para device físico cambia a la IP LAN de tu Mac o a un túnel ngrok HTTPS.
-  apiBaseUrl: 'http://10.0.2.2:8000',
-  reverbHost: '10.0.2.2',
-  reverbPort: 8080,
-  reverbScheme: 'http',
-  reverbAppKey: 'local',
+  // Backend (VITE_API_URL) y Reverb (VITE_REVERB_*) viven en `.env*` —
+  // son compartidos en la arquitectura B, no per-tenant.
   assets: {
     icon: 'tenants/demo/icon.png',
     splash: 'tenants/demo/splash.png',

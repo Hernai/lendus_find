@@ -66,10 +66,21 @@ CORS ([config/cors.php](../../../backend/config/cors.php)) ya tiene patrón `^ht
 
 ### Config requerida en frontend (producción)
 
+En `.env.production` del servidor de build (no committed; ver
+[`.env.production.example`](../../../frontend/.env.production.example)):
+
 ```env
 VITE_API_URL=https://apifind.lendus.app/api
+VITE_REVERB_HOST=apifind.lendus.app
+VITE_REVERB_PORT=443
+VITE_REVERB_SCHEME=https
 # NO setear VITE_TENANT_ID en prod: el subdominio del frontend lo resuelve.
 ```
+
+> El backend HTTP y el WebSocket Reverb **no se declaran per-tenant** en
+> `frontend/tenants/<slug>.tenant.ts`. Son infraestructura compartida y se
+> leen de `.env*`. Los `tenant.ts` solo contienen identidad (slug, appId,
+> appName), branding (theme, assets) y configuración nativa (push, deepLink).
 
 ### Super admin global
 

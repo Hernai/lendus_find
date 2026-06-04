@@ -12,12 +12,8 @@ const config: TenantConfig = {
   slug: 'moneycapital',
   appId: 'mx.moneycapital.app',
   appName: 'MoneyCapital',
-  // En dev: emulador Android usa 10.0.2.2 para llegar al host Mac.
-  apiBaseUrl: 'http://10.0.2.2:8000',
-  reverbHost: '10.0.2.2',
-  reverbPort: 8080,
-  reverbScheme: 'http',
-  reverbAppKey: 'local',
+  // Backend (VITE_API_URL) y Reverb (VITE_REVERB_*) viven en `.env*` —
+  // son compartidos en la arquitectura B, no per-tenant.
   assets: {
     icon: 'tenants/moneycapital/icon.png',
     splash: 'tenants/moneycapital/splash.png',
