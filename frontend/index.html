@@ -11,8 +11,12 @@
     <meta name="apple-mobile-web-app-title" content="LendusFind">
     <!-- Manifest PWA dinámico por tenant. Vive en el backend (apifind.lendus.app)
          porque el subdominio del frontend solo sirve estáticos. Usamos
-         %VITE_API_URL% para que se inyecte en build time desde .env*. -->
-    <link rel="manifest" href="%VITE_API_URL%/v2/public/manifest" crossorigin="use-credentials">
+         %VITE_API_URL% para que se inyecte en build time desde .env*.
+         Sin `crossorigin` porque el manifest es público (no necesita Bearer
+         token ni cookies). Con `use-credentials` el browser exige
+         Access-Control-Allow-Credentials:true y el backend tiene
+         supports_credentials=false por diseño (auth Bearer, no cookies). -->
+    <link rel="manifest" href="%VITE_API_URL%/v2/public/manifest">
     <title>LendusFind</title>
   </head>
   <body>
