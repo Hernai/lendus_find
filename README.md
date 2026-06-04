@@ -50,9 +50,13 @@ Las vistas viven en `frontend/src/views/`:
 
 ## Documentación de despliegue
 
-| Componente | Documento |
-|------------|-----------|
-| **Backend** (Laravel + PostgreSQL + Redis + Reverb) en AlmaLinux 9 | [backend/DEPLOYMENT.md](backend/DEPLOYMENT.md) |
+**Empezá por acá**: [DEPLOY.md](DEPLOY.md) — guía rápida con la arquitectura, pre-requisitos, checklist y links a cada sección del runbook detallado.
+
+| Componente / contexto | Documento |
+|-----------------------|-----------|
+| **Visión general del deploy** (arquitectura, env vars, primer paso) | [DEPLOY.md](DEPLOY.md) |
+| **Runbook detallado** (AlmaLinux 9, nginx, php-fpm, Reverb, queue, SELinux, troubleshooting) | [.claude/skills/deploy-ops/SKILL.md](.claude/skills/deploy-ops/SKILL.md) |
+| **Backend** (Laravel + PostgreSQL + Redis + Reverb) — referencia legacy | [backend/DEPLOYMENT.md](backend/DEPLOYMENT.md) |
 | **Frontend Web** (backoffice, portal, landings) en Nginx | [frontend/DEPLOYMENT.md](frontend/DEPLOYMENT.md#web-backoffice--portal--landings) |
 | **Frontend Android** (Capacitor, white-label per-tenant) | [frontend/DEPLOYMENT.md](frontend/DEPLOYMENT.md#android) |
 | **Frontend iOS** (Capacitor, white-label per-tenant) | [frontend/DEPLOYMENT.md](frontend/DEPLOYMENT.md#ios) |
