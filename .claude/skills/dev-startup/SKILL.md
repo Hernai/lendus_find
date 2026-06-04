@@ -334,7 +334,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n mx.lendus.demo/mx.lendus.demo.MainActivity
 ```
 
-> Nota: el demo apunta a `apiBaseUrl: http://localhost:8000`. Desde el emulador Android, `localhost` es **el emulador**, no tu Mac. Para que conecte al backend cambia a `http://10.0.2.2:8000` en `tenants/demo.tenant.ts` y rebuild, o usa ngrok.
+> Nota: el dev local web apunta a `VITE_API_URL=http://localhost:8000/api` (en `.env`). Desde el emulador Android, `localhost` es **el emulador**, no tu Mac. Para que conecte al backend creá un `.env.local` con `VITE_API_URL=http://10.0.2.2:8000/api` y `VITE_REVERB_HOST=10.0.2.2`, y rebuildá. O usá ngrok.
 
 ### "Limpiar todo y arrancar de cero"
 
@@ -384,7 +384,7 @@ Aplicar: `source ~/.zshrc`.
 | iOS build falla en `pod install` | Pods desactualizados | `cd ios/App && pod repo update && pod install` |
 | Emulador Android no aparece en `adb devices` | adb daemon descoordinado | `adb kill-server && adb start-server && adb devices` |
 | App Capacitor no carga (pantalla blanca) | `dist/` no se copió a `android/app/src/main/assets/public/` | `npm run tenant:build -- <slug>` (hace `cap sync`) |
-| App Android no conecta a backend `localhost` | El emulador es otro host | Cambia `apiBaseUrl` a `http://10.0.2.2:8000` o usa ngrok |
+| App Android no conecta a backend `localhost` | El emulador es otro host | Crea `.env.local` con `VITE_API_URL=http://10.0.2.2:8000/api` o usa ngrok |
 | Reverb no conecta desde la app móvil | `VITE_REVERB_HOST=localhost` | Cambia a IP de tu Mac o ngrok HTTPS |
 | CORS error desde Capacitor | `capacitor://localhost` no permitido | Ya está en `backend/config/cors.php`; verifica que no haya cache |
 | `force_update: true` en `/api/v2/public/version` | App con versión < `MOBILE_*_MIN_VERSION` | Sube `X-App-Version` o baja el mínimo en `config/app.php` |

@@ -1,7 +1,13 @@
 # Tenants — Configuración white-label
 
 Cada SOFOM tiene un archivo `<slug>.tenant.ts` que parametriza el build
-nativo para esa marca (bundle ID, nombre, iconos, splash, push, Reverb).
+nativo con su identidad (bundle ID, nombre, iconos, splash, push).
+
+> La URL del backend (`VITE_API_URL`) y la del WebSocket (`VITE_REVERB_*`)
+> **no se declaran aquí**: son infraestructura compartida en la arquitectura
+> B (un solo backend `apifind.lendus.app` que distingue tenants por header
+> `X-Tenant-ID`). Esos valores se leen de `frontend/.env*` durante el build.
+> Ver [`../.env.production.example`](../.env.production.example).
 
 ## Estructura
 
@@ -26,7 +32,7 @@ tenants/
    cp tenants/_template.tenant.ts tenants/acme.tenant.ts
    ```
 
-2. **Llena los campos** (`appId`, `appName`, `reverbAppKey`, etc.).
+2. **Llena los campos** (`appId`, `appName`, `theme.primary`, `assets`, `landingComponent`, `auth.methods`, `push`, `deepLinkHost`).
 
 3. **Coloca los assets** en `tenants/acme/`:
    - `icon.png` — PNG cuadrado 1024×1024

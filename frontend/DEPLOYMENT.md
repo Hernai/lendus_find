@@ -8,7 +8,7 @@ El frontend de **LendusFind** es **un solo proyecto Vue 3 + Vite** que se constr
 | **Android** | `.aab` firmado en Play Store, una app por SOFOM | Solicitantes en celular |
 | **iOS** | `.ipa` firmado en App Store, una app por SOFOM | Solicitantes en celular |
 
-> **Concepto white-label**: cada SOFOM tiene su propia config en `frontend/tenants/<slug>.tenant.ts` que define `appId`, branding, endpoints, push keys, etc. El build acepta `TENANT=<slug>` para producir un artifact específico.
+> **Concepto white-label**: cada SOFOM tiene su propia config en `frontend/tenants/<slug>.tenant.ts` que define identidad (`appId`, `appName`), branding (theme, assets, landing), métodos de auth y push keys. **La URL del backend (`VITE_API_URL`) y la del WebSocket (`VITE_REVERB_*`) NO van en el tenant config** — son infraestructura compartida y se leen de `.env`/`.env.production`. El build acepta `TENANT=<slug>` para producir un artifact específico.
 
 ---
 
@@ -36,17 +36,21 @@ El build de Vite produce HTML + JS + CSS estáticos en `frontend/dist/`. Nginx l
 ### 1. Configurar `.env` del build
 
 ```env
-# frontend/.env.production
-VITE_API_URL=https://api.tudominio.mx/api
-VITE_APP_URL=https://app.tudominio.mx
-VITE_TENANT_ID=demo          # tenant default si no se resuelve por subdomain
-VITE_APP_NAME=LendusFind
+# frontend/.env.production (no commiteado — ver .env.production.example)
+VITE_API_URL=https://apifind.lendus.app/api
+VITE_APP_URL=https://lendus.app
+# NO setear VITE_TENANT_ID en prod: el subdominio (moneycapital.lendus.app)
+# lo resuelve automáticamente con detectTenantSlug().
 
-VITE_REVERB_HOST=api.tudominio.mx
+VITE_REVERB_HOST=apifind.lendus.app
 VITE_REVERB_PORT=443
 VITE_REVERB_SCHEME=https
-VITE_REVERB_APP_KEY=tu_app_key
+VITE_REVERB_APP_KEY=<tomar de backend/.env REVERB_APP_KEY>
 ```
+
+> Estos valores son los mismos para **todos los tenants**: con arquitectura B
+> hay un único backend (`apifind.lendus.app`) que distingue tenants por el
+> header `X-Tenant-ID` que el interceptor agrega a cada request.
 
 ### 2. Build
 
@@ -353,8 +357,9 @@ cd .. && npx cap sync android
 - Reiniciar app después de aceptar permiso (iOS cachea agresivo).
 
 ### WebSocket no conecta en native
-- `reverbHost` debe apuntar a un dominio público (no `localhost` ni IP local).
-- `reverbScheme: 'https'` + `forceTLS: true`.
+- `VITE_REVERB_HOST` (en `.env`/`.env.production`) debe apuntar a un
+  dominio público (no `localhost` ni IP local).
+- `VITE_REVERB_SCHEME=https` + `forceTLS: true` en el cliente Echo.
 
 ---
 
