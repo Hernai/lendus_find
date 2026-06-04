@@ -333,7 +333,14 @@ export const useAuthStore = defineStore('auth', () => {
   const logout = async () => {
     try {
       if (token.value) {
-        await v2.applicant.auth.logout()
+        // Dispatch al endpoint correcto según el tipo de token:
+        // los tokens staff fallan con 401 contra /v2/applicant/auth/logout
+        // (no tienen la ability "applicant" y viceversa).
+        if (isStaff.value) {
+          await v2.staff.auth.logout()
+        } else {
+          await v2.applicant.auth.logout()
+        }
       }
     } catch (error) {
       authLogger.error('Logout API error', error)
