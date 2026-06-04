@@ -9,8 +9,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="LendusFind">
-    <!-- Manifest PWA dinámico por tenant. El backend resuelve el tenant por subdomain. -->
-    <link rel="manifest" href="/api/v2/public/manifest" crossorigin="use-credentials">
+    <!-- Manifest PWA dinámico por tenant. Vive en el backend (apifind.lendus.app)
+         porque el subdominio del frontend solo sirve estáticos. Usamos
+         %VITE_API_URL% para que se inyecte en build time desde .env*. -->
+    <link rel="manifest" href="%VITE_API_URL%/v2/public/manifest" crossorigin="use-credentials">
     <title>LendusFind</title>
   </head>
   <body>
