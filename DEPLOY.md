@@ -10,12 +10,18 @@ detallado paso a paso (con comandos copy-paste) vive en
 
 | Componente | Tecnología | Dónde corre |
 |-----------|------------|-------------|
-| Backend | Laravel 12 + PHP 8.2 | nginx + php-fpm (un solo dominio: `apifind.lendus.app`) |
-| WebSocket | Laravel Reverb | systemd service en `127.0.0.1:8080` (proxy nginx en `/app`) |
+| Backend | Laravel 12 + PHP 8.2 | nginx **o** Apache (httpd) + php-fpm (un solo dominio: `apifind.lendus.app`) |
+| WebSocket | Laravel Reverb | systemd service en `127.0.0.1:8080` (proxy `/app` en nginx o `mod_proxy_wstunnel` en Apache) |
 | Queue worker | Laravel queue Redis | systemd service |
-| Frontend (3 bundles) | Vue 3 + Vite (estáticos) | nginx — un subdominio por SOFOM (`moneycapital.lendus.app`, `finatea.lendus.app`, `demo.lendus.app`) |
+| Frontend (3 bundles) | Vue 3 + Vite (estáticos) | nginx **o** Apache — un subdominio por SOFOM (`moneycapital.lendus.app`, `finatea.lendus.app`, `demo.lendus.app`) |
 | Base de datos | PostgreSQL 15 | `127.0.0.1:5432` (single DB con scoping lógico por tenant) |
 | Cache / queue / sessions | Redis | `127.0.0.1:6379` |
+
+> **Variante del web server**: el runbook soporta tanto **Nginx** (standalone)
+> como **Apache** (cuando el server ya tiene Apache con cPanel/WHM/Plesk).
+> Las secciones 10–11 de la skill cubren Nginx; la sección 21 cubre Apache
+> (incluyendo `mod_proxy_wstunnel`, cache headers, y paths típicos de cPanel).
+> El resto del runbook (Postgres, Redis, env vars, systemd, SELinux) es idéntico.
 
 ---
 
@@ -84,8 +90,8 @@ Seguilas en orden. Tiempo estimado total: 1.5–2 horas.
 | 6 | Crear pool de PHP-FPM dedicado | § 6 | 5 min |
 | 7 | Instalar script de deploy `/usr/local/bin/lendusfind-deploy.sh` | § 7 | 5 min |
 | 8-9 | Crear systemd units para Reverb y queue worker | § 8-9 | 5 min |
-| 10 | Configurar nginx para el backend (`apifind.lendus.app`) | § 10 | 5 min |
-| 11 | Buildear el frontend (3 tenants) y subir el `dist/` por scp/rsync. Configurar nginx para los 3 subdominios | § 11 | 15-30 min |
+| 10 | Configurar nginx **o** Apache para el backend (`apifind.lendus.app`) | § 10 (nginx) **o** § 21.2 (Apache) | 5–10 min |
+| 11 | Buildear el frontend (3 tenants) y subir el `dist/` por scp/rsync. Configurar nginx **o** Apache para los 3 subdominios | § 11 (nginx) **o** § 21.3 (Apache) | 15-30 min |
 | 12 | Emitir certificados Let's Encrypt para los 5 dominios | § 12 | 5 min |
 | 13 | Configurar SELinux (contextos + booleans) | § 13 | 5 min |
 | 14 | Configurar firewalld (solo 80/443/22) | § 14 | 2 min |
@@ -126,19 +132,18 @@ En LendusFind, los env vars **no están hardcoded** en el código — viven en a
 
 ## Si algo falla
 
-Ver tabla de troubleshooting en
-[`.claude/skills/deploy-ops/SKILL.md`](.claude/skills/deploy-ops/SKILL.md) § 19.
-Cubre los 12 problemas más comunes en AlmaLinux:
+Ver tablas de troubleshooting en
+[`.claude/skills/deploy-ops/SKILL.md`](.claude/skills/deploy-ops/SKILL.md):
 
-- `502 Bad Gateway` (php-fpm socket)
-- `403 Forbidden` en nginx (SELinux)
-- `500` tras cambiar `.env` (config:cache stale)
-- `could not find driver pgsql` / `Class "Redis" not found` (extensiones PHP faltantes)
-- Reverb connection refused (proxy nginx)
-- Queue jobs no procesados
-- Certbot timeout (DNS o firewall)
-- Composer OOM
-- etc.
+- **§ 19 (Nginx + comunes)**: `502 Bad Gateway`, `403 Forbidden`/SELinux,
+  `500` tras cambiar `.env` (config:cache stale), `could not find driver pgsql`,
+  `Class "Redis" not found`, Reverb connection refused, Queue stuck,
+  Certbot timeout, Composer OOM, etc.
+- **§ 21.9 (Apache-specific)**: `curl /app` devuelve 404 con HTML de
+  Laravel (proxy `wstunnel` mal configurado), `502 Bad Gateway` en `/app`,
+  `503` por `setsebool httpd_can_network_relay`, frontend devuelve HTML
+  cuando un chunk JS no existe (cache stale o build incompleto),
+  `mod_proxy_wstunnel` no carga, cPanel pisa el VirtualHost, etc.
 
 ---
 
@@ -150,7 +155,7 @@ Cubre los 12 problemas más comunes en AlmaLinux:
 | [`.claude/skills/multitenancy/SKILL.md`](.claude/skills/multitenancy/SKILL.md) | Cómo funciona la arquitectura multi-tenant (header `X-Tenant-ID`, scoping, branding) |
 | [`.claude/skills/mobile-deploy/SKILL.md`](.claude/skills/mobile-deploy/SKILL.md) | Agregar un nuevo SOFOM (tenant), buildear apps nativas iOS/Android, configurar push |
 | [`frontend/DEPLOYMENT.md`](frontend/DEPLOYMENT.md) | Detalles específicos del frontend (PWA, Capacitor, tenant configs) |
-| [`backend/.env.example`](backend/.env.example) | Plantilla de env vars del backend con valores de prod comentados |
+| [`backend/.env.exampleee`](backend/.env.example) | Plantilla de env vars del backend con valores de prod comentados |
 | [`frontend/.env.production.example`](frontend/.env.production.example) | Plantilla de env vars del frontend para producción |
 
 ---

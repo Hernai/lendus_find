@@ -9,9 +9,22 @@ description: Runbook a prueba de tontos para desplegar LendusFind en un servidor
 
 Usar este runbook al hacer un primer deploy de LendusFind a producción en
 un servidor AlmaLinux 9 plano (sin Docker/K8s), o al onboardear un
-servidor staging idéntico. Audiencia: DevOps con experiencia Linux/Nginx.
+servidor staging idéntico. Audiencia: DevOps con experiencia Linux.
 Si la infra cambia a containers o PaaS, esta skill queda como referencia
 para los gotchas (SELinux, `config:cache`, php-fpm env) y la topología.
+
+**Variante del web server**: el runbook cubre **dos sabores** del mismo
+deploy:
+
+- **Variante Nginx** (secciones 10–11): standalone/VPS sin panel.
+- **Variante Apache** (sección 21): cuando el servidor ya tiene Apache
+  con cPanel/WHM/Plesk u otro stack heredado. Cubre los VirtualHosts del
+  backend y los frontends, el WebSocket proxy (`mod_proxy_wstunnel`) y
+  los gotchas SELinux específicos de `httpd_t`.
+
+Elegí una de las dos según tu setup y saltá la otra. El resto del
+runbook (Postgres, Redis, env vars, systemd, SELinux base) aplica igual
+para ambos.
 
 ## Topología
 
@@ -670,13 +683,285 @@ sudo -u deploy -E php artisan migrate:rollback --force
 - Migraciones siempre `--force` en prod (Laravel pide confirmación interactiva si no).
 - Modo mantenimiento (`php artisan down`) automático durante migraciones, levantado al final (`php artisan up`).
 
+## 21. Variante Apache (httpd) — backend + frontends
+
+Usar esta variante cuando el server tiene Apache instalado (típico de
+cPanel/WHM, Plesk, hosting administrado o stacks heredados). Saltea las
+secciones 10–11 si estás acá; lo demás (Postgres, Redis, env vars,
+systemd, SELinux base, firewall) aplica igual.
+
+### 21.1 Módulos requeridos
+
+```bash
+# AlmaLinux 9 — Apache (httpd) viene con el core, falta wstunnel
+sudo dnf install -y httpd mod_ssl
+# mod_proxy_wstunnel suele venir con httpd pero hay que cargarlo
+httpd -M 2>&1 | grep -E "proxy_module|proxy_http|proxy_wstunnel|rewrite|ssl"
+```
+
+Tenés que ver estos 5: `proxy_module`, `proxy_http_module`,
+`proxy_wstunnel_module`, `rewrite_module`, `ssl_module`. Si falta alguno,
+editá `/etc/httpd/conf.modules.d/00-proxy.conf`:
+
+```apache
+LoadModule proxy_module modules/mod_proxy.so
+LoadModule proxy_http_module modules/mod_proxy_http.so
+LoadModule proxy_wstunnel_module modules/mod_proxy_wstunnel.so
+LoadModule rewrite_module modules/mod_rewrite.so
+```
+
+Y `/etc/httpd/conf.modules.d/00-ssl.conf`:
+```apache
+LoadModule ssl_module modules/mod_ssl.so
+```
+
+### 21.2 VirtualHost del backend — `apifind.lendus.app`
+
+Crear `/etc/httpd/conf.d/apifind.lendus.app.conf`:
+
+```apache
+# Redirect HTTP → HTTPS
+<VirtualHost *:80>
+    ServerName apifind.lendus.app
+    Redirect permanent / https://apifind.lendus.app/
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName apifind.lendus.app
+    DocumentRoot /var/www/lendusfind/backend/backend/public
+
+    SSLEngine on
+    SSLCertificateFile      /etc/letsencrypt/live/apifind.lendus.app/fullchain.pem
+    SSLCertificateKeyFile   /etc/letsencrypt/live/apifind.lendus.app/privkey.pem
+    Include /etc/letsencrypt/options-ssl-apache.conf
+
+    ServerTokens Prod
+    ServerSignature Off
+
+    ErrorLog  /var/log/httpd/apifind.error.log
+    CustomLog /var/log/httpd/apifind.access.log combined
+
+    # ===========================================
+    # WebSocket Reverb — proxypear /app a 127.0.0.1:8080
+    # IMPORTANTE: este bloque va ANTES del handler PHP, sino Apache lo
+    # entrega a Laravel y devuelve 404.
+    # ===========================================
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule ^/app/?(.*) ws://127.0.0.1:8080/app/$1 [P,L]
+    RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+    RewriteRule ^/app/?(.*) http://127.0.0.1:8080/app/$1 [P,L]
+    ProxyPreserveHost On
+    ProxyRequests Off
+    ProxyTimeout 3600
+
+    # ===========================================
+    # Laravel — todo lo demás (REST API)
+    # ===========================================
+    <Directory /var/www/lendusfind/backend/backend/public>
+        Options -Indexes +FollowSymLinks
+        AllowOverride All
+        Require all granted
+
+        # PHP-FPM via Unix socket (configurado en sección 6)
+        <FilesMatch \.php$>
+            SetHandler "proxy:unix:/var/run/php-fpm/lendusfind.sock|fcgi://localhost/"
+        </FilesMatch>
+    </Directory>
+
+    # Subir el límite si Laravel sube docs grandes
+    LimitRequestBody 52428800
+</VirtualHost>
+```
+
+> **`.htaccess` de Laravel**: el `public/.htaccess` de Laravel ya hace el
+> rewriting a `index.php`. Como pusimos `AllowOverride All`, Apache lo
+> procesa. No hace falta duplicar reglas.
+
+### 21.3 VirtualHost de los frontends — `*.lendus.app`
+
+Crear `/etc/httpd/conf.d/tenants.lendus.app.conf`:
+
+```apache
+<VirtualHost *:80>
+    ServerName lendus.app
+    ServerAlias moneycapital.lendus.app finatea.lendus.app demo.lendus.app
+    Redirect permanent / https://%{HTTP_HOST}/
+</VirtualHost>
+
+# Bloque común a los 3 tenants: el directorio del DocumentRoot se
+# resuelve dinámicamente vía SetEnvIf según el Host.
+<VirtualHost *:443>
+    ServerName moneycapital.lendus.app
+    ServerAlias finatea.lendus.app demo.lendus.app
+
+    SSLEngine on
+    SSLCertificateFile      /etc/letsencrypt/live/lendus.app/fullchain.pem
+    SSLCertificateKeyFile   /etc/letsencrypt/live/lendus.app/privkey.pem
+    Include /etc/letsencrypt/options-ssl-apache.conf
+
+    # Map Host → tenant dir
+    SetEnvIf Host "moneycapital.lendus.app" TENANT_DIR=frontend-moneycapital
+    SetEnvIf Host "finatea.lendus.app"       TENANT_DIR=frontend-finatea
+    SetEnvIf Host "demo.lendus.app"          TENANT_DIR=frontend-demo
+
+    # DocumentRoot resuelto por env var
+    DocumentRoot /var/www/lendusfind/${TENANT_DIR}
+
+    ErrorLog  /var/log/httpd/tenants.error.log
+    CustomLog /var/log/httpd/tenants.access.log combined
+
+    <Directory /var/www/lendusfind/frontend-moneycapital>
+        AllowOverride None
+        Require all granted
+        Options -Indexes
+    </Directory>
+    <Directory /var/www/lendusfind/frontend-finatea>
+        AllowOverride None
+        Require all granted
+        Options -Indexes
+    </Directory>
+    <Directory /var/www/lendusfind/frontend-demo>
+        AllowOverride None
+        Require all granted
+        Options -Indexes
+    </Directory>
+
+    # ===========================================
+    # Cache headers — clave para evitar bugs de bundle stale en deploys
+    # ===========================================
+    # SW: nunca cachear (el browser tiene que ver el SW nuevo en cada deploy)
+    <LocationMatch "^/sw\.js$">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Expires "0"
+    </LocationMatch>
+
+    # index.html: tampoco cachear (apunta a chunks con hash variable)
+    <LocationMatch "^/(index\.html)?$">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Expires "0"
+    </LocationMatch>
+
+    # Assets con hash en el nombre: cache larga (immutable)
+    <LocationMatch "\.(?:js|css|woff2?|png|jpg|jpeg|svg|ico)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </LocationMatch>
+
+    # ===========================================
+    # SPA fallback: /assets/* directo; cualquier otra ruta → index.html
+    # ===========================================
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+    RewriteRule ^ /index.html [L]
+</VirtualHost>
+```
+
+Requiere `mod_headers` (suele venir): `httpd -M | grep headers_module`.
+
+### 21.4 PHP-FPM con Apache
+
+La sección 6 ya configura el pool PHP-FPM con socket Unix en
+`/var/run/php-fpm/lendusfind.sock`. En Apache, el `SetHandler` del
+VirtualHost lo usa directamente. No hace falta `mod_php` (ojo: si está
+instalado, deshabilítarlo con `dnf remove php` y mantener solo `php-fpm`).
+
+### 21.5 SELinux específico de Apache
+
+Las reglas de la sección 13 ya usan `httpd_sys_content_t` y
+`httpd_sys_rw_content_t`, que son los contextos correctos para Apache.
+**No hay que cambiar nada** — los mismos `chcon`/`setsebool` funcionan
+idénticos con httpd.
+
+Boolean específico para `mod_proxy_wstunnel` + Reverb local:
+```bash
+sudo setsebool -P httpd_can_network_relay 1
+```
+
+### 21.6 TLS con Let's Encrypt (Apache)
+
+```bash
+sudo dnf install -y python3-certbot-apache
+sudo certbot --apache -d apifind.lendus.app
+sudo certbot --apache -d lendus.app -d moneycapital.lendus.app -d finatea.lendus.app -d demo.lendus.app
+```
+
+Certbot edita los VirtualHosts automáticamente. Si ya los tenés escritos
+a mano (como arriba), usá `--apache --reinstall` o `certonly` + agregás
+las directivas SSL vos.
+
+### 21.7 Habilitar y arrancar
+
+```bash
+sudo apachectl configtest          # verifica syntax — debe imprimir "Syntax OK"
+sudo systemctl enable --now httpd
+sudo systemctl reload httpd        # para apply de cambios
+```
+
+### 21.8 Health-checks específicos Apache
+
+```bash
+# ¿Está sirviendo?
+curl -fsI https://apifind.lendus.app/api/v2/public/health
+curl -fsI https://moneycapital.lendus.app/
+
+# ¿Proxy WebSocket funciona? Handshake manual:
+curl -i -N --max-time 5 \
+  -H "Connection: Upgrade" \
+  -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Version: 13" \
+  -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+  "https://apifind.lendus.app/app/<REVERB_APP_KEY>"
+# Esperar: HTTP/1.1 101 Switching Protocols
+
+# Logs
+sudo tail -f /var/log/httpd/apifind.error.log
+sudo tail -f /var/log/httpd/tenants.error.log
+```
+
+### 21.9 Troubleshooting Apache-specific
+
+| Síntoma | Causa | Fix |
+|---------|-------|-----|
+| `curl` al `/app/...` devuelve `404 Not Found` con HTML de Laravel | Apache no proxypea `/app`, lo pasa a PHP | Verificar que el bloque `RewriteRule` `^/app` esté ANTES del handler PHP en el VirtualHost de `apifind` |
+| `502 Bad Gateway` en `/app` | Apache proxypea pero Reverb no responde | `ss -tlnp \| grep 8080`; iniciar Reverb (sección 8) |
+| `503 Service Unavailable` en proxy | Falta `setsebool httpd_can_network_relay 1` | Aplicar el boolean y `setenforce` recargar SELinux |
+| Frontend devuelve HTML cuando el chunk JS no existe → `Failed to load module script: Expected JS but got text/html` | Bundle viejo cacheado por el browser/SW o build incompleto en `dist/` | (1) Verificar que `ls /var/www/lendusfind/frontend-<tenant>/assets/` tiene los archivos con los hashes que pide el browser. (2) Desregistrar SW + clear site data + hard refresh. (3) Confirmar que el VirtualHost tiene `Cache-Control: no-cache` para `sw.js` e `index.html` (sección 21.3). |
+| `mod_proxy_wstunnel.so` no carga | Módulo no instalado o mal nombre | `httpd -M \| grep wstunnel`. AlmaLinux 9 lo trae con `httpd` core; verificar `LoadModule` |
+| Apache + cPanel pisa el VirtualHost custom | cPanel regenera config desde `/var/cpanel/userdata/` | Usar Include EasyApache o `pre_virtualhost_global.conf`. Consultar `EA4` docs |
+| 502 / errores en POST grandes | `LimitRequestBody` bajo o `php.ini` con `upload_max_filesize` chico | Subir ambos: Apache 50 MB + `php_admin_value[upload_max_filesize]=50M` en el pool PHP-FPM |
+| Certbot falla en `--apache` con vhost custom | Detección automática rota | Usar `certonly --webroot -w /var/www/lendusfind/backend/backend/public -d apifind.lendus.app` y agregar las directivas SSL a mano |
+
+### 21.10 Convención de paths con cPanel/WHM
+
+Si el server usa cPanel, los DocumentRoots típicos son
+`/home/<user>/public_html/<dominio>/` en lugar de `/var/www/lendusfind/`.
+Adaptá:
+
+| Path en runbook estándar | Path típico cPanel |
+|--------------------------|--------------------|
+| `/var/www/lendusfind/backend/backend/public` | `/home/lendus/public_html/apifind.lendus.app` |
+| `/var/www/lendusfind/frontend-moneycapital` | `/home/lendus/public_html/moneycapital.lendus.app` |
+| `/home/lendus/laravelfiles_moneycapital` | El código Laravel afuera del `public_html` (recomendado por cPanel) |
+
+Mantener los `.env`/sysconfig fuera del DocumentRoot para que Apache no
+los sirva como archivos públicos.
+
 ## Archivos clave de esta skill
 
+Variante Nginx:
+- `/etc/nginx/conf.d/apifind.lendus.app.conf` (sección 10)
+- `/etc/nginx/conf.d/tenants.lendus.app.conf` (sección 11.3)
+
+Variante Apache:
+- `/etc/httpd/conf.d/apifind.lendus.app.conf` (sección 21.2)
+- `/etc/httpd/conf.d/tenants.lendus.app.conf` (sección 21.3)
+
+Comunes a ambos:
 - `/etc/sysconfig/lendusfind-backend` — env vars de prod (600 root:root)
 - `/etc/php-fpm.d/lendusfind.conf` — pool dedicado
 - `/etc/systemd/system/lendusfind-reverb.service`
 - `/etc/systemd/system/lendusfind-queue.service`
-- `/etc/nginx/conf.d/apifind.lendus.app.conf`
-- `/etc/nginx/conf.d/tenants.lendus.app.conf`
 - `/usr/local/bin/lendusfind-deploy.sh` — entrypoint del deploy
-- `/var/www/lendusfind/` — root de la app
+- `/var/www/lendusfind/` — root de la app (o `/home/<user>/public_html/` con cPanel)
