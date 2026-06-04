@@ -26,7 +26,10 @@ class ApiLogController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // Resolvemos el tenant del request (header X-Tenant-ID) en vez de
+        // $staff->tenant porque el super admin global tiene tenant_id NULL.
+        // RequireStaff ya valida cross-tenant para staff per-tenant.
+        $tenant = app('tenant');
 
         $query = ApiLog::where('tenant_id', $tenant->id)
             ->orderBy('created_at', 'desc');
@@ -80,7 +83,10 @@ class ApiLogController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // Resolvemos el tenant del request (header X-Tenant-ID) en vez de
+        // $staff->tenant porque el super admin global tiene tenant_id NULL.
+        // RequireStaff ya valida cross-tenant para staff per-tenant.
+        $tenant = app('tenant');
 
         $apiLog = ApiLog::where('tenant_id', $tenant->id)
             ->where('id', $id)
@@ -100,7 +106,10 @@ class ApiLogController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // Resolvemos el tenant del request (header X-Tenant-ID) en vez de
+        // $staff->tenant porque el super admin global tiene tenant_id NULL.
+        // RequireStaff ya valida cross-tenant para staff per-tenant.
+        $tenant = app('tenant');
 
         $providers = ApiLog::where('tenant_id', $tenant->id)
             ->distinct()
@@ -122,7 +131,10 @@ class ApiLogController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // Resolvemos el tenant del request (header X-Tenant-ID) en vez de
+        // $staff->tenant porque el super admin global tiene tenant_id NULL.
+        // RequireStaff ya valida cross-tenant para staff per-tenant.
+        $tenant = app('tenant');
 
         // Get stats for today
         $today = now()->startOfDay();

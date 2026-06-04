@@ -34,7 +34,9 @@ class IntegrationController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // El super admin global tiene tenant_id NULL; usamos el tenant
+        // resuelto del header X-Tenant-ID. RequireStaff valida cross-tenant.
+        $tenant = app('tenant');
 
         $configs = TenantApiConfig::where('tenant_id', $tenant->id)
             ->orderBy('provider')
@@ -68,7 +70,9 @@ class IntegrationController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // El super admin global tiene tenant_id NULL; usamos el tenant
+        // resuelto del header X-Tenant-ID. RequireStaff valida cross-tenant.
+        $tenant = app('tenant');
 
         $validator = Validator::make($request->all(), [
             'provider' => 'required|string|in:' . implode(',', array_keys(TenantApiConfig::PROVIDERS)),
@@ -169,7 +173,9 @@ class IntegrationController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // El super admin global tiene tenant_id NULL; usamos el tenant
+        // resuelto del header X-Tenant-ID. RequireStaff valida cross-tenant.
+        $tenant = app('tenant');
 
         $config = TenantApiConfig::where('tenant_id', $tenant->id)
             ->where('id', $id)
@@ -292,7 +298,9 @@ class IntegrationController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // El super admin global tiene tenant_id NULL; usamos el tenant
+        // resuelto del header X-Tenant-ID. RequireStaff valida cross-tenant.
+        $tenant = app('tenant');
 
         $config = TenantApiConfig::where('tenant_id', $tenant->id)
             ->where('id', $id)
@@ -316,7 +324,9 @@ class IntegrationController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // El super admin global tiene tenant_id NULL; usamos el tenant
+        // resuelto del header X-Tenant-ID. RequireStaff valida cross-tenant.
+        $tenant = app('tenant');
 
         $config = TenantApiConfig::where('tenant_id', $tenant->id)
             ->where('id', $id)

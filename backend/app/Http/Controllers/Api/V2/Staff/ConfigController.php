@@ -27,7 +27,9 @@ class ConfigController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // El super admin global tiene tenant_id NULL; usamos el tenant
+        // resuelto del header X-Tenant-ID. RequireStaff valida cross-tenant.
+        $tenant = app('tenant');
 
         return $this->success([
             'tenant' => [
@@ -56,7 +58,9 @@ class ConfigController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // El super admin global tiene tenant_id NULL; usamos el tenant
+        // resuelto del header X-Tenant-ID. RequireStaff valida cross-tenant.
+        $tenant = app('tenant');
 
         $validated = $request->validate([
             'name' => 'sometimes|string|max:100',
@@ -92,7 +96,9 @@ class ConfigController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // El super admin global tiene tenant_id NULL; usamos el tenant
+        // resuelto del header X-Tenant-ID. RequireStaff valida cross-tenant.
+        $tenant = app('tenant');
 
         $validated = $request->validate([
             'primary_color' => 'nullable|string|regex:/^#[0-9A-Fa-f]{6}$/',
@@ -130,7 +136,9 @@ class ConfigController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // El super admin global tiene tenant_id NULL; usamos el tenant
+        // resuelto del header X-Tenant-ID. RequireStaff valida cross-tenant.
+        $tenant = app('tenant');
 
         return $this->success([
             'api_configs' => $tenant->apiConfigs->map->toApiArray(),
@@ -148,7 +156,9 @@ class ConfigController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // El super admin global tiene tenant_id NULL; usamos el tenant
+        // resuelto del header X-Tenant-ID. RequireStaff valida cross-tenant.
+        $tenant = app('tenant');
 
         $validated = $request->validate([
             'provider' => 'required|string|max:50',
@@ -190,7 +200,9 @@ class ConfigController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // El super admin global tiene tenant_id NULL; usamos el tenant
+        // resuelto del header X-Tenant-ID. RequireStaff valida cross-tenant.
+        $tenant = app('tenant');
 
         $config = TenantApiConfig::where('tenant_id', $tenant->id)
             ->where('id', $id)
@@ -210,7 +222,9 @@ class ConfigController extends Controller
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
-        $tenant = $staff->tenant;
+        // El super admin global tiene tenant_id NULL; usamos el tenant
+        // resuelto del header X-Tenant-ID. RequireStaff valida cross-tenant.
+        $tenant = app('tenant');
 
         $config = TenantApiConfig::where('tenant_id', $tenant->id)
             ->where('id', $id)

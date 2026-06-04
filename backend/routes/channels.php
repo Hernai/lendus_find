@@ -12,20 +12,30 @@ use Illuminate\Support\Facades\Log;
  *
  * Sanctum entrega el modelo asociado al token activo, así que estos
  * canales se invocan con uno u otro tipo y debemos manejar ambos.
+ *
+ * Las guards `function_exists()` evitan FatalError "Cannot redeclare ..."
+ * cuando Laravel carga `channels.php` más de una vez (typical en
+ * `route:cache`/`config:cache` durante deploy).
  */
-function broadcast_is_staff(Model $user): bool
-{
-    return $user instanceof StaffAccount;
+if (!function_exists('broadcast_is_staff')) {
+    function broadcast_is_staff(Model $user): bool
+    {
+        return $user instanceof StaffAccount;
+    }
 }
 
-function broadcast_is_applicant(Model $user): bool
-{
-    return $user instanceof ApplicantAccount;
+if (!function_exists('broadcast_is_applicant')) {
+    function broadcast_is_applicant(Model $user): bool
+    {
+        return $user instanceof ApplicantAccount;
+    }
 }
 
-function broadcast_can_view_all_applications(Model $user): bool
-{
-    return $user instanceof StaffAccount && $user->canViewAllApplications();
+if (!function_exists('broadcast_can_view_all_applications')) {
+    function broadcast_can_view_all_applications(Model $user): bool
+    {
+        return $user instanceof StaffAccount && $user->canViewAllApplications();
+    }
 }
 
 // Canal de aplicación específica (staff viendo la aplicación)
