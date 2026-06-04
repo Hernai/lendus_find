@@ -143,4 +143,5 @@ Detailed conventions are in `.claude/skills/`. Use when working on specific area
 | `dev-ops` | Starting/stopping servers, installing deps, troubleshooting, scripts, env config |
 | `dev-startup` | Manual de boot/halt completo: backend, Reverb, queue, frontend web, emulador Android, simulador iOS, recetas combinadas |
 | `mobile-deploy` | Releases móviles white-label per-tenant: agregar SOFOMs, build iOS/Android, push APNs/FCM |
+| `deploy-ops` | Runbook de deploy en producción AlmaLinux 9 bare-metal (nginx + php-fpm + Reverb + queue) — env vars, SELinux, firewalld, script de deploy, troubleshooting |
 | `git-workflow` | Git commits, branches, PRs, tags, versionado — Conventional Commits en español |
