@@ -785,65 +785,77 @@ class ApplicationService
      */
     public function getStatistics(Tenant $tenant, ?string $dateFrom = null, ?string $dateTo = null): array
     {
-        $query = Application::where('tenant_id', $tenant->id);
+        // Cache 60s por tenant+rango. El dashboard refresca seguido pero los
+        // numeros no necesitan ser exactos al segundo. Sin cache, este endpoint
+        // dispara ~17 queries (un COUNT por cada uno de los 13 status mas
+        // total, today, processing). Con cache, ~95% de los hits responden
+        // con 0 queries.
+        $cacheKey = "applications:statistics:{$tenant->id}:" . md5(($dateFrom ?? '') . '|' . ($dateTo ?? ''));
 
-        if ($dateFrom) {
-            $query->where('created_at', '>=', $dateFrom);
-        }
-        if ($dateTo) {
-            $query->where('created_at', '<=', $dateTo);
-        }
+        return \Illuminate\Support\Facades\Cache::remember(
+            $cacheKey,
+            60,
+            fn () => $this->buildStatistics($tenant, $dateFrom, $dateTo)
+        );
+    }
 
-        $total = (clone $query)->count();
+    /**
+     * 17 queries originales -> 3:
+     *  1) group by status (cuenta total y byStatus en una pasada)
+     *  2) approved+rejected today (1 query con FILTER)
+     *  3) avg processing time en SQL (sin cargar todos los records a PHP)
+     */
+    private function buildStatistics(Tenant $tenant, ?string $dateFrom, ?string $dateTo): array
+    {
+        $baseConditions = ['tenant_id' => $tenant->id];
 
-        // Count by each status (lowercase keys for consistency)
+        // Query 1: COUNT total + COUNT por status en una sola pasada.
+        $statusCounts = Application::where($baseConditions)
+            ->when($dateFrom, fn ($q) => $q->where('created_at', '>=', $dateFrom))
+            ->when($dateTo, fn ($q) => $q->where('created_at', '<=', $dateTo))
+            ->selectRaw('status, COUNT(*) as count')
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->toArray();
+
         $byStatus = [];
         foreach (array_keys(Application::statuses()) as $status) {
-            $byStatus[strtolower($status)] = (clone $query)->where('status', $status)->count();
+            $byStatus[strtolower($status)] = (int) ($statusCounts[$status] ?? 0);
         }
+        $total = (int) array_sum($statusCounts);
 
-        // Pending review = submitted
-        $pendingReview = $byStatus['submitted'] ?? 0;
-
-        // Pending documents = docs_pending
-        $pendingDocuments = $byStatus['docs_pending'] ?? 0;
-
-        // Approved/rejected today
+        // Query 2: approved+rejected today en una sola query con FILTER.
         $today = now()->startOfDay();
-        $approvedToday = (clone $query)
-            ->where('status', Application::STATUS_APPROVED)
+        $todayRow = Application::where($baseConditions)
+            ->when($dateFrom, fn ($q) => $q->where('created_at', '>=', $dateFrom))
+            ->when($dateTo, fn ($q) => $q->where('created_at', '<=', $dateTo))
             ->where('status_changed_at', '>=', $today)
-            ->count();
-        $rejectedToday = (clone $query)
-            ->where('status', Application::STATUS_REJECTED)
-            ->where('status_changed_at', '>=', $today)
-            ->count();
+            ->whereIn('status', [Application::STATUS_APPROVED, Application::STATUS_REJECTED])
+            ->selectRaw('
+                COUNT(*) FILTER (WHERE status = ?) as approved,
+                COUNT(*) FILTER (WHERE status = ?) as rejected
+            ', [Application::STATUS_APPROVED, Application::STATUS_REJECTED])
+            ->first();
 
-        // Average processing time (from SUBMITTED to APPROVED/REJECTED)
-        $avgProcessingTime = 0;
-        $processedApps = (clone $query)
+        // Query 3: AVG de horas procesadas en SQL puro. Antes cargaba TODOS
+        // los registros (potencialmente miles) y hacia el calculo en PHP.
+        $avgRow = Application::where($baseConditions)
+            ->when($dateFrom, fn ($q) => $q->where('created_at', '>=', $dateFrom))
+            ->when($dateTo, fn ($q) => $q->where('created_at', '<=', $dateTo))
             ->whereIn('status', [Application::STATUS_APPROVED, Application::STATUS_REJECTED])
             ->whereNotNull('submitted_at')
             ->whereNotNull('status_changed_at')
-            ->get(['submitted_at', 'status_changed_at']);
-
-        if ($processedApps->count() > 0) {
-            $totalHours = $processedApps->sum(function ($app) {
-                $submitted = \Carbon\Carbon::parse($app->submitted_at);
-                $changed = \Carbon\Carbon::parse($app->status_changed_at);
-                return $changed->diffInHours($submitted);
-            });
-            $avgProcessingTime = $totalHours / $processedApps->count();
-        }
+            ->selectRaw('AVG(EXTRACT(EPOCH FROM (status_changed_at - submitted_at)) / 3600) as avg_hours')
+            ->first();
 
         return [
             'total' => $total,
             'by_status' => $byStatus,
-            'pending_review' => $pendingReview,
-            'pending_documents' => $pendingDocuments,
-            'approved_today' => $approvedToday,
-            'rejected_today' => $rejectedToday,
-            'average_processing_time_hours' => round((float) $avgProcessingTime, 2),
+            'pending_review' => $byStatus['submitted'] ?? 0,
+            'pending_documents' => $byStatus['docs_pending'] ?? 0,
+            'approved_today' => (int) ($todayRow->approved ?? 0),
+            'rejected_today' => (int) ($todayRow->rejected ?? 0),
+            'average_processing_time_hours' => round((float) ($avgRow->avg_hours ?? 0), 2),
         ];
     }
 

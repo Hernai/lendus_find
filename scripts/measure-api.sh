@@ -328,15 +328,36 @@ echo
 # -----------------------------------------------------------------------------
 # 3. Endpoints Staff (con token, warm)
 # -----------------------------------------------------------------------------
-echo "${BLUE}${BOLD}-- Staff Admin --${NC}"
+echo "${BLUE}${BOLD}-- Staff: dashboards y listados --${NC}"
 print_header
-print_row "GET /v2/staff/me/tenants"          "$(measure GET '/v2/staff/me/tenants'              "${LAST_AUTH_HEADER}")"
-print_row "GET /v2/staff/applications"        "$(measure GET '/v2/staff/applications?page=1&per_page=20' "${LAST_AUTH_HEADER}")"
-print_row "GET /v2/staff/products"            "$(measure GET '/v2/staff/products'                "${LAST_AUTH_HEADER}")"
-print_row "GET /v2/staff/users"               "$(measure GET '/v2/staff/users?page=1&per_page=20' "${LAST_AUTH_HEADER}")"
-print_row "GET /v2/staff/api-logs/"           "$(measure GET '/v2/staff/api-logs/?page=1&per_page=20' "${LAST_AUTH_HEADER}")"
-print_row "GET /v2/staff/api-logs/stats"      "$(measure GET '/v2/staff/api-logs/stats'           "${LAST_AUTH_HEADER}")"
-print_row "GET /v2/staff/api-logs/providers"  "$(measure GET '/v2/staff/api-logs/providers'       "${LAST_AUTH_HEADER}")"
+print_row "GET /v2/staff/me/tenants"                    "$(measure GET '/v2/staff/me/tenants'              "${LAST_AUTH_HEADER}")"
+print_row "GET /v2/staff/applications"                  "$(measure GET '/v2/staff/applications?page=1&per_page=20' "${LAST_AUTH_HEADER}")"
+print_row "GET /v2/staff/applications/board"            "$(measure GET '/v2/staff/applications/board'      "${LAST_AUTH_HEADER}")"
+print_row "GET /v2/staff/applications/statistics"       "$(measure GET '/v2/staff/applications/statistics' "${LAST_AUTH_HEADER}")"
+print_row "GET /v2/staff/applications/unassigned"       "$(measure GET '/v2/staff/applications/unassigned' "${LAST_AUTH_HEADER}")"
+print_row "GET /v2/staff/applications/my-queue"         "$(measure GET '/v2/staff/applications/my-queue'   "${LAST_AUTH_HEADER}")"
+echo
+
+echo "${BLUE}${BOLD}-- Staff: catalogos --${NC}"
+print_header
+print_row "GET /v2/staff/products"                      "$(measure GET '/v2/staff/products'                "${LAST_AUTH_HEADER}")"
+print_row "GET /v2/staff/users"                         "$(measure GET '/v2/staff/users?page=1&per_page=20' "${LAST_AUTH_HEADER}")"
+print_row "GET /v2/staff/loans"                         "$(measure GET '/v2/staff/loans?page=1&per_page=20' "${LAST_AUTH_HEADER}")"
+echo
+
+echo "${BLUE}${BOLD}-- Staff: configuracion del tenant --${NC}"
+print_header
+print_row "GET /v2/staff/config"                        "$(measure GET '/v2/staff/config'                  "${LAST_AUTH_HEADER}")"
+print_row "GET /v2/staff/integrations"                  "$(measure GET '/v2/staff/integrations'            "${LAST_AUTH_HEADER}")"
+print_row "GET /v2/staff/notification-templates"        "$(measure GET '/v2/staff/notification-templates'  "${LAST_AUTH_HEADER}")"
+print_row "GET /v2/staff/notification-templates/config" "$(measure GET '/v2/staff/notification-templates/config' "${LAST_AUTH_HEADER}")"
+echo
+
+echo "${BLUE}${BOLD}-- Staff: logs y auditoria --${NC}"
+print_header
+print_row "GET /v2/staff/api-logs"                      "$(measure GET '/v2/staff/api-logs?page=1&per_page=20' "${LAST_AUTH_HEADER}")"
+print_row "GET /v2/staff/api-logs/stats"                "$(measure GET '/v2/staff/api-logs/stats'          "${LAST_AUTH_HEADER}")"
+print_row "GET /v2/staff/api-logs/providers"            "$(measure GET '/v2/staff/api-logs/providers'      "${LAST_AUTH_HEADER}")"
 echo
 
 # -----------------------------------------------------------------------------
