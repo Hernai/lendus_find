@@ -191,11 +191,28 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $applications = $this->service->getUnassigned($staff->isSuperAdmin() ? app('tenant') : $staff->tenant);
+        try {
+            $tenant = $staff->isSuperAdmin() ? app('tenant') : $staff->tenant;
+            if (!$tenant) {
+                return $this->error('TENANT_NOT_RESOLVED', 'No se pudo resolver el tenant para este staff.', 422);
+            }
 
-        return $this->success([
-            'applications' => $applications->map(fn($app) => $this->formatApplication($app)),
-        ]);
+            $applications = $this->service->getUnassigned($tenant);
+
+            return $this->success([
+                'applications' => $applications->map(fn ($app) => $this->formatApplication($app))->all(),
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('GET /v2/staff/applications/unassigned failed', [
+                'staff_id' => $staff?->id,
+                'tenant_id' => $staff?->tenant_id,
+                'error' => $e->getMessage(),
+                'file' => basename($e->getFile()),
+                'line' => $e->getLine(),
+                'trace_short' => collect($e->getTrace())->take(5)->map(fn ($t) => ($t['file'] ?? '?') . ':' . ($t['line'] ?? '?'))->all(),
+            ]);
+            return $this->error('UNASSIGNED_LIST_FAILED', 'No se pudo cargar la lista de solicitudes sin asignar.', 500);
+        }
     }
 
     /**
@@ -210,11 +227,24 @@ class ApplicationController extends Controller
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
-        $applications = $this->service->getAssignedTo($staff, $status);
+        try {
+            $applications = $this->service->getAssignedTo($staff, $status);
 
-        return $this->success([
-            'applications' => $applications->map(fn($app) => $this->formatApplication($app)),
-        ]);
+            return $this->success([
+                'applications' => $applications->map(fn ($app) => $this->formatApplication($app))->all(),
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('GET /v2/staff/applications/my-queue failed', [
+                'staff_id' => $staff?->id,
+                'tenant_id' => $staff?->tenant_id,
+                'status_filter' => $status,
+                'error' => $e->getMessage(),
+                'file' => basename($e->getFile()),
+                'line' => $e->getLine(),
+                'trace_short' => collect($e->getTrace())->take(5)->map(fn ($t) => ($t['file'] ?? '?') . ':' . ($t['line'] ?? '?'))->all(),
+            ]);
+            return $this->error('MY_QUEUE_FAILED', 'No se pudo cargar tu cola de trabajo.', 500);
+        }
     }
 
     /**
