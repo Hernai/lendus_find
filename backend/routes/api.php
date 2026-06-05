@@ -78,7 +78,10 @@ Route::middleware(['tenant', 'auth:sanctum'])->post('/broadcasting/auth', functi
 // =============================================
 // V2: PUBLIC CONFIG (no authentication required)
 // =============================================
-Route::middleware(['tenant', 'metadata'])->prefix('v2')->group(function () {
+// `etag` agrega ETag debil y responde 304 si el cliente envia
+// If-None-Match con el mismo hash. Ahorra el body (~5-50KB) y reduce
+// latencia a ~30ms desde el cliente cuando el payload no cambio.
+Route::middleware(['tenant', 'metadata', 'etag'])->prefix('v2')->group(function () {
     Route::get('/config', [V2ConfigController::class, 'index']);
     Route::get('/public/manifest', V2ManifestController::class);
     Route::get('/public/version', V2VersionController::class);
@@ -282,7 +285,8 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
         // Selector de tenant del usuario autenticado
         // (super admin global → todos; staff per-tenant → solo el suyo)
         // =============================================
-        Route::get('/me/tenants', [\App\Http\Controllers\Api\V2\Staff\AuthController::class, 'availableTenants']);
+        Route::get('/me/tenants', [\App\Http\Controllers\Api\V2\Staff\AuthController::class, 'availableTenants'])
+            ->middleware('etag');
 
         // =============================================
         // Device tokens (push notifications)
