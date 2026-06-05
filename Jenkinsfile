@@ -86,12 +86,31 @@ pipeline {
                     if (params.DRY_RUN) {
                         echo "DRY_RUN: simulando deploy de ${params.REF}"
                     } else {
-                        // Ejecutar como el usuario lendus (dueño del directorio app)
+                        // Estrategia rsync: el server NO es un repo git
+                        // (código se subió originalmente por SFTP). Jenkins
+                        // sí tiene el workspace fresco con el commit nuevo.
+                        // Copiamos backend/ del workspace a APP_DIR
+                        // preservando .env, vendor, storage y bootstrap/cache.
                         sh """
-                            sudo -u lendus bash -c '
-                                cd ${env.APP_DIR}
-                                ./scripts/deploy-backend.sh ${params.REF}
-                            '
+                            sudo rsync -av --delete \\
+                                --exclude='.env' \\
+                                --exclude='.env.*' \\
+                                --exclude='vendor/' \\
+                                --exclude='storage/' \\
+                                --exclude='bootstrap/cache/' \\
+                                --exclude='.git/' \\
+                                ${env.WORKSPACE}/backend/ ${env.APP_DIR}/
+
+                            sudo chown -R lendus:lendus ${env.APP_DIR}
+
+                            # Copiar scripts/ al APP_DIR para que el deploy.sh
+                            # quede disponible para invocaciones manuales.
+                            sudo cp -r ${env.WORKSPACE}/scripts ${env.APP_DIR}/scripts
+                            sudo chown -R lendus:lendus ${env.APP_DIR}/scripts
+                            sudo chmod +x ${env.APP_DIR}/scripts/*.sh
+
+                            # Ejecutar el script con SKIP_GIT=1 (no es repo git)
+                            sudo -u lendus SKIP_GIT=1 bash ${env.APP_DIR}/scripts/deploy-backend.sh ${params.REF}
                         """
                     }
                 }

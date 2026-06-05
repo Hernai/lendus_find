@@ -16,6 +16,9 @@
 #   COMPOSER_BIN        default: /usr/local/bin/composer (autodetect)
 #   SKIP_COMPOSER       si =1, salta composer install
 #   SKIP_RESTART        si =1, salta systemctl restart
+#   SKIP_GIT            si =1, salta git fetch + reset (útil cuando el
+#                       directorio NO es un repo git y Jenkins ya hizo
+#                       rsync del workspace antes de invocar el script)
 # =============================================================================
 set -euo pipefail
 
@@ -24,6 +27,7 @@ APP_DIR="${APP_DIR:-/home/lendus/laravelfiles_moneycapital}"
 PHP_BIN="${PHP_BIN:-ea-php82}"
 SKIP_COMPOSER="${SKIP_COMPOSER:-0}"
 SKIP_RESTART="${SKIP_RESTART:-0}"
+SKIP_GIT="${SKIP_GIT:-0}"
 
 # Autodetect composer
 if [[ -z "${COMPOSER_BIN:-}" ]]; then
@@ -45,13 +49,18 @@ cd "$APP_DIR"
 log "Deploy → $REF en $APP_DIR"
 
 # -----------------------------------------------------------------------------
-# 1. Git pull
+# 1. Git pull (saltable cuando el directorio no es un repo git)
 # -----------------------------------------------------------------------------
-log "git fetch + reset"
-git fetch --all --tags --prune
-git reset --hard "$REF"
-HEAD=$(git rev-parse --short HEAD)
-log "HEAD ahora: $HEAD"
+if [[ "$SKIP_GIT" != "1" ]] && [[ -d .git ]]; then
+    log "git fetch + reset"
+    git fetch --all --tags --prune
+    git reset --hard "$REF"
+    HEAD=$(git rev-parse --short HEAD)
+    log "HEAD ahora: $HEAD"
+else
+    log "SKIP_GIT=$SKIP_GIT, .git $([[ -d .git ]] && echo presente || echo ausente) — salto pull/reset"
+    HEAD="${REF}"
+fi
 
 # -----------------------------------------------------------------------------
 # 2. Composer install (solo si cambió composer.lock o vendor/ está vacío)
@@ -59,11 +68,14 @@ log "HEAD ahora: $HEAD"
 if [[ "$SKIP_COMPOSER" != "1" ]]; then
     if [[ -z "${COMPOSER_BIN:-}" ]]; then
         log "WARN: composer no detectado, salto composer install"
-    elif [[ ! -d vendor/laravel ]] || git diff "${HEAD}^" "${HEAD}" -- composer.lock 2>/dev/null | grep -q .; then
-        log "Composer install (con $PHP_BIN $COMPOSER_BIN)"
+    elif [[ ! -d vendor/laravel ]]; then
+        log "vendor/laravel no existe — composer install"
+        "$PHP_BIN" "$COMPOSER_BIN" install --no-dev --optimize-autoloader --no-interaction
+    elif [[ -d .git ]] && git diff "${HEAD}^" "${HEAD}" -- composer.lock 2>/dev/null | grep -q .; then
+        log "composer.lock cambió — composer install"
         "$PHP_BIN" "$COMPOSER_BIN" install --no-dev --optimize-autoloader --no-interaction
     else
-        log "composer.lock sin cambios, salto install"
+        log "composer.lock sin cambios, salto install (usa SKIP_COMPOSER=0 + tocar composer.lock para forzar)"
     fi
 else
     log "SKIP_COMPOSER=1, salto composer install"
