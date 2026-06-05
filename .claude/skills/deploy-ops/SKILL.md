@@ -849,10 +849,15 @@ Crear `/etc/httpd/conf.d/tenants.lendus.app.conf`:
 
     # ===========================================
     # SPA fallback: /assets/* directo; cualquier otra ruta → index.html
+    # IMPORTANTE: A nivel VirtualHost, %{REQUEST_FILENAME} NO es la ruta
+    # absoluta del filesystem (solo lo es dentro de .htaccess). Si usas
+    # REQUEST_FILENAME aquí, las condiciones -f y -d siempre dan falso y
+    # TODA petición termina en index.html (incluso assets que sí existen).
+    # Hay que componer la ruta con DOCUMENT_ROOT + REQUEST_URI.
     # ===========================================
     RewriteEngine On
-    RewriteCond %{REQUEST_FILENAME} -f [OR]
-    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} -f [OR]
+    RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} -d
     RewriteRule ^ - [L]
     RewriteRule ^ /index.html [L]
 </VirtualHost>
@@ -928,6 +933,8 @@ sudo tail -f /var/log/httpd/tenants.error.log
 | `502 Bad Gateway` en `/app` | Apache proxypea pero Reverb no responde | `ss -tlnp \| grep 8080`; iniciar Reverb (sección 8) |
 | `503 Service Unavailable` en proxy | Falta `setsebool httpd_can_network_relay 1` | Aplicar el boolean y `setenforce` recargar SELinux |
 | Frontend devuelve HTML cuando el chunk JS no existe → `Failed to load module script: Expected JS but got text/html` | Bundle viejo cacheado por el browser/SW o build incompleto en `dist/` | (1) Verificar que `ls /var/www/lendusfind/frontend-<tenant>/assets/` tiene los archivos con los hashes que pide el browser. (2) Desregistrar SW + clear site data + hard refresh. (3) Confirmar que el VirtualHost tiene `Cache-Control: no-cache` para `sw.js` e `index.html` (sección 21.3). |
+| Frontend devuelve HTML para `.js` que **sí existen** en disco. `md5sum index.html` coincide con `curl /assets/foo.js`. Apache responde 200 con `Content-Length` = tamaño del index.html | Las reglas SPA fallback del Include usan `%{REQUEST_FILENAME}` que **no es la ruta absoluta** a nivel VirtualHost — las condiciones `-f`/`-d` siempre dan falso y todo cae a `index.html` | Cambiar las RewriteCond a `%{DOCUMENT_ROOT}%{REQUEST_URI} -f [OR]` y `%{DOCUMENT_ROOT}%{REQUEST_URI} -d` (sección 21.3 ya corregida). `REQUEST_FILENAME` solo funciona en `.htaccess`, no a nivel VirtualHost. |
+| `.htaccess` de cPanel con reglas SPA **duplicadas** y sin flag `[L]` en `RewriteRule ^ /index.html` | cPanel genera un `.htaccess` legacy con el bloque dos veces. Sin `[L]` el procesamiento sigue y la segunda iteración rebote a `/index.html` | Reemplazar el `.htaccess` por uno mínimo: `RewriteEngine On` + condiciones `DOCUMENT_ROOT%{REQUEST_URI} -f/-d` + `RewriteRule ^ - [L]` + `RewriteRule ^ /index.html [L]`. Hacer backup antes. |
 | `mod_proxy_wstunnel.so` no carga | Módulo no instalado o mal nombre | `httpd -M \| grep wstunnel`. AlmaLinux 9 lo trae con `httpd` core; verificar `LoadModule` |
 | Apache + cPanel pisa el VirtualHost custom | cPanel regenera config desde `/var/cpanel/userdata/` | Usar Include EasyApache o `pre_virtualhost_global.conf`. Consultar `EA4` docs |
 | 502 / errores en POST grandes | `LimitRequestBody` bajo o `php.ini` con `upload_max_filesize` chico | Subir ambos: Apache 50 MB + `php_admin_value[upload_max_filesize]=50M` en el pool PHP-FPM |
