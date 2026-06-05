@@ -294,6 +294,12 @@ sudo systemctl reload php-fpm
 sudo systemctl restart lendusfind-reverb
 sudo systemctl restart lendusfind-queue
 
+# Warmup del cache publico — pre-popula v2:config:* y v2:manifest:* para
+# que el primer usuario tras el deploy no pague el cold de ~1s. El reload
+# de FPM arriba mato los workers, OPCache se llena en el primer hit;
+# este warmup hace ese primer hit nosotros, no el usuario.
+sudo -u deploy -E php artisan cache:warmup --force || true
+
 echo "✓ Deploy completado a $(git rev-parse --short HEAD)"
 ```
 
