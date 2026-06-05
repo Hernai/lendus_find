@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Cache;
 
 class Tenant extends Model
 {
@@ -43,6 +44,30 @@ class Tenant extends Model
         'activated_at' => 'datetime',
         'suspended_at' => 'datetime',
     ];
+
+    /**
+     * Invalidar el cache de lookup del middleware `IdentifyTenant` cuando
+     * se cree, actualice o borre un tenant. Las keys vivas son por slug
+     * y por UUID — invalidamos ambas porque IdentifyTenant las usa.
+     */
+    protected static function booted(): void
+    {
+        $forget = function (self $tenant): void {
+            Cache::forget("tenant:lookup:{$tenant->id}");
+            if ($tenant->slug) {
+                Cache::forget("tenant:lookup:{$tenant->slug}");
+            }
+            // Si cambió el slug, también el viejo
+            $originalSlug = $tenant->getOriginal('slug');
+            if ($originalSlug && $originalSlug !== $tenant->slug) {
+                Cache::forget("tenant:lookup:{$originalSlug}");
+            }
+        };
+
+        static::saved($forget);
+        static::deleted($forget);
+        static::restored($forget);
+    }
 
     /**
      * Get the staff accounts for this tenant.

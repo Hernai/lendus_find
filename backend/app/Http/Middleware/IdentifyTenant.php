@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\Tenant;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -72,14 +73,14 @@ class IdentifyTenant
         // 2. Check subdomain
         $subdomain = $this->extractSubdomain($request->getHost());
         if ($subdomain !== null) {
-            return Tenant::where('slug', $subdomain)->first();
+            return $this->findTenantByIdOrSlug($subdomain);
         }
 
         // 3. Check query parameter (for development/testing only)
         if (app()->environment('local', 'testing')) {
             $slug = $request->query('tenant');
             if ($slug !== null && $slug !== '') {
-                return Tenant::where('slug', $slug)->first();
+                return $this->findTenantByIdOrSlug($slug);
             }
 
             // 4. Default tenant for development (convenience for local dev)
@@ -92,22 +93,36 @@ class IdentifyTenant
     }
 
     /**
-     * Find a tenant by UUID or slug.
+     * Find a tenant by UUID or slug, con cache de 10 minutos.
+     *
+     * IdentifyTenant corre en TODAS las requests, así que un lookup sin
+     * cache pega a la DB en cada request. La tabla `tenants` cambia muy
+     * poco (cuando se crea o desactiva un SOFOM). El cache se invalida
+     * en el modelo `Tenant` (eventos `saved`/`deleted`) para no servir
+     * datos viejos.
+     *
+     * TTL de 600s = 10 min: balance entre frescura y carga de DB.
      */
     protected function findTenantByIdOrSlug(string $identifier): ?Tenant
     {
-        // Try by slug first (most common and faster)
-        $tenant = Tenant::where('slug', $identifier)->first();
-        if ($tenant !== null) {
-            return $tenant;
-        }
+        return Cache::remember(
+            "tenant:lookup:{$identifier}",
+            600,
+            function () use ($identifier): ?Tenant {
+                // Try by slug first (most common and faster)
+                $tenant = Tenant::where('slug', $identifier)->first();
+                if ($tenant !== null) {
+                    return $tenant;
+                }
 
-        // Try by UUID if it's a valid UUID format
-        if (Str::isUuid($identifier)) {
-            return Tenant::find($identifier);
-        }
+                // Try by UUID if it's a valid UUID format
+                if (Str::isUuid($identifier)) {
+                    return Tenant::find($identifier);
+                }
 
-        return null;
+                return null;
+            }
+        );
     }
 
     /**
