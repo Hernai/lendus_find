@@ -109,8 +109,10 @@ pipeline {
                             sudo chown -R lendus:lendus ${env.APP_DIR}/scripts
                             sudo chmod +x ${env.APP_DIR}/scripts/*.sh
 
-                            # Ejecutar el script con SKIP_GIT=1 (no es repo git)
-                            sudo -u lendus SKIP_GIT=1 bash ${env.APP_DIR}/scripts/deploy-backend.sh ${params.REF}
+                            # El script detecta automáticamente la ausencia de .git
+                            # y skip el git pull. No necesitamos pasar SKIP_GIT=1
+                            # explícitamente (sudoers bloquea env vars custom).
+                            sudo -u lendus bash ${env.APP_DIR}/scripts/deploy-backend.sh ${params.REF}
                         """
                     }
                 }
