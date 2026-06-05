@@ -102,6 +102,7 @@ Route::middleware(['tenant', 'metadata', 'log.request'])->prefix('v2/staff/auth'
 
     Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/me', [StaffAuthController::class, 'me']);
+        Route::post('/logout', [StaffAuthController::class, 'logout']);
     });
 });
 
