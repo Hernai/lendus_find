@@ -62,6 +62,9 @@ class Tenant extends Model
             if ($originalSlug && $originalSlug !== $tenant->slug) {
                 Cache::forget("tenant:lookup:{$originalSlug}");
             }
+            // V2 public config: payload derivado del tenant (branding, settings,
+            // integraciones). Si el tenant cambió, el config tiene que regenerarse.
+            Cache::forget("v2:config:{$tenant->id}");
         };
 
         static::saved($forget);

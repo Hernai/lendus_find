@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Tenant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Sirve el manifest PWA dinámico por tenant.
@@ -23,7 +24,24 @@ class ManifestController extends Controller
     {
         /** @var Tenant|null $tenant */
         $tenant = $request->attributes->get('tenant') ?: app('tenant');
-        // Relación con tenant_branding (no la columna JSON legacy `branding`).
+
+        // Cache server-side por tenant — invalidado por V2ConfigCacheObserver
+        // al guardar/borrar TenantBranding. El Cache-Control de abajo cachea
+        // tambien browser-side y en CDN intermedios.
+        $manifest = Cache::remember(
+            "v2:manifest:" . ($tenant?->id ?: 'default'),
+            300,
+            fn () => $this->build($tenant)
+        );
+
+        return response()
+            ->json($manifest)
+            ->header('Content-Type', 'application/manifest+json')
+            ->header('Cache-Control', 'public, max-age=300');
+    }
+
+    private function build(?Tenant $tenant): array
+    {
         $branding = $tenant?->brandingConfig;
 
         $name = $branding?->pwa_name ?: $tenant?->name ?: 'LendusFind';
@@ -54,12 +72,11 @@ class ManifestController extends Controller
             ];
         }
 
-        // Fallback razonable si el tenant aún no subió iconos PWA dedicados.
         if (empty($icons) && $logo) {
             $icons[] = ['src' => $logo, 'sizes' => '512x512', 'type' => 'image/png'];
         }
 
-        $manifest = [
+        return [
             'name' => $name,
             'short_name' => $shortName,
             'description' => 'Solicita tu crédito en línea con '.$name,
@@ -72,10 +89,5 @@ class ManifestController extends Controller
             'lang' => 'es-MX',
             'icons' => $icons,
         ];
-
-        return response()
-            ->json($manifest)
-            ->header('Content-Type', 'application/manifest+json')
-            ->header('Cache-Control', 'public, max-age=300');
     }
 }

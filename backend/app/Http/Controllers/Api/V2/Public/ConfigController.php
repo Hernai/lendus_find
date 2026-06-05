@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * V2 Config Controller.
@@ -39,11 +40,38 @@ class ConfigController extends Controller
      * Get tenant configuration.
      *
      * GET /v2/config
+     *
+     * El resultado se cachea 5 min por tenant (clave `v2:config:{id}`). La
+     * config cambia raramente (productos, branding, integraciones) y la
+     * invalidacion la hacen los `booted()` de Tenant, TenantBranding,
+     * Product y TenantApiConfig al guardar.
      */
     public function index(): JsonResponse
     {
         $tenant = app('tenant');
 
+        $payload = Cache::remember(
+            self::cacheKey($tenant->id),
+            300,
+            fn () => $this->buildPayload($tenant)
+        );
+
+        return $this->success($payload);
+    }
+
+    /**
+     * Clave de cache compartida con los hooks de invalidacion en los
+     * modelos. Manten el formato sincronizado con el `forget()` en
+     * Tenant::booted() / Product::booted() / TenantApiConfig::booted() /
+     * TenantBranding::booted().
+     */
+    public static function cacheKey(string $tenantId): string
+    {
+        return "v2:config:{$tenantId}";
+    }
+
+    private function buildPayload($tenant): array
+    {
         // Use tenant_branding table if available, fallback to legacy branding column
         $branding = $tenant->brandingConfig
             ? $tenant->brandingConfig->toApiArray()
@@ -69,7 +97,7 @@ class ConfigController extends Controller
             'active' => $activeIntegrations,
         ];
 
-        return $this->success([
+        return [
             'tenant' => [
                 'id' => $tenant->id,
                 'name' => $tenant->name,
@@ -105,9 +133,9 @@ class ConfigController extends Controller
                 'late_fee_rate' => $p->late_fee_rate,
                 'display_order' => $p->display_order,
                 'is_active' => $p->is_active,
-            ]),
+            ])->all(),
             'options' => $this->getEnumOptions(),
-        ]);
+        ];
     }
 
     /**

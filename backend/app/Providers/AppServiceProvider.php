@@ -6,6 +6,10 @@ use App\Contracts\ApiLoggerInterface;
 use App\Contracts\DocumentStorageInterface;
 use App\Contracts\KycServiceInterface;
 use App\Contracts\SmsServiceInterface;
+use App\Models\Product;
+use App\Models\TenantApiConfig;
+use App\Models\TenantBranding;
+use App\Observers\V2ConfigCacheObserver;
 use App\Services\ApiLoggerService;
 use App\Services\DocumentService;
 use App\Services\ExternalApi\NubariumService;
@@ -60,6 +64,18 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureRateLimiting();
+        $this->registerObservers();
+    }
+
+    /**
+     * Observers que invalidan cache transversal cuando cambian datos
+     * compartidos por multiples endpoints.
+     */
+    protected function registerObservers(): void
+    {
+        Product::observe(V2ConfigCacheObserver::class);
+        TenantApiConfig::observe(V2ConfigCacheObserver::class);
+        TenantBranding::observe(V2ConfigCacheObserver::class);
     }
 
     /**
