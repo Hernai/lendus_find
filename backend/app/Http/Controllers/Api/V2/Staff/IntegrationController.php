@@ -10,6 +10,7 @@ use App\Services\KycServiceFactory;
 use App\Services\TwilioServiceFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Validator;
 
 /**
@@ -32,20 +33,34 @@ class IntegrationController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        /** @var StaffAccount $staff */
-        $staff = $request->user();
-        // El super admin global tiene tenant_id NULL; usamos el tenant
-        // resuelto del header X-Tenant-ID. RequireStaff valida cross-tenant.
         $tenant = app('tenant');
 
-        $configs = TenantApiConfig::where('tenant_id', $tenant->id)
-            ->orderBy('provider')
-            ->orderBy('service_type')
-            ->get();
+        // Cache 5 min — las integraciones del tenant cambian solo cuando
+        // el super_admin las edita. Invalida via V2ConfigCacheObserver
+        // (TenantApiConfig::saved) que ya esta registrado.
+        $integrations = Cache::remember(
+            "integrations:list:{$tenant->id}",
+            300,
+            fn () => TenantApiConfig::where('tenant_id', $tenant->id)
+                ->orderBy('provider')
+                ->orderBy('service_type')
+                ->get()
+                ->map(fn ($config) => $config->toApiArray())
+                ->all()
+        );
 
         return $this->success([
-            'integrations' => $configs->map(fn($config) => $config->toApiArray()),
+            'integrations' => $integrations,
         ]);
+    }
+
+    /**
+     * Clave de cache compartida con observers. Manten sincronizada con
+     * V2ConfigCacheObserver y futuros invalidadores.
+     */
+    public static function listCacheKey(string $tenantId): string
+    {
+        return "integrations:list:{$tenantId}";
     }
 
     /**

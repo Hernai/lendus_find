@@ -13,6 +13,7 @@ use App\Models\TenantApiConfig;
 use App\Services\TemplateRenderer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
@@ -38,33 +39,59 @@ class NotificationTemplateController extends Controller
     {
         $tenant = app('tenant');
 
-        $query = NotificationTemplate::where('tenant_id', $tenant->id);
+        // Cache 5 min por tenant + filtros. Templates raramente cambian
+        // (los edita el super_admin manualmente). Invalida en saved/deleted
+        // via NotificationTemplate::booted.
+        $filters = [
+            'event' => $request->input('event'),
+            'channel' => $request->input('channel'),
+            'is_active' => $request->has('is_active') ? $request->boolean('is_active') : null,
+        ];
+        $cacheKey = static::indexCacheKey($tenant->id, $filters);
 
-        // Filter by event
-        if ($request->has('event')) {
-            $query->forEvent($request->event);
-        }
-
-        // Filter by channel
-        if ($request->has('channel')) {
-            $query->forChannel($request->channel);
-        }
-
-        // Filter by active status
-        if ($request->has('is_active')) {
-            $query->where('is_active', $request->boolean('is_active'));
-        }
-
-        $templates = $query->with(['creator', 'updater'])
-            ->orderBy('event')
-            ->orderBy('channel')
-            ->orderBy('priority')
-            ->get()
-            ->map(fn ($t) => $this->formatTemplate($t));
+        $templates = Cache::remember(
+            $cacheKey,
+            300,
+            fn () => $this->buildIndex($tenant->id, $filters)
+        );
 
         return $this->success([
             'templates' => $templates,
         ]);
+    }
+
+    public static function indexCacheKey(string $tenantId, array $filters): string
+    {
+        ksort($filters);
+        // Incluimos la "version" en la clave para invalidacion implicita:
+        // cuando un template cambia, V2ConfigCacheObserver incrementa
+        // "notification-templates:version:{tenant}" y todas las variantes
+        // de filtros quedan stale automaticamente, sin tener que enumerarlas.
+        $version = \Illuminate\Support\Facades\Cache::get("notification-templates:version:{$tenantId}", 1);
+        return "notification-templates:index:{$tenantId}:v{$version}:" . md5(serialize($filters));
+    }
+
+    private function buildIndex(string $tenantId, array $filters): array
+    {
+        $query = NotificationTemplate::where('tenant_id', $tenantId);
+
+        if ($filters['event'] !== null) {
+            $query->forEvent($filters['event']);
+        }
+        if ($filters['channel'] !== null) {
+            $query->forChannel($filters['channel']);
+        }
+        if ($filters['is_active'] !== null) {
+            $query->where('is_active', $filters['is_active']);
+        }
+
+        return $query->with(['creator', 'updater'])
+            ->orderBy('event')
+            ->orderBy('channel')
+            ->orderBy('priority')
+            ->get()
+            ->map(fn ($t) => $this->formatTemplate($t))
+            ->all();
     }
 
     /**
@@ -251,26 +278,31 @@ class NotificationTemplateController extends Controller
      */
     public function config(): JsonResponse
     {
-        $events = collect(NotificationEvent::cases())->map(fn ($event) => [
-            'value' => $event->value,
-            'label' => $event->label(),
-            'available_variables' => $event->getAvailableVariables(),
-            'recommended_channels' => array_map(fn ($ch) => $ch->value, $event->getRecommendedChannels()),
-            'enabled_by_default' => $event->isEnabledByDefault(),
-        ]);
+        // Payload 100% estatico (enums NotificationEvent y NotificationChannel).
+        // No depende del tenant ni del usuario. Cacheable indefinidamente
+        // hasta nuevo deploy. TTL 1 dia + el reload de FPM en deploy lo
+        // invalida implicitamente al reset del cache.
+        $payload = Cache::remember('notification-templates:config', 86400, function () {
+            $events = collect(NotificationEvent::cases())->map(fn ($event) => [
+                'value' => $event->value,
+                'label' => $event->label(),
+                'available_variables' => $event->getAvailableVariables(),
+                'recommended_channels' => array_map(fn ($ch) => $ch->value, $event->getRecommendedChannels()),
+                'enabled_by_default' => $event->isEnabledByDefault(),
+            ])->all();
 
-        $channels = collect(NotificationChannel::cases())->map(fn ($channel) => [
-            'value' => $channel->value,
-            'label' => $channel->label(),
-            'supports_html' => $channel->supportsHtml(),
-            'requires_subject' => $channel->requiresSubject(),
-            'character_limit' => $channel->characterLimit(),
-        ]);
+            $channels = collect(NotificationChannel::cases())->map(fn ($channel) => [
+                'value' => $channel->value,
+                'label' => $channel->label(),
+                'supports_html' => $channel->supportsHtml(),
+                'requires_subject' => $channel->requiresSubject(),
+                'character_limit' => $channel->characterLimit(),
+            ])->all();
 
-        return $this->success([
-            'events' => $events,
-            'channels' => $channels,
-        ]);
+            return compact('events', 'channels');
+        });
+
+        return $this->success($payload);
     }
 
     /**

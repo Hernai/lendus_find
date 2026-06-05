@@ -3,6 +3,9 @@
 namespace App\Observers;
 
 use App\Http\Controllers\Api\V2\Public\ConfigController;
+use App\Http\Controllers\Api\V2\Staff\IntegrationController;
+use App\Models\NotificationTemplate;
+use App\Models\TenantApiConfig;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 
@@ -41,7 +44,28 @@ class V2ConfigCacheObserver
         if (! $tenantId) {
             return;
         }
+
+        // /v2/config y /v2/public/manifest dependen de Product/TenantApiConfig/
+        // TenantBranding/Tenant.
         Cache::forget(ConfigController::cacheKey($tenantId));
         Cache::forget("v2:manifest:{$tenantId}");
+
+        // /v2/staff/integrations cachea por tenant. Solo TenantApiConfig
+        // afecta ese payload, pero limpiar de mas no cuesta.
+        if ($model instanceof TenantApiConfig) {
+            Cache::forget(IntegrationController::listCacheKey($tenantId));
+        }
+
+        // /v2/staff/notification-templates cachea por tenant+filtros. La
+        // clave incluye un md5 de filtros, asi que no podemos enumerar
+        // individualmente — usamos forget de todas las variantes via
+        // bombardeo: NotificationTemplate guarda cualquier hash de filtros
+        // posible. Si Redis fuera el cache store y soportara SCAN, podriamos
+        // hacer SCAN MATCH "notification-templates:index:{tenantId}:*".
+        // Por simplicidad y para Redis con KEYS prohibido en prod, usamos
+        // una clave "version" — incrementarla invalida implicitamente todo.
+        if ($model instanceof NotificationTemplate) {
+            Cache::increment("notification-templates:version:{$tenantId}");
+        }
     }
 }

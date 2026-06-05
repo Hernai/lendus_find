@@ -7,6 +7,7 @@ use App\Contracts\DocumentStorageInterface;
 use App\Contracts\KycServiceInterface;
 use App\Contracts\SmsServiceInterface;
 use App\Models\CachedPersonalAccessToken;
+use App\Models\NotificationTemplate;
 use App\Models\Product;
 use App\Models\TenantApiConfig;
 use App\Models\TenantBranding;
@@ -83,6 +84,7 @@ class AppServiceProvider extends ServiceProvider
         Product::observe(V2ConfigCacheObserver::class);
         TenantApiConfig::observe(V2ConfigCacheObserver::class);
         TenantBranding::observe(V2ConfigCacheObserver::class);
+        NotificationTemplate::observe(V2ConfigCacheObserver::class);
     }
 
     /**
