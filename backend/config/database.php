@@ -103,8 +103,20 @@ return [
             // handshake; las siguientes usan la conexión ya abierta.
             // Override con DB_PERSISTENT=false si causa problemas en
             // entornos con timeouts agresivos de Postgres.
+            // ATTR_EMULATE_PREPARES=true: PDO emula prepared statements en el
+            // cliente (PHP) en lugar de enviarlas como `PREPARE pdo_stmt_X` al
+            // server. Esto es OBLIGATORIO con PgBouncer en pool_mode=transaction:
+            // sin emulacion, la conexion backend que recibio el PREPARE puede
+            // ser distinta a la que ejecuta el EXECUTE -> error SQLSTATE 26000
+            // "no existe la sentencia preparada pdo_stmt_X". Eso disparaba
+            // retries de Laravel y dejaba endpoints simples en 900ms+ warm.
+            // Tradeoff: PDO interpola los parametros en client-side; sigue
+            // siendo seguro contra SQL injection (PDO los escapa) pero pierdes
+            // el cache de plan a nivel server (irrelevante con prepared statement
+            // pooling apagado de todos modos).
             'options' => [
                 \PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', true),
+                \PDO::ATTR_EMULATE_PREPARES => true,
             ],
         ],
 
