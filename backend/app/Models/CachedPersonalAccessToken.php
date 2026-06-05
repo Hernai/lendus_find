@@ -51,9 +51,15 @@ class CachedPersonalAccessToken extends PersonalAccessToken
             static::forgetCacheFor($token);
         });
 
-        static::updated(function (self $token) {
-            static::forgetCacheFor($token);
-        });
+        // NO invalidar en `updated`. Sanctum actualiza `last_used_at` en
+        // CADA request autenticado para tracking. Si invalidamos en update,
+        // el cache se borra inmediatamente despues de poblarse y nunca
+        // persiste -> cada request paga el lookup completo + load profile
+        // (medido: 1.7s por request en lugar de 900ms con cache caliente).
+        //
+        // El tradeoff: si manualmente actualizas un token (ej. cambiar
+        // abilities/name), tarda hasta CACHE_TTL en reflejarse. Para revoke
+        // total, usa delete().
     }
 
     /**
