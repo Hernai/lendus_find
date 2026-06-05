@@ -955,6 +955,206 @@ Adaptá:
 Mantener los `.env`/sysconfig fuera del DocumentRoot para que Apache no
 los sirva como archivos públicos.
 
+## 22. Performance & Observability — diagnóstico y optimización
+
+Esta sección documenta las prácticas activas para mantener latencias bajas
+(~700–1200 ms p95 en /v2/staff) sobre la DB remota de 192.168.0.100. Si la
+DB se mueve a localhost, varias de estas dejan de ser críticas pero siguen
+siendo buena higiene.
+
+### 22.1 PDO persistent connections
+
+Habilitado por default en `backend/config/database.php` vía
+`PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', true)`. Reduce el handshake
+TCP a Postgres remoto (~280 ms por request) a una vez por worker PHP-FPM.
+
+Cómo monitorear que sigue funcionando:
+
+```bash
+# 1. Conteo de conexiones por host (debe ser ~= pm.max_children del pool,
+#    no debe escalar con el RPS):
+sudo -u postgres psql -c "SELECT client_addr, count(*) FROM pg_stat_activity WHERE datname = 'lendusfind' GROUP BY client_addr;"
+
+# 2. Tiempo de espera de conexión desde la app (medir con EXPLAIN ANALYZE
+#    en queries triviales; si > 50 ms, sospechar de PDO cerrando conexiones).
+```
+
+Override solo si Postgres está cortando conexiones agresivamente
+(`statement_timeout`, `idle_in_transaction_session_timeout`):
+
+```bash
+# /etc/sysconfig/lendusfind-backend
+DB_PERSISTENT=false
+```
+
+### 22.2 PgBouncer (cuando la DB queda remota)
+
+Si la DB no se puede mover al mismo host (`192.168.0.100` actual),
+PgBouncer en el host de la app es la siguiente palanca: hace pooling
+transaccional, una sola conexión TCP por worker, y baja la latencia del
+roundtrip cuando hay conexión caliente.
+
+```bash
+sudo dnf install -y pgbouncer
+
+# /etc/pgbouncer/pgbouncer.ini
+[databases]
+lendusfind = host=192.168.0.100 port=6927 dbname=lendusfind
+
+[pgbouncer]
+listen_addr = 127.0.0.1
+listen_port = 6432
+auth_type = scram-sha-256
+auth_file = /etc/pgbouncer/userlist.txt
+pool_mode = transaction
+max_client_conn = 200
+default_pool_size = 25
+reserve_pool_size = 5
+server_idle_timeout = 60
+```
+
+Cambiar en `/etc/sysconfig/lendusfind-backend`:
+- `DB_HOST=127.0.0.1`
+- `DB_PORT=6432`
+
+Cosas que NO funcionan con `pool_mode=transaction`:
+- `SET LOCAL` fuera de transacción.
+- Prepared statements del lado del cliente (Laravel los usa; activar
+  `PDO::ATTR_EMULATE_PREPARES => true` o cambiar a `pool_mode=session`).
+- LISTEN/NOTIFY (no lo usamos).
+
+### 22.3 Co-ubicación de la DB (preferido a mediano plazo)
+
+Si se puede mover Postgres al mismo host de la app:
+- Eliminamos `~280 ms/request` de latencia de red.
+- PgBouncer deja de ser obligatorio.
+- Habilitar `synchronous_commit=local` y `shared_buffers≈25% RAM`.
+
+Decisión actual: queda en backlog hasta justificar mover la base fuera
+del LAN existente (192.168.0.100 está en infra compartida).
+
+### 22.4 Laravel Telescope (staging y debug temporal)
+
+Telescope nunca se habilita en producción (overhead alto, expone datos
+sensibles). Solo se instala en staging y para debug puntual.
+
+```bash
+cd /var/www/lendusfind/current
+sudo -u deploy composer require laravel/telescope --dev
+sudo -u deploy php artisan telescope:install
+sudo -u deploy php artisan migrate
+```
+
+`config/telescope.php`:
+
+```php
+'enabled' => env('TELESCOPE_ENABLED', false),
+'storage' => [
+    'database' => [
+        'connection' => env('TELESCOPE_DB_CONNECTION', 'sqlite'),
+    ],
+],
+```
+
+`/etc/sysconfig/lendusfind-backend-staging`:
+
+```bash
+TELESCOPE_ENABLED=true
+TELESCOPE_DB_CONNECTION=sqlite
+```
+
+Acceso: `https://apifind-staging.lendus.app/telescope` — protegido por el
+gate de `app/Providers/TelescopeServiceProvider.php` que limita a emails
+del super_admin. Verificar que solo whitelista correos `@lendus.app`.
+
+Limpieza periódica:
+
+```bash
+sudo -u deploy php artisan telescope:prune --hours=48
+```
+
+### 22.5 OPCache — verificación
+
+PHP-FPM en producción depende de OPCache para no recompilar PHP en cada
+request. Script para verificar que está activo y bien dimensionado:
+
+```bash
+# /usr/local/bin/lendusfind-opcache-stats.sh
+#!/usr/bin/env bash
+set -e
+curl -s -H "Host: apifind.lendus.app" http://127.0.0.1/api/ops/opcache-stats \
+  | jq '{
+      enabled: .opcache_enabled,
+      cache_full: .cache_full,
+      memory_used_pct: ((.memory_usage.used_memory / (.memory_usage.used_memory + .memory_usage.free_memory)) * 100 | floor),
+      hit_rate: .opcache_statistics.opcache_hit_rate,
+      scripts: .opcache_statistics.num_cached_scripts,
+      max_scripts: .opcache_statistics.max_cached_keys
+    }'
+```
+
+El endpoint `/api/ops/opcache-stats` se sirve con un controller minimal en
+`app/Http/Controllers/Ops/OpcacheStatsController.php` (protegido por IP
+allowlist a 127.0.0.1 y al rango de Jenkins).
+
+Valores esperados sanos:
+- `enabled: true`
+- `cache_full: false`
+- `hit_rate > 99` (después del warm-up)
+- `memory_used_pct < 80` (si llega a 90%, subir `opcache.memory_consumption`).
+
+`/etc/php.d/10-opcache.ini` recomendado:
+
+```ini
+opcache.enable=1
+opcache.memory_consumption=256
+opcache.interned_strings_buffer=16
+opcache.max_accelerated_files=20000
+opcache.validate_timestamps=0
+opcache.save_comments=1
+opcache.fast_shutdown=1
+```
+
+Con `validate_timestamps=0`, el script de deploy debe correr
+`php-fpm reload` (ya lo hace en la sección 7).
+
+### 22.6 Cloudflare frente a `apifind.lendus.app`
+
+Poner Cloudflare en proxy mode delante del backend da:
+- TLS termination ya negociado (handshake compartido).
+- Cache de assets estáticos del SPA (los frontends `*.lendus.app` también
+  los benefician).
+- WAF y rate limiting global (complementa los `throttle:*` de Laravel).
+- DDoS L3/L4 absorbido por Cloudflare.
+
+Pasos:
+
+1. Agregar el dominio en Cloudflare con DNS proxy ON (nube naranja) para
+   `apifind.lendus.app`.
+2. SSL/TLS mode: **Full (strict)** — Cloudflare verifica el cert del origen.
+3. Origin Server Certificate: generar uno en Cloudflare (15 años) y
+   reemplazar el cert de Let's Encrypt del origen, o mantener Let's Encrypt
+   y usar **Authenticated Origin Pulls** (mTLS al origen).
+4. WebSocket support: habilitarlo en Network → WebSockets ON (default).
+5. Reglas de cache:
+   - `*.lendus.app/assets/*` → Cache Everything, TTL 1 año.
+   - `apifind.lendus.app/api/*` → Bypass cache.
+   - `apifind.lendus.app/app/*` (WebSocket Reverb) → Bypass cache.
+
+⚠ Cuidado con headers detrás del proxy:
+- Cloudflare reemplaza el IP del cliente. `app/Http/Middleware/TrustProxies.php`
+  debe confiar en `CF-Connecting-IP` (ya está en `MetadataService::getRealIp()`).
+- Si se activa "Always Use HTTPS", quitar el redirect HTTP→HTTPS del
+  Apache para no causar loops.
+- Origin restringido por firewall: solo aceptar conexiones de los
+  rangos IP públicos de Cloudflare (https://www.cloudflare.com/ips/):
+  ```bash
+  for cidr in $(curl -s https://www.cloudflare.com/ips-v4); do
+    sudo firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='$cidr' service name='https' accept"
+  done
+  sudo firewall-cmd --reload
+  ```
+
 ## Archivos clave de esta skill
 
 Variante Nginx:
