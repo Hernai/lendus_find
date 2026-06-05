@@ -315,6 +315,14 @@ class MetadataService
 
     /**
      * Capture and flatten metadata for direct database insert.
+     *
+     * MISMO PRINCIPIO QUE `capture()`: NO hace IP lookup externo en el
+     * camino crítico del request. Si el cliente mandó `X-Geo-Lat/Lng`,
+     * se usa eso. Si no, los campos city/region/country quedan null.
+     *
+     * El lookup por IP solo debe correr fuera del request (jobs,
+     * terminating callbacks). Para eso usar `resolveIpGeolocation()`
+     * explícitamente.
      */
     public function captureFlat(Request $request): array
     {
@@ -322,7 +330,16 @@ class MetadataService
         $userAgent = $request->userAgent() ?? '';
 
         $deviceInfo = $this->getDeviceInfoFlat($userAgent);
-        $geolocation = $this->getGeolocationFlat($ip);
+
+        // Geo del dispositivo (más preciso si está disponible)
+        $clientGeo = $this->parseClientGeo($request);
+        $geolocation = [
+            'latitude' => $clientGeo['latitude'] ?? null,
+            'longitude' => $clientGeo['longitude'] ?? null,
+            'city' => null,
+            'region' => null,
+            'country' => null,
+        ];
 
         return array_merge(
             [
