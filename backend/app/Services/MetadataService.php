@@ -19,31 +19,47 @@ class MetadataService
 
     /**
      * Capture all metadata from a request.
+     *
+     * El IP lookup externo (~200-500ms a ip-api.com) NO se hace dentro del
+     * camino crítico del request. Si el cliente mandó `X-Geo-Lat/Lng` (caso
+     * normal en web/móvil con permiso de geolocalización), se usa eso sin
+     * tocar la red. Si no, devolvemos `geolocation = null` y el lookup por
+     * IP queda diferido para que lo dispare un job en background (ver
+     * `resolveIpGeolocation()` y el middleware `LogClientRequest` que llama
+     * `terminating()`).
      */
     public function capture(Request $request): array
     {
         $userAgent = $request->userAgent() ?? '';
         $this->agent->setUserAgent($userAgent);
 
-        // Si el cliente envió coordenadas del dispositivo (más precisas que IP).
         $clientGeo = $this->parseClientGeo($request);
-        $ipGeo = $this->getGeolocation($this->getRealIp($request));
-        // Si hay device geo, lo merge con city/region/country de IP (no vienen del cliente).
-        $geolocation = $clientGeo
-            ? array_merge(is_array($ipGeo) ? $ipGeo : [], $clientGeo)
-            : $ipGeo;
 
         return [
             'tenant_id' => $request->attributes->get('tenant')?->id,
             'ip_address' => $this->getRealIp($request),
             'user_agent' => $userAgent,
             'device_info' => $this->parseUserAgent($userAgent),
-            'geolocation' => $geolocation,
+            // Si vino del dispositivo (más preciso), se usa directo. Sino se
+            // deja null: el IP lookup lo hace el job post-response.
+            'geolocation' => $clientGeo,
             // Headers enviados por clientes móviles/PWA (X-Platform=web|ios|android).
             'platform' => $request->header('X-Platform'),
             'app_version' => $request->header('X-App-Version'),
             'device_id' => $request->header('X-Device-Id'),
         ];
+    }
+
+    /**
+     * Resolver geolocalización por IP (lookup externo bloqueante).
+     *
+     * Solo debe llamarse fuera del camino crítico del request (job, cron,
+     * `terminating()` callback). NO llamar desde un middleware HTTP que
+     * preceda al response.
+     */
+    public function resolveIpGeolocation(string $ip): ?array
+    {
+        return $this->getGeolocation($ip);
     }
 
     /**

@@ -17,8 +17,13 @@ use Throwable;
  * por el dispositivo en los headers `X-Geo-Lat`, `X-Geo-Lng`, `X-Geo-Accuracy`.
  *
  * Se debe registrar DESPUÉS de `tenant` + `auth:sanctum` para que tengamos
- * tenant y usuario disponibles. El registro es post-respuesta para capturar
- * status_code y duración.
+ * tenant y usuario disponibles.
+ *
+ * El INSERT a `audit_logs` (y, si hace falta, el IP geo lookup) corren
+ * DESPUÉS del response al cliente vía `app()->terminating()`. Así no
+ * agregan latencia al request. En Apache + PHP-FPM, `terminating()` se
+ * dispara después de que el response llega al cliente, antes del shutdown
+ * del worker.
  *
  * Solo se loguean rutas bajo `api/v2/*` para no inundar la tabla con assets
  * o endpoints públicos triviales como /health.
@@ -52,12 +57,18 @@ class LogClientRequest
             return $response;
         }
 
-        try {
-            $this->log($request, $response, $startedAt);
-        } catch (Throwable $e) {
-            // No bloquear nunca la respuesta por errores de logging.
-            Log::warning('LogClientRequest failed', ['error' => $e->getMessage()]);
-        }
+        // Capturamos todos los datos necesarios AHORA (mientras request/user
+        // están vivos), pero diferimos el INSERT a `audit_logs` y el IP geo
+        // lookup hasta DESPUÉS de que el response llegue al cliente.
+        $payload = $this->buildPayload($request, $response, $startedAt);
+
+        app()->terminating(function () use ($payload) {
+            try {
+                $this->persist($payload);
+            } catch (Throwable $e) {
+                Log::warning('LogClientRequest failed', ['error' => $e->getMessage()]);
+            }
+        });
 
         return $response;
     }
@@ -95,20 +106,18 @@ class LogClientRequest
         return true;
     }
 
-    private function log(Request $request, Response $response, float $startedAt): void
+    /**
+     * Empaca los datos del request en un array que se pueda persistir más
+     * tarde sin necesitar el Request original (que puede haberse destruido).
+     */
+    private function buildPayload(Request $request, Response $response, float $startedAt): array
     {
         /** @var MetadataService $meta */
         $meta = app(MetadataService::class);
         $captured = $meta->capture($request);
         $clientGeo = $meta->parseClientGeo($request);
 
-        // El usuario puede venir de Sanctum (requests autenticados) o ser
-        // resuelto manualmente por el controller (login/verifyOtp setea
-        // $request->attributes->'audit_user'). Esto permite correlacionar
-        // el HTTP_REQUEST del propio login con el applicant/staff dueño.
         $user = $request->user() ?? $request->attributes->get('audit_user');
-        $tenantId = $captured['tenant_id'] ?? null;
-
         $applicantId = null;
         $userId = null;
         if ($user) {
@@ -119,42 +128,92 @@ class LogClientRequest
             }
         }
 
-        $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
+        $routeId = $request->route('id');
+        $applicationId = ($routeId && $this->isApplicationRoute($request)) ? $routeId : null;
 
-        AuditLog::create([
-            'tenant_id' => $tenantId,
+        return [
+            'tenant_id' => $captured['tenant_id'] ?? null,
             'user_id' => $userId,
             'applicant_id' => $applicantId,
-            'application_id' => $request->route('id') && $this->isApplicationRoute($request)
-                ? $request->route('id')
-                : null,
+            'application_id' => $applicationId,
+            'method' => $request->method(),
+            'path' => '/'.$request->path(),
+            'query' => $request->query() ?: null,
+            'status_code' => $response->getStatusCode(),
+            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            'ip_address' => $captured['ip_address'] ?? null,
+            'user_agent' => $captured['user_agent'] ?? null,
+            'platform' => $captured['platform'] ?? null,
+            'app_version' => $captured['app_version'] ?? null,
+            'device_id' => $captured['device_id'] ?? null,
+            'device_info' => $captured['device_info'] ?? [],
+            // Geo del dispositivo (más preciso); si no vino, el lookup por
+            // IP se resuelve en persist() — fuera del path crítico.
+            'client_geo' => $clientGeo,
+        ];
+    }
+
+    /**
+     * Persistir el audit log. Corre DESPUÉS del response vía
+     * `app()->terminating()`. Si la geo del dispositivo no llegó en headers,
+     * acá hacemos el lookup por IP (puede tomar 200-500ms pero ya no afecta
+     * al cliente — el response ya salió).
+     */
+    private function persist(array $p): void
+    {
+        $clientGeo = $p['client_geo'];
+
+        $latitude = $clientGeo['latitude'] ?? null;
+        $longitude = $clientGeo['longitude'] ?? null;
+        $city = null;
+        $region = null;
+        $country = null;
+        $geoSource = $clientGeo ? 'device' : 'ip';
+
+        // Solo hacer el IP lookup si no tenemos geo del dispositivo Y hay IP.
+        if (! $clientGeo && ! empty($p['ip_address'])) {
+            $ipGeo = app(MetadataService::class)->resolveIpGeolocation($p['ip_address']);
+            if (is_array($ipGeo)) {
+                $latitude = $latitude ?? ($ipGeo['latitude'] ?? null);
+                $longitude = $longitude ?? ($ipGeo['longitude'] ?? null);
+                $city = $ipGeo['city'] ?? null;
+                $region = $ipGeo['region'] ?? null;
+                $country = $ipGeo['country'] ?? null;
+            }
+        }
+
+        AuditLog::create([
+            'tenant_id' => $p['tenant_id'],
+            'user_id' => $p['user_id'],
+            'applicant_id' => $p['applicant_id'],
+            'application_id' => $p['application_id'],
             'action' => AuditAction::HTTP_REQUEST->value,
             'entity_type' => 'http_request',
             'entity_id' => null,
             'metadata' => [
-                'method' => $request->method(),
-                'path' => '/'.$request->path(),
-                'query' => $request->query() ?: null,
-                'status_code' => $response->getStatusCode(),
-                'duration_ms' => $durationMs,
-                'platform' => $captured['platform'] ?? null,
-                'app_version' => $captured['app_version'] ?? null,
-                'device_id' => $captured['device_id'] ?? null,
-                'geo_source' => $clientGeo ? 'device' : 'ip',
+                'method' => $p['method'],
+                'path' => $p['path'],
+                'query' => $p['query'],
+                'status_code' => $p['status_code'],
+                'duration_ms' => $p['duration_ms'],
+                'platform' => $p['platform'],
+                'app_version' => $p['app_version'],
+                'device_id' => $p['device_id'],
+                'geo_source' => $geoSource,
                 'geo_accuracy_m' => $clientGeo['accuracy'] ?? null,
             ],
-            'ip_address' => $captured['ip_address'] ?? null,
-            'user_agent' => $captured['user_agent'] ?? null,
-            'latitude' => $clientGeo['latitude'] ?? ($captured['geolocation']['latitude'] ?? null),
-            'longitude' => $clientGeo['longitude'] ?? ($captured['geolocation']['longitude'] ?? null),
-            'city' => $captured['geolocation']['city'] ?? null,
-            'region' => $captured['geolocation']['region'] ?? null,
-            'country' => $captured['geolocation']['country'] ?? null,
-            'device_type' => $captured['device_info']['device_type'] ?? null,
-            'browser' => $captured['device_info']['browser'] ?? null,
-            'browser_version' => $captured['device_info']['browser_version'] ?? null,
-            'os' => $captured['device_info']['os'] ?? null,
-            'os_version' => $captured['device_info']['os_version'] ?? null,
+            'ip_address' => $p['ip_address'],
+            'user_agent' => $p['user_agent'],
+            'latitude' => $latitude,
+            'longitude' => $longitude,
+            'city' => $city,
+            'region' => $region,
+            'country' => $country,
+            'device_type' => $p['device_info']['device_type'] ?? null,
+            'browser' => $p['device_info']['browser'] ?? null,
+            'browser_version' => $p['device_info']['browser_version'] ?? null,
+            'os' => $p['device_info']['os'] ?? null,
+            'os_version' => $p['device_info']['os_version'] ?? null,
             'created_at' => now(),
         ]);
     }
