@@ -3,6 +3,7 @@ import { detectTenantSlug, hasTenantInUrl } from '@/utils/tenant'
 import { STORAGE_KEYS } from '@/utils/storage'
 import { logger } from '@/utils/logger'
 import { emitAuthEvent } from '@/services/auth-events'
+import { perf } from '@/utils/perf'
 import { apiClient } from './client'
 
 const log = logger.child('HTTP')
@@ -94,13 +95,46 @@ export function registerInterceptors(): void {
       delete config.headers['Content-Type']
     }
 
+    // Marca tiempo de inicio para que el interceptor de response calcule la
+    // duración total. Se guarda en config.metadata (campo libre de Axios).
+    ;(config as { metadata?: Record<string, unknown> }).metadata = {
+      ...(config as { metadata?: Record<string, unknown> }).metadata,
+      perfStartedAt: performance.now(),
+    }
+
     log.debug('Request', { url: config.url, tenant: tenantSlug })
     return config
   })
 
   apiClient.interceptors.response.use(
-    (response) => response,
+    (response) => {
+      const meta = (response.config as { metadata?: { perfStartedAt?: number } }).metadata
+      if (meta?.perfStartedAt != null) {
+        perf.recordApi({
+          method: (response.config.method || 'GET').toUpperCase(),
+          url: response.config.url || '',
+          status: response.status,
+          durationMs: performance.now() - meta.perfStartedAt,
+          startedAt: meta.perfStartedAt,
+        })
+      }
+      return response
+    },
     async (error) => {
+      // Registrar la métrica incluso si falló
+      const config = error?.config ?? error?.response?.config
+      const meta = (config as { metadata?: { perfStartedAt?: number } } | undefined)?.metadata
+      if (meta?.perfStartedAt != null) {
+        perf.recordApi({
+          method: (config?.method || 'GET').toUpperCase(),
+          url: config?.url || '',
+          status: error?.response?.status,
+          durationMs: performance.now() - meta.perfStartedAt,
+          startedAt: meta.perfStartedAt,
+          error: error?.message || 'Network error',
+        })
+      }
+
       if (error?.response) {
         const { status, config } = error.response
         const requestUrl = (config?.url as string) || ''
