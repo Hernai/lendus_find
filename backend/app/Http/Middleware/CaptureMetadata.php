@@ -24,8 +24,11 @@ class CaptureMetadata
      */
     public function handle(Request $request, Closure $next): Response
     {
-        // Capture metadata
-        $metadata = $this->metadataService->captureFlat($request);
+        // Capture metadata (estructura anidada) y aplánarlo para que los
+        // consumidores (controllers que insertan en audit_logs) tengan las
+        // claves al mismo nivel.
+        $captured = $this->metadataService->capture($request);
+        $metadata = $this->metadataService->flatten($captured);
 
         // Store in request attributes for controller access
         $request->attributes->set('metadata', $metadata);

@@ -272,83 +272,35 @@ class MetadataService
     }
 
     /**
-     * Get device info as flat array for database storage.
+     * Aplana el array devuelto por `capture()` para INSERT directo a tabla
+     * (audit_logs). Elimina los wrappers `device_info` y `geolocation`,
+     * dejando todas las claves al mismo nivel.
+     *
+     * Antes existía un `captureFlat()` separado que duplicaba la lógica de
+     * `capture()` — eso causó un bug donde mi primer fix solo arregló
+     * `capture()` y `captureFlat()` siguió haciendo IP lookup. Unificado.
+     *
+     * @param array $captured Resultado de `capture($request)`
      */
-    public function getDeviceInfoFlat(string $userAgent): array
+    public function flatten(array $captured): array
     {
-        $info = $this->parseUserAgent($userAgent);
+        $deviceInfo = $captured['device_info'] ?? [];
+        $geolocation = $captured['geolocation'] ?? [];
 
         return [
-            'device_type' => $info['device_type'],
-            'browser' => $info['browser'],
-            'browser_version' => $info['browser_version'],
-            'os' => $info['os'],
-            'os_version' => $info['os_version'],
+            'tenant_id' => $captured['tenant_id'] ?? null,
+            'ip_address' => $captured['ip_address'] ?? null,
+            'user_agent' => $captured['user_agent'] ?? null,
+            'device_type' => $deviceInfo['device_type'] ?? null,
+            'browser' => $deviceInfo['browser'] ?? null,
+            'browser_version' => $deviceInfo['browser_version'] ?? null,
+            'os' => $deviceInfo['os'] ?? null,
+            'os_version' => $deviceInfo['os_version'] ?? null,
+            'latitude' => $geolocation['latitude'] ?? null,
+            'longitude' => $geolocation['longitude'] ?? null,
+            'city' => $geolocation['city'] ?? null,
+            'region' => $geolocation['region'] ?? null,
+            'country' => $geolocation['country'] ?? null,
         ];
-    }
-
-    /**
-     * Get geolocation as flat array for database storage.
-     */
-    public function getGeolocationFlat(string $ip): array
-    {
-        $geo = $this->getGeolocation($ip);
-
-        if (!$geo) {
-            return [
-                'latitude' => null,
-                'longitude' => null,
-                'city' => null,
-                'region' => null,
-                'country' => null,
-            ];
-        }
-
-        return [
-            'latitude' => $geo['latitude'],
-            'longitude' => $geo['longitude'],
-            'city' => $geo['city'],
-            'region' => $geo['region'],
-            'country' => $geo['country'],
-        ];
-    }
-
-    /**
-     * Capture and flatten metadata for direct database insert.
-     *
-     * MISMO PRINCIPIO QUE `capture()`: NO hace IP lookup externo en el
-     * camino crítico del request. Si el cliente mandó `X-Geo-Lat/Lng`,
-     * se usa eso. Si no, los campos city/region/country quedan null.
-     *
-     * El lookup por IP solo debe correr fuera del request (jobs,
-     * terminating callbacks). Para eso usar `resolveIpGeolocation()`
-     * explícitamente.
-     */
-    public function captureFlat(Request $request): array
-    {
-        $ip = $this->getRealIp($request);
-        $userAgent = $request->userAgent() ?? '';
-
-        $deviceInfo = $this->getDeviceInfoFlat($userAgent);
-
-        // Geo del dispositivo (más preciso si está disponible)
-        $clientGeo = $this->parseClientGeo($request);
-        $geolocation = [
-            'latitude' => $clientGeo['latitude'] ?? null,
-            'longitude' => $clientGeo['longitude'] ?? null,
-            'city' => null,
-            'region' => null,
-            'country' => null,
-        ];
-
-        return array_merge(
-            [
-                'tenant_id' => $request->attributes->get('tenant')?->id,
-                'ip_address' => $ip,
-                'user_agent' => $userAgent,
-            ],
-            $deviceInfo,
-            $geolocation
-        );
     }
 }
