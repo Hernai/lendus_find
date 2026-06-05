@@ -203,7 +203,7 @@ class AuthController extends Controller
         } else {
             $tenants = [];
             if ($account->tenant_id) {
-                $tenant = \App\Models\Tenant::find($account->tenant_id);
+                $tenant = $this->resolveTenantForStaff($account->tenant_id);
                 if ($tenant) {
                     $tenants[] = ['id' => $tenant->id, 'slug' => $tenant->slug, 'name' => $tenant->name];
                 }
@@ -229,7 +229,7 @@ class AuthController extends Controller
         } else {
             $availableTenants = [];
             if ($account->tenant_id) {
-                $tenant = \App\Models\Tenant::find($account->tenant_id);
+                $tenant = $this->resolveTenantForStaff($account->tenant_id);
                 if ($tenant) {
                     $availableTenants[] = ['id' => $tenant->id, 'slug' => $tenant->slug, 'name' => $tenant->name];
                 }
@@ -258,5 +258,38 @@ class AuthController extends Controller
             'permissions' => $account->getPermissionsArray(),
             'available_tenants' => $availableTenants,
         ];
+    }
+
+    /**
+     * Devuelve el tenant del staff sin pegarle a la DB cuando ya esta
+     * resuelto por el middleware IdentifyTenant.
+     *
+     * Caso comun (>99%): el staff opera dentro de su propio tenant, asi que
+     * el `tenant_id` del account coincide con `app('tenant')->id`. En ese
+     * caso reutilizamos la instancia ya cargada (era 1 query SELECT por PK
+     * a la DB remota = ~90ms por hit autenticado).
+     *
+     * Caso raro: super admin global accediendo via X-Tenant-ID a un tenant
+     * distinto del que tiene asignado (no aplica aqui porque es_super_admin
+     * va por el otro branch), o staff con tenant_id desincronizado. Ahi
+     * caemos al find() normal, que ya esta cacheado por
+     * Tenant::booted()/Cache::remember en el flujo de IdentifyTenant cuando
+     * se busca por slug — pero el find() por id no usa ese cache, asi que
+     * lo hacemos manual con un TTL similar.
+     */
+    private function resolveTenantForStaff(string $tenantId): ?\App\Models\Tenant
+    {
+        if (app()->bound('tenant')) {
+            $current = app('tenant');
+            if ($current instanceof \App\Models\Tenant && $current->id === $tenantId) {
+                return $current;
+            }
+        }
+
+        return \Illuminate\Support\Facades\Cache::remember(
+            "tenant:byid:{$tenantId}",
+            600,
+            fn () => \App\Models\Tenant::find($tenantId)
+        );
     }
 }
