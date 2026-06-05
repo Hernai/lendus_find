@@ -105,21 +105,25 @@ class ApiLogController extends Controller
      */
     public function providers(Request $request): JsonResponse
     {
-        /** @var StaffAccount $staff */
-        $staff = $request->user();
-        // Resolvemos el tenant del request (header X-Tenant-ID) en vez de
-        // $staff->tenant porque el super admin global tiene tenant_id NULL.
-        // RequireStaff ya valida cross-tenant para staff per-tenant.
         $tenant = app('tenant');
 
-        $providers = ApiLog::where('tenant_id', $tenant->id)
-            ->distinct()
-            ->pluck('provider')
-            ->filter()
-            ->values();
+        // Cache 10min. La lista de providers distintos en api_logs cambia
+        // solo cuando aparece un proveedor nuevo (raro). El query DISTINCT
+        // sobre api_logs puede ser costoso si la tabla tiene millones de
+        // filas y no hay indice cubriendo provider.
+        $providers = Cache::remember(
+            "api-logs:providers:{$tenant->id}",
+            600,
+            fn () => ApiLog::where('tenant_id', $tenant->id)
+                ->distinct()
+                ->pluck('provider')
+                ->filter()
+                ->values()
+                ->all()
+        );
 
         return $this->success([
-            'providers' => $providers
+            'providers' => $providers,
         ]);
     }
 

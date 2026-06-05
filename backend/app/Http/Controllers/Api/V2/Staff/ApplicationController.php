@@ -603,15 +603,53 @@ class ApplicationController extends Controller
      */
     private function formatApplication(Application $app): array
     {
+        try {
+            return $this->doFormatApplication($app);
+        } catch (\Throwable $e) {
+            // Datos inconsistentes en una application no deben tirar 500 del
+            // endpoint entero. Logueamos para diagnosticar y devolvemos
+            // payload minimo con `_error: true` para que el frontend lo
+            // muestre como "registro con problema" sin romper la lista.
+            \Illuminate\Support\Facades\Log::warning('formatApplication failed', [
+                'application_id' => $app->id,
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => basename($e->getFile()),
+            ]);
+
+            return [
+                'id' => $app->id,
+                'folio' => ($app->created_at?->format('Ymd') ?? 'XXXXXXXX') . '-' . strtoupper(substr((string) $app->id, 0, 4)),
+                'status' => $app->status,
+                'status_label' => $app->status_label ?? $app->status,
+                'applicant_type' => $app->applicant_type,
+                'applicant_name' => null,
+                'applicant_phone' => null,
+                'applicant_rfc' => null,
+                'product' => ['id' => $app->product_id, 'name' => null, 'type' => null, 'required_documents' => []],
+                'requested_amount' => $app->requested_amount,
+                'requested_term_months' => $app->requested_term_months,
+                'requested_term_days' => $app->requested_term_days,
+                'term_in_days' => false,
+                'monthly_payment' => $app->monthly_payment,
+                'risk_level' => $app->risk_level,
+                'assigned_to' => null,
+                'created_at' => $app->created_at?->toIso8601String(),
+                'updated_at' => $app->updated_at?->toIso8601String(),
+                'submitted_at' => $app->submitted_at?->toIso8601String(),
+                '_error' => 'Datos incompletos en este registro',
+            ];
+        }
+    }
+
+    private function doFormatApplication(Application $app): array
+    {
         // Generate folio from created_at date + short UUID
         // Format: YYYYMMDD-XXXX (e.g., 20260119-ABC1)
         $folio = $app->created_at?->format('Ymd') . '-' . strtoupper(substr($app->id, 0, 4));
 
         // Cache de relaciones para evitar acceso encadenado con `null` que
         // en PHP 8 con strict mode puede escalar a 500 al indexar nullables.
-        // Especificamente product->rules es JSONB nullable: si product
-        // existe pero rules es null, `$app->product?->rules['x']` truena
-        // porque ?->rules retorna null y `null['x']` tira warning/error.
         $product = $app->product;
         $productRules = is_array($product?->rules) ? $product->rules : [];
         $assignedTo = $app->assignedTo;

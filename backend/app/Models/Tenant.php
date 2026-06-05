@@ -68,6 +68,8 @@ class Tenant extends Model
             // Lista global de tenants activos (usado por el selector del
             // super_admin en login/me/availableTenants).
             Cache::forget('tenants:active:selector');
+            // /v2/staff/config (showCacheKey)
+            Cache::forget("staff:config:show:{$tenant->id}");
         };
 
         static::saved($forget);

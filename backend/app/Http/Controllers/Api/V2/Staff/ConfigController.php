@@ -9,6 +9,7 @@ use App\Models\TenantApiConfig;
 use App\Models\TenantBranding;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Staff Config Controller (v2).
@@ -25,28 +26,45 @@ class ConfigController extends Controller
      */
     public function show(Request $request): JsonResponse
     {
-        /** @var StaffAccount $staff */
-        $staff = $request->user();
-        // El super admin global tiene tenant_id NULL; usamos el tenant
-        // resuelto del header X-Tenant-ID. RequireStaff valida cross-tenant.
         $tenant = app('tenant');
 
-        return $this->success([
-            'tenant' => [
-                'id' => $tenant->id,
-                'name' => $tenant->name,
-                'slug' => $tenant->slug,
-                'legal_name' => $tenant->legal_name,
-                'rfc' => $tenant->rfc,
-                'email' => $tenant->email,
-                'phone' => $tenant->phone,
-                'website' => $tenant->website,
-            ],
-            'branding' => $tenant->brandingConfig?->toApiArray() ?? $this->getDefaultBranding(),
-            'api_configs' => $tenant->apiConfigs->map->toApiArray(),
-            'available_providers' => TenantApiConfig::PROVIDERS,
-            'available_service_types' => TenantApiConfig::SERVICE_TYPES,
-        ]);
+        // Cache 5min por tenant. Las settings del tenant (info basica,
+        // branding, api_configs) cambian solo cuando el super_admin las
+        // edita. Invalidacion automatica via Tenant::booted() y
+        // V2ConfigCacheObserver al guardar TenantApiConfig/TenantBranding.
+        $payload = Cache::remember(
+            "staff:config:show:{$tenant->id}",
+            300,
+            function () use ($tenant) {
+                $tenant->load(['brandingConfig', 'apiConfigs']);
+                return [
+                    'tenant' => [
+                        'id' => $tenant->id,
+                        'name' => $tenant->name,
+                        'slug' => $tenant->slug,
+                        'legal_name' => $tenant->legal_name,
+                        'rfc' => $tenant->rfc,
+                        'email' => $tenant->email,
+                        'phone' => $tenant->phone,
+                        'website' => $tenant->website,
+                    ],
+                    'branding' => $tenant->brandingConfig?->toApiArray() ?? $this->getDefaultBranding(),
+                    'api_configs' => $tenant->apiConfigs->map->toApiArray()->all(),
+                    'available_providers' => TenantApiConfig::PROVIDERS,
+                    'available_service_types' => TenantApiConfig::SERVICE_TYPES,
+                ];
+            }
+        );
+
+        return $this->success($payload);
+    }
+
+    /**
+     * Clave de cache compartida con observers para invalidacion explicita.
+     */
+    public static function showCacheKey(string $tenantId): string
+    {
+        return "staff:config:show:{$tenantId}";
     }
 
     /**
