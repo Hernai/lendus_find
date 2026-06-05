@@ -143,8 +143,9 @@ print_header() {
 echo "${BLUE}${BOLD}━━ Public (sin auth) ━━${NC}"
 print_header
 print_row "GET /v2/public/health"     "$(measure GET '/v2/public/health')"
-print_row "GET /v2/public/config"     "$(measure GET '/v2/public/config')"
+print_row "GET /v2/config"            "$(measure GET '/v2/config')"
 print_row "GET /v2/public/manifest"   "$(measure GET '/v2/public/manifest')"
+print_row "GET /v2/public/version"    "$(measure GET '/v2/public/version')"
 echo
 
 # -----------------------------------------------------------------------------
@@ -183,15 +184,13 @@ AUTH_HEADER="Authorization: Bearer ${TOKEN}"
 
 echo "${BLUE}${BOLD}━━ Staff Admin ━━${NC}"
 print_header
-print_row "GET /v2/staff/tenants"             "$(measure GET '/v2/staff/tenants'                 "${AUTH_HEADER}")"
+print_row "GET /v2/staff/me/tenants"          "$(measure GET '/v2/staff/me/tenants'              "${AUTH_HEADER}")"
 print_row "GET /v2/staff/applications"        "$(measure GET '/v2/staff/applications?page=1&per_page=20' "${AUTH_HEADER}")"
-print_row "GET /v2/staff/applications/stats"  "$(measure GET '/v2/staff/applications/stats'      "${AUTH_HEADER}")"
 print_row "GET /v2/staff/products"            "$(measure GET '/v2/staff/products'                "${AUTH_HEADER}")"
 print_row "GET /v2/staff/users"               "$(measure GET '/v2/staff/users?page=1&per_page=20' "${AUTH_HEADER}")"
-print_row "GET /v2/staff/api-logs"            "$(measure GET '/v2/staff/api-logs?page=1&per_page=20' "${AUTH_HEADER}")"
+print_row "GET /v2/staff/api-logs/"           "$(measure GET '/v2/staff/api-logs/?page=1&per_page=20' "${AUTH_HEADER}")"
 print_row "GET /v2/staff/api-logs/stats"      "$(measure GET '/v2/staff/api-logs/stats'           "${AUTH_HEADER}")"
 print_row "GET /v2/staff/api-logs/providers"  "$(measure GET '/v2/staff/api-logs/providers'       "${AUTH_HEADER}")"
-print_row "GET /v2/staff/config/tenant"       "$(measure GET '/v2/staff/config/tenant'            "${AUTH_HEADER}")"
 echo
 
 # -----------------------------------------------------------------------------
