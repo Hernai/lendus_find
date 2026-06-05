@@ -63,6 +63,16 @@ class LogClientRequest
         $payload = $this->buildPayload($request, $response, $startedAt);
 
         app()->terminating(function () use ($payload) {
+            // CRITICO: forzar fastcgi_finish_request ANTES de hacer trabajo
+            // sincrono. En Apache+EasyApache4 con mod_proxy_fcgi, Laravel no
+            // siempre lo dispara automaticamente, asi que el cliente acababa
+            // esperando ~280ms del INSERT a audit_logs. Llamandolo explicito
+            // aqui garantizamos que el response ya esta enviado al cliente
+            // antes de tocar la DB.
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            }
+
             try {
                 $this->persist($payload);
             } catch (Throwable $e) {
@@ -170,8 +180,17 @@ class LogClientRequest
         $country = null;
         $geoSource = $clientGeo ? 'device' : 'ip';
 
-        // Solo hacer el IP lookup si no tenemos geo del dispositivo Y hay IP.
-        if (! $clientGeo && ! empty($p['ip_address'])) {
+        // IP geo lookup deshabilitado en path de respuesta. fastcgi_finish_request
+        // no esta cerrando la conexion antes del terminating en este stack
+        // (Apache + cPanel/EasyApache 4), asi que el cliente esperaba ~500ms del
+        // HTTP call a ip-api.com en CADA request.
+        //
+        // El IP que igualmente quedo persistido (campo ip_address) permite hacer
+        // el geo lookup en batch nocturno con un command: para cada audit_log
+        // sin lat/lng, resolver y poblar. Eso saca el costo del path critico.
+        //
+        // TODO: agendar `audit-logs:resolve-geo` command nocturno.
+        if (! $clientGeo && ! empty($p['ip_address']) && env('AUDIT_GEO_LOOKUP_SYNC', false)) {
             $ipGeo = app(MetadataService::class)->resolveIpGeolocation($p['ip_address']);
             if (is_array($ipGeo)) {
                 $latitude = $latitude ?? ($ipGeo['latitude'] ?? null);
