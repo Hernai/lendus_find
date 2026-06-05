@@ -87,6 +87,10 @@ Route::middleware(['tenant', 'metadata'])->prefix('v2')->group(function () {
 // Health check no requiere tenant (es status del backend).
 Route::get('v2/public/health', V2HealthController::class);
 
+// Stats de OPCache para monitoreo. Sin auth — restringido por IP allowlist
+// dentro del controller. Ver deploy-ops skill seccion 22.5.
+Route::get('ops/opcache-stats', \App\Http\Controllers\Ops\OpcacheStatsController::class);
+
 // =============================================
 // V2: PUBLIC SIMULATOR (no authentication required)
 // =============================================

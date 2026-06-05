@@ -552,7 +552,7 @@ class ApplicationService
     public function getAssignedTo(StaffAccount $staff, ?string $status = null): Collection
     {
         $query = Application::assignedToStaff($staff->id)
-            ->with(['person', 'product'])
+            ->with(['person.account', 'company', 'product', 'assignedTo.profile'])
             ->orderByDesc('submitted_at');
 
         if ($status) {
@@ -573,7 +573,7 @@ class ApplicationService
                 Application::STATUS_SUBMITTED,
                 Application::STATUS_IN_REVIEW,
             ])
-            ->with(['person', 'product'])
+            ->with(['person.account', 'company', 'product', 'assignedTo.profile'])
             ->orderBy('submitted_at');
 
         if ($status) {
@@ -631,7 +631,7 @@ class ApplicationService
         foreach ($columns as $status) {
             $query = Application::where('tenant_id', $tenant->id)
                 ->where('status', $status)
-                ->with(['person', 'product', 'assignedTo']);
+                ->with(['person', 'product', 'assignedTo.profile']);
 
             if ($assignedTo) {
                 $query->where('assigned_to', $assignedTo);
@@ -691,7 +691,7 @@ class ApplicationService
         int $perPage = 20
     ): LengthAwarePaginator {
         $query = Application::where('tenant_id', $tenant->id)
-            ->with(['person.account.phoneIdentity', 'product', 'assignedTo']);
+            ->with(['person.account.phoneIdentity', 'company', 'product', 'assignedTo.profile']);
 
         // Apply filters
         if (!empty($filters['status'])) {

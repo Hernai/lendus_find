@@ -55,7 +55,8 @@ class NotificationTemplateController extends Controller
             $query->where('is_active', $request->boolean('is_active'));
         }
 
-        $templates = $query->orderBy('event')
+        $templates = $query->with(['creator', 'updater'])
+            ->orderBy('event')
             ->orderBy('channel')
             ->orderBy('priority')
             ->get()
@@ -76,6 +77,7 @@ class NotificationTemplateController extends Controller
         $tenant = app('tenant');
 
         $template = NotificationTemplate::where('tenant_id', $tenant->id)
+            ->with(['creator', 'updater'])
             ->findOrFail($id);
 
         return $this->success([
@@ -132,6 +134,7 @@ class NotificationTemplateController extends Controller
         $data['updated_by'] = $user->id;
 
         $template = NotificationTemplate::create($data);
+        $template->load(['creator', 'updater']);
 
         return $this->success([
             'template' => $this->formatTemplate($template),
@@ -190,7 +193,7 @@ class NotificationTemplateController extends Controller
         $template->update($data);
 
         return $this->success([
-            'template' => $this->formatTemplate($template->fresh()),
+            'template' => $this->formatTemplate($template->fresh(['creator', 'updater'])),
         ], 'Template updated successfully');
     }
 

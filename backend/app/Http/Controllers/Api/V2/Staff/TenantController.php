@@ -32,7 +32,16 @@ class TenantController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Tenant::with('brandingConfig');
+        // withCount evita N+1: en vez de 2 queries COUNT (users + applications)
+        // por cada tenant del listado, agrega ambos contadores en la query
+        // principal. Se quita el global scope `tenant` porque este endpoint
+        // es del super_admin (ve todos los tenants) y el scope filtraría por
+        // el tenant del header.
+        $query = Tenant::with('brandingConfig')
+            ->withCount([
+                'staffAccounts as users_count' => fn($q) => $q->withoutGlobalScope('tenant'),
+                'applications as applications_count' => fn($q) => $q->withoutGlobalScope('tenant'),
+            ]);
 
         // Search filter
         if ($search = $request->input('search')) {
@@ -446,13 +455,14 @@ class TenantController extends Controller
      */
     private function formatTenant(Tenant $tenant): array
     {
-        $usersCount = StaffAccount::withoutGlobalScope('tenant')
-            ->where('tenant_id', $tenant->id)
-            ->count();
+        // users_count / applications_count vienen ya precargados via withCount
+        // en index(). Si llegamos sin esos atributos (otros callers), caemos
+        // a las queries individuales para no romper compatibilidad.
+        $usersCount = $tenant->users_count
+            ?? StaffAccount::withoutGlobalScope('tenant')->where('tenant_id', $tenant->id)->count();
 
-        $applicationsCount = Application::withoutGlobalScope('tenant')
-            ->where('tenant_id', $tenant->id)
-            ->count();
+        $applicationsCount = $tenant->applications_count
+            ?? Application::withoutGlobalScope('tenant')->where('tenant_id', $tenant->id)->count();
 
         return [
             'id' => $tenant->id,

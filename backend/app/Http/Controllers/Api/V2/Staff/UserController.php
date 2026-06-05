@@ -58,9 +58,12 @@ class UserController extends Controller
             });
         }
 
-        // Pagination
+        // Pagination + eager load del perfil (evita N+1 en formatStaffAccount)
         $perPage = min($request->input('per_page', 20), 100);
-        $paginated = $query->orderBy('created_at', 'desc')->paginate($perPage);
+        $paginated = $query
+            ->with('profile')
+            ->orderBy('created_at', 'desc')
+            ->paginate($perPage);
 
         return $this->success([
             'users' => $paginated->map(fn($account) => $this->formatStaffAccount($account)),
