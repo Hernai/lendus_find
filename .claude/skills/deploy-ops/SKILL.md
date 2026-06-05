@@ -1161,6 +1161,130 @@ Pasos:
   sudo firewall-cmd --reload
   ```
 
+## 23. Geo IP con MaxMind GeoLite2 (DB local, sin API externa)
+
+`audit_logs.latitude/longitude/city/region/country` se enriquece offline
+desde una base de datos local de MaxMind. No usamos APIs externas tipo
+ip-api.com porque agregan latencia al request (~200-500ms por lookup)
+y rate limits que limitan el throughput.
+
+### 23.1 Setup inicial (una sola vez)
+
+**1. Cuenta MaxMind + License Key:**
+
+   - Signup gratis: https://www.maxmind.com/en/geolite2/signup
+   - Verifica el email, setea password.
+   - Account → "My MaxMind Account ID" → copia el numero (~6-7 digits).
+   - "Manage License Keys" → "Generate new license key":
+     - Description: "LendusFind production server"
+     - "Will this key be used for GeoIP Update?" → **YES**
+     - Confirm → copia la key (la muestra una sola vez)
+
+**2. Env vars en /etc/sysconfig/lendusfind-backend** (o `.env` de cPanel):
+
+```bash
+MAXMIND_ACCOUNT_ID=123456
+MAXMIND_LICENSE_KEY=xxxxxxxxxxxxxxxx_xxxxxx
+```
+
+**3. Refresh config + descarga inicial de la DB:**
+
+```bash
+sudo -u deploy -E php artisan config:cache
+sudo -u deploy -E php artisan audit-logs:update-geoip-db
+# Resultado esperado: ~70MB descargados a storage/app/geoip/GeoLite2-City.mmdb
+```
+
+**4. Verifica:**
+
+```bash
+sudo -u deploy -E php artisan audit-logs:update-geoip-db --check
+# Esperado:
+#   Account ID: OK
+#   License Key: OK
+#   DB local: OK (70.X MB, mtime YYYY-MM-DD)
+```
+
+### 23.2 Schedule automatico
+
+Ya configurado en `routes/console.php`:
+
+- **`audit-logs:update-geoip-db`** — cada **miercoles 03:00** America/Mexico_City.
+  MaxMind libera nueva version los martes; corremos miercoles para asegurar.
+
+- **`audit-logs:resolve-geo --limit=1000 --since="2 hours"`** — cada **hora al minuto :15**.
+  Recorre audit_logs de las ultimas 2h sin lat/lng, resuelve via MaxMind local.
+
+Para que el schedule funcione, necesita uno de estos dos servicios corriendo:
+
+**Opcion A (recomendada): systemd `schedule:work`**
+
+```ini
+# /etc/systemd/system/lendusfind-schedule.service
+[Unit]
+Description=LendusFind Laravel Schedule
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=deploy
+WorkingDirectory=/var/www/lendusfind/current
+EnvironmentFile=/etc/sysconfig/lendusfind-backend
+ExecStart=/usr/bin/php artisan schedule:work
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl enable --now lendusfind-schedule
+```
+
+**Opcion B: cron (cPanel-friendly)**
+
+```cron
+* * * * * cd /home/lendus/laravelfiles_moneycapital && /opt/cpanel/ea-php82/root/usr/bin/php artisan schedule:run >> /dev/null 2>&1
+```
+
+### 23.3 Verificacion / diagnostico
+
+```bash
+# Ver siguiente ejecucion programada
+sudo -u deploy -E php artisan schedule:list
+
+# Estado de la DB (tamano + fecha)
+ls -lah /var/www/lendusfind/current/storage/app/geoip/GeoLite2-City.mmdb
+
+# Manual: actualizar DB ahora mismo
+sudo -u deploy -E php artisan audit-logs:update-geoip-db
+
+# Manual: resolver TODOS los pendientes (no solo ultimas 2h)
+sudo -u deploy -E php artisan audit-logs:resolve-geo --limit=50000
+
+# Dry-run para diagnostico sin escribir nada
+sudo -u deploy -E php artisan audit-logs:resolve-geo --dry-run --limit=100
+```
+
+### 23.4 Backup de la DB
+
+`storage/app/geoip/*.mmdb` NO se versiona en git (`.gitignore` lo excluye).
+Cada vez que `update-geoip-db` corre:
+- Si existe la actual, la renombra a `.mmdb.bak` antes de overwrite.
+- Si la nueva descarga es exitosa, borra el `.bak`.
+- Si falla, restaura desde el `.bak`.
+
+Sin necesidad de backup adicional — la siguiente corrida del schedule
+re-descarga si la actual se corrompe.
+
+### 23.5 Costo y limites
+
+- **Free tier** de MaxMind GeoLite2: **gratis sin limites de uso** (DB local).
+- Solo limite: actualizaciones cada semana (martes/jueves).
+- Para tier "GeoIP2 City" (precision mejor): de pago, ~50 USD/mes.
+- LendusFind usa GeoLite2 (free) y es suficiente para auditoria.
+
 ## Archivos clave de esta skill
 
 Variante Nginx:

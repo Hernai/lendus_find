@@ -42,4 +42,13 @@ return [
         'whatsapp_from' => env('TWILIO_WHATSAPP_FROM'),
     ],
 
+    // MaxMind GeoLite2 - geolocalizacion via DB local (no API externa).
+    // Genera tu license key en:
+    //   https://www.maxmind.com/en/accounts/current/license-key
+    // marcando "Will this key be used for GeoIP Update? YES".
+    'maxmind' => [
+        'account_id' => env('MAXMIND_ACCOUNT_ID'),
+        'license_key' => env('MAXMIND_LICENSE_KEY'),
+    ],
+
 ];

@@ -51,15 +51,27 @@ class MetadataService
     }
 
     /**
-     * Resolver geolocalización por IP (lookup externo bloqueante).
-     *
-     * Solo debe llamarse fuera del camino crítico del request (job, cron,
-     * `terminating()` callback). NO llamar desde un middleware HTTP que
-     * preceda al response.
+     * @deprecated Usa App\Services\GeoIp\MaxMindGeoService::lookup() en su lugar.
+     * Esta funcion hacia HTTP a ip-api.com (rate limit + latencia). Reemplazada
+     * por DB local MaxMind GeoLite2 (sin red, sin rate limit). Mantenida solo
+     * por compatibilidad con codigo legacy que pueda llamarla.
      */
     public function resolveIpGeolocation(string $ip): ?array
     {
-        return $this->getGeolocation($ip);
+        $mm = app(\App\Services\GeoIp\MaxMindGeoService::class)->lookup($ip);
+        if ($mm) {
+            return [
+                'latitude' => $mm['latitude'] ?? null,
+                'longitude' => $mm['longitude'] ?? null,
+                'city' => $mm['city'] ?? null,
+                'region' => $mm['region'] ?? null,
+                'country' => $mm['country'] ?? null,
+                'country_name' => $mm['country_name'] ?? null,
+                'isp' => null,
+                'org' => null,
+            ];
+        }
+        return null;
     }
 
     /**
@@ -160,9 +172,11 @@ class MetadataService
     }
 
     /**
-     * Get geolocation data from IP address.
-     * Uses ip-api.com free service (45 req/min limit).
-     * Results are cached for 24 hours to reduce API calls.
+     * @deprecated Reemplazado por MaxMindGeoService::lookup(). Esta funcion
+     * hacia HTTP a ip-api.com con rate limit 45 req/min y latencia ~200-500ms.
+     * Ya no se llama desde el path del request — el lookup se hace offline
+     * via `audit-logs:resolve-geo` con DB local MaxMind. Mantenida solo
+     * por si codigo legacy o tests la invocan directamente.
      */
     public function getGeolocation(string $ip): ?array
     {
