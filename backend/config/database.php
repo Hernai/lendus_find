@@ -103,20 +103,23 @@ return [
             // handshake; las siguientes usan la conexión ya abierta.
             // Override con DB_PERSISTENT=false si causa problemas en
             // entornos con timeouts agresivos de Postgres.
-            // ATTR_EMULATE_PREPARES=true: PDO emula prepared statements en el
-            // cliente (PHP) en lugar de enviarlas como `PREPARE pdo_stmt_X` al
-            // server. Esto es OBLIGATORIO con PgBouncer en pool_mode=transaction:
-            // sin emulacion, la conexion backend que recibio el PREPARE puede
-            // ser distinta a la que ejecuta el EXECUTE -> error SQLSTATE 26000
-            // "no existe la sentencia preparada pdo_stmt_X". Eso disparaba
-            // retries de Laravel y dejaba endpoints simples en 900ms+ warm.
-            // Tradeoff: PDO interpola los parametros en client-side; sigue
-            // siendo seguro contra SQL injection (PDO los escapa) pero pierdes
-            // el cache de plan a nivel server (irrelevante con prepared statement
-            // pooling apagado de todos modos).
+            // NOTA sobre PgBouncer + prepared statements:
+            //
+            // En pool_mode=transaction, PgBouncer reasigna la conexion backend
+            // al pool tras cada COMMIT. Eso normalmente rompe los prepared
+            // statements server-side (error SQLSTATE 26000 "no existe la
+            // sentencia preparada pdo_stmt_X"). PgBouncer >= 1.21 resuelve
+            // esto con `max_prepared_statements > 0` en pgbouncer.ini, que
+            // habilita protocol-level prepared statement pooling. Verificar
+            // tambien que `server_reset_query` NO contenga `DEALLOCATE ALL`.
+            //
+            // NO usar PDO::ATTR_EMULATE_PREPARES=true: PDO interpola los
+            // parametros en cliente y bind de booleans `true` se serializa
+            // como `1` (int), Postgres lo rechaza con SQLSTATE 42883
+            // "el operador no existe: boolean = integer" en cualquier query
+            // tipo `where('is_active', true)`.
             'options' => [
                 \PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', true),
-                \PDO::ATTR_EMULATE_PREPARES => true,
             ],
         ],
 
