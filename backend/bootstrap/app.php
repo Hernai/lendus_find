@@ -24,6 +24,14 @@ return Application::configure(basePath: dirname(__DIR__))
             'metadata' => \App\Http\Middleware\CaptureMetadata::class,
             'log.request' => \App\Http\Middleware\LogClientRequest::class,
             'etag' => \App\Http\Middleware\AddEtag::class,
+            'debug.queries' => \App\Http\Middleware\DebugQueryLog::class,
+        ]);
+
+        // DebugQueryLog opera siempre que DEBUG_QUERIES=1 o un IP en allowlist
+        // mande X-Debug-Queries header. Por eso lo aplicamos globalmente a la
+        // API — el middleware decide internamente si registrar o no.
+        $middleware->api(append: [
+            \App\Http\Middleware\DebugQueryLog::class,
         ]);
 
         // Exclude API routes from CSRF verification (they use Bearer token auth)

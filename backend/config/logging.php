@@ -73,6 +73,17 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Canal dedicado para DebugQueryLog. Separa el ruido del laravel.log
+        // principal y permite rotar/borrar el log de queries sin tocar el
+        // resto. Activable via DEBUG_QUERIES=1 o header X-Debug-Queries.
+        'queries' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/queries.log'),
+            'level' => 'info',
+            'days' => 3,
+            'replace_placeholders' => false,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),
