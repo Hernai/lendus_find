@@ -86,33 +86,43 @@ pipeline {
                     if (params.DRY_RUN) {
                         echo "DRY_RUN: simulando deploy de ${params.REF}"
                     } else {
-                        // Estrategia rsync: el server NO es un repo git
-                        // (código se subió originalmente por SFTP). Jenkins
-                        // sí tiene el workspace fresco con el commit nuevo.
-                        // Copiamos backend/ del workspace a APP_DIR
-                        // preservando .env, vendor, storage y bootstrap/cache.
+                        // Modelo de mínimo privilegio: TODO el deploy se
+                        // ejecuta como `lendus`. Jenkins solo tiene permiso
+                        // para invocar `bash` como lendus (sudoers).
+                        //
+                        // Pre-requisito one-time en el server:
+                        //   sudo setfacl -R -m u:lendus:rX /var/lib/jenkins
+                        //   sudo setfacl -d -R -m u:lendus:rX /var/lib/jenkins
+                        // Eso permite a lendus LEER el workspace de Jenkins
+                        // sin necesidad de sudo. Como lendus es dueño del
+                        // APP_DIR, rsync/cp/chmod no requieren root.
                         sh """
-                            sudo rsync -av --delete \\
-                                --exclude='.env' \\
-                                --exclude='.env.*' \\
-                                --exclude='vendor/' \\
-                                --exclude='storage/' \\
-                                --exclude='bootstrap/cache/' \\
-                                --exclude='.git/' \\
-                                ${env.WORKSPACE}/backend/ ${env.APP_DIR}/
+                            sudo -u lendus bash -s <<'DEPLOY'
+set -euo pipefail
 
-                            sudo chown -R lendus:lendus ${env.APP_DIR}
+WORKSPACE='${env.WORKSPACE}'
+APP_DIR='${env.APP_DIR}'
+REF='${params.REF}'
 
-                            # Copiar scripts/ al APP_DIR para que el deploy.sh
-                            # quede disponible para invocaciones manuales.
-                            sudo cp -r ${env.WORKSPACE}/scripts ${env.APP_DIR}/scripts
-                            sudo chown -R lendus:lendus ${env.APP_DIR}/scripts
-                            sudo chmod +x ${env.APP_DIR}/scripts/*.sh
+# rsync del workspace de Jenkins al APP_DIR. Sin sudo: lendus puede
+# leer el workspace (gracias al ACL) y escribir en su propio APP_DIR.
+rsync -av --delete \\
+    --exclude='.env' \\
+    --exclude='.env.*' \\
+    --exclude='vendor/' \\
+    --exclude='storage/' \\
+    --exclude='bootstrap/cache/' \\
+    --exclude='.git/' \\
+    "\${WORKSPACE}/backend/" "\${APP_DIR}/"
 
-                            # El script detecta automáticamente la ausencia de .git
-                            # y skip el git pull. No necesitamos pasar SKIP_GIT=1
-                            # explícitamente (sudoers bloquea env vars custom).
-                            sudo -u lendus bash ${env.APP_DIR}/scripts/deploy-backend.sh ${params.REF}
+# Copiar scripts/
+rm -rf "\${APP_DIR}/scripts"
+cp -r "\${WORKSPACE}/scripts" "\${APP_DIR}/scripts"
+chmod +x "\${APP_DIR}/scripts/"*.sh
+
+# Ejecutar deploy (auto-detecta ausencia de .git y salta git pull)
+"\${APP_DIR}/scripts/deploy-backend.sh" "\${REF}"
+DEPLOY
                         """
                     }
                 }
