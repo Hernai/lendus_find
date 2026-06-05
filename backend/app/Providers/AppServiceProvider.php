@@ -6,6 +6,7 @@ use App\Contracts\ApiLoggerInterface;
 use App\Contracts\DocumentStorageInterface;
 use App\Contracts\KycServiceInterface;
 use App\Contracts\SmsServiceInterface;
+use App\Models\CachedPersonalAccessToken;
 use App\Models\Product;
 use App\Models\TenantApiConfig;
 use App\Models\TenantBranding;
@@ -65,6 +66,12 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureRateLimiting();
         $this->registerObservers();
+
+        // Cachea los lookups de Sanctum en Redis 60s. Ahorra ~560ms por
+        // request autenticado (2 queries: token + tokenable) contra la DB
+        // remota. Tradeoff: tokens revocados siguen validos hasta 60s,
+        // excepto en logout explicito (deleted hook invalida al instante).
+        \Laravel\Sanctum\Sanctum::usePersonalAccessTokenModel(CachedPersonalAccessToken::class);
     }
 
     /**
