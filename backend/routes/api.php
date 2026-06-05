@@ -382,9 +382,16 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
         });
 
         // Applications - Read (any staff)
+        // IMPORTANTE: rutas con segmentos fijos (unassigned, my-queue,
+        // board, statistics) DEBEN declararse ANTES de /{id}, de lo
+        // contrario Laravel matchea /applications/unassigned como
+        // /applications/{id} con id='unassigned' y la query a Postgres
+        // truena con "invalid input syntax for type uuid".
         Route::get('/applications', [StaffAppController::class, 'index']);
         Route::get('/applications/board', [StaffAppController::class, 'board']);
         Route::get('/applications/statistics', [StaffAppController::class, 'statistics']);
+        Route::get('/applications/unassigned', [StaffAppController::class, 'unassigned']);
+        Route::get('/applications/my-queue', [StaffAppController::class, 'myQueue']);
         Route::get('/applications/{id}', [StaffAppController::class, 'show']);
         Route::get('/applications/{id}/audit-logs', [StaffAuditLogController::class, 'listByApplication']);
         Route::get('/applicants/{id}/audit-logs', [StaffAuditLogController::class, 'listByApplicant']);
