@@ -98,7 +98,9 @@ Route::middleware(['tenant', 'metadata'])->prefix('v2/simulator')->group(functio
 // V2: STAFF AUTHENTICATION (uses StaffAccount model)
 // =============================================
 Route::middleware(['tenant', 'metadata', 'log.request'])->prefix('v2/staff/auth')->group(function () {
-    Route::post('/login', [StaffAuthController::class, 'login']);
+    // Throttle: 5 intentos por minuto por IP. Bloquea brute force de
+    // credenciales del backoffice (compliance CNBV / mejor práctica).
+    Route::middleware('throttle:5,1')->post('/login', [StaffAuthController::class, 'login']);
 
     Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/me', [StaffAuthController::class, 'me']);
