@@ -65,11 +65,38 @@ class Tenant extends Model
             // V2 public config: payload derivado del tenant (branding, settings,
             // integraciones). Si el tenant cambió, el config tiene que regenerarse.
             Cache::forget("v2:config:{$tenant->id}");
+            // Lista global de tenants activos (usado por el selector del
+            // super_admin en login/me/availableTenants).
+            Cache::forget('tenants:active:selector');
         };
 
         static::saved($forget);
         static::deleted($forget);
         static::restored($forget);
+    }
+
+    /**
+     * Lista cacheada de tenants activos para selectores (super_admin login,
+     * me, /me/tenants). Antes cada uno corria una query a `tenants` y eso
+     * sumaba 3x ~280ms por sesion del super_admin contra DB remota.
+     *
+     * TTL alto (10 min) porque la lista de tenants cambia raramente; las
+     * altas/bajas/edits invalidan via Tenant::booted() forget.
+     *
+     * @return array<int, array{id:string,slug:string,name:string}>
+     */
+    public static function activeListForSelector(): array
+    {
+        return Cache::remember(
+            'tenants:active:selector',
+            600,
+            fn () => static::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'slug', 'name'])
+                ->map(fn ($t) => ['id' => $t->id, 'slug' => $t->slug, 'name' => $t->name])
+                ->all()
+        );
     }
 
     /**

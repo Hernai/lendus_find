@@ -193,11 +193,9 @@ class AuthController extends Controller
         $isSuperAdmin = $account->isSuperAdmin() && $account->tenant_id === null;
 
         if ($isSuperAdmin) {
-            $tenants = \App\Models\Tenant::where('is_active', true)
-                ->orderBy('name')
-                ->get(['id', 'slug', 'name'])
-                ->map(fn ($t) => ['id' => $t->id, 'slug' => $t->slug, 'name' => $t->name])
-                ->all();
+            // Cache 10 min via Tenant::activeListForSelector (invalidado por
+            // Tenant::booted al saved). Antes esto era 1 query por hit.
+            $tenants = \App\Models\Tenant::activeListForSelector();
         } else {
             $tenants = [];
             if ($account->tenant_id) {
@@ -223,12 +221,7 @@ class AuthController extends Controller
         // Super admin global: lista de tenants disponibles para el selector.
         // Staff per-tenant: solo su tenant asignado.
         if ($isSuperAdmin) {
-            $availableTenants = \App\Models\Tenant::query()
-                ->where('is_active', true)
-                ->orderBy('name')
-                ->get(['id', 'slug', 'name'])
-                ->map(fn ($t) => ['id' => $t->id, 'slug' => $t->slug, 'name' => $t->name])
-                ->all();
+            $availableTenants = \App\Models\Tenant::activeListForSelector();
         } else {
             $availableTenants = [];
             if ($account->tenant_id) {
