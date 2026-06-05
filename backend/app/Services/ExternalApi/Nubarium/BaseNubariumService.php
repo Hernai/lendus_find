@@ -169,12 +169,14 @@ abstract class BaseNubariumService extends BaseExternalApiService
 
             Log::error('Nubarium: JWT generation failed', [
                 'status' => $response->status(),
-                'body' => $response->body(),
+                // Trunco para no loguear tokens/credenciales completas si la
+                // respuesta de error las refleja.
+                'body' => substr($response->body(), 0, 500),
             ]);
             return null;
         } catch (\Exception $e) {
             Log::error('Nubarium: JWT generation exception', [
-                'error' => $e->getMessage(),
+                'error' => self::sanitizeError($e),
             ]);
             return null;
         }
@@ -186,6 +188,36 @@ abstract class BaseNubariumService extends BaseExternalApiService
     public function clearTokenCache(): void
     {
         Cache::forget($this->getTokenCacheKey());
+    }
+
+    /**
+     * Sanitiza el mensaje de un Throwable antes de loguearlo.
+     *
+     * Why: Las excepciones de Guzzle/Http en endpoints biometricos (INE,
+     * liveness, face-match) muestran el request body completo en el mensaje,
+     * incluyendo imagenes base64 de ~1MB y, en el path de auth, las
+     * credenciales del tenant. Loguear eso satura storage/logs e introduce
+     * datos sensibles en archivos planos.
+     *
+     * How: Truncamos a 500 chars y reemplazamos cualquier bloque base64
+     * largo (>=120 chars) por un placeholder. Tambien filtramos campos
+     * conocidos (password, token, bearer) por si aparecen en el mensaje.
+     */
+    public static function sanitizeError(\Throwable $e): string
+    {
+        $msg = $e->getMessage();
+
+        // Reemplaza bloques base64 largos por placeholder.
+        $msg = preg_replace('/[A-Za-z0-9+\/=]{120,}/', '<base64:redacted>', $msg) ?? $msg;
+
+        // Censura credenciales o tokens si quedaran en el mensaje.
+        $msg = preg_replace('/("?(?:password|bearer_token|access_token|token|authorization)"?\s*[:=]\s*"?)[^",\s}]+/i', '$1<redacted>', $msg) ?? $msg;
+
+        if (strlen($msg) > 500) {
+            $msg = substr($msg, 0, 500) . '...<truncated>';
+        }
+
+        return $msg;
     }
 
     /**
@@ -298,11 +330,12 @@ abstract class BaseNubariumService extends BaseExternalApiService
                 'error' => 'Verifique las credenciales',
             ];
         } catch (\Exception $e) {
-            $this->updateTestResult(false, $e->getMessage());
+            $sanitized = self::sanitizeError($e);
+            $this->updateTestResult(false, $sanitized);
             return [
                 'success' => false,
                 'message' => 'Error de conexión',
-                'error' => $e->getMessage(),
+                'error' => $sanitized,
             ];
         }
     }

@@ -123,11 +123,11 @@ class NubariumIdentityService extends BaseNubariumService
 
             return $this->handleError($response, 'Validación de CURP');
         } catch (\Exception $e) {
-            Log::error('Nubarium CURP validation error', ['error' => $e->getMessage()]);
+            Log::error('Nubarium CURP validation error', ['error' => static::sanitizeError($e)]);
 
             return [
                 'success' => false,
-                'error' => 'Error al validar CURP: ' . $e->getMessage(),
+                'error' => 'Error al validar CURP: ' . static::sanitizeError($e),
             ];
         }
     }
@@ -186,11 +186,11 @@ class NubariumIdentityService extends BaseNubariumService
 
             return $this->handleError($response, 'Obtención de CURP');
         } catch (\Exception $e) {
-            Log::error('Nubarium getCurp error', ['error' => $e->getMessage()]);
+            Log::error('Nubarium getCurp error', ['error' => static::sanitizeError($e)]);
 
             return [
                 'success' => false,
-                'error' => 'Error al obtener CURP: ' . $e->getMessage(),
+                'error' => 'Error al obtener CURP: ' . static::sanitizeError($e),
             ];
         }
     }
@@ -252,11 +252,11 @@ class NubariumIdentityService extends BaseNubariumService
 
             return $this->handleError($response, 'Validación de RFC');
         } catch (\Exception $e) {
-            Log::error('Nubarium RFC validation error', ['error' => $e->getMessage()]);
+            Log::error('Nubarium RFC validation error', ['error' => static::sanitizeError($e)]);
 
             return [
                 'success' => false,
-                'error' => 'Error al validar RFC: ' . $e->getMessage(),
+                'error' => 'Error al validar RFC: ' . static::sanitizeError($e),
             ];
         }
     }

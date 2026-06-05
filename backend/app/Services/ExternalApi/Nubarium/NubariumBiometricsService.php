@@ -91,11 +91,11 @@ class NubariumBiometricsService extends BaseNubariumService
 
             return $this->handleError($response, 'Extracción de datos INE');
         } catch (\Exception $e) {
-            Log::error('Nubarium INE OCR error', ['error' => $e->getMessage()]);
+            Log::error('Nubarium INE OCR error', ['error' => static::sanitizeError($e)]);
 
             return [
                 'success' => false,
-                'error' => 'Error al extraer datos de INE: ' . $e->getMessage(),
+                'error' => 'Error al extraer datos de INE: ' . static::sanitizeError($e),
             ];
         }
     }
@@ -212,11 +212,11 @@ class NubariumBiometricsService extends BaseNubariumService
 
             return $this->handleError($response, 'Validación de INE contra lista nominal');
         } catch (\Exception $e) {
-            Log::error('Nubarium INE validation error', ['error' => $e->getMessage()]);
+            Log::error('Nubarium INE validation error', ['error' => static::sanitizeError($e)]);
 
             return [
                 'success' => false,
-                'error' => 'Error al validar INE: ' . $e->getMessage(),
+                'error' => 'Error al validar INE: ' . static::sanitizeError($e),
             ];
         }
     }
@@ -326,11 +326,11 @@ class NubariumBiometricsService extends BaseNubariumService
 
             return $this->handleError($response, 'Comparación facial (Face Match)');
         } catch (\Exception $e) {
-            Log::error('Nubarium Face Match error', ['error' => $e->getMessage()]);
+            Log::error('Nubarium Face Match error', ['error' => static::sanitizeError($e)]);
 
             return [
                 'success' => false,
-                'error' => 'Error en comparación facial: ' . $e->getMessage(),
+                'error' => 'Error en comparación facial: ' . static::sanitizeError($e),
             ];
         }
     }
@@ -411,11 +411,11 @@ class NubariumBiometricsService extends BaseNubariumService
 
             return $this->handleError($response, 'Detección de vida (Liveness)');
         } catch (\Exception $e) {
-            Log::error('Nubarium Liveness error', ['error' => $e->getMessage()]);
+            Log::error('Nubarium Liveness error', ['error' => static::sanitizeError($e)]);
 
             return [
                 'success' => false,
-                'error' => 'Error en detección de vida: ' . $e->getMessage(),
+                'error' => 'Error en detección de vida: ' . static::sanitizeError($e),
             ];
         }
     }
@@ -455,11 +455,11 @@ class NubariumBiometricsService extends BaseNubariumService
 
                 return $this->handleError($response, 'Generación de token biométrico');
             } catch (\Exception $e) {
-                Log::error('Nubarium token generation error', ['error' => $e->getMessage()]);
+                Log::error('Nubarium token generation error', ['error' => static::sanitizeError($e)]);
 
                 return [
                     'success' => false,
-                    'error' => 'Error al generar token: ' . $e->getMessage(),
+                    'error' => 'Error al generar token: ' . static::sanitizeError($e),
                 ];
             }
         });

@@ -72,11 +72,11 @@ class NubariumComplianceService extends BaseNubariumService
 
             return $this->handleError($response, 'Consulta OFAC');
         } catch (\Exception $e) {
-            Log::error('Nubarium OFAC check error', ['error' => $e->getMessage()]);
+            Log::error('Nubarium OFAC check error', ['error' => static::sanitizeError($e)]);
 
             return [
                 'success' => false,
-                'error' => 'Error al consultar OFAC: ' . $e->getMessage(),
+                'error' => 'Error al consultar OFAC: ' . static::sanitizeError($e),
             ];
         }
     }
@@ -145,11 +145,11 @@ class NubariumComplianceService extends BaseNubariumService
 
             return $this->handleError($response, 'Consulta Listas Negras PLD');
         } catch (\Exception $e) {
-            Log::error('Nubarium PLD blacklists check error', ['error' => $e->getMessage()]);
+            Log::error('Nubarium PLD blacklists check error', ['error' => static::sanitizeError($e)]);
 
             return [
                 'success' => false,
-                'error' => 'Error al consultar listas negras: ' . $e->getMessage(),
+                'error' => 'Error al consultar listas negras: ' . static::sanitizeError($e),
             ];
         }
     }
@@ -196,11 +196,11 @@ class NubariumComplianceService extends BaseNubariumService
 
             return $this->handleError($response, 'Consulta historial IMSS');
         } catch (\Exception $e) {
-            Log::error('Nubarium IMSS history error', ['error' => $e->getMessage()]);
+            Log::error('Nubarium IMSS history error', ['error' => static::sanitizeError($e)]);
 
             return [
                 'success' => false,
-                'error' => 'Error al consultar IMSS: ' . $e->getMessage(),
+                'error' => 'Error al consultar IMSS: ' . static::sanitizeError($e),
             ];
         }
     }
@@ -246,11 +246,11 @@ class NubariumComplianceService extends BaseNubariumService
 
             return $this->handleError($response, 'Validación de CEP');
         } catch (\Exception $e) {
-            Log::error('Nubarium CEP validation error', ['error' => $e->getMessage()]);
+            Log::error('Nubarium CEP validation error', ['error' => static::sanitizeError($e)]);
 
             return [
                 'success' => false,
-                'error' => 'Error al validar CEP: ' . $e->getMessage(),
+                'error' => 'Error al validar CEP: ' . static::sanitizeError($e),
             ];
         }
     }
@@ -293,11 +293,11 @@ class NubariumComplianceService extends BaseNubariumService
 
             return $this->handleError($response, 'Validación de Cédula Profesional');
         } catch (\Exception $e) {
-            Log::error('Nubarium Cedula validation error', ['error' => $e->getMessage()]);
+            Log::error('Nubarium Cedula validation error', ['error' => static::sanitizeError($e)]);
 
             return [
                 'success' => false,
-                'error' => 'Error al validar cédula: ' . $e->getMessage(),
+                'error' => 'Error al validar cédula: ' . static::sanitizeError($e),
             ];
         }
     }
