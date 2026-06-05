@@ -607,6 +607,15 @@ class ApplicationController extends Controller
         // Format: YYYYMMDD-XXXX (e.g., 20260119-ABC1)
         $folio = $app->created_at?->format('Ymd') . '-' . strtoupper(substr($app->id, 0, 4));
 
+        // Cache de relaciones para evitar acceso encadenado con `null` que
+        // en PHP 8 con strict mode puede escalar a 500 al indexar nullables.
+        // Especificamente product->rules es JSONB nullable: si product
+        // existe pero rules es null, `$app->product?->rules['x']` truena
+        // porque ?->rules retorna null y `null['x']` tira warning/error.
+        $product = $app->product;
+        $productRules = is_array($product?->rules) ? $product->rules : [];
+        $assignedTo = $app->assignedTo;
+
         return [
             'id' => $app->id,
             'folio' => $folio,
@@ -623,19 +632,19 @@ class ApplicationController extends Controller
                 : $app->company?->rfc,
             'product' => [
                 'id' => $app->product_id,
-                'name' => $app->product?->name,
-                'type' => $app->product?->type,
-                'required_documents' => $app->product?->required_documents ?? [],
+                'name' => $product?->name,
+                'type' => $product?->type,
+                'required_documents' => $product?->required_documents ?? [],
             ],
             'requested_amount' => $app->requested_amount,
             'requested_term_months' => $app->requested_term_months,
             'requested_term_days' => $app->requested_term_days,
-            'term_in_days' => (bool) ($app->product?->rules['term_in_days'] ?? false),
+            'term_in_days' => (bool) ($productRules['term_in_days'] ?? false),
             'monthly_payment' => $app->monthly_payment,
             'risk_level' => $app->risk_level,
-            'assigned_to' => $app->assignedTo ? [
-                'id' => $app->assignedTo->id,
-                'name' => $app->assignedTo->profile?->full_name ?? $app->assignedTo->email,
+            'assigned_to' => $assignedTo ? [
+                'id' => $assignedTo->id,
+                'name' => $assignedTo->profile?->full_name ?? $assignedTo->email,
             ] : null,
             'created_at' => $app->created_at?->toIso8601String(),
             'updated_at' => $app->updated_at?->toIso8601String(),
@@ -688,8 +697,8 @@ class ApplicationController extends Controller
             'requested_amount' => $app->requested_amount,
             'requested_term_months' => $app->requested_term_months,
             'requested_term_days' => $app->requested_term_days,
-            'term_in_days' => (bool) ($app->product?->rules['term_in_days'] ?? false),
-            'payment_frequency' => $app->product?->payment_frequencies[0] ?? null,
+            'term_in_days' => (bool) ((is_array($app->product?->rules) ? $app->product->rules : [])['term_in_days'] ?? false),
+            'payment_frequency' => (is_array($app->product?->payment_frequencies) ? $app->product->payment_frequencies : [])[0] ?? null,
             'purpose' => $app->purpose,
             'purpose_label' => $app->purpose ? (\App\Enums\LoanPurpose::tryFrom($app->purpose)?->label() ?? $app->purpose) : null,
             'purpose_description' => $app->purpose_description,

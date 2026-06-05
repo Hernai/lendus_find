@@ -601,6 +601,27 @@ class ApplicationService
         string $sortBy = 'created_at',
         string $sortDir = 'desc'
     ): array {
+        // Cache 30s. Multiples staff abren el board con los mismos filtros
+        // (caso comun: kanban del dashboard) -> con cache responden de Redis.
+        // 30s es suficientemente fresco para un dashboard operacional y
+        // absorbe el 90% del trafico tipico.
+        $cacheKey = 'applications:board:' . $tenant->id . ':' . md5(implode(',', $columns) . "|{$limitPerColumn}|{$assignedTo}|{$sortBy}|{$sortDir}");
+
+        return \Illuminate\Support\Facades\Cache::remember(
+            $cacheKey,
+            30,
+            fn () => $this->buildBoardData($tenant, $columns, $limitPerColumn, $assignedTo, $sortBy, $sortDir)
+        );
+    }
+
+    private function buildBoardData(
+        Tenant $tenant,
+        array $columns,
+        int $limitPerColumn,
+        ?string $assignedTo,
+        string $sortBy,
+        string $sortDir
+    ): array {
         $statusLabels = Application::statuses();
         $result = [
             'columns' => [],
