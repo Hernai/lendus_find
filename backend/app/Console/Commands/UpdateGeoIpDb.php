@@ -5,7 +5,7 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use PharData;
+use Symfony\Component\Process\Process;
 use Throwable;
 
 /**
@@ -88,23 +88,59 @@ class UpdateGeoIpDb extends Command
         $sizeMB = round(filesize($tmpTarGz) / 1024 / 1024, 1);
         $this->info("Descargado: {$sizeMB} MB");
 
-        // Extraer .mmdb del tar.gz. MaxMind empaca dentro de
-        // GeoLite2-City_YYYYMMDD/GeoLite2-City.mmdb
-        $this->info('Extrayendo .mmdb...');
+        // Extraer .mmdb usando el `tar` nativo del sistema.
+        //
+        // Antes usabamos PharData de PHP pero carga el archivo entero en
+        // memoria, lo que truena con memory_limit=128M (el tar.gz pesa ~30MB
+        // pero las estructuras internas de Phar inflan ~5-6x). El tar
+        // de Linux extrae con streams, sin memoria significativa.
+        //
+        // MaxMind empaca el .mmdb dentro de un subdirectorio
+        // `GeoLite2-City_YYYYMMDD/` asi que extraemos a un staging
+        // dir y movemos el .mmdb encontrado.
+        $this->info('Extrayendo .mmdb (via tar)...');
+
+        $stagingDir = $targetDir . '/_extract_' . time();
+        if (! @mkdir($stagingDir, 0755, true)) {
+            $this->error("No se pudo crear staging dir: {$stagingDir}");
+            @unlink($tmpTarGz);
+            return self::FAILURE;
+        }
+
         try {
-            $phar = new PharData($tmpTarGz);
+            // tar -xzf {archivo} -C {dest} --wildcards '*.mmdb'
+            //   -x extract, -z gzip, -f file, -C cambia a dir destino
+            //   --wildcards permite glob para extraer solo el .mmdb
+            $process = new Process([
+                'tar',
+                '-xzf', $tmpTarGz,
+                '-C', $stagingDir,
+                '--wildcards',
+                '*.mmdb',
+            ]);
+            $process->setTimeout(120);
+            $process->run();
+
+            if (! $process->isSuccessful()) {
+                throw new \RuntimeException(
+                    'tar exit ' . $process->getExitCode() . ': ' . $process->getErrorOutput()
+                );
+            }
+
+            // Buscar el .mmdb extraido (esta dentro de algun subdirectorio)
             $extracted = null;
-            foreach (new \RecursiveIteratorIterator($phar) as $file) {
-                if (str_ends_with($file->getFilename(), '.mmdb')) {
-                    $extracted = $file;
+            $rii = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($stagingDir, \RecursiveDirectoryIterator::SKIP_DOTS)
+            );
+            foreach ($rii as $file) {
+                if ($file->isFile() && str_ends_with($file->getFilename(), '.mmdb')) {
+                    $extracted = $file->getPathname();
                     break;
                 }
             }
 
             if (! $extracted) {
-                $this->error('No se encontro .mmdb dentro del tar.gz');
-                @unlink($tmpTarGz);
-                return self::FAILURE;
+                throw new \RuntimeException('No se encontro .mmdb en el archivo extraido');
             }
 
             // Backup del actual si existe (rollback rapido si la nueva esta rota)
@@ -112,18 +148,27 @@ class UpdateGeoIpDb extends Command
                 @rename($targetFile, $targetFile . '.bak');
             }
 
-            copy($extracted->getPathname(), $targetFile);
+            if (! @rename($extracted, $targetFile)) {
+                // rename puede fallar entre filesystems; intentar copy + unlink
+                if (! @copy($extracted, $targetFile)) {
+                    throw new \RuntimeException("No se pudo mover .mmdb a {$targetFile}");
+                }
+                @unlink($extracted);
+            }
             chmod($targetFile, 0644);
-            @unlink($tmpTarGz);
         } catch (Throwable $e) {
             $this->error('Error al extraer: ' . $e->getMessage());
-            @unlink($tmpTarGz);
             // Restore desde backup si quedo huerfano
-            if (is_file($targetFile . '.bak')) {
+            if (! is_file($targetFile) && is_file($targetFile . '.bak')) {
                 @rename($targetFile . '.bak', $targetFile);
             }
+            $this->cleanupStaging($stagingDir);
+            @unlink($tmpTarGz);
             return self::FAILURE;
         }
+
+        $this->cleanupStaging($stagingDir);
+        @unlink($tmpTarGz);
 
         $finalSizeMB = round(filesize($targetFile) / 1024 / 1024, 1);
         $this->info("OK: {$targetFile} ({$finalSizeMB} MB)");
@@ -136,6 +181,22 @@ class UpdateGeoIpDb extends Command
         @unlink($targetFile . '.bak');
 
         return self::SUCCESS;
+    }
+
+    private function cleanupStaging(string $dir): void
+    {
+        if (! is_dir($dir)) {
+            return;
+        }
+        // Borrar recursivamente sin shell_exec (mas seguro)
+        $rii = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($dir, \RecursiveDirectoryIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($rii as $file) {
+            $file->isDir() ? @rmdir($file->getPathname()) : @unlink($file->getPathname());
+        }
+        @rmdir($dir);
     }
 
     private function checkOnly(string $targetFile): int
