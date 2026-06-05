@@ -96,6 +96,16 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            // Conexiones PHP persistentes — el worker PHP-FPM reusa la
+            // conexión TCP a Postgres entre requests. Sin esto, cada
+            // request paga el handshake (~280ms con DB remota). Con
+            // persistent, solo la PRIMER request del worker paga el
+            // handshake; las siguientes usan la conexión ya abierta.
+            // Override con DB_PERSISTENT=false si causa problemas en
+            // entornos con timeouts agresivos de Postgres.
+            'options' => [
+                \PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', true),
+            ],
         ],
 
         'sqlsrv' => [
