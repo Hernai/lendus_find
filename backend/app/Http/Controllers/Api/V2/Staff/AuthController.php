@@ -121,7 +121,11 @@ class AuthController extends Controller
             return $this->unauthorized('Token no válido para esta ruta');
         }
 
-        $account->load('profile');
+        // loadMissing en lugar de load: el token cache (CachedPersonalAccessToken)
+        // ya hace eager load de tokenable.profile, asi que en hits warm esto es
+        // no-op. load() forzaba un SELECT extra a staff_profiles (~275ms a la
+        // DB remota) en cada /me.
+        $account->loadMissing('profile');
 
         return $this->success([
             'user' => $this->formatStaffResponse($account),
