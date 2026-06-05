@@ -2,8 +2,7 @@
 
 namespace App\Http\Middleware;
 
-use App\Enums\AuditAction;
-use App\Models\AuditLog;
+use App\Jobs\PersistAuditLogJob;
 use App\Services\MetadataService;
 use Closure;
 use Illuminate\Http\Request;
@@ -57,28 +56,25 @@ class LogClientRequest
             return $response;
         }
 
-        // Capturamos todos los datos necesarios AHORA (mientras request/user
-        // están vivos), pero diferimos el INSERT a `audit_logs` y el IP geo
-        // lookup hasta DESPUÉS de que el response llegue al cliente.
+        // Capturamos los datos del request AHORA y despachamos el INSERT a
+        // `audit_logs` como queue job. El response sale al cliente sin esperar
+        // la escritura.
+        //
+        // Antes probamos `app()->terminating()` con fastcgi_finish_request(),
+        // pero en Apache+EasyApache4 con mod_proxy_fcgi el cliente seguia
+        // esperando ~280ms-1.5s al INSERT porque Apache no liberaba la
+        // conexion. Queue dispatch a Redis es ~1ms y desacopla totalmente:
+        // el queue worker (systemd `lendusfind-queue`) procesa en background.
         $payload = $this->buildPayload($request, $response, $startedAt);
 
-        app()->terminating(function () use ($payload) {
-            // CRITICO: forzar fastcgi_finish_request ANTES de hacer trabajo
-            // sincrono. En Apache+EasyApache4 con mod_proxy_fcgi, Laravel no
-            // siempre lo dispara automaticamente, asi que el cliente acababa
-            // esperando ~280ms del INSERT a audit_logs. Llamandolo explicito
-            // aqui garantizamos que el response ya esta enviado al cliente
-            // antes de tocar la DB.
-            if (function_exists('fastcgi_finish_request')) {
-                fastcgi_finish_request();
-            }
-
-            try {
-                $this->persist($payload);
-            } catch (Throwable $e) {
-                Log::warning('LogClientRequest failed', ['error' => $e->getMessage()]);
-            }
-        });
+        try {
+            PersistAuditLogJob::dispatch($payload);
+        } catch (Throwable $e) {
+            // Si Redis esta caido el dispatch falla. Logueamos pero no rompemos
+            // el response. Audit log se pierde para ese request pero la app
+            // sigue sirviendo.
+            Log::warning('Failed to dispatch PersistAuditLogJob', ['error' => $e->getMessage()]);
+        }
 
         return $response;
     }
@@ -161,80 +157,6 @@ class LogClientRequest
             // IP se resuelve en persist() — fuera del path crítico.
             'client_geo' => $clientGeo,
         ];
-    }
-
-    /**
-     * Persistir el audit log. Corre DESPUÉS del response vía
-     * `app()->terminating()`. Si la geo del dispositivo no llegó en headers,
-     * acá hacemos el lookup por IP (puede tomar 200-500ms pero ya no afecta
-     * al cliente — el response ya salió).
-     */
-    private function persist(array $p): void
-    {
-        $clientGeo = $p['client_geo'];
-
-        $latitude = $clientGeo['latitude'] ?? null;
-        $longitude = $clientGeo['longitude'] ?? null;
-        $city = null;
-        $region = null;
-        $country = null;
-        $geoSource = $clientGeo ? 'device' : 'ip';
-
-        // IP geo lookup deshabilitado en path de respuesta. fastcgi_finish_request
-        // no esta cerrando la conexion antes del terminating en este stack
-        // (Apache + cPanel/EasyApache 4), asi que el cliente esperaba ~500ms del
-        // HTTP call a ip-api.com en CADA request.
-        //
-        // El IP que igualmente quedo persistido (campo ip_address) permite hacer
-        // el geo lookup en batch nocturno con un command: para cada audit_log
-        // sin lat/lng, resolver y poblar. Eso saca el costo del path critico.
-        //
-        // TODO: agendar `audit-logs:resolve-geo` command nocturno.
-        if (! $clientGeo && ! empty($p['ip_address']) && env('AUDIT_GEO_LOOKUP_SYNC', false)) {
-            $ipGeo = app(MetadataService::class)->resolveIpGeolocation($p['ip_address']);
-            if (is_array($ipGeo)) {
-                $latitude = $latitude ?? ($ipGeo['latitude'] ?? null);
-                $longitude = $longitude ?? ($ipGeo['longitude'] ?? null);
-                $city = $ipGeo['city'] ?? null;
-                $region = $ipGeo['region'] ?? null;
-                $country = $ipGeo['country'] ?? null;
-            }
-        }
-
-        AuditLog::create([
-            'tenant_id' => $p['tenant_id'],
-            'user_id' => $p['user_id'],
-            'applicant_id' => $p['applicant_id'],
-            'application_id' => $p['application_id'],
-            'action' => AuditAction::HTTP_REQUEST->value,
-            'entity_type' => 'http_request',
-            'entity_id' => null,
-            'metadata' => [
-                'method' => $p['method'],
-                'path' => $p['path'],
-                'query' => $p['query'],
-                'status_code' => $p['status_code'],
-                'duration_ms' => $p['duration_ms'],
-                'platform' => $p['platform'],
-                'app_version' => $p['app_version'],
-                'device_id' => $p['device_id'],
-                'geo_source' => $geoSource,
-                'geo_accuracy_m' => $clientGeo['accuracy'] ?? null,
-            ],
-            'ip_address' => $p['ip_address'],
-            'user_agent' => $p['user_agent'],
-            'latitude' => $latitude,
-            'longitude' => $longitude,
-            'city' => $city,
-            'region' => $region,
-            'country' => $country,
-            'device_type' => $p['device_info']['device_type'] ?? null,
-            'browser' => $p['device_info']['browser'] ?? null,
-            'browser_version' => $p['device_info']['browser_version'] ?? null,
-            'os' => $p['device_info']['os'] ?? null,
-            'os_version' => $p['device_info']['os_version'] ?? null,
-            'created_at' => now(),
-        ]);
     }
 
     private function isApplicationRoute(Request $request): bool
