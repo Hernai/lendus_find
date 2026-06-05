@@ -24,7 +24,9 @@ pipeline {
 
     options {
         timestamps()
-        ansiColor('xterm')
+        // ansiColor('xterm') requiere plugin AnsiColor. Si lo instalas
+        // (Manage Jenkins → Plugins → AnsiColor), descomenta la línea.
+        // ansiColor('xterm')
         timeout(time: 15, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '20'))
         disableConcurrentBuilds()  // un solo deploy a la vez
