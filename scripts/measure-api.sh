@@ -2,17 +2,25 @@
 # =============================================================================
 # Mide tiempos de respuesta de los endpoints principales de la API LendusFind.
 #
-# Por default usa HTTP/2 + keep-alive — todos los runs de un mismo endpoint
-# comparten una sola conexion TCP+TLS. Eso refleja la experiencia REAL de un
-# navegador o app movil, que tambien reusa conexiones. Si quieres simular
-# clientes "frios" (cada request abre conexion nueva), usa COLD_MODE=1.
+# Cada request es una invocacion independiente de curl: nueva conexion
+# TCP+TLS por request. Eso simula a un cliente que NO esta reusando
+# conexion (worst case desde la perspectiva del usuario). Si tu cliente
+# usa keep-alive (browser, axios reutilizando socket), tus tiempos
+# reales seran MENORES.
+#
+# El piso fisico de esta medicion = RTT + handshake TCP + handshake TLS.
+# Para mi RTT de 226ms, eso da ~700ms minimo por endpoint. Cualquier
+# tiempo significativamente sobre eso es backend procesando.
+#
+# Para endpoints con ETag, se hace una ronda extra con If-None-Match —
+# eso mide cuanto tarda un cliente que ya tiene el payload en local
+# (debe responder 304 sin body).
 #
 # Uso:
 #   ./scripts/measure-api.sh                            # contra produccion (default)
 #   API_BASE=http://localhost:8000/api ./scripts/measure-api.sh    # contra local
 #   TENANT=finatea ./scripts/measure-api.sh             # otro tenant
 #   RUNS=10 ./scripts/measure-api.sh                    # 10 mediciones por endpoint
-#   COLD_MODE=1 ./scripts/measure-api.sh                # conexion nueva por request
 #   SKIP_LOGIN=1 ./scripts/measure-api.sh               # no testear /login (throttle)
 #
 # Output: tabla con endpoint, status, min, avg, max, p95 (en ms).
@@ -25,7 +33,6 @@ TENANT="${TENANT:-moneycapital}"
 EMAIL="${EMAIL:-superadmin@lendus.mx}"
 PASSWORD="${PASSWORD:-password}"
 RUNS="${RUNS:-5}"
-COLD_MODE="${COLD_MODE:-0}"
 SKIP_LOGIN="${SKIP_LOGIN:-0}"
 
 # Colores
@@ -37,15 +44,11 @@ GRAY=$'\033[0;90m'
 BOLD=$'\033[1m'
 NC=$'\033[0m'
 
-mode_label="HTTP/2 + keep-alive (cliente real)"
-[[ "$COLD_MODE" == "1" ]] && mode_label="conexion nueva por request (worst-case)"
-
 echo
 echo "${BOLD}Medicion de tiempos de API LendusFind${NC}"
 echo "${GRAY}Base:    ${API_BASE}${NC}"
 echo "${GRAY}Tenant:  ${TENANT}${NC}"
-echo "${GRAY}Runs:    ${RUNS} por endpoint${NC}"
-echo "${GRAY}Modo:    ${mode_label}${NC}"
+echo "${GRAY}Runs:    ${RUNS} por endpoint, conexion nueva cada request${NC}"
 echo
 
 # -----------------------------------------------------------------------------
@@ -66,55 +69,57 @@ stats_from_times() {
 }
 
 # -----------------------------------------------------------------------------
-# measure_warm: usa --next + --http2 para reusar conexion en los N runs.
-# Solo soporta GET con headers fijos (suficiente para nuestros endpoints).
+# measure_get: GET con N invocaciones de curl. Captura el ETag de la primera
+# respuesta para que el caller pueda medir el 304 despues.
 # Devuelve "status|min|avg|max|p95|etag"
 # -----------------------------------------------------------------------------
-measure_warm() {
+measure_get() {
   local url="$1"
   local extra_headers="${2:-}"
+  local times=() last_status="" etag="" i
 
-  # Construir comando con --next por cada run
-  local args=(--http2 -sS --max-time 30 \
+  # Primer request: dumpea headers para extraer ETag
+  local first_headers first_stats
+  first_headers=$(mktemp)
+  first_stats=$(curl -sS --max-time 30 \
+    -D "$first_headers" -o /dev/null \
+    -w "%{http_code}\t%{time_starttransfer}" \
     -H "Accept: application/json" \
-    -H "X-Tenant-ID: ${TENANT}")
-  [[ -n "$extra_headers" ]] && args+=(-H "${extra_headers}")
-  args+=(-D - -o /dev/null -w "STATS\t%{http_code}\t%{time_starttransfer}\n" "${API_BASE}${url}")
+    -H "X-Tenant-ID: ${TENANT}" \
+    ${extra_headers:+-H "${extra_headers}"} \
+    "${API_BASE}${url}" 2>/dev/null) || first_stats="000\t30.0"
 
-  local i
+  etag=$(grep -i "^etag:" "$first_headers" 2>/dev/null | head -1 | sed 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//' | tr -d '\r')
+  rm -f "$first_headers"
+
+  last_status="${first_stats%%$'\t'*}"
+  local first_ms
+  first_ms=$(awk -v s="${first_stats##*$'\t'}" 'BEGIN { printf "%.0f", s * 1000 }')
+  times+=("$first_ms")
+
+  # Resto de requests
   for ((i=2; i<=RUNS; i++)); do
-    args+=(--next -sS --max-time 30 \
+    local resp
+    resp=$(curl -sS -o /dev/null \
+      -w "%{http_code}\t%{time_starttransfer}" \
       -H "Accept: application/json" \
-      -H "X-Tenant-ID: ${TENANT}")
-    [[ -n "$extra_headers" ]] && args+=(-H "${extra_headers}")
-    args+=(-o /dev/null -w "STATS\t%{http_code}\t%{time_starttransfer}\n" "${API_BASE}${url}")
+      -H "X-Tenant-ID: ${TENANT}" \
+      ${extra_headers:+-H "${extra_headers}"} \
+      --max-time 30 \
+      "${API_BASE}${url}" 2>/dev/null) || resp="000\t30.0"
+    last_status="${resp%%$'\t'*}"
+    local ms
+    ms=$(awk -v s="${resp##*$'\t'}" 'BEGIN { printf "%.0f", s * 1000 }')
+    times+=("$ms")
   done
 
-  local output
-  output=$(curl "${args[@]}" 2>/dev/null)
-
-  # Extraer ETag de la primera respuesta (-D - imprime headers de la 1ra)
-  local etag
-  etag=$(grep -i "^etag:" <<< "$output" | head -1 | sed 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//' | tr -d '\r')
-
-  # Extraer status y tiempos
-  local stats_lines last_status times
-  stats_lines=$(grep "^STATS" <<< "$output")
-  last_status=$(awk -F'\t' '{print $2}' <<< "$stats_lines" | tail -1)
-  times=$(awk -F'\t' '{ printf "%.0f\n", $3 * 1000 }' <<< "$stats_lines")
-
-  if [[ -z "$times" ]]; then
-    echo "ERR|0|0|0|0|"
-    return
-  fi
-
   local stats
-  stats=$(stats_from_times <<< "$times")
+  stats=$(printf '%s\n' "${times[@]}" | stats_from_times)
   echo "${last_status}|${stats}|${etag}"
 }
 
 # -----------------------------------------------------------------------------
-# measure_cold: una invocacion de curl por request (conexion nueva cada vez).
+# measure_cold: legacy (POST tambien lo usa).
 # -----------------------------------------------------------------------------
 measure_cold() {
   local method="$1"
@@ -159,44 +164,38 @@ measure_cold() {
 
 # -----------------------------------------------------------------------------
 # Mide el 304 Not Modified de un endpoint con ETag.
-# Reusa conexion via --next.
 # -----------------------------------------------------------------------------
 measure_304() {
   local url="$1"
   local etag="$2"
   local extra_headers="${3:-}"
+  local times=() last_status="" i
 
   [[ -z "$etag" ]] && { echo ""; return; }
 
-  local args=(--http2 -sS --max-time 30 \
-    -H "Accept: application/json" \
-    -H "X-Tenant-ID: ${TENANT}" \
-    -H "If-None-Match: ${etag}")
-  [[ -n "$extra_headers" ]] && args+=(-H "${extra_headers}")
-  args+=(-o /dev/null -w "STATS\t%{http_code}\t%{time_starttransfer}\n" "${API_BASE}${url}")
-
-  local i
-  for ((i=2; i<=RUNS; i++)); do
-    args+=(--next -sS --max-time 30 \
+  for ((i=1; i<=RUNS; i++)); do
+    local resp
+    resp=$(curl -sS -o /dev/null \
+      -w "%{http_code}\t%{time_starttransfer}" \
       -H "Accept: application/json" \
       -H "X-Tenant-ID: ${TENANT}" \
-      -H "If-None-Match: ${etag}")
-    [[ -n "$extra_headers" ]] && args+=(-H "${extra_headers}")
-    args+=(-o /dev/null -w "STATS\t%{http_code}\t%{time_starttransfer}\n" "${API_BASE}${url}")
+      -H "If-None-Match: ${etag}" \
+      ${extra_headers:+-H "${extra_headers}"} \
+      --max-time 30 \
+      "${API_BASE}${url}" 2>/dev/null) || resp="000\t30.0"
+    last_status="${resp%%$'\t'*}"
+    local ms
+    ms=$(awk -v s="${resp##*$'\t'}" 'BEGIN { printf "%.0f", s * 1000 }')
+    times+=("$ms")
   done
 
-  local output stats_lines last_status times stats
-  output=$(curl "${args[@]}" 2>/dev/null)
-  stats_lines=$(grep "^STATS" <<< "$output")
-  last_status=$(awk -F'\t' '{print $2}' <<< "$stats_lines" | tail -1)
-  times=$(awk -F'\t' '{ printf "%.0f\n", $3 * 1000 }' <<< "$stats_lines")
-  [[ -z "$times" ]] && { echo ""; return; }
-  stats=$(stats_from_times <<< "$times")
+  local stats
+  stats=$(printf '%s\n' "${times[@]}" | stats_from_times)
   echo "${last_status}|${stats}|"
 }
 
 # -----------------------------------------------------------------------------
-# Dispatcher: GET usa warm o cold segun flag; POST siempre cold.
+# Dispatcher: GET usa measure_get (con ETag); POST usa measure_cold.
 # -----------------------------------------------------------------------------
 measure() {
   local method="$1"
@@ -204,8 +203,8 @@ measure() {
   local extra_headers="${3:-}"
   local body="${4:-}"
 
-  if [[ "$method" == "GET" && "$COLD_MODE" != "1" ]]; then
-    measure_warm "$url" "$extra_headers"
+  if [[ "$method" == "GET" ]]; then
+    measure_get "$url" "$extra_headers"
   else
     measure_cold "$method" "$url" "$extra_headers" "$body"
   fi
@@ -252,9 +251,8 @@ print_row() {
   color_time "$max"; printf "  "
   color_time "$p95"; printf "\n"
   # Si vino con ETag, medir el 304
-  if [[ -n "$etag" && "$COLD_MODE" != "1" ]]; then
+  if [[ -n "$etag" ]]; then
     local url="${label##* }"
-    # Quitar query string para reusar
     local result304
     result304=$(measure_304 "$url" "$etag" "${LAST_AUTH_HEADER:-}")
     if [[ -n "$result304" ]]; then
