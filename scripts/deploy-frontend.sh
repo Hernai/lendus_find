@@ -62,11 +62,29 @@ SKIP_INSTALL="${SKIP_INSTALL:-0}"
 # 2. Var de entorno TENANTS=slug1,slug2
 # 3. Auto-detect: todos los archivos `frontend/tenants/<slug>.tenant.ts`
 #    (excluyendo `_template.tenant.ts`)
-FRONTEND_DIR="$WORKSPACE_DIR/frontend"
-if [[ ! -d "$FRONTEND_DIR" ]]; then
-    echo "ERROR: no existe $FRONTEND_DIR. WORKSPACE_DIR mal configurado?"
+FRONTEND_SRC="$WORKSPACE_DIR/frontend"
+if [[ ! -d "$FRONTEND_SRC" ]]; then
+    echo "ERROR: no existe $FRONTEND_SRC. WORKSPACE_DIR mal configurado?"
     exit 1
 fi
+
+# El workspace de Jenkins suele ser propiedad de `jenkins` con ACL `r-x`
+# para `lendus`. `npm ci` necesita escribir `node_modules/` en el cwd, asi
+# que copiamos a un staging dir bajo $HOME donde si tenemos write. El
+# build genera `dist/` ahi y desde alli hacemos el rsync final.
+STAGING_DIR="${STAGING_DIR:-$HOME/.cache/lendus-frontend-build}"
+echo "▶ Staging dir: $STAGING_DIR"
+
+mkdir -p "$STAGING_DIR"
+# rsync con --delete para mantener staging limpio entre runs. Excluimos
+# node_modules y dist del source para no copiar basura de devs locales.
+rsync -a --delete \
+    --exclude='node_modules/' \
+    --exclude='dist/' \
+    --exclude='.cache/' \
+    "$FRONTEND_SRC/" "$STAGING_DIR/"
+
+FRONTEND_DIR="$STAGING_DIR"
 
 if [[ -n "${1:-}" ]]; then
     TENANT_LIST=("$1")
