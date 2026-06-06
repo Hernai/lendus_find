@@ -58,10 +58,11 @@ class UserController extends Controller
             });
         }
 
-        // Pagination + eager load del perfil (evita N+1 en formatStaffAccount)
+        // Pagination + eager load del perfil (evita N+1 en formatStaffAccount).
+        // `with('profile')` ya esta aplicado al inicio del query builder; no
+        // hace falta volver a llamarlo aqui.
         $perPage = min($request->input('per_page', 20), 100);
         $paginated = $query
-            ->with('profile')
             ->orderBy('created_at', 'desc')
             ->paginate($perPage);
 
