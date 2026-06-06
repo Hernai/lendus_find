@@ -36,6 +36,9 @@ pipeline {
         string(name: 'REF', defaultValue: 'feat/moneycapital-onboarding', description: 'Branch, tag o commit a deployar')
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Saltar la fase de tests (deploy de emergencia)')
         booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Solo simular (no aplica cambios)')
+        booleanParam(name: 'DEPLOY_BACKEND', defaultValue: true, description: 'Desplegar el backend Laravel')
+        booleanParam(name: 'DEPLOY_FRONTEND', defaultValue: true, description: 'Desplegar el frontend Vue (todos los tenants)')
+        string(name: 'FRONTEND_TENANTS', defaultValue: '', description: 'Lista CSV de tenants a deployar. Vacio = todos los detectados en frontend/tenants/. Ej: "moneycapital,demo"')
     }
 
     environment {
@@ -81,6 +84,9 @@ pipeline {
         }
 
         stage('Deploy Backend') {
+            when {
+                expression { params.DEPLOY_BACKEND }
+            }
             steps {
                 script {
                     if (params.DRY_RUN) {
@@ -122,6 +128,59 @@ chmod +x "\${APP_DIR}/scripts/"*.sh
 
 # Ejecutar deploy (auto-detecta ausencia de .git y salta git pull)
 "\${APP_DIR}/scripts/deploy-backend.sh" "\${REF}"
+DEPLOY
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Deploy Frontend') {
+            when {
+                expression { params.DEPLOY_FRONTEND }
+            }
+            steps {
+                script {
+                    if (params.DRY_RUN) {
+                        echo "DRY_RUN: simulando deploy frontend"
+                    } else {
+                        // Mismo modelo de privilegios que el backend: corre
+                        // como `lendus`, que es dueño de /home/lendus/public_html.
+                        //
+                        // El script `deploy-frontend.sh`:
+                        //   1. npm ci dentro de WORKSPACE/frontend
+                        //   2. npm run tenant:build -- <slug> por cada tenant
+                        //   3. rsync de WORKSPACE/frontend/dist/ al docroot
+                        //      /home/lendus/public_html/<slug>.lendus.app/
+                        //
+                        // Si FRONTEND_TENANTS esta vacio, auto-detecta todos los
+                        // archivos `*.tenant.ts` (excluye _template).
+                        sh """
+                            sudo -u lendus bash -s <<'DEPLOY'
+set -euo pipefail
+
+WORKSPACE='${env.WORKSPACE}'
+FRONTEND_TENANTS='${params.FRONTEND_TENANTS}'
+
+# Copiar scripts/ al lugar donde se ejecutara el deploy
+mkdir -p "\${WORKSPACE}/scripts"
+chmod +x "\${WORKSPACE}/scripts/"*.sh 2>/dev/null || true
+
+# Necesitamos node accesible en PATH para el user lendus. Si hay nvm
+# instalado, cargarlo; sino esperamos que /usr/bin/node este en PATH.
+if [[ -s "\${HOME}/.nvm/nvm.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "\${HOME}/.nvm/nvm.sh"
+    nvm use --lts > /dev/null 2>&1 || true
+fi
+which node || { echo "ERROR: node no esta en PATH"; exit 1; }
+node --version
+
+# El script lee TENANTS env var si esta seteada
+export TENANTS="\${FRONTEND_TENANTS}"
+export WORKSPACE_DIR="\${WORKSPACE}"
+
+"\${WORKSPACE}/scripts/deploy-frontend.sh"
 DEPLOY
                         """
                     }
