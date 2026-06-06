@@ -1490,7 +1490,56 @@ NOTA: si vas a poner Cloudflare delante (sección 22.6), HTTP/2 origin-side
 es menos urgente — Cloudflare hace HTTP/2 + HTTP/3 al edge y solo el hop
 CF↔Apache queda en HTTP/1.1.
 
-### 24.8 Resumen de orden de aplicación en server nuevo
+### 24.8 Node.js para Jenkins Deploy Frontend (CentOS 7 + glibc 2.17)
+
+El stage `Deploy Frontend` del Jenkinsfile corre `npm ci` + `npm run tenant:build`
+como user `lendus`. El frontend (Vite 6 + Vue 3) requiere Node >= 20.19, pero
+CentOS 7 tiene glibc 2.17 y los binarios oficiales de Node 18+ requieren
+glibc 2.28 — fallan al ejecutar.
+
+Solución: usar los **unofficial builds** de Node compilados con glibc 2.17.
+Son binarios mantenidos por el mismo equipo de Node y se publican en
+https://unofficial-builds.nodejs.org/download/release/.
+
+Instalación (one-time como user lendus):
+
+```bash
+sudo -u lendus bash <<'INSTALL'
+set -euo pipefail
+NODE_VER="v20.18.0"
+INSTALL_DIR="$HOME/.nvm/versions/node/${NODE_VER}"
+
+# Carga nvm
+export NVM_DIR="$HOME/.nvm"
+source "$NVM_DIR/nvm.sh"
+
+# Limpia binarios oficiales que no funcionan
+for v in $(nvm ls --no-colors 2>/dev/null | grep -oE 'v2[0-9]+\.[0-9]+\.[0-9]+' | sort -u); do
+    nvm uninstall "$v" 2>/dev/null || true
+done
+
+# Descarga y extrae al directorio que nvm espera
+cd /tmp
+curl -L --fail -o node.tar.gz \
+    "https://unofficial-builds.nodejs.org/download/release/${NODE_VER}/node-${NODE_VER}-linux-x64-glibc-217.tar.gz"
+mkdir -p "$INSTALL_DIR"
+tar -xzf node.tar.gz -C "$INSTALL_DIR" --strip-components=1
+rm -f /tmp/node.tar.gz
+
+nvm alias default "$NODE_VER"
+nvm use "$NODE_VER"
+node --version  # debe imprimir v20.18.0
+INSTALL
+```
+
+Migración a Node 22 LTS cuando esté disponible:
+- Verificar que `unofficial-builds.nodejs.org/download/release/v22.X.Y/node-v22.X.Y-linux-x64-glibc-217.tar.gz` existe
+- Cambiar `NODE_VER` y re-correr el script
+
+A largo plazo: migrar el server a AlmaLinux 9 elimina esta dependencia. AlmaLinux 9
+tiene glibc 2.34 y `dnf module install nodejs:20` da Node oficial sin parches.
+
+### 24.9 Resumen de orden de aplicación en server nuevo
 
 ```bash
 # 1. PgBouncer (sección 24.2)
