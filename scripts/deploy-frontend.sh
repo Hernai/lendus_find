@@ -135,16 +135,18 @@ for slug in "${TENANT_LIST[@]}"; do
     tenant_file="$FRONTEND_DIR/tenants/${slug}.tenant.ts"
     if [[ ! -f "$tenant_file" ]]; then
         echo "  ✗ No existe $tenant_file — saltando"
-        ((fail_count++))
+        fail_count=$((fail_count + 1))
         failed_tenants+=("$slug:no_tenant_file")
         continue
     fi
 
     docroot="$PUBLIC_HTML_DIR/${slug}.lendus.app"
     if [[ ! -d "$docroot" ]]; then
-        echo "  ✗ Docroot no existe: $docroot — saltando"
-        ((fail_count++))
-        failed_tenants+=("$slug:no_docroot")
+        # Tenant definido en el repo (`frontend/tenants/<slug>.tenant.ts`)
+        # pero subdominio NO registrado aun en WHM/cPanel. Skipeamos sin
+        # marcar como fallo — es esperable para tenants en preparacion
+        # antes de configurar DNS + cPanel.
+        echo "  ⊘ Docroot no existe: $docroot — skipeando (registrar subdominio en cPanel primero)"
         continue
     fi
 
@@ -152,14 +154,14 @@ for slug in "${TENANT_LIST[@]}"; do
     echo "  ▶ npm run tenant:build -- $slug"
     if ! $NPM_BIN run tenant:build -- "$slug"; then
         echo "  ✗ Build falló para $slug"
-        ((fail_count++))
+        fail_count=$((fail_count + 1))
         failed_tenants+=("$slug:build_failed")
         continue
     fi
 
     if [[ ! -d "$FRONTEND_DIR/dist" ]]; then
         echo "  ✗ dist/ no se genero después del build"
-        ((fail_count++))
+        fail_count=$((fail_count + 1))
         failed_tenants+=("$slug:no_dist")
         continue
     fi
@@ -180,7 +182,7 @@ for slug in "${TENANT_LIST[@]}"; do
     chmod -R a+rX "$docroot/assets" 2>/dev/null || true
 
     echo "  ✓ $slug desplegado en $docroot"
-    ((deploy_count++))
+    deploy_count=$((deploy_count + 1))
 done
 
 echo
