@@ -84,6 +84,14 @@ rsync -a --delete \
     --exclude='.cache/' \
     "$FRONTEND_SRC/" "$STAGING_DIR/"
 
+# `build-tenant.mjs` ejecuta `npx cap sync` si detecta `ios/` o `android/`
+# en el dir del frontend. Capacitor CLI requiere Node 22+ y nosotros tenemos
+# 20.18 (lo mas nuevo compatible con glibc 2.17 de CentOS 7). Los dirs
+# nativos NO son parte del web deploy — los borramos para que build-tenant.mjs
+# salte el cap sync y solo haga el vite build (que es lo unico que web
+# necesita).
+rm -rf "$STAGING_DIR/ios" "$STAGING_DIR/android"
+
 FRONTEND_DIR="$STAGING_DIR"
 
 if [[ -n "${1:-}" ]]; then
