@@ -159,10 +159,10 @@ DEPLOY
                         // los archivos `*.tenant.ts` (excluye _template).
                         sh """
                             chmod +x '${env.WORKSPACE}/scripts/deploy-frontend.sh'
-                            sudo -u lendus \\
-                                WORKSPACE_DIR='${env.WORKSPACE}' \\
-                                TENANTS='${params.FRONTEND_TENANTS}' \\
-                                bash '${env.WORKSPACE}/scripts/deploy-frontend.sh'
+                            # sudo bloquea env vars de la linea de comando por
+                            # seguridad. Las inyectamos DENTRO del bash que
+                            # corre como lendus para evitar pelear con sudoers.
+                            sudo -u lendus bash -c "export WORKSPACE_DIR='${env.WORKSPACE}'; export TENANTS='${params.FRONTEND_TENANTS}'; bash '${env.WORKSPACE}/scripts/deploy-frontend.sh'"
                         """
                     }
                 }
