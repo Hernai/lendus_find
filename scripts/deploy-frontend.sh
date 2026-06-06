@@ -4,7 +4,7 @@
 #
 # Idempotente. Hace `npm ci` + `npm run tenant:build -- <slug>` + rsync de
 # `dist/` al docroot del subdominio del tenant. Disenado para correr desde
-# Jenkins o manual en el server.
+# Jenkins (como user lendus) o manual en el server.
 #
 # Uso:
 #   ./scripts/deploy-frontend.sh                  # deploy de TODOS los tenants
@@ -20,11 +20,36 @@
 #   SKIP_INSTALL     si =1, salta `npm ci` (asume node_modules listo)
 #
 # Pre-requisitos en el server:
-#   - Node 20.19+ o 22.12+ (ver frontend/package.json engines)
+#   - Node 20.19+ o 22.12+ (ver frontend/package.json engines). Como CentOS 7
+#     no soporta binarios oficiales, instalar via unofficial-builds:
+#     ver deploy-ops/SKILL.md seccion 24.8.
 #   - npm con acceso a registry publico
 #   - Acceso de escritura a /home/lendus/public_html/<slug>.lendus.app
 # =============================================================================
 set -euo pipefail
+
+# Cargar nvm si esta disponible. sudo -u lendus en shells no-interactivos
+# NO carga ~/.bashrc, asi que nvm no esta en PATH por default. Lo cargamos
+# explicitamente aqui para que `node`/`npm` esten disponibles.
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "$NVM_DIR/nvm.sh" || true
+    nvm use default > /dev/null 2>&1 || nvm use --lts > /dev/null 2>&1 || true
+fi
+
+# Verificacion early: si no hay node usable, fallar con mensaje claro
+if ! command -v node > /dev/null 2>&1; then
+    echo "ERROR: 'node' no encontrado en PATH"
+    echo "  PATH actual: $PATH"
+    echo "  NVM_DIR:     ${NVM_DIR:-no seteado}"
+    echo "  HOME:        $HOME"
+    echo "  Instalar Node 20 LTS via unofficial-builds (ver deploy-ops 24.8)"
+    exit 1
+fi
+
+echo "▶ Node:    $(node --version)  ($(command -v node))"
+echo "▶ npm:     $(npm --version)"
 
 WORKSPACE_DIR="${WORKSPACE_DIR:-$(pwd)}"
 PUBLIC_HTML_DIR="${PUBLIC_HTML_DIR:-/home/lendus/public_html}"
