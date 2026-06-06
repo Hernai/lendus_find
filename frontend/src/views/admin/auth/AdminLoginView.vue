@@ -1,13 +1,27 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore, useTenantStore } from '@/stores'
 import { AppButton, AppInput } from '@/components/common'
 import TenantSelectorModal from '@/components/admin/TenantSelectorModal.vue'
+import { useRecaptcha } from '@/composables/useRecaptcha'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const tenantStore = useTenantStore()
+
+// reCAPTCHA v3 — invisible, se ejecuta al submit. Si el backend no
+// configuro site_key, el composable se comporta como no-op (devuelve
+// null) y el backend salta validacion. Sin friccion para local dev.
+const recaptcha = useRecaptcha()
+onMounted(() => {
+  // Precarga el script en background mientras el usuario llena el form,
+  // asi al submit ya esta listo. Idempotente si tenant no tiene site_key.
+  recaptcha.ensureLoaded().catch(() => {
+    // Si Google esta caido o un bloqueador lo bloquea, lo manejamos en
+    // execute(); aqui silencioso.
+  })
+})
 
 const email = ref('')
 const password = ref('')
@@ -43,7 +57,11 @@ const handleSubmit = async () => {
 
   error.value = ''
 
-  const result = await authStore.loginWithPassword(email.value, password.value)
+  // Ejecuta reCAPTCHA v3 con accion 'login'. Devuelve null si el tenant
+  // no tiene site_key configurado — el backend ignora el token en ese caso.
+  const recaptchaToken = await recaptcha.execute('login')
+
+  const result = await authStore.loginWithPassword(email.value, password.value, recaptchaToken)
 
   if (result.success) {
     // Super admin global con más de 1 tenant → modal de selección.
@@ -62,6 +80,9 @@ const handleSubmit = async () => {
         break
       case 'UNAUTHORIZED_METHOD':
         error.value = 'Tu cuenta no tiene acceso a esta área'
+        break
+      case 'CAPTCHA_FAILED':
+        error.value = 'No pudimos verificar que eres humano. Recarga la página e intenta de nuevo.'
         break
       default:
         error.value = result.error || 'Error al iniciar sesión'

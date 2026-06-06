@@ -156,6 +156,10 @@ export interface V2StaffUser {
 export interface V2StaffLoginPayload {
   email: string
   password: string
+  // Token de reCAPTCHA v3 (opcional). El frontend lo manda cuando el
+  // tenant tiene captcha activo (site_key configurado en backend). Si
+  // el backend tiene secret_key vacia, ignora este campo.
+  recaptcha_token?: string | null
 }
 
 // =====================================================

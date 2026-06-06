@@ -693,10 +693,10 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const loginWithPassword = async (email: string, password: string): Promise<{ success: boolean; error?: string; requiresTenantSelection?: boolean; availableTenants?: Array<{id: string; slug: string; name: string}> }> => {
+  const loginWithPassword = async (email: string, password: string, recaptchaToken?: string | null): Promise<{ success: boolean; error?: string; requiresTenantSelection?: boolean; availableTenants?: Array<{id: string; slug: string; name: string}> }> => {
     isLoading.value = true
     try {
-      const response = await v2.staff.auth.login({ email, password })
+      const response = await v2.staff.auth.login({ email, password, recaptcha_token: recaptchaToken ?? null })
 
       // V2 response wraps data in { success, data: { token, user } }
       if (response.success && response.data) {

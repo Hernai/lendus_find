@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\StaffAccount;
+use App\Services\Auth\RecaptchaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -24,12 +25,28 @@ class AuthController extends Controller
     /**
      * Login with email + password.
      */
-    public function login(Request $request): JsonResponse
+    public function login(Request $request, RecaptchaService $recaptcha): JsonResponse
     {
         $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
+            // Opcional: solo se exige cuando el backend tiene secret_key
+            // configurada (ver verify() abajo). El frontend lo manda como
+            // resultado de grecaptcha.execute(siteKey, {action: 'login'}).
+            'recaptcha_token' => 'nullable|string',
         ]);
+
+        // reCAPTCHA v3 — gate antes de cualquier consulta a DB para no
+        // gastar ciclos en requests automatizadas. Solo aplica si hay
+        // secret_key configurada; sin keys (local/testing), `verify()`
+        // retorna null y dejamos pasar.
+        $captchaResult = $recaptcha->verify(
+            $request->input('recaptcha_token'),
+            'login'
+        );
+        if ($captchaResult === false) {
+            return $this->error('CAPTCHA_FAILED', 'No pudimos verificar que eres humano. Recarga la pagina e intenta de nuevo.', 422);
+        }
 
         // 1. Buscar super admin global (sin tenant_id). Si existe y la
         //    contraseña coincide, gana sobre cualquier match per-tenant.

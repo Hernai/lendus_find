@@ -51,4 +51,22 @@ return [
         'license_key' => env('MAXMIND_LICENSE_KEY'),
     ],
 
+    // Google reCAPTCHA v3 (invisible, score-based) para proteger endpoints
+    // sensibles como /login. Si `secret_key` esta vacio, la validacion se
+    // skipea (default seguro para local/testing). Generar keys en:
+    //   https://www.google.com/recaptcha/admin/create
+    // Tipo: reCAPTCHA v3. Dominios: agregar lendus.app y *.lendus.app.
+    'recaptcha' => [
+        'site_key' => env('RECAPTCHA_SITE_KEY'),
+        'secret_key' => env('RECAPTCHA_SECRET_KEY'),
+        // Threshold de score: 1.0 = humano confiable, 0.0 = bot.
+        // 0.5 es el default recomendado por Google. Subir a 0.7 para
+        // mayor friccion; bajar a 0.3 si tus usuarios reales saca scores
+        // bajos por razones legitimas (mobile, VPNs corporativos, etc.).
+        'min_score' => (float) env('RECAPTCHA_MIN_SCORE', 0.5),
+        // Si true, valida que la accion ejecutada por el frontend coincida
+        // con la esperada por el backend (evita reuse de tokens entre paths).
+        'verify_action' => filter_var(env('RECAPTCHA_VERIFY_ACTION', true), FILTER_VALIDATE_BOOLEAN),
+    ],
+
 ];

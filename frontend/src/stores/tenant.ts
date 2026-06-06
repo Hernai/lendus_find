@@ -177,6 +177,12 @@ export const useTenantStore = defineStore('tenant', () => {
   const loadFailed = ref(false)
   const error = ref<string | null>(null)
 
+  // Config publica de reCAPTCHA expuesta por /v2/config. Si site_key es
+  // null, el backend no requiere captcha y el composable useRecaptcha
+  // se comporta como no-op. Vive aparte de `tenant` para no romper su
+  // shape tipado.
+  const recaptcha = ref<{ site_key: string | null } | null>(null)
+
   // Cache control for concurrent requests
   const configLoadPromise = ref<Promise<void> | null>(null)
 
@@ -249,6 +255,9 @@ export const useTenantStore = defineStore('tenant', () => {
 
         tenant.value = response.data.tenant as unknown as Tenant
         products.value = response.data.products as unknown as Product[]
+        // reCAPTCHA es opcional; backend lo expone solo cuando hay site_key
+        // configurado. Si no viene, dejamos null y useRecaptcha hace no-op.
+        recaptcha.value = (response.data as { recaptcha?: { site_key: string | null } }).recaptcha ?? null
         // Garantizamos mexicanState (default vacío) ya que en V2ConfigOptions es opcional
         // pero el shape local EnumOptions lo requiere.
         options.value = response.data.options
@@ -469,6 +478,7 @@ export const useTenantStore = defineStore('tenant', () => {
     tenant,
     products,
     options,
+    recaptcha,
     isLoading,
     isLoaded,
     loadFailed,

@@ -123,10 +123,18 @@ export interface V2ConfigOptions {
   mexicanState?: V2EnumOption[]
 }
 
+export interface V2RecaptchaConfig {
+  // Site key publica de reCAPTCHA v3. null = backend no requiere captcha
+  // (local/testing). El frontend lo usa para decidir si cargar el script
+  // de Google y ejecutar grecaptcha.execute antes del login.
+  site_key: string | null
+}
+
 export interface V2ConfigResponse {
   tenant: V2TenantConfig
   products: V2ProductConfig[]
   options: V2ConfigOptions
+  recaptcha?: V2RecaptchaConfig
 }
 
 // =====================================================

@@ -117,6 +117,13 @@ class ConfigController extends Controller
                 'created_at' => $tenant->created_at?->toIso8601String(),
                 'updated_at' => $tenant->updated_at?->toIso8601String(),
             ],
+            // Site key publica de reCAPTCHA v3 para que el frontend cargue
+            // el script de Google y ejecute grecaptcha.execute(siteKey, ...)
+            // antes de POST /staff/auth/login. Null = el backend no requiere
+            // captcha (local/testing); el frontend salta la validacion.
+            'recaptcha' => [
+                'site_key' => config('services.recaptcha.site_key'),
+            ],
             'products' => Product::active()->orderBy('display_order')->get()->map(fn($p) => [
                 'id' => $p->id,
                 'tenant_id' => $p->tenant_id,
