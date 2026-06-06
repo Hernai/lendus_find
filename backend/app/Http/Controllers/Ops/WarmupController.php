@@ -42,6 +42,7 @@ class WarmupController extends Controller
 {
     private array $allowed = [
         '127.0.0.1',
+        '51.195.6.177', // IP publica del server (loopback efectivo cuando entra por vhost)
         '::1',
         '192.168.0.0/24',
     ];
@@ -116,6 +117,8 @@ class WarmupController extends Controller
         $loaded = 0;
         $failed = [];
 
+        // 1) Declarar las clases. class_exists() dispara el autoloader Composer
+        //    y compila a opcache.
         foreach ($this->warmClasses as $class) {
             try {
                 if (class_exists($class) || interface_exists($class) || trait_exists($class)) {
@@ -124,6 +127,35 @@ class WarmupController extends Controller
             } catch (\Throwable $e) {
                 $failed[] = ['class' => $class, 'error' => $e->getMessage()];
             }
+        }
+
+        // 2) Ejecutar lo del path real para forzar compile de clases internas
+        //    de Laravel (Symfony Container resolutions, Validator factory,
+        //    Hash driver, etc.) que NO se cargan con class_exists del controller
+        //    pero SI se necesitan en login real. Sin efectos secundarios.
+        try {
+            // bcrypt: warmea el Hash driver + extension bcrypt
+            $dummyHash = \Illuminate\Support\Facades\Hash::make('warmup-only-' . random_int(0, 999));
+            \Illuminate\Support\Facades\Hash::check('warmup-only-x', $dummyHash);
+
+            // Validator: warmea reglas comunes del login (email/required/string)
+            \Illuminate\Support\Facades\Validator::make(
+                ['email' => 'x@example.com', 'password' => 'x'],
+                ['email' => 'required|email', 'password' => 'required|string']
+            )->fails();
+
+            // Cache + Redis: warmea el cache store y la conexion Predis/PhpRedis
+            \Illuminate\Support\Facades\Cache::has('warmup:probe');
+
+            // Container: resuelve servicios que el login usa
+            app(\App\Services\MetadataService::class);
+            app(\Illuminate\Auth\AuthManager::class)->guard('sanctum');
+
+            // JSON encode/decode (Laravel response uses it intensively)
+            json_encode(['probe' => 1]);
+            json_decode('{"probe":1}', true);
+        } catch (\Throwable $e) {
+            $failed[] = ['stage' => 'runtime-warmup', 'error' => $e->getMessage()];
         }
 
         $durationMs = (int) round((microtime(true) - $t0) * 1000);

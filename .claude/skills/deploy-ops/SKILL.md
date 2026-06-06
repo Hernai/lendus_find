@@ -1285,6 +1285,240 @@ re-descarga si la actual se corrompe.
 - Para tier "GeoIP2 City" (precision mejor): de pago, ~50 USD/mes.
 - LendusFind usa GeoLite2 (free) y es suficiente para auditoria.
 
+## 24. Performance hardening aplicado en producción (junio 2026)
+
+Cambios manuales en el server `server.arcco.mx` (OVH/cPanel/EasyApache 4)
+que NO viven en el repo y deben re-aplicarse si el host se recrea o si
+se monta un servidor nuevo. Cada uno ahorra latencia concreta y todos
+juntos llevaron `/me`/`/login` warm de ~600-2300ms a ~25-50ms en server.
+
+### 24.1 `.env` — defaults sensibles para prod
+
+Cambios sobre el `.env` del servidor (`/home/lendus/laravelfiles_moneycapital/.env`).
+Estos están reflejados en `backend/.env.example` del repo, pero el `.env`
+de cada servidor hay que sincronizarlo manualmente:
+
+```bash
+# Crítico: con `log` se escribe síncrono a laravel.log con file_lock en
+# cada request donde algún listener emite un broadcast → ~580ms por hit
+# autenticado. `null` lo elimina. Si necesitas websockets reales usa
+# `reverb` y verifica que el daemon corre.
+sed -i 's/^BROADCAST_CONNECTION=.*/BROADCAST_CONNECTION=null/' .env
+
+# bcrypt cost 12 (default Laravel) = ~290ms por verify. 10 = ~70ms.
+# Con throttle:5/min en /login, cost 10 sigue siendo seguro y elimina
+# 220ms del path crítico del login.
+sed -i 's/^BCRYPT_ROUNDS=.*/BCRYPT_ROUNDS=10/' .env
+grep -q '^BCRYPT_ROUNDS' .env || echo 'BCRYPT_ROUNDS=10' >> .env
+
+# Limpiar config cache y regenerar
+rm -f bootstrap/cache/config.php
+/opt/cpanel/ea-php82/root/usr/bin/php artisan config:cache
+systemctl restart ea-php82-php-fpm
+```
+
+Hay que rehashear las passwords existentes que estén con cost > 10. El
+`rehash_on_login=true` lo hace automáticamente al login, pero para
+acelerar puedes forzarlo via tinker:
+
+```bash
+/opt/cpanel/ea-php82/root/usr/bin/php artisan tinker --execute="
+\\App\\Models\\StaffAccount::withoutGlobalScopes()->get()->each(function(\$a) {
+  \$cost = password_get_info(\$a->password)['options']['cost'] ?? null;
+  if (\$cost && \$cost > 10) {
+    \$a->password = \\Illuminate\\Support\\Facades\\Hash::make('TEMPORAL_NO_USAR');
+    // Mejor: NO hagas esto, deja que rehash_on_login haga su trabajo cuando el
+    // usuario logueé. Solo úsalo si vas a forzar reset de password masivo.
+  }
+});"
+```
+
+### 24.2 PgBouncer — `max_prepared_statements`
+
+PgBouncer 1.21+ soporta protocol-level prepared statement pooling, lo que
+permite usar `pool_mode=transaction` (mejor) sin que Laravel rompa con
+`SQLSTATE 26000 "no existe la sentencia preparada pdo_stmt_X"`.
+
+Editar `/etc/pgbouncer/pgbouncer.ini`:
+
+```ini
+pool_mode = transaction
+max_prepared_statements = 100
+```
+
+```bash
+# Validar versión (necesario >= 1.21)
+pgbouncer --version
+
+# Aplicar
+systemctl restart pgbouncer
+```
+
+NUNCA usar `PDO::ATTR_EMULATE_PREPARES => true` como workaround. PDO
+interpola los `true` como `1` (int) y Postgres rechaza con SQLSTATE 42883
+"el operador no existe: boolean = integer" cualquier query estilo
+`where('is_active', true)`. Rompe `Tenant::activeListForSelector`,
+`/v2/config` público, etc.
+
+### 24.3 PHP-FPM pool — mantener más workers warm
+
+Por default cPanel asigna `min_spare_servers=2` con `process_idle_timeout=60`.
+Eso recicla workers cada minuto idle, y cada cold start paga ~2s de
+autoload de Laravel.
+
+Editar `/opt/cpanel/ea-php82/root/etc/php-fpm.d/apifind.lendus.app.conf`:
+
+```ini
+pm = dynamic
+pm.max_children = 16
+pm.start_servers = 6
+pm.min_spare_servers = 6   ; siempre al menos 6 workers vivos
+pm.max_spare_servers = 10
+pm.process_idle_timeout = 300  ; workers viven 5 min idle antes de morir
+pm.max_requests = 500
+```
+
+⚠️ Validación: `start_servers` debe estar entre `min_spare_servers` y
+`max_spare_servers`. Si los pones desalineados, FPM no arranca.
+
+```bash
+# Validar antes de restart
+/opt/cpanel/ea-php82/root/usr/sbin/php-fpm -t -y /opt/cpanel/ea-php82/root/etc/php-fpm.conf
+systemctl restart ea-php82-php-fpm
+```
+
+### 24.4 WarmupController — registrado en el repo, ajustar IP allowlist
+
+`backend/app/Http/Controllers/Ops/WarmupController.php` está en el repo y
+sirve en `/api/ops/warmup`. Por defecto solo permite `127.0.0.1`, `::1` y
+`192.168.0.0/24`. En este server hay que agregar la IP pública del propio
+host porque cuando entra por el vhost con `--resolve` esa es la `REMOTE_ADDR`:
+
+```bash
+# Agregar la IP pública del server al allowlist
+sed -i "s|'127.0.0.1',|'127.0.0.1',\n        '51.195.6.177',|" \
+  app/Http/Controllers/Ops/WarmupController.php
+rm -f bootstrap/cache/routes-*.php
+/opt/cpanel/ea-php82/root/usr/bin/php artisan route:cache
+systemctl restart ea-php82-php-fpm
+```
+
+**Importante**: el endpoint hace `class_exists()` sobre clases del path
+login + autenticado para pre-cargar opcache. Sin embargo NO logra warmear
+el pipeline HTTP completo (middleware Symfony, Sanctum stateful, etc.)
+porque eso solo se compila al servir un HTTP request real. **El cold start
+de 2s en workers nuevos es costo estructural del framework Laravel** y no
+se elimina sin `opcache.preload` (descartado, ver 24.5) ni tráfico continuo.
+
+Si decides activar el cron warmup (no resuelve el cold completo, pero
+ayuda al path básico):
+
+```bash
+cat > /etc/cron.d/lendus-apifind-warmup <<'EOF'
+SHELL=/bin/bash
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+* * * * * root for i in $(seq 1 20); do curl -sk --resolve apifind.lendus.app:443:51.195.6.177 -o /dev/null https://apifind.lendus.app/api/ops/warmup; done
+EOF
+chmod 644 /etc/cron.d/lendus-apifind-warmup
+```
+
+### 24.5 `opcache.preload` — descartado, NO activar
+
+Intentamos `opcache.preload` para pre-compilar el framework en el master
+de PHP-FPM y eliminar el cold start. **Falló** por:
+
+1. `nesbot/carbon` tiene clases con dependencias de `phpstan/phpstan` (dev
+   dependency, no instalada en prod). El preload no puede compilar clases
+   con interfaces faltantes y aborta.
+2. `memory_limit=128M` (default) se agota durante el preload antes de
+   terminar.
+
+Si el preload falla, **PHP-FPM no arranca y tira TODOS los sitios PHP del
+server**. Riesgo > beneficio. Si quieres reintentar, necesitas:
+
+- Skipear `vendor/nesbot/carbon/src/Carbon/PHPStan/*`,
+  `vendor/nesbot/carbon/src/Carbon/WrapperClock.php`,
+  `vendor/nesbot/carbon/src/Carbon/MessageFormatter/*` y similares.
+- Subir `memory_limit` a 256M al menos para el master de FPM (no
+  necesariamente para los workers).
+
+Por ahora, los workers de larga vida (sección 24.3) + tráfico continuo
+hacen que el cold no se sienta en producción real.
+
+### 24.6 mod_security — debe quedar ON
+
+Durante la sesión de diagnóstico desactivamos mod_security globalmente
+(`SecRuleEngine "Off"` en `/etc/apache2/conf.d/modsec/modsec2.cpanel.conf`)
+para descartar que fuera el cuello del login. **No lo era** — los 580ms
+del login estaban en `BROADCAST_CONNECTION=log` (ver 24.1).
+
+Confirma que está ON:
+
+```bash
+grep "^SecRuleEngine" /etc/apache2/conf.d/modsec/modsec2.cpanel.conf
+# Debe responder: SecRuleEngine "On"
+
+# Si está Off, reactivar
+sed -i 's/^SecRuleEngine "Off"/SecRuleEngine "On"/' \
+  /etc/apache2/conf.d/modsec/modsec2.cpanel.conf
+/scripts/restartsrv_httpd --graceful
+```
+
+### 24.7 HTTP/2 — pendiente, requiere EasyApache provision
+
+`mod_http2` NO está instalado en este server. Para activarlo:
+
+1. WHM → Software → EasyApache 4 → Customize del perfil activo
+2. Apache MPM → cambiar `mpm_prefork` → `mpm_event` (todos los sitios
+   deben usar PHP-FPM, no mod_php — este server cumple, todos los pools
+   están en CGI/FPM)
+3. Apache Modules → marcar `mod_http2`
+4. Review → Provision
+
+Después agregar al vhost SSL via include:
+
+```bash
+mkdir -p /etc/apache2/conf.d/userdata/ssl/2_4/lendus/apifind.lendus.app
+cat > /etc/apache2/conf.d/userdata/ssl/2_4/lendus/apifind.lendus.app/http2.conf <<'EOF'
+Protocols h2 http/1.1
+EOF
+/scripts/ensure_vhost_includes --user=lendus
+/scripts/restartsrv_httpd --graceful
+```
+
+NOTA: si vas a poner Cloudflare delante (sección 22.6), HTTP/2 origin-side
+es menos urgente — Cloudflare hace HTTP/2 + HTTP/3 al edge y solo el hop
+CF↔Apache queda en HTTP/1.1.
+
+### 24.8 Resumen de orden de aplicación en server nuevo
+
+```bash
+# 1. PgBouncer (sección 24.2)
+vim /etc/pgbouncer/pgbouncer.ini  # max_prepared_statements=100
+systemctl restart pgbouncer
+
+# 2. PHP-FPM pool tuning (sección 24.3)
+vim /opt/cpanel/ea-php82/root/etc/php-fpm.d/apifind.lendus.app.conf
+/opt/cpanel/ea-php82/root/usr/sbin/php-fpm -t -y /opt/cpanel/ea-php82/root/etc/php-fpm.conf
+systemctl restart ea-php82-php-fpm
+
+# 3. .env del backend (sección 24.1)
+cd /home/lendus/laravelfiles_moneycapital
+sed -i 's/^BROADCAST_CONNECTION=.*/BROADCAST_CONNECTION=null/' .env
+sed -i 's/^BCRYPT_ROUNDS=.*/BCRYPT_ROUNDS=10/' .env
+rm -f bootstrap/cache/config.php
+/opt/cpanel/ea-php82/root/usr/bin/php artisan config:cache
+systemctl restart ea-php82-php-fpm
+
+# 4. WarmupController IP allowlist (sección 24.4) — solo si la IP pública cambia
+# (la IP 51.195.6.177 ya está commiteada en el repo)
+
+# 5. Verificar mod_security (sección 24.6)
+grep "^SecRuleEngine" /etc/apache2/conf.d/modsec/modsec2.cpanel.conf
+
+# 6. (Opcional) HTTP/2 (sección 24.7) — requiere provision EasyApache
+```
+
 ## Archivos clave de esta skill
 
 Variante Nginx:
