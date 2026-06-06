@@ -94,6 +94,12 @@ Route::get('v2/public/health', V2HealthController::class);
 // dentro del controller. Ver deploy-ops skill seccion 22.5.
 Route::get('ops/opcache-stats', \App\Http\Controllers\Ops\OpcacheStatsController::class);
 
+// Warmup del opcache de un worker PHP-FPM. Toca todas las clases del path
+// login + autenticado para que el primer hit real no pague cold-compile
+// (~2s -> ~30ms). Restringido por IP allowlist al loopback + LAN. Lo
+// dispara cron `/etc/cron.d/lendus-apifind-warmup` cada minuto.
+Route::get('ops/warmup', \App\Http\Controllers\Ops\WarmupController::class);
+
 // =============================================
 // V2: PUBLIC SIMULATOR (no authentication required)
 // =============================================
