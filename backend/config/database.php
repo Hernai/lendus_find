@@ -120,6 +120,26 @@ return [
             // tipo `where('is_active', true)`.
             'options' => [
                 \PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', true),
+                // CRITICO con PgBouncer en pool_mode=transaction:
+                //
+                // PgBouncer libera la conexion backend al pool tras CADA
+                // COMMIT. Eso pierde los prepared statements server-side
+                // (PREPARE/EXECUTE) que Laravel registra por default. La
+                // siguiente transaction intenta usar `pdo_stmt_X` que ya no
+                // existe en el backend nuevo y truena con SQLSTATE 26000
+                // o 42P05, abortando la transaction. Las siguientes queries
+                // dentro de la misma tx tronan con SQLSTATE 25P02
+                // "In failed sql transaction" — sintoma observado en /otp/verify
+                // y cualquier flujo con DB::transaction grande.
+                //
+                // Este flag desactiva los prepared statements SERVER-side
+                // pero MANTIENE el parameter binding seguro de PDO (a
+                // diferencia de ATTR_EMULATE_PREPARES=true que interpola
+                // en cliente y rompe booleans `where('is_active', true)`).
+                //
+                // Override con DB_DISABLE_PREPARES=false solo si conectas
+                // directo a Postgres (sin PgBouncer).
+                \PDO::PGSQL_ATTR_DISABLE_PREPARES => env('DB_DISABLE_PREPARES', true),
             ],
         ],
 

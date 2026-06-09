@@ -470,19 +470,29 @@ class ApplicantAuthService
             'last_used_at' => now(),
         ]);
 
-        // Log registration
-        AuditLog::log(
-            AuditAction::USER_CREATED->value,
-            $tenantId,
-            [
-                'applicant_id' => $account->id,
-                'metadata' => [
-                    'identity_type' => $type,
-                    'is_applicant' => true,
-                    'auth_version' => 'v2',
-                ],
-            ]
-        );
+        // Log registration. Wrapped: el audit log es secundario al flujo de
+        // negocio; si truena (PgBouncer/conexion/etc.) NO debe abortar la
+        // creacion de la cuenta. SQLSTATE 25P02 con PgBouncer puede romper
+        // toda la transaccion del verifyOtp si algun log falla en medio.
+        try {
+            AuditLog::log(
+                AuditAction::USER_CREATED->value,
+                $tenantId,
+                [
+                    'applicant_id' => $account->id,
+                    'metadata' => [
+                        'identity_type' => $type,
+                        'is_applicant' => true,
+                        'auth_version' => 'v2',
+                    ],
+                ]
+            );
+        } catch (\Throwable $e) {
+            Log::warning('[ApplicantAuthService] AuditLog::log USER_CREATED failed', [
+                'account_id' => $account->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         // Record phone/email verification (new accounts are verified via OTP)
         // Note: At this point person doesn't exist yet, so we'll record when person is created
@@ -506,19 +516,28 @@ class ApplicantAuthService
         // correlacionar el HTTP_REQUEST anónimo del login con su dueño.
         request()->attributes->set('audit_user', $account);
 
-        // Log successful login
-        AuditLog::log(
-            AuditAction::LOGIN_SUCCESS->value,
-            $account->tenant_id,
-            [
-                'applicant_id' => $account->id,
-                'metadata' => [
-                    'method' => $method,
-                    'is_applicant' => true,
-                    'auth_version' => 'v2',
-                ],
-            ]
-        );
+        // Log successful login. Wrapped por la misma razón que USER_CREATED:
+        // un fallo del audit log NO debe abortar la creación del token ni
+        // la respuesta al cliente.
+        try {
+            AuditLog::log(
+                AuditAction::LOGIN_SUCCESS->value,
+                $account->tenant_id,
+                [
+                    'applicant_id' => $account->id,
+                    'metadata' => [
+                        'method' => $method,
+                        'is_applicant' => true,
+                        'auth_version' => 'v2',
+                    ],
+                ]
+            );
+        } catch (\Throwable $e) {
+            Log::warning('[ApplicantAuthService] AuditLog::log LOGIN_SUCCESS failed', [
+                'account_id' => $account->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         // Load identity for response
         $account->load(['primaryIdentity', 'phoneIdentity', 'emailIdentity']);

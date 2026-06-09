@@ -65,11 +65,19 @@ class AuditLog extends Model
         // pasa user_id/applicant_id explicitamente respetamos eso; si no, los
         // inferimos del request actual: StaffAccount -> user_id,
         // ApplicantAccount -> applicant_id.
+        //
+        // OPTIMIZACION: solo llamamos `$request->user()` cuando AMBOS son
+        // null. Resolver `user()` con Sanctum dispara queries a
+        // `personal_access_tokens` + eager load del tokenable; cuando esto
+        // ocurre dentro de una transaccion grande (ej. verifyOtp con
+        // create account + token + 2 audit logs) suma 2-3 prepared
+        // statements extra por log que pueden agotar el cupo de PgBouncer
+        // y romper la transaccion con SQLSTATE 25P02.
         $userId = $options['user_id'] ?? null;
         $applicantId = $options['applicant_id'] ?? null;
 
-        $currentUser = $request->user();
         if ($userId === null && $applicantId === null) {
+            $currentUser = $request->user();
             if ($currentUser instanceof StaffAccount) {
                 $userId = $currentUser->id;
             } elseif ($currentUser instanceof ApplicantAccount) {
