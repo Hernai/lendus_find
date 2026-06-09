@@ -78,23 +78,62 @@ class ApplicantAuthService
             'masked_target' => $this->maskIdentifier($type, $identifier),
         ];
 
-        // In development/local mode, include the code for testing (not sent via SMS)
+        // Exponer el codigo en la respuesta cuando NO se va a enviar de
+        // verdad. Dos casos:
+        //   1. Ambiente local/testing (dev local).
+        //   2. El tenant no tiene proveedor activo (Twilio/Mailgun/etc.)
+        //      para el canal solicitado — onboarding inicial, demo, sandbox.
+        //
+        // Si el tenant TIENE proveedor activo NO se expone nunca, aunque el
+        // envio real falle por saldo/numero no verificado/etc. — para eso
+        // estan los logs.
         $isDevelopment = app()->environment('local', 'testing');
-        if ($isDevelopment) {
+        $hasProvider = $this->tenantHasActiveProvider($tenantId, $channel);
+        $exposeCode = $isDevelopment || ! $hasProvider;
+
+        if ($exposeCode) {
             $data['code'] = $otpRequest->code;
             $data['dev_mode'] = true;
+            $data['dev_reason'] = $isDevelopment ? 'environment' : 'no_provider_configured';
         }
 
-        // Determine the appropriate message
-        $message = $isDevelopment
-            ? '[DEV] Código generado (no enviado - modo desarrollo)'
-            : $this->getOtpSentMessage($channel);
+        // Mensaje del response: contexto distinto segun por que se expone.
+        if ($isDevelopment) {
+            $message = '[DEV] Código generado (no enviado - modo desarrollo)';
+        } elseif (! $hasProvider) {
+            $message = "[Sin proveedor de {$channel} configurado] Código: {$otpRequest->code}";
+        } else {
+            $message = $this->getOtpSentMessage($channel);
+        }
 
         return [
             'success' => true,
             'message' => $message,
             'data' => $data,
         ];
+    }
+
+    /**
+     * ¿El tenant tiene un proveedor activo para el canal solicitado?
+     *
+     * Mapeo channel -> service_type:
+     *   SMS, PHONE  -> sms
+     *   WHATSAPP    -> whatsapp
+     *   EMAIL       -> email
+     */
+    private function tenantHasActiveProvider(string $tenantId, string $channel): bool
+    {
+        $serviceType = match (strtoupper($channel)) {
+            'WHATSAPP' => 'whatsapp',
+            'EMAIL'    => 'email',
+            default    => 'sms',
+        };
+
+        return \App\Models\TenantApiConfig::query()
+            ->where('tenant_id', $tenantId)
+            ->where('service_type', $serviceType)
+            ->where('is_active', true)
+            ->exists();
     }
 
     /**
