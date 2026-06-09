@@ -20,7 +20,6 @@ import type {
   V2ApplicationStatistics,
   V2ApplicationNote,
   V2ApplicationNotePayload,
-  V2StatusHistoryEntry,
 } from '@/types/v2'
 
 const BASE_PATH = '/v2/staff/applications'
@@ -146,13 +145,8 @@ export async function get(id: string): Promise<V2ApiResponse<V2ApplicationDetail
   return response.data
 }
 
-/**
- * Get application status history.
- */
-export async function getHistory(id: string): Promise<V2ApiResponse<{ history: V2StatusHistoryEntry[] }>> {
-  const response = await api.get<V2ApiResponse<{ history: V2StatusHistoryEntry[] }>>(`${BASE_PATH}/${id}/history`)
-  return response.data
-}
+// getHistory eliminado: la lectura del historial unificado vive en el feed
+// `v2.staff.activity.getActivity(applicationId, { kind: 'event' })`.
 
 // =====================================================
 // Action Operations (with permissions)
@@ -407,37 +401,8 @@ export async function verifyData(
   return response.data
 }
 
-// =====================================================
-// API Logs (within application context)
-// =====================================================
-
-export interface V2ApiLogEntry {
-  id: string
-  provider: string
-  service: string
-  endpoint: string
-  method: string
-  request_method: string
-  request_url: string
-  response_status: number
-  success: boolean
-  error_message?: string
-  duration_ms: number
-  request_payload?: Record<string, unknown>
-  response_payload?: Record<string, unknown>
-  response_body?: Record<string, unknown>
-  created_at: string
-}
-
-/**
- * Get API logs for application.
- */
-export async function getApiLogs(applicationId: string): Promise<V2ApiResponse<{ logs: V2ApiLogEntry[] }>> {
-  const response = await api.get<V2ApiResponse<{ logs: V2ApiLogEntry[] }>>(
-    `${BASE_PATH}/${applicationId}/api-logs`
-  )
-  return response.data
-}
+// API Logs por aplicacion: eliminado. Ahora se consume via el feed unificado
+// `v2.staff.activity.getActivity(applicationId, { kind: 'api' })`.
 
 export default {
   // List operations
@@ -447,7 +412,6 @@ export default {
   getUnassigned,
   getMyQueue,
   get,
-  getHistory,
   // Status operations
   assign,
   changeStatus,
@@ -472,6 +436,4 @@ export default {
   unverifyBankAccount,
   // Data verification
   verifyData,
-  // API logs
-  getApiLogs,
 }

@@ -90,27 +90,26 @@ class ApplicationEventService
         ?array $metadata = null,
         ?Request $request = null
     ): ApplicationStatusHistory {
-        // Build metadata with IP and user agent
-        $eventMetadata = array_merge(
-            $metadata ?? [],
+        // Build metadata with event type. IP/UA/geo se capturan automaticamente
+        // por ActivityRecorder->AuditLog::log() desde el Request, no es necesario
+        // duplicarlos aqui.
+        $eventMetadata = array_merge($metadata ?? [], ['event_type' => $eventType]);
+
+        // Use the event type as both from_status and to_status for non-status-change events.
+        // ActivityRecorder escribe a application_status_history Y a audit_logs en una sola llamada.
+        $result = \App\Services\ActivityRecorder::recordApplicationEvent(
+            $application,
+            $eventType,
             [
-                'event_type' => $eventType,
-                'ip_address' => $request?->ip() ?? request()->ip(),
-                'user_agent' => $request?->userAgent() ?? request()->userAgent(),
-            ]
+                'from_status' => $eventType,
+                'to_status' => $eventType,
+                'notes' => $details ?? self::EVENT_LABELS[$eventType] ?? $eventType,
+                'metadata' => $eventMetadata,
+            ],
+            $request
         );
 
-        // Use the event type as both from_status and to_status for non-status-change events
-        $history = ApplicationStatusHistory::create([
-            'application_id' => $application->id,
-            'from_status' => $eventType,
-            'to_status' => $eventType,
-            'changed_by' => $changedById,
-            'changed_by_type' => $changedByType,
-            'notes' => $details ?? self::EVENT_LABELS[$eventType] ?? $eventType,
-            'metadata' => $eventMetadata,
-            'created_at' => now(),
-        ]);
+        $history = $result['history'];
 
         Log::debug('[ApplicationEventService] Event recorded', [
             'application_id' => $application->id,

@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api\V2\Staff;
 
 use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
-use App\Models\ApplicationStatusHistory;
 use App\Models\Application;
 use App\Models\DataVerification;
 use App\Models\Document;
@@ -270,7 +269,8 @@ class ApplicationController extends Controller
                 'person.account',
                 'company',
                 'assignedTo',
-                'statusHistory',
+                // 'statusHistory' removido del eager load: ahora se consulta
+                // bajo demanda via GET /applications/{id}/activity (feed unificado).
                 'documents',
             ])
             ->first();
@@ -552,81 +552,6 @@ class ApplicationController extends Controller
         ], 'Evaluación de riesgo actualizada.');
     }
 
-    /**
-     * Get status history and lifecycle events.
-     *
-     * GET /v2/staff/applications/{id}/history
-     *
-     * Returns all events: status changes, profile updates, document uploads,
-     * KYC verifications, references, bank accounts, etc.
-     */
-    public function history(Request $request, string $id): JsonResponse
-    {
-        /** @var StaffAccount $staff */
-        $staff = $request->user();
-
-        $application = Application::where('id', $id)
-            ->where('tenant_id', $this->scopedTenantId($staff))
-            ->first();
-
-        if (!$application) {
-            return $this->notFound('Solicitud no encontrada.');
-        }
-
-        // Get all history entries (both status changes and lifecycle events)
-        $history = ApplicationStatusHistory::where('application_id', $application->id)
-            ->orderByDesc('created_at')
-            ->get();
-
-        return $this->success([
-            'history' => $history->map(function ($h) {
-                $metadata = $h->metadata ?? [];
-                $isLifecycleEvent = ApplicationEventService::isLifecycleEvent($h->from_status);
-
-                return [
-                    // Event type info
-                    'event_type' => $isLifecycleEvent ? ($metadata['event_type'] ?? $h->from_status) : 'STATUS_CHANGE',
-                    'event_label' => $isLifecycleEvent
-                        ? ApplicationEventService::getEventLabel($h->from_status)
-                        : 'Estado cambiado',
-                    'is_lifecycle_event' => $isLifecycleEvent,
-
-                    // Status change info (for status changes)
-                    'from_status' => $isLifecycleEvent ? null : $h->from_status,
-                    'from_status_label' => $isLifecycleEvent ? null : $h->from_status_label,
-                    'to_status' => $isLifecycleEvent ? null : $h->to_status,
-                    'to_status_label' => $isLifecycleEvent ? null : $h->to_status_label,
-
-                    // Common fields
-                    'changed_by' => $h->changed_by_name,
-                    'changed_by_type' => $h->changed_by_type,
-                    'notes' => $h->notes,
-
-                    // Context (IP address, user agent)
-                    'ip_address' => $metadata['ip_address'] ?? null,
-                    'user_agent' => $metadata['user_agent'] ?? null,
-
-                    // Event-specific metadata (document type, field changes, etc.)
-                    'metadata' => array_filter([
-                        'document_type' => $metadata['document_type'] ?? null,
-                        'document_type_label' => $metadata['document_type_label'] ?? null,
-                        'changed_fields' => $metadata['changed_fields'] ?? null,
-                        'step_number' => $metadata['step_number'] ?? null,
-                        'step_label' => $metadata['step_label'] ?? null,
-                        'is_valid' => $metadata['is_valid'] ?? null,
-                        'matched' => $metadata['matched'] ?? null,
-                        'score' => $metadata['score'] ?? null,
-                        'bank_name' => $metadata['bank_name'] ?? null,
-                        'reference_type' => $metadata['reference_type'] ?? null,
-                        'postal_code' => $metadata['postal_code'] ?? null,
-                        'employment_type' => $metadata['employment_type'] ?? null,
-                    ]),
-
-                    'created_at' => $h->created_at->toIso8601String(),
-                ];
-            }),
-        ]);
-    }
 
     /**
      * Format application for list view.
@@ -895,31 +820,9 @@ class ApplicationController extends Controller
                 'name' => $app->assignedTo->name,
                 'email' => $app->assignedTo->email,
             ] : null,
-            'status_history' => $app->statusHistory->map(function ($h) {
-                $metadata = $h->metadata ?? [];
-                $fromStatus = $h->from_status ?? '';
-                $isLifecycleEvent = ApplicationEventService::isLifecycleEvent($fromStatus);
-
-                return [
-                    'from_status' => $h->from_status,
-                    'from_status_label' => $isLifecycleEvent
-                        ? ApplicationEventService::getEventLabel($fromStatus)
-                        : $h->from_status_label,
-                    'to_status' => $h->to_status,
-                    'to_status_label' => $h->to_status_label,
-                    'changed_by' => $h->changed_by_name,
-                    'notes' => $h->notes,
-                    'created_at' => $h->created_at->toIso8601String(),
-                    // Lifecycle event fields
-                    'is_lifecycle_event' => $isLifecycleEvent,
-                    'event_type' => $isLifecycleEvent ? ($metadata['event_type'] ?? $fromStatus) : 'STATUS_CHANGE',
-                    'event_label' => $isLifecycleEvent ? ApplicationEventService::getEventLabel($fromStatus) : null,
-                    // Metadata for "Ver detalles" button
-                    'ip_address' => $metadata['ip_address'] ?? null,
-                    'user_agent' => $metadata['user_agent'] ?? null,
-                    'metadata' => $metadata,
-                ];
-            })->values()->toArray(),
+            // status_history removido del payload: el frontend ahora consulta
+            // GET /applications/{id}/activity para el feed unificado (eventos
+            // de negocio + auditoria + llamadas a APIs externas).
             'notes' => collect($app->notes ?? [])->map(fn($n) => [
                 'id' => $n['id'] ?? uniqid(),
                 'content' => $n['content'] ?? $n['text'] ?? '',
@@ -1016,19 +919,15 @@ class ApplicationController extends Controller
         $truncatedContent = strlen($validated['content']) > 50
             ? substr($validated['content'], 0, 50) . '...'
             : $validated['content'];
-        ApplicationStatusHistory::create([
-            'application_id' => $application->id,
+        \App\Services\ActivityRecorder::recordApplicationEvent($application, 'APPLICATION_UPDATED', [
             'from_status' => 'NOTE_ADDED',
             'to_status' => 'NOTE_ADDED',
-            'changed_by' => $staff->id,
-            'changed_by_type' => StaffAccount::class,
             'notes' => "Nota agregada: \"{$truncatedContent}\"",
             'metadata' => [
-                'action' => 'note_added',
+                'kind' => 'note_added',
                 'note_id' => $newNote['id'],
                 'content_preview' => $truncatedContent,
             ],
-            'created_at' => now(),
         ]);
 
         return $this->created($newNote, 'Nota agregada exitosamente.');
@@ -1076,123 +975,6 @@ class ApplicationController extends Controller
         ]);
     }
 
-    /**
-     * Get document history (all versions).
-     *
-     * GET /v2/staff/applications/{appId}/documents/{docId}/history
-     */
-    public function getDocumentHistory(Request $request, string $appId, string $docId): JsonResponse
-    {
-        /** @var StaffAccount $staff */
-        $staff = $request->user();
-
-        $application = Application::where('id', $appId)
-            ->where('tenant_id', $this->scopedTenantId($staff))
-            ->with('person')
-            ->first();
-
-        if (!$application) {
-            return $this->notFound('Solicitud no encontrada.');
-        }
-
-        $document = $this->findApplicationDocument($application, $docId);
-
-        if (!$document) {
-            return $this->notFound('Documento no encontrado.');
-        }
-
-        // Get all document versions of this type
-        $documentVersions = \App\Models\Document::where('documentable_type', $document->documentable_type)
-            ->where('documentable_id', $document->documentable_id)
-            ->where('type', $document->type)
-            ->get();
-
-        $documentIds = $documentVersions->pluck('id')->toArray();
-
-        // Get review actions from ApplicationStatusHistory
-        $reviewActions = ApplicationStatusHistory::where('application_id', $application->id)
-            ->whereJsonContains('metadata->document_type', $document->type)
-            ->orderBy('created_at', 'desc')
-            ->get()
-            ->filter(function ($action) {
-                $metadata = $action->metadata ?? [];
-                $actionType = $metadata['action'] ?? '';
-                return in_array($actionType, ['document_approved', 'document_rejected', 'document_unapproved']);
-            })
-            ->map(function ($action) {
-                $metadata = $action->metadata ?? [];
-                $actionType = $metadata['action'] ?? '';
-
-                $actionLabel = match ($actionType) {
-                    'document_approved' => 'Aprobado',
-                    'document_rejected' => 'Rechazado',
-                    'document_unapproved' => 'Desaprobado',
-                    default => 'Actualizado',
-                };
-
-                $status = match ($actionType) {
-                    'document_approved' => 'APPROVED',
-                    'document_rejected' => 'REJECTED',
-                    'document_unapproved' => 'PENDING',
-                    default => 'PENDING',
-                };
-
-                // Get previous status label
-                $previousStatus = $metadata['old_status'] ?? null;
-                $previousStatusLabel = match ($previousStatus) {
-                    'APPROVED' => 'Aprobado',
-                    'REJECTED' => 'Rechazado',
-                    'PENDING' => 'Pendiente',
-                    default => $previousStatus,
-                };
-
-                return [
-                    'id' => $action->id,
-                    'file_name' => null,
-                    'status' => $status,
-                    'action_label' => $actionLabel,
-                    'rejection_reason' => $metadata['reason'] ?? null,
-                    'rejection_comment' => $metadata['comment'] ?? null,
-                    'reviewer_name' => $action->changed_by_name,
-                    'reviewed_at' => null,
-                    'replaced_at' => null,
-                    'created_at' => $action->created_at?->toIso8601String(),
-                    'is_current' => false,
-                    'previous_status' => $previousStatus,
-                    'previous_status_label' => $previousStatusLabel,
-                ];
-            });
-
-        // Get document upload entries
-        $uploadEntries = $documentVersions->map(function ($doc) {
-            return [
-                'id' => $doc->id,
-                'file_name' => $doc->file_name,
-                'status' => 'PENDING',
-                'action_label' => $doc->replaced_at ? 'Reemplazado' : 'Subido',
-                'rejection_reason' => null,
-                'rejection_comment' => null,
-                'reviewer_name' => null,
-                'reviewed_at' => null,
-                'replaced_at' => $doc->replaced_at?->toIso8601String(),
-                'created_at' => $doc->created_at?->toIso8601String(),
-                'is_current' => $doc->replaced_at === null,
-                'previous_status' => null,
-                'previous_status_label' => null,
-            ];
-        });
-
-        // Merge and sort by created_at descending
-        $history = $reviewActions->concat($uploadEntries)
-            ->sortByDesc('created_at')
-            ->values();
-
-        return $this->success([
-            'document_type' => $document->type,
-            'history' => $history,
-            'total_versions' => $documentVersions->count(),
-        ]);
-    }
 
     /**
      * Download document.
@@ -1259,22 +1041,16 @@ class ApplicationController extends Controller
         $document->reviewed_by = $staff->id;
         $document->save();
 
-        // Record history
-        ApplicationStatusHistory::create([
-            'application_id' => $application->id,
+        \App\Services\ActivityRecorder::recordApplicationEvent($application, 'DOCUMENT_APPROVED', [
             'from_status' => 'DOCUMENT_REVIEW',
             'to_status' => 'DOCUMENT_REVIEW',
-            'changed_by' => $staff->id,
-            'changed_by_type' => StaffAccount::class,
             'notes' => "Documento '{$document->type}' aprobado",
+            'entity' => $document,
+            'old_values' => ['status' => $oldStatus],
+            'new_values' => ['status' => 'APPROVED'],
             'metadata' => [
-                'action' => 'document_approved',
-                'document_id' => $document->id,
                 'document_type' => $document->type,
-                'old_status' => $oldStatus,
-                'new_status' => 'APPROVED',
             ],
-            'created_at' => now(),
         ]);
 
         // Check if all verifications are complete to auto-advance status
@@ -1335,42 +1111,32 @@ class ApplicationController extends Controller
             }
         }
 
-        // Record document rejection history
-        ApplicationStatusHistory::create([
-            'application_id' => $application->id,
+        \App\Services\ActivityRecorder::recordApplicationEvent($application, 'DOCUMENT_REJECTED', [
             'from_status' => 'DOCUMENT_REVIEW',
             'to_status' => 'DOCUMENT_REVIEW',
-            'changed_by' => $staff->id,
-            'changed_by_type' => StaffAccount::class,
             'notes' => "Documento '{$document->type}' rechazado: {$validated['reason']}",
+            'entity' => $document,
+            'old_values' => ['status' => $oldDocStatus],
+            'new_values' => ['status' => 'REJECTED', 'rejection_reason' => $validated['reason']],
             'metadata' => [
-                'action' => 'document_rejected',
-                'document_id' => $document->id,
                 'document_type' => $document->type,
-                'old_status' => $oldDocStatus,
-                'new_status' => 'REJECTED',
                 'reason' => $validated['reason'],
                 'comment' => $validated['comment'] ?? null,
             ],
-            'created_at' => now(),
         ]);
 
-        // Record application status change if it happened
         if ($statusChanged) {
-            ApplicationStatusHistory::create([
-                'application_id' => $application->id,
+            \App\Services\ActivityRecorder::recordApplicationEvent($application, 'APPLICATION_UPDATED', [
                 'from_status' => $oldAppStatus,
                 'to_status' => Application::STATUS_DOCS_PENDING,
-                'changed_by' => $staff->id,
-                'changed_by_type' => StaffAccount::class,
                 'notes' => "Solicitud movida a documentos pendientes por rechazo de documento '{$document->type}'",
+                'old_values' => ['status' => $oldAppStatus],
+                'new_values' => ['status' => Application::STATUS_DOCS_PENDING],
                 'metadata' => [
-                    'action' => 'status_change',
                     'trigger' => 'document_rejected',
                     'document_id' => $document->id,
                     'document_type' => $document->type,
                 ],
-                'created_at' => now(),
             ]);
         }
 
@@ -1412,22 +1178,14 @@ class ApplicationController extends Controller
         $document->reviewed_by = null;
         $document->save();
 
-        // Record history
-        ApplicationStatusHistory::create([
-            'application_id' => $application->id,
+        \App\Services\ActivityRecorder::recordApplicationEvent($application, 'DOCUMENT_UNAPPROVED', [
             'from_status' => 'DOCUMENT_REVIEW',
             'to_status' => 'DOCUMENT_REVIEW',
-            'changed_by' => $staff->id,
-            'changed_by_type' => StaffAccount::class,
             'notes' => "Documento '{$document->type}' regresado a pendiente",
-            'metadata' => [
-                'action' => 'document_unapproved',
-                'document_id' => $document->id,
-                'document_type' => $document->type,
-                'old_status' => $oldStatus,
-                'new_status' => 'PENDING',
-            ],
-            'created_at' => now(),
+            'entity' => $document,
+            'old_values' => ['status' => $oldStatus],
+            'new_values' => ['status' => 'PENDING'],
+            'metadata' => ['document_type' => $document->type],
         ]);
 
         return $this->success(null, 'Documento regresado a pendiente.');
@@ -1486,23 +1244,18 @@ class ApplicationController extends Controller
             'NOT_VERIFIED' => 'no verificada',
             'NO_ANSWER' => 'sin respuesta',
         ];
-        ApplicationStatusHistory::create([
-            'application_id' => $application->id,
+        \App\Services\ActivityRecorder::recordApplicationEvent($application, 'REFERENCE_VERIFIED', [
             'from_status' => 'REFERENCE_VERIFICATION',
             'to_status' => 'REFERENCE_VERIFICATION',
-            'changed_by' => $staff->id,
-            'changed_by_type' => StaffAccount::class,
             'notes' => "Referencia '{$reference->full_name}' {$resultLabels[$validated['result']]}" . (($validated['notes'] ?? null) ? ": {$validated['notes']}" : ''),
+            'entity' => $reference,
+            'old_values' => ['status' => $oldStatus],
+            'new_values' => ['status' => $statusMap[$validated['result']]],
             'metadata' => [
-                'action' => 'reference_verified',
-                'reference_id' => $reference->id,
                 'reference_name' => $reference->full_name,
-                'old_status' => $oldStatus,
-                'new_status' => $statusMap[$validated['result']],
                 'result' => $validated['result'],
                 'notes' => $validated['notes'] ?? null,
             ],
-            'created_at' => now(),
         ]);
 
         return $this->success(null, 'Referencia verificada.');
@@ -1543,21 +1296,17 @@ class ApplicationController extends Controller
         $bankAccount->verified_by = $staff->id;
         $bankAccount->save();
 
-        // Record history
-        ApplicationStatusHistory::create([
-            'application_id' => $application->id,
+        \App\Services\ActivityRecorder::recordApplicationEvent($application, 'DATA_VERIFIED', [
             'from_status' => 'BANK_ACCOUNT_VERIFICATION',
             'to_status' => 'BANK_ACCOUNT_VERIFICATION',
-            'changed_by' => $staff->id,
-            'changed_by_type' => StaffAccount::class,
             'notes' => "Cuenta bancaria '{$bankAccount->bank_name}' verificada (CLABE: ***{$this->maskClabe($bankAccount->clabe)})",
+            'entity' => $bankAccount,
+            'old_values' => ['is_verified' => $wasVerified],
+            'new_values' => ['is_verified' => true],
             'metadata' => [
-                'action' => 'bank_account_verified',
-                'bank_account_id' => $bankAccount->id,
                 'bank_name' => $bankAccount->bank_name,
-                'was_verified' => $wasVerified,
+                'kind' => 'bank_account_verified',
             ],
-            'created_at' => now(),
         ]);
 
         return $this->success(null, 'Cuenta bancaria verificada.');
@@ -1594,21 +1343,17 @@ class ApplicationController extends Controller
         $bankAccount->verified_by = null;
         $bankAccount->save();
 
-        // Record history
-        ApplicationStatusHistory::create([
-            'application_id' => $application->id,
+        \App\Services\ActivityRecorder::recordApplicationEvent($application, 'DATA_REJECTED', [
             'from_status' => 'BANK_ACCOUNT_VERIFICATION',
             'to_status' => 'BANK_ACCOUNT_VERIFICATION',
-            'changed_by' => $staff->id,
-            'changed_by_type' => StaffAccount::class,
             'notes' => "Verificación de cuenta bancaria '{$bankAccount->bank_name}' removida",
+            'entity' => $bankAccount,
+            'old_values' => ['is_verified' => $wasVerified],
+            'new_values' => ['is_verified' => false],
             'metadata' => [
-                'action' => 'bank_account_unverified',
-                'bank_account_id' => $bankAccount->id,
                 'bank_name' => $bankAccount->bank_name,
-                'was_verified' => $wasVerified,
+                'kind' => 'bank_account_unverified',
             ],
-            'created_at' => now(),
         ]);
 
         return $this->success(null, 'Verificación de cuenta bancaria removida.');
@@ -1995,25 +1740,24 @@ class ApplicationController extends Controller
                 default => ucfirst($field),
             };
 
-            ApplicationStatusHistory::create([
-                'application_id' => $application->id,
-                'from_status' => 'ENTITY_VERIFICATION',
-                'to_status' => 'ENTITY_VERIFICATION',
-                'changed_by' => $staffId,
-                'changed_by_type' => StaffAccount::class,
-                'notes' => "{$fieldLabel} {$actionLabel}" . ($rejectionReason ? ": {$rejectionReason}" : ''),
-                'metadata' => [
-                    'action' => 'entity_verification',
-                    'entity_type' => $entityType,
-                    'entity_id' => $entityId,
-                    'field' => $field,
-                    'old_status' => $oldStatus,
-                    'new_status' => $modelStatus,
-                    'method' => $method,
-                    'rejection_reason' => $rejectionReason,
-                ],
-                'created_at' => now(),
-            ]);
+            \App\Services\ActivityRecorder::recordApplicationEvent(
+                $application,
+                $modelStatus === 'REJECTED' ? 'DATA_REJECTED' : 'DATA_VERIFIED',
+                [
+                    'from_status' => 'ENTITY_VERIFICATION',
+                    'to_status' => 'ENTITY_VERIFICATION',
+                    'notes' => "{$fieldLabel} {$actionLabel}" . ($rejectionReason ? ": {$rejectionReason}" : ''),
+                    'old_values' => ['status' => $oldStatus],
+                    'new_values' => ['status' => $modelStatus],
+                    'metadata' => [
+                        'entity_type' => $entityType,
+                        'entity_id' => $entityId,
+                        'field' => $field,
+                        'method' => $method,
+                        'rejection_reason' => $rejectionReason,
+                    ],
+                ]
+            );
         }
     }
 
@@ -2277,19 +2021,16 @@ class ApplicationController extends Controller
                 $app->status = Application::STATUS_IN_REVIEW;
                 $app->save();
 
-                // Record status change
-                ApplicationStatusHistory::create([
-                    'application_id' => $app->id,
+                \App\Services\ActivityRecorder::recordApplicationEvent($app, 'APPLICATION_UPDATED', [
                     'from_status' => $oldStatus,
                     'to_status' => Application::STATUS_IN_REVIEW,
-                    'changed_by' => $staff->id,
-                    'changed_by_type' => StaffAccount::class,
                     'notes' => 'Verificaciones completadas, solicitud lista para revisión',
+                    'old_values' => ['status' => $oldStatus],
+                    'new_values' => ['status' => Application::STATUS_IN_REVIEW],
                     'metadata' => [
-                        'action' => 'auto_status_advance',
                         'trigger' => 'verifications_complete',
+                        'kind' => 'auto_status_advance',
                     ],
-                    'created_at' => now(),
                 ]);
 
                 return true;
@@ -2472,46 +2213,41 @@ class ApplicationController extends Controller
             }
         }
 
-        // Record history entry for verification change
-        ApplicationStatusHistory::create([
-            'application_id' => $application->id,
+        $verificationAction = match ($validated['action']) {
+            'verify' => 'DATA_VERIFIED',
+            'reject' => 'DATA_REJECTED',
+            'unverify' => 'DATA_CORRECTED',
+        };
+        \App\Services\ActivityRecorder::recordApplicationEvent($application, $verificationAction, [
             'from_status' => 'DATA_VERIFICATION',
             'to_status' => 'DATA_VERIFICATION',
-            'changed_by' => $staff->id,
-            'changed_by_type' => StaffAccount::class,
             'notes' => match ($validated['action']) {
                 'verify' => "Campo '{$validated['field']}' verificado",
                 'reject' => "Campo '{$validated['field']}' rechazado: " . ($validated['rejection_reason'] ?? ''),
                 'unverify' => "Verificación removida del campo '{$validated['field']}'" . (($validated['notes'] ?? null) ? ": {$validated['notes']}" : ''),
             },
+            'old_values' => ['status' => $oldStatus],
+            'new_values' => ['status' => $newStatus],
             'metadata' => [
-                'action' => 'data_verification',
                 'field' => $validated['field'],
                 'verification_action' => $validated['action'],
-                'old_status' => $oldStatus,
-                'new_status' => $newStatus,
                 'method' => $validated['method'] ?? null,
                 'rejection_reason' => $validated['rejection_reason'] ?? null,
                 'notes' => $validated['notes'] ?? null,
             ],
-            'created_at' => now(),
         ]);
 
-        // Record application status change if it happened (rejection)
         if ($statusChanged) {
-            ApplicationStatusHistory::create([
-                'application_id' => $application->id,
+            \App\Services\ActivityRecorder::recordApplicationEvent($application, 'APPLICATION_UPDATED', [
                 'from_status' => $oldAppStatus,
                 'to_status' => Application::STATUS_CORRECTIONS_PENDING,
-                'changed_by' => $staff->id,
-                'changed_by_type' => StaffAccount::class,
                 'notes' => "Solicitud movida a correcciones pendientes por rechazo de campo '{$validated['field']}'",
+                'old_values' => ['status' => $oldAppStatus],
+                'new_values' => ['status' => Application::STATUS_CORRECTIONS_PENDING],
                 'metadata' => [
-                    'action' => 'status_change',
                     'trigger' => 'data_rejected',
                     'field' => $validated['field'],
                 ],
-                'created_at' => now(),
             ]);
         }
 
@@ -2531,73 +2267,48 @@ class ApplicationController extends Controller
     }
 
     // =========================================================================
-    // API Logs Operations
+    // Activity Feed (reemplaza /audit-logs y /api-logs viejos)
     // =========================================================================
 
     /**
-     * Get API logs for application.
+     * Feed unificado de actividad de una solicitud.
      *
-     * GET /v2/staff/applications/{id}/api-logs
+     * GET /v2/staff/applications/{id}/activity
+     *
+     * Combina application_status_history + audit_logs + api_logs en una sola
+     * linea de tiempo cronologica, paginada con cursor. Reemplaza los
+     * endpoints viejos /audit-logs y /api-logs.
+     *
+     * Filtros:
+     *   ?cursor=<base64>        cursor temporal para paginar (desc)
+     *   ?kind=event|audit|api   limita a una sola fuente (default: todas)
+     *   ?q=<texto>              busqueda libre en title/summary/actor
+     *   ?per_page=50            tamaño de pagina (max 200)
+     *   ?include_http=1         incluye HTTP_REQUEST en audits (default: no)
      */
-    public function getApiLogs(Request $request, string $id): JsonResponse
+    public function activity(Request $request, string $id, \App\Services\ActivityFeedService $feed): JsonResponse
     {
         /** @var StaffAccount $staff */
         $staff = $request->user();
 
         $application = Application::where('id', $id)
             ->where('tenant_id', $this->scopedTenantId($staff))
-            ->with('person.account')
+            ->with('person')
             ->first();
 
-        if (!$application) {
+        if (! $application) {
             return $this->notFound('Solicitud no encontrada.');
         }
 
-        // Get API logs related to this application or its entity (Person/Company)
-        $personId = $application->person_id;
-        $accountId = $application->person?->account?->id;
-
-        $logs = \App\Models\ApiLog::where('tenant_id', $this->scopedTenantId($staff))
-            ->where(function ($q) use ($application, $personId, $accountId) {
-                // Search by application_id
-                $q->where('application_id', $application->id);
-
-                // Search by entity_type/entity_id (V2 polymorphic entity)
-                if ($personId) {
-                    $q->orWhere(function ($q2) use ($personId) {
-                        $q2->where('entity_type', \App\Models\Person::class)
-                            ->where('entity_id', $personId);
-                    });
-                }
-
-                // Search by user_id (ApplicantAccount ID)
-                if ($accountId) {
-                    $q->orWhere('user_id', $accountId);
-                }
-            })
-            ->orderBy('created_at', 'desc')
-            ->limit(100)
-            ->get();
-
-        return $this->success([
-            'logs' => $logs->map(fn($log) => [
-                'id' => $log->id,
-                'provider' => $log->provider,
-                'service' => $log->service,
-                'endpoint' => $log->endpoint,
-                'method' => $log->method,
-                'request_method' => $log->method,
-                'request_url' => $log->endpoint,
-                'response_status' => $log->response_status,
-                'success' => $log->success,
-                'error_message' => $log->error_message,
-                'duration_ms' => $log->duration_ms,
-                'request_payload' => $log->request_payload,
-                'response_payload' => $log->response_body,
-                'response_body' => $log->response_body,
-                'created_at' => $log->created_at?->toIso8601String(),
-            ]),
+        $result = $feed->forApplication($application, [
+            'cursor' => $request->query('cursor'),
+            'kind' => $request->query('kind'),
+            'q' => $request->query('q'),
+            'per_page' => $request->query('per_page'),
+            'include_http' => filter_var($request->query('include_http', false), FILTER_VALIDATE_BOOLEAN),
         ]);
+
+        return $this->success($result);
     }
 
     // =========================================================================

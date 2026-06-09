@@ -3,17 +3,15 @@ import { ref, computed, onMounted, onBeforeMount, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AppButton } from '@/components/common'
 import AdminDocumentGallery from '@/components/admin/AdminDocumentGallery.vue'
-import AuditLogList from '@/components/admin/AuditLogList.vue'
 import ConfirmModal from '@/components/admin/ConfirmModal.vue'
+import ActivityTimeline from '@/components/admin/application-detail/ActivityTimeline.vue'
 import {
   ReferencesSection,
   BankAccountsSection,
   NotesSection,
-  TimelineSection,
-  ApiLogsSection,
   ApplicantDataSection,
 } from '@/components/admin/application-detail'
-import { v2, type V2ApiLogEntry } from '@/services/v2'
+import { v2 } from '@/services/v2'
 import { platform } from '@/platform'
 import { useWebSocket, useToast, useDocumentTypes } from '@/composables'
 import { useTenantStore } from '@/stores/tenant'
@@ -285,16 +283,6 @@ const docRejectReason = ref('')
 const docRejectComment = ref('')
 const isRejectingDoc = ref(false)
 
-// Timeline metadata modal state
-const showMetadataModal = ref(false)
-const selectedTimelineEvent = ref<Application['timeline'][0] | null>(null)
-
-// API Logs state (using V2ApiLogEntry from services)
-const apiLogs = ref<V2ApiLogEntry[]>([])
-const loadingApiLogs = ref(false)
-const showApiLogDetailModal = ref(false)
-const selectedApiLog = ref<V2ApiLogEntry | null>(null)
-
 const docRejectReasons = [
   { value: 'ILLEGIBLE', label: 'Documento ilegible' },
   { value: 'EXPIRED', label: 'Documento vencido' },
@@ -406,9 +394,9 @@ const tabs = [
   { id: 'documents', label: 'Documentos' },
   { id: 'references', label: 'Referencias' },
   { id: 'bank_accounts', label: 'Cuentas Bancarias' },
-  { id: 'timeline', label: 'Historial' },
+  // Tab unica que reemplaza a Historial + Actividad + Logs API. Lee del
+  // endpoint /v2/staff/applications/{id}/activity (feed unificado).
   { id: 'activity', label: 'Actividad' },
-  { id: 'api_logs', label: 'Logs API' }
 ]
 
 // Status colors for UI display
@@ -452,21 +440,6 @@ const error = ref('')
 
 // Computed refs for WebSocket (to allow reactive reconnection when tenant loads)
 const tenantIdRef = computed(() => tenantStore.tenant?.id)
-
-// timelineForSection: normaliza metadata para TimelineSection, que define el shape sin `| null`.
-// Convertimos null → undefined en strings/numbers, dejando booleans coercibles.
-const timelineForSection = computed(() => {
-  const events = application.value?.timeline ?? []
-  return events.map((ev) => {
-    if (!ev.metadata) return ev as unknown as { id: string; action: string; description: string; author: string; created_at: string; metadata?: Record<string, unknown> }
-    const m = ev.metadata
-    const cleaned: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(m)) {
-      cleaned[k] = v === null ? undefined : v
-    }
-    return { ...ev, metadata: cleaned }
-  }) as unknown as Array<{ id: string; action: string; description: string; author: string; created_at: string; metadata?: Record<string, unknown> }>
-})
 
 // WebSocket connection for real-time updates
 useWebSocket({
@@ -723,67 +696,9 @@ const fetchApplication = async () => {
         author: n.author?.name || 'Sistema',
         created_at: n.created_at
       })),
-      timeline: workflow?.status_history?.map((h, idx) => {
-        // Check if this is a lifecycle event (new format from backend)
-        if (h.is_lifecycle_event) {
-          return {
-            id: String(idx),
-            action: h.event_type || 'LIFECYCLE_EVENT',
-            description: h.notes || h.event_label || h.event_type || 'Evento',
-            author: h.changed_by || 'Sistema',
-            created_at: h.created_at || new Date().toISOString(),
-            metadata: {
-              ip_address: h.ip_address,
-              user_agent: h.user_agent,
-              ...h.metadata
-            }
-          }
-        }
-
-        // Map special action types (legacy format)
-        const actionTypes = [
-          'DATA_VERIFICATION',
-          'DOCUMENT_REVIEW',
-          'REFERENCE_VERIFICATION',
-          'BANK_ACCOUNT_VERIFICATION',
-          'NOTE_ADDED',
-          'ASSIGNMENT',
-          'COUNTER_OFFER',
-          'DATA_CORRECTED'
-        ]
-
-        // Handle special action entries (non-status changes)
-        if (h.from_status && actionTypes.includes(h.from_status)) {
-          return {
-            id: String(idx),
-            action: h.from_status,
-            description: h.notes || h.from_status,
-            author: h.changed_by || 'Sistema',
-            created_at: h.created_at || h.timestamp || new Date().toISOString(),
-            metadata: {
-              ip_address: h.ip_address,
-              user_agent: h.user_agent,
-              ...h.metadata
-            }
-          }
-        }
-
-        // Handle regular status changes
-        return {
-          id: String(idx),
-          action: 'STATUS_CHANGE',
-          description: h.to_status
-            ? `Estado cambiado de ${h.from_status_label || h.from_status || 'N/A'} a ${h.to_status_label || h.to_status}${h.notes ? `: ${h.notes}` : ''}`
-            : `Estado cambiado a ${h.status}${h.reason ? `: ${h.reason}` : ''}`,
-          author: h.changed_by || 'Sistema',
-          created_at: h.created_at || h.timestamp || new Date().toISOString(),
-          metadata: {
-            ip_address: h.ip_address,
-            user_agent: h.user_agent,
-            ...h.metadata
-          }
-        }
-      }) || [],
+      // timeline removido: el feed unificado lo consulta directo desde
+      // /v2/staff/applications/{id}/activity al abrir el tab Actividad.
+      timeline: [],
       signature: {
         has_signed: verification?.signature?.has_signed ?? false,
         signature_base64: verification?.signature?.signature_base64 ?? undefined,
@@ -820,34 +735,10 @@ const fetchApplication = async () => {
   }
 }
 
-// Load API logs for this application's applicant
-const loadApiLogs = async () => {
-  if (!application.value) return
-
-  loadingApiLogs.value = true
-  try {
-    const appId = route.params.id as string
-    const response = await v2.staff.application.getApiLogs(appId)
-    apiLogs.value = response.data?.logs || []
-  } catch (e) {
-    log.error('Error al cargar logs de API', { error: e })
-    apiLogs.value = []
-  } finally {
-    loadingApiLogs.value = false
-  }
-}
-
-const viewApiLogDetail = (log: V2ApiLogEntry) => {
-  selectedApiLog.value = log
-  showApiLogDetailModal.value = true
-}
-
-// Switch tab and load data if needed
+// Switch tab. El feed de actividad (`activity`) carga su propia data al
+// montarse el componente ActivityTimeline, no necesitamos prefetching aqui.
 const switchTab = (tabId: string) => {
   activeTab.value = tabId
-  if (tabId === 'api_logs' && apiLogs.value.length === 0 && !loadingApiLogs.value) {
-    loadApiLogs()
-  }
 }
 
 // Load selfie (profile photo) for display throughout the form
@@ -1850,11 +1741,6 @@ const handleAddNote = async (text: string) => {
   }
 }
 
-// Handler for TimelineSection component
-const handleViewTimelineDetails = (event: Application['timeline'][0]) => {
-  selectedTimelineEvent.value = event
-  showMetadataModal.value = true
-}
 
 // Cleanup: revoke object URLs to prevent memory leaks
 onUnmounted(() => {
@@ -3248,28 +3134,9 @@ onUnmounted(() => {
             />
           </div>
 
-          <!-- Timeline Tab -->
-          <!-- TimelineSection define su propio TimelineEvent (strings sin null); el backend devuelve null
-               en algunos campos opcionales, por eso normalizamos via timelineForSection. -->
-          <div v-if="activeTab === 'timeline'">
-            <TimelineSection
-              :events="timelineForSection"
-              @view-details="handleViewTimelineDetails"
-            />
-          </div>
-
-          <!-- Activity Tab (audit log: acciones + peticiones HTTP con geo) -->
+          <!-- Activity Tab unificado: eventos de negocio + auditoria + integraciones -->
           <div v-if="activeTab === 'activity'">
-            <AuditLogList :application-id="application.id" />
-          </div>
-
-          <!-- API Logs Tab -->
-          <div v-if="activeTab === 'api_logs'">
-            <ApiLogsSection
-              :logs="apiLogs"
-              :is-loading="loadingApiLogs"
-              @view-detail="viewApiLogDetail"
-            />
+            <ActivityTimeline :application-id="application.id" />
           </div>
         </div>
       </div>
@@ -3292,98 +3159,8 @@ onUnmounted(() => {
     </div>
 
     <!-- API Log Detail Modal -->
-    <div
-      v-if="showApiLogDetailModal && selectedApiLog"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      @click.self="showApiLogDetailModal = false"
-    >
-      <div class="bg-white rounded-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
-        <div class="p-4 border-b border-gray-200 flex justify-between items-center">
-          <div>
-            <h3 class="text-lg font-semibold text-gray-900">Detalle de Llamada API</h3>
-            <p class="text-sm text-gray-500">{{ selectedApiLog.provider }} - {{ selectedApiLog.service }}</p>
-          </div>
-          <button
-            class="text-gray-400 hover:text-gray-600"
-            @click="showApiLogDetailModal = false"
-          >
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <div class="flex-1 overflow-y-auto p-4 space-y-4">
-          <!-- Summary -->
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div class="bg-gray-50 rounded-lg p-3">
-              <p class="text-xs text-gray-500">Método</p>
-              <p class="font-medium">{{ selectedApiLog.method }}</p>
-            </div>
-            <div class="bg-gray-50 rounded-lg p-3">
-              <p class="text-xs text-gray-500">HTTP Status</p>
-              <p class="font-medium">{{ selectedApiLog.response_status }}</p>
-            </div>
-            <div class="bg-gray-50 rounded-lg p-3">
-              <p class="text-xs text-gray-500">Duración</p>
-              <p class="font-medium">{{ selectedApiLog.duration_ms }}ms</p>
-            </div>
-            <div class="bg-gray-50 rounded-lg p-3">
-              <p class="text-xs text-gray-500">Estado</p>
-              <span
-                :class="[
-                  'px-2 py-1 text-xs font-medium rounded-full',
-                  selectedApiLog.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                ]"
-              >
-                {{ selectedApiLog.success ? 'Exitoso' : 'Error' }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Endpoint -->
-          <div>
-            <p class="text-sm font-medium text-gray-700 mb-1">Endpoint</p>
-            <code class="block bg-gray-100 p-2 rounded text-sm text-gray-800 break-all">
-              {{ selectedApiLog.endpoint }}
-            </code>
-          </div>
-
-          <!-- Error Message (if any) -->
-          <div v-if="selectedApiLog.error_message" class="bg-red-50 border border-red-200 rounded-lg p-3">
-            <p class="text-sm font-medium text-red-800 mb-1">Mensaje de Error</p>
-            <p class="text-sm text-red-700">{{ selectedApiLog.error_message }}</p>
-          </div>
-
-          <!-- Request Payload -->
-          <div v-if="selectedApiLog.request_payload">
-            <p class="text-sm font-medium text-gray-700 mb-1">Request Payload</p>
-            <pre class="bg-gray-900 text-green-400 p-3 rounded-lg text-xs overflow-x-auto max-h-60">{{ JSON.stringify(selectedApiLog.request_payload, null, 2) }}</pre>
-          </div>
-
-          <!-- Response Body -->
-          <div v-if="selectedApiLog.response_body">
-            <p class="text-sm font-medium text-gray-700 mb-1">Response Body</p>
-            <pre class="bg-gray-900 text-green-400 p-3 rounded-lg text-xs overflow-x-auto max-h-60">{{ JSON.stringify(selectedApiLog.response_body, null, 2) }}</pre>
-          </div>
-
-          <!-- Timestamp -->
-          <div class="text-sm text-gray-500">
-            Fecha: {{ formatDateTime(selectedApiLog.created_at) }}
-          </div>
-        </div>
-
-        <div class="p-4 border-t border-gray-200">
-          <AppButton
-            variant="outline"
-            class="w-full"
-            @click="showApiLogDetailModal = false"
-          >
-            Cerrar
-          </AppButton>
-        </div>
-      </div>
-    </div>
+    <!-- API Log Detail Modal removido: la nueva ActivityTimeline expande
+         cada item inline con su metadata JSON; no necesita modal aparte. -->
 
     <!-- Status Change Modal -->
     <div
@@ -3959,263 +3736,6 @@ onUnmounted(() => {
               Descargar archivo
             </a>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Timeline Metadata Modal -->
-    <div
-      v-if="showMetadataModal && selectedTimelineEvent"
-      class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      @click.self="showMetadataModal = false"
-    >
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
-        <!-- Header -->
-        <div class="bg-gradient-to-r from-primary-600 to-primary-700 px-6 py-4 flex justify-between items-center">
-          <div class="flex items-center gap-3">
-            <div class="bg-white/20 rounded-lg p-2">
-              <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <h3 class="text-lg font-semibold text-white">Detalles del Evento</h3>
-          </div>
-          <button
-            class="text-white/80 hover:text-white hover:bg-white/10 rounded-lg p-1.5 transition-colors"
-            @click="showMetadataModal = false"
-          >
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <!-- Content -->
-        <div class="flex-1 overflow-y-auto p-6 space-y-5">
-          <!-- Event Description Card -->
-          <div class="bg-gray-50 rounded-xl p-4">
-            <p class="text-sm text-gray-900 leading-relaxed">{{ selectedTimelineEvent.description }}</p>
-          </div>
-
-          <!-- Info Grid -->
-          <div class="grid grid-cols-2 gap-4">
-            <div class="bg-gray-50 rounded-xl p-4">
-              <div class="flex items-center gap-2 mb-2">
-                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <span class="text-xs font-medium text-gray-500 uppercase">Realizado por</span>
-              </div>
-              <p class="text-sm font-medium text-gray-900">{{ selectedTimelineEvent.author }}</p>
-            </div>
-
-            <div class="bg-gray-50 rounded-xl p-4">
-              <div class="flex items-center gap-2 mb-2">
-                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span class="text-xs font-medium text-gray-500 uppercase">Fecha y Hora</span>
-              </div>
-              <p class="text-sm font-medium text-gray-900">{{ formatDateTime(selectedTimelineEvent.created_at) }}</p>
-            </div>
-          </div>
-
-          <!-- Event-Specific Details -->
-          <div v-if="selectedTimelineEvent.metadata?.document_type || selectedTimelineEvent.metadata?.step_number || selectedTimelineEvent.metadata?.changed_fields || selectedTimelineEvent.metadata?.bank_name || selectedTimelineEvent.metadata?.reference_type || selectedTimelineEvent.metadata?.employment_type || selectedTimelineEvent.metadata?.postal_code || selectedTimelineEvent.metadata?.score !== undefined" class="border border-blue-200 rounded-xl overflow-hidden">
-            <div class="bg-blue-50 px-4 py-2 border-b border-blue-200">
-              <div class="flex items-center gap-2">
-                <svg class="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span class="text-xs font-semibold text-blue-600 uppercase">Detalles del Evento</span>
-              </div>
-            </div>
-            <div class="p-4 space-y-3">
-              <div v-if="selectedTimelineEvent.metadata?.document_type" class="flex items-center justify-between">
-                <span class="text-xs text-gray-500">Tipo de Documento</span>
-                <span class="text-sm text-gray-700">{{ selectedTimelineEvent.metadata.document_type_label || selectedTimelineEvent.metadata.document_type }}</span>
-              </div>
-              <div v-if="selectedTimelineEvent.metadata?.step_number" class="flex items-center justify-between">
-                <span class="text-xs text-gray-500">Paso</span>
-                <span class="text-sm text-gray-700">{{ selectedTimelineEvent.metadata.step_number }}{{ selectedTimelineEvent.metadata.step_label ? ` - ${selectedTimelineEvent.metadata.step_label}` : '' }}</span>
-              </div>
-              <div v-if="selectedTimelineEvent.metadata?.changed_fields?.length" class="flex items-start justify-between">
-                <span class="text-xs text-gray-500">Campos Actualizados</span>
-                <span class="text-sm text-gray-700 text-right">{{ selectedTimelineEvent.metadata.changed_fields.join(', ') }}</span>
-              </div>
-              <div v-if="selectedTimelineEvent.metadata?.bank_name" class="flex items-center justify-between">
-                <span class="text-xs text-gray-500">Banco</span>
-                <span class="text-sm text-gray-700">{{ selectedTimelineEvent.metadata.bank_name }}</span>
-              </div>
-              <div v-if="selectedTimelineEvent.metadata?.reference_type" class="flex items-center justify-between">
-                <span class="text-xs text-gray-500">Tipo de Referencia</span>
-                <span class="text-sm text-gray-700">{{ selectedTimelineEvent.metadata.reference_type }}</span>
-              </div>
-              <div v-if="selectedTimelineEvent.metadata?.employment_type" class="flex items-center justify-between">
-                <span class="text-xs text-gray-500">Tipo de Empleo</span>
-                <span class="text-sm text-gray-700">{{ selectedTimelineEvent.metadata.employment_type }}</span>
-              </div>
-              <div v-if="selectedTimelineEvent.metadata?.postal_code" class="flex items-center justify-between">
-                <span class="text-xs text-gray-500">Código Postal</span>
-                <span class="text-sm font-mono text-gray-700">{{ selectedTimelineEvent.metadata.postal_code }}</span>
-              </div>
-              <div v-if="selectedTimelineEvent.metadata?.is_valid !== undefined" class="flex items-center justify-between">
-                <span class="text-xs text-gray-500">Validación</span>
-                <span :class="['text-sm font-medium', selectedTimelineEvent.metadata.is_valid ? 'text-green-600' : 'text-red-600']">
-                  {{ selectedTimelineEvent.metadata.is_valid ? 'Válido' : 'Inválido' }}
-                </span>
-              </div>
-              <div v-if="selectedTimelineEvent.metadata?.matched !== undefined" class="flex items-center justify-between">
-                <span class="text-xs text-gray-500">Coincidencia</span>
-                <span :class="['text-sm font-medium', selectedTimelineEvent.metadata.matched ? 'text-green-600' : 'text-red-600']">
-                  {{ selectedTimelineEvent.metadata.matched ? 'Sí' : 'No' }}
-                </span>
-              </div>
-              <div v-if="selectedTimelineEvent.metadata?.score !== undefined" class="flex items-center justify-between">
-                <span class="text-xs text-gray-500">Score</span>
-                <span class="text-sm font-medium text-gray-700">{{ selectedTimelineEvent.metadata.score }}%</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Technical Details -->
-          <div v-if="selectedTimelineEvent.metadata?.ip_address || selectedTimelineEvent.metadata?.user_agent || selectedTimelineEvent.metadata?.geolocation" class="border border-gray-200 rounded-xl overflow-hidden">
-            <div class="bg-gray-100 px-4 py-2 border-b border-gray-200">
-              <div class="flex items-center gap-2">
-                <svg class="h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-                <span class="text-xs font-semibold text-gray-600 uppercase">Información Técnica</span>
-              </div>
-            </div>
-            <div class="p-4 space-y-3">
-              <div v-if="selectedTimelineEvent.metadata?.ip_address" class="flex items-center justify-between">
-                <span class="text-xs text-gray-500">IP</span>
-                <span class="text-sm font-mono text-gray-700 bg-gray-100 px-2 py-0.5 rounded">{{ selectedTimelineEvent.metadata.ip_address }}</span>
-              </div>
-              <div v-if="selectedTimelineEvent.metadata?.location" class="flex items-center justify-between">
-                <span class="text-xs text-gray-500">Ubicación</span>
-                <span class="text-sm text-gray-700">{{ selectedTimelineEvent.metadata.location }}</span>
-              </div>
-              <div v-if="selectedTimelineEvent.metadata?.geolocation" class="space-y-2">
-                <div class="flex items-center justify-between">
-                  <span class="text-xs text-gray-500">Coordenadas GPS</span>
-                  <a
-                    :href="`https://www.google.com/maps?q=${selectedTimelineEvent.metadata.geolocation.latitude},${selectedTimelineEvent.metadata.geolocation.longitude}`"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="text-sm font-mono text-primary-600 hover:text-primary-800 bg-primary-50 px-2 py-0.5 rounded flex items-center gap-1"
-                  >
-                    {{ selectedTimelineEvent.metadata.geolocation.latitude?.toFixed(6) }}, {{ selectedTimelineEvent.metadata.geolocation.longitude?.toFixed(6) }}
-                    <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                  </a>
-                </div>
-                <div v-if="selectedTimelineEvent.metadata.geolocation.accuracy" class="flex items-center justify-between">
-                  <span class="text-xs text-gray-500">Precisión</span>
-                  <span class="text-sm text-gray-700">± {{ Math.round(selectedTimelineEvent.metadata.geolocation.accuracy) }} metros</span>
-                </div>
-              </div>
-              <div v-if="selectedTimelineEvent.metadata?.user_agent" class="flex items-center justify-between">
-                <span class="text-xs text-gray-500">Dispositivo</span>
-                <span class="text-sm text-gray-700">{{ parseUserAgent(selectedTimelineEvent.metadata.user_agent) }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Cambios específicos (para correcciones de datos) -->
-          <div v-if="selectedTimelineEvent.metadata?.changes && Object.keys(selectedTimelineEvent.metadata.changes).length > 0" class="border border-amber-200 rounded-xl overflow-hidden">
-            <div class="bg-amber-50 px-4 py-2 border-b border-amber-200">
-              <div class="flex items-center gap-2">
-                <svg class="h-4 w-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                <span class="text-xs font-semibold text-amber-700 uppercase">Cambios Realizados</span>
-              </div>
-            </div>
-            <div class="divide-y divide-gray-100">
-              <div
-                v-for="(change, field) in selectedTimelineEvent.metadata.changes"
-                :key="field"
-                class="p-4"
-              >
-                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{{ field }}</p>
-                <div class="space-y-2">
-                  <div class="flex items-start gap-3 bg-red-50 rounded-lg px-3 py-2">
-                    <span class="text-red-400 mt-0.5">
-                      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
-                      </svg>
-                    </span>
-                    <span class="text-sm text-red-700 line-through flex-1">{{ parseChangeValue(change, 'old') }}</span>
-                  </div>
-                  <div class="flex items-start gap-3 bg-green-50 rounded-lg px-3 py-2">
-                    <span class="text-green-500 mt-0.5">
-                      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                      </svg>
-                    </span>
-                    <span class="text-sm text-green-700 font-medium flex-1">{{ parseChangeValue(change, 'new') }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Fallback para old_value/new_value cuando no hay changes específicos -->
-          <template v-if="!selectedTimelineEvent.metadata?.changes && (selectedTimelineEvent.metadata?.old_value || selectedTimelineEvent.metadata?.new_value)">
-            <div class="border border-amber-200 rounded-xl overflow-hidden">
-              <div class="bg-amber-50 px-4 py-2 border-b border-amber-200">
-                <div class="flex items-center gap-2">
-                  <svg class="h-4 w-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  <span class="text-xs font-semibold text-amber-700 uppercase">Cambio de Valor</span>
-                </div>
-              </div>
-              <div class="p-4 space-y-2">
-                <div v-if="selectedTimelineEvent.metadata?.old_value" class="flex items-start gap-3 bg-red-50 rounded-lg px-3 py-2">
-                  <span class="text-red-400 mt-0.5">
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
-                    </svg>
-                  </span>
-                  <span class="text-sm text-red-700 line-through flex-1">{{ selectedTimelineEvent.metadata.old_value }}</span>
-                </div>
-                <div v-if="selectedTimelineEvent.metadata?.new_value" class="flex items-start gap-3 bg-green-50 rounded-lg px-3 py-2">
-                  <span class="text-green-500 mt-0.5">
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                    </svg>
-                  </span>
-                  <span class="text-sm text-green-700 font-medium flex-1">{{ selectedTimelineEvent.metadata.new_value }}</span>
-                </div>
-              </div>
-            </div>
-          </template>
-
-          <div v-if="selectedTimelineEvent.metadata?.reason" class="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <div class="flex items-start gap-3">
-              <svg class="h-5 w-5 text-blue-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-              </svg>
-              <div>
-                <p class="text-xs font-medium text-blue-600 uppercase mb-1">Motivo</p>
-                <p class="text-sm text-blue-800">{{ selectedTimelineEvent.metadata.reason }}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Footer -->
-        <div class="border-t border-gray-200 px-6 py-4 bg-gray-50">
-          <button
-            class="w-full px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-xl transition-colors"
-            @click="showMetadataModal = false"
-          >
-            Cerrar
-          </button>
         </div>
       </div>
     </div>

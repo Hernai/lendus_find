@@ -46,7 +46,6 @@ use App\Http\Controllers\Api\V2\Staff\NotificationTemplateController as StaffNot
 use App\Http\Controllers\Api\V2\Applicant\NotificationPreferenceController as ApplicantNotificationPreferenceController;
 use App\Http\Controllers\Api\V2\Applicant\NotificationController as ApplicantNotificationController;
 use App\Http\Controllers\Api\V2\Staff\NotificationPreferenceController as StaffNotificationPreferenceController;
-use App\Http\Controllers\Api\V2\Staff\AuditLogController as StaffAuditLogController;
 use App\Http\Controllers\Api\V2\Applicant\LoanController as ApplicantLoanController;
 use App\Http\Controllers\Api\V2\Staff\LoanController as StaffLoanController;
 
@@ -399,8 +398,8 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
         Route::get('/applications/unassigned', [StaffAppController::class, 'unassigned']);
         Route::get('/applications/my-queue', [StaffAppController::class, 'myQueue']);
         Route::get('/applications/{id}', [StaffAppController::class, 'show']);
-        Route::get('/applications/{id}/audit-logs', [StaffAuditLogController::class, 'listByApplication']);
-        Route::get('/applicants/{id}/audit-logs', [StaffAuditLogController::class, 'listByApplicant']);
+        // Audit logs por applicant/application eliminados: el feed unificado
+        // los expone via /applications/{id}/activity?kind=audit.
 
         // Loan Portfolio (staff)
         Route::get('/loans', [StaffLoanController::class, 'index']);
@@ -445,8 +444,9 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
         Route::put('/applications/{id}/verify-data', [StaffAppController::class, 'verifyData'])
             ->middleware('permission:canVerifyReferences');
 
-        // Application API Logs
-        Route::get('/applications/{id}/api-logs', [StaffAppController::class, 'getApiLogs']);
+        // Application Activity Feed (unified: status_history + audit + api logs)
+        Route::get('/applications/{id}/activity', [StaffAppController::class, 'activity']);
+        // /applications/{id}/api-logs eliminado: usar /activity?kind=api
 
         // Documents - Types only (other document routes not used)
         Route::get('/documents/types', [StaffDocController::class, 'types']);

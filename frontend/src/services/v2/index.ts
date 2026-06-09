@@ -38,7 +38,7 @@ import staffConfig from './config.staff.service'
 import staffApiLog from './apilog.staff.service'
 import staffTenant from './tenant.staff.service'
 import staffIntegration from './integration.staff.service'
-import staffAuditLog from './audit.staff.service'
+import staffActivity from './activity.staff.service'
 import person from './person.service'
 import simulator from './simulator.service'
 import publicConfig from './config.public.service'
@@ -85,7 +85,7 @@ export const v2 = {
     apiLog: staffApiLog,
     tenant: staffTenant,
     integration: staffIntegration,
-    auditLog: staffAuditLog,
+    activity: staffActivity,
     loan: staffLoan,
   },
 
@@ -128,7 +128,6 @@ export {
   staffApiLog,
   staffTenant,
   staffIntegration,
-  staffAuditLog,
   person,
   simulator,
   publicConfig,
@@ -187,7 +186,6 @@ export type {
   V2ApplicationUpdatePayload,
   V2CounterOffer,
   V2CounterOfferResponsePayload,
-  V2StatusHistoryEntry,
   V2ApplicationFilters,
   V2AssignApplicationPayload,
   V2ChangeStatusPayload,
@@ -232,7 +230,9 @@ export type {
 } from '@/types/v2'
 
 // Re-export types from services
-export type { V2ApiLogEntry } from './application.staff.service'
+// V2ApiLogEntry removido junto con application.staff.service.getApiLogs.
+// La info de api-logs por aplicacion viaja ahora en el feed unificado:
+// v2.staff.activity.getActivity(appId, { kind: 'api' })
 
 // Default export for convenience
 export default v2

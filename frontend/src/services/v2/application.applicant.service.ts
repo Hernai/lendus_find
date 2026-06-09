@@ -12,7 +12,6 @@ import type {
   V2ApplicationCreatePayload,
   V2ApplicationUpdatePayload,
   V2CounterOfferResponsePayload,
-  V2StatusHistoryEntry,
 } from '@/types/v2'
 
 const BASE_PATH = '/v2/applicant/applications'
@@ -86,13 +85,9 @@ export async function respondToCounterOffer(
   return response.data
 }
 
-/**
- * Get application status history.
- */
-export async function getHistory(id: string): Promise<V2ApiResponse<{ history: V2StatusHistoryEntry[] }>> {
-  const response = await api.get<V2ApiResponse<{ history: V2StatusHistoryEntry[] }>>(`${BASE_PATH}/${id}/history`)
-  return response.data
-}
+// getHistory eliminado: el applicant no necesita un endpoint dedicado de
+// historial; lo que ve en su dashboard sale del feed unificado del staff
+// cuando hace falta exponerlo.
 
 export default {
   list,
@@ -102,5 +97,4 @@ export default {
   submit,
   cancel,
   respondToCounterOffer,
-  getHistory,
 }

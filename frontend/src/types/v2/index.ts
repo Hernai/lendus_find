@@ -664,7 +664,9 @@ export interface V2ApplicationWorkflow {
     name: string
     email: string
   } | null
-  status_history: V2StatusHistoryEntry[]
+  // status_history removido: el historial unificado ahora vive en el feed
+  // `/v2/staff/applications/{id}/activity` (ver ActivityItem en
+  // services/v2/activity.staff.service.ts).
   notes: V2ApplicationNote[]
 }
 
@@ -735,7 +737,7 @@ export interface V2Application {
   risk_score: number | null
   risk_assessment: Record<string, unknown> | null
   counter_offer: V2CounterOffer | null
-  status_history?: V2StatusHistoryEntry[]
+  // status_history removido: usar el feed unificado `/applications/{id}/activity`.
   created_at: string
   updated_at: string
   // Relations (when loaded)
@@ -783,50 +785,9 @@ export interface V2CounterOffer {
   accepted: boolean | null
 }
 
-export interface V2StatusHistoryEntry {
-  // Event type info (for lifecycle events)
-  event_type?: string
-  event_label?: string
-  is_lifecycle_event?: boolean
-
-  // Status change info (for status changes)
-  from_status?: string | null
-  from_status_label?: string | null
-  to_status?: string | null
-  to_status_label?: string | null
-
-  // Common fields
-  changed_by?: string | null
-  changed_by_type?: string | null
-  notes?: string | null
-  created_at?: string
-
-  // Context (IP address, user agent)
-  ip_address?: string | null
-  user_agent?: string | null
-
-  // Event-specific metadata
-  metadata?: {
-    document_type?: string | null
-    document_type_label?: string | null
-    changed_fields?: string[] | null
-    step_number?: number | null
-    step_label?: string | null
-    is_valid?: boolean | null
-    matched?: boolean | null
-    score?: number | null
-    bank_name?: string | null
-    reference_type?: string | null
-    postal_code?: string | null
-    employment_type?: string | null
-    [key: string]: unknown
-  }
-
-  // Legacy format (kept for backwards compatibility)
-  status?: V2ApplicationStatus
-  reason?: string | null
-  timestamp?: string
-}
+// V2StatusHistoryEntry removido: el feed unificado expone `ActivityItem`
+// (ver `services/v2/activity.staff.service.ts`). Mantengo el comentario
+// como pista para futuras búsquedas si alguien busca el tipo viejo.
 
 export interface V2ApplicationCreatePayload {
   product_id: string

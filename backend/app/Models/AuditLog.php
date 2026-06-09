@@ -61,20 +61,27 @@ class AuditLog extends Model
     ): self {
         $request = request();
 
-        // Determine the actor ID based on authenticated user type
-        $userId = null;
-        $staffId = null;
-        if (array_key_exists('user_id', $options)) {
-            $userId = $options['user_id'];
-        } elseif ($request->user() instanceof StaffAccount) {
-            $staffId = $request->user()->id;
+        // Determine the actor based on authenticated user type. Si el caller
+        // pasa user_id/applicant_id explicitamente respetamos eso; si no, los
+        // inferimos del request actual: StaffAccount -> user_id,
+        // ApplicantAccount -> applicant_id.
+        $userId = $options['user_id'] ?? null;
+        $applicantId = $options['applicant_id'] ?? null;
+
+        $currentUser = $request->user();
+        if ($userId === null && $applicantId === null) {
+            if ($currentUser instanceof StaffAccount) {
+                $userId = $currentUser->id;
+            } elseif ($currentUser instanceof ApplicantAccount) {
+                $applicantId = $currentUser->id;
+            }
         }
 
         $data = [
             'tenant_id' => $tenantId ?? $request->attributes->get('tenant')?->id,
             'action' => $action,
             'user_id' => $userId,
-            'applicant_id' => $options['applicant_id'] ?? null,
+            'applicant_id' => $applicantId,
             'application_id' => $options['application_id'] ?? null,
             'entity_type' => $options['entity_type'] ?? null,
             'entity_id' => $options['entity_id'] ?? null,

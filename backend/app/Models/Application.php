@@ -561,20 +561,17 @@ class Application extends Model
         $assignee = StaffAccount::find($staffId);
         $assigneeName = $assignee?->name ?? 'Usuario desconocido';
 
-        ApplicationStatusHistory::create([
-            'application_id' => $this->id,
+        \App\Services\ActivityRecorder::recordApplicationEvent($this, 'APPLICATION_UPDATED', [
             'from_status' => 'ASSIGNMENT',
             'to_status' => 'ASSIGNMENT',
-            'changed_by' => $assignedById,
-            'changed_by_type' => StaffAccount::class,
             'notes' => "Solicitud asignada a {$assigneeName}",
+            'old_values' => ['assigned_to' => $previousAssignee],
+            'new_values' => ['assigned_to' => $staffId],
             'metadata' => [
-                'action' => 'assigned',
+                'kind' => 'assigned',
                 'assignee_id' => $staffId,
                 'assignee_name' => $assigneeName,
-                'previous_assignee' => $previousAssignee,
             ],
-            'created_at' => now(),
         ]);
     }
 
@@ -642,24 +639,20 @@ class Application extends Model
             ]),
         ]);
 
-        // Record history
         $formattedAmount = number_format($offer['amount'], 2);
-        ApplicationStatusHistory::create([
-            'application_id' => $this->id,
+        \App\Services\ActivityRecorder::recordApplicationEvent($this, 'APPLICATION_UPDATED', [
             'from_status' => 'COUNTER_OFFER',
             'to_status' => 'COUNTER_OFFER',
-            'changed_by' => $staffId,
-            'changed_by_type' => StaffAccount::class,
             'notes' => "Contraoferta enviada: \${$formattedAmount} a {$offer['term_months']} meses" . ($reason ? " - {$reason}" : ''),
+            'new_values' => ['counter_offer' => $offer],
             'metadata' => [
-                'action' => 'counter_offer_sent',
+                'kind' => 'counter_offer_sent',
                 'amount' => $offer['amount'],
                 'term_months' => $offer['term_months'],
                 'interest_rate' => $offer['interest_rate'] ?? null,
                 'monthly_payment' => $offer['monthly_payment'] ?? null,
                 'reason' => $reason,
             ],
-            'created_at' => now(),
         ]);
     }
 
@@ -724,7 +717,17 @@ class Application extends Model
     }
 
     /**
-     * Record status change history.
+     * Record status change. Delega a ActivityRecorder para que el cambio
+     * quede registrado en ambas tablas (application_status_history Y
+     * audit_logs), con el actor explicito que viene del caller (los metodos
+     * de lifecycle como submit/approve/reject reciben el staff_id o el
+     * applicant_id como parametro, no del request HTTP).
+     *
+     * Mapeo from_status/to_status -> AuditAction:
+     *   STATUS_SUBMITTED  -> APPLICATION_SUBMITTED
+     *   STATUS_APPROVED   -> APPLICATION_APPROVED
+     *   STATUS_REJECTED   -> APPLICATION_REJECTED
+     *   otros             -> APPLICATION_UPDATED (status change generico)
      */
     protected function recordStatusChange(
         ?string $fromStatus,
@@ -733,14 +736,22 @@ class Application extends Model
         ?string $changedByType,
         ?string $notes = null
     ): void {
-        ApplicationStatusHistory::record(
-            $this,
-            $fromStatus,
-            $toStatus,
-            $changedBy,
-            $changedByType,
-            $notes
-        );
+        $action = match ($toStatus) {
+            self::STATUS_SUBMITTED => 'APPLICATION_SUBMITTED',
+            self::STATUS_APPROVED  => 'APPLICATION_APPROVED',
+            self::STATUS_REJECTED  => 'APPLICATION_REJECTED',
+            default                => 'APPLICATION_UPDATED',
+        };
+
+        \App\Services\ActivityRecorder::recordApplicationEvent($this, $action, [
+            'from_status' => $fromStatus,
+            'to_status'   => $toStatus,
+            'notes'       => $notes,
+            'old_values'  => ['status' => $fromStatus],
+            'new_values'  => ['status' => $toStatus],
+            'actor_id'    => $changedBy,
+            'actor_type'  => $changedByType,
+        ]);
     }
 
     /**

@@ -12,7 +12,8 @@ export { default as TabNavigation } from './TabNavigation.vue'
 export { default as ReferencesSection } from './ReferencesSection.vue'
 export { default as BankAccountsSection } from './BankAccountsSection.vue'
 export { default as NotesSection } from './NotesSection.vue'
-export { default as TimelineSection } from './TimelineSection.vue'
-export { default as ApiLogsSection } from './ApiLogsSection.vue'
+// Feed unificado de actividad. Reemplaza a TimelineSection + AuditLogList +
+// ApiLogsSection (eliminados). Consume /v2/staff/applications/{id}/activity.
+export { default as ActivityTimeline } from './ActivityTimeline.vue'
 export { default as VerifiableField } from './VerifiableField.vue'
 export { default as ApplicantDataSection } from './ApplicantDataSection.vue'
