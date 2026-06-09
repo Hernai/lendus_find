@@ -1595,6 +1595,103 @@ Migración a Node 22 LTS cuando esté disponible:
 A largo plazo: migrar el server a AlmaLinux 9 elimina esta dependencia. AlmaLinux 9
 tiene glibc 2.34 y `dnf module install nodejs:20` da Node oficial sin parches.
 
+### 24.10 Storage de documentos — disk configurable, NO hardcoded
+
+`DocumentService::upload` (línea 86 del service) elige el disk donde se
+guarda el archivo de cada documento del aplicante (INE, comprobantes,
+selfies). El código histórico tenía hardcoded:
+
+```php
+// MAL — asume que producción siempre tiene S3:
+$disk = config('app.env') === 'production' ? 's3' : 'local';
+```
+
+Eso truena con `Class "League\Flysystem\AwsS3V3\PortableVisibilityConverter"
+not found` cuando el SOFOM arranca sin tener S3/MinIO instalado. Vimos el
+caso con MoneyCapital (2026-06-09).
+
+#### Fix permanente
+
+```php
+$disk = config('filesystems.documents_disk')
+    ?? config('filesystems.default')
+    ?? 'local';
+```
+
+Y en `.env`:
+
+```bash
+# Disk default (logs, exports). Sin cambio.
+FILESYSTEM_DISK=local
+
+# Disk DEDICADO para documentos de aplicantes. Si vacío, usa el default.
+DOCUMENTS_DISK=local
+```
+
+#### Recomendaciones de disk por etapa del SOFOM
+
+| Etapa | Recomendación | Razón |
+|---|---|---|
+| Arranque (< 1k solicitudes) | `DOCUMENTS_DISK=local` | Sin dependencias, sin costos. Storage del server alcanza para ~10 GB |
+| Crecimiento (1k–50k solicitudes) | `DOCUMENTS_DISK=minio` (self-hosted) | Storage S3-compatible sin costos AWS. Permite escalar nodos |
+| Producción a escala (> 50k) | `DOCUMENTS_DISK=s3` (AWS) | Durabilidad 11 nueves, signed URLs gratis, backup automático |
+
+#### Migración local → S3 cuando crezca
+
+Cuando llegue el momento de mover de local a S3/MinIO:
+
+```bash
+# 1. Instalar paquete (en el server con composer cd al APP_DIR)
+composer require league/flysystem-aws-s3-v3
+
+# 2. Configurar credenciales en .env:
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_DEFAULT_REGION=us-east-1
+AWS_BUCKET=moneycapital-documents
+
+# 3. Cambiar el disk
+sed -i 's/^DOCUMENTS_DISK=.*/DOCUMENTS_DISK=s3/' .env
+
+# 4. Migrar archivos existentes preservando el path:
+aws s3 sync storage/app/private/tenants/ s3://moneycapital-documents/tenants/ \
+    --acl private
+
+# 5. Actualizar `documents.storage_disk` en BD:
+ea-php82 artisan tinker --execute="
+\App\Models\Document::where('storage_disk', 'local')->update(['storage_disk' => 's3']);
+"
+
+# 6. Limpiar config y reiniciar
+ea-php82 artisan config:clear
+systemctl restart ea-php82-php-fpm
+
+# 7. Smoke: subir un documento desde el frontend, verificar:
+ea-php82 artisan tinker --execute="
+\$d = \App\Models\Document::latest()->first();
+echo \$d->storage_disk;  // debe ser 's3'
+echo Storage::disk(\$d->storage_disk)->exists(\$d->storage_path) ? 'OK' : 'MISS';
+"
+```
+
+#### Diagnóstico rápido cuando truena el upload
+
+```bash
+# 1. Ver el error
+grep "production.ERROR" storage/logs/laravel.log | tail -1
+
+# 2. Si dice "PortableVisibilityConverter not found":
+#    → S3 está configurado como disk pero el paquete no está instalado
+#    → Solución rápida: DOCUMENTS_DISK=local en .env + restart FPM
+
+# 3. Si dice "Permission denied" o "is not writable":
+chown -R lendus:lendus storage/app
+chmod -R 775 storage/app
+
+# 4. Si dice "AccessDenied" o "InvalidAccessKeyId":
+#    → Credenciales AWS_* en .env están mal o faltan
+```
+
 ### 24.9 Resumen de orden de aplicación en server nuevo
 
 ```bash

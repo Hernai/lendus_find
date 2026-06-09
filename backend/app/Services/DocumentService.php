@@ -83,7 +83,16 @@ class DocumentService
         $entityType = class_basename($documentable);
         $path = "tenants/{$tenant->id}/{$entityType}/{$documentable->id}/documents/{$filename}";
 
-        $disk = config('app.env') === 'production' ? 's3' : 'local';
+        // Disk de almacenamiento. Antes se hardcodeaba `s3` en producción,
+        // pero eso truena con "Class League\Flysystem\AwsS3V3\PortableVisibilityConverter
+        // not found" si el tenant no tiene S3/MinIO instalado (caso de SOFOMS
+        // arrancando en disco local + nginx-served). Ahora se lee de
+        // `filesystems.documents_disk` que cada tenant configura en `.env`
+        // con DOCUMENTS_DISK=local|s3|minio. Si no está declarado, default
+        // al `filesystems.default` de Laravel, último fallback `local`.
+        $disk = config('filesystems.documents_disk')
+            ?? config('filesystems.default')
+            ?? 'local';
 
         // Check for existing document of same type BEFORE storing file
         $existingDoc = Document::where('documentable_type', get_class($documentable))

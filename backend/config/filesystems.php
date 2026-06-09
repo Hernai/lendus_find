@@ -17,6 +17,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Documents Disk
+    |--------------------------------------------------------------------------
+    |
+    | Disco específico para documentos de aplicantes (INE, comprobantes, etc.).
+    | Si está vacío, DocumentService cae al `default` de arriba. Útil cuando
+    | queremos almacenar documentos en un disco distinto al resto (ej. S3 para
+    | documentos sensibles + local para otros archivos).
+    |
+    | Soporta: 'local', 's3', 'minio', cualquier disk declarado en `disks`.
+    | NO uses 's3' si `league/flysystem-aws-s3-v3` no está instalado — truena
+    | con "PortableVisibilityConverter not found" al upload.
+    */
+    'documents_disk' => env('DOCUMENTS_DISK'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Filesystem Disks
     |--------------------------------------------------------------------------
     |
