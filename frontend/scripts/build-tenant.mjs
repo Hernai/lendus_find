@@ -76,7 +76,9 @@ const envLines = [
   `# Generado por scripts/build-tenant.mjs para tenant=${tenant.slug}. NO commitear.`,
   `VITE_TENANT_SLUG=${tenant.slug}`,
   `VITE_APP_NAME=${tenant.appName}`,
-  `VITE_THEME_PRIMARY=${tenant.theme.primary}`,
+  // nativeTheme (ex `theme`): solo splash + status bar nativo. Fallback al
+  // legacy `theme.primary` para builds en transición.
+  `VITE_THEME_PRIMARY=${tenant.nativeTheme?.primary ?? tenant.theme?.primary ?? '#1E40AF'}`,
 ]
 writeFileSync(envFile, envLines.join('\n') + '\n')
 

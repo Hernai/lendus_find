@@ -21,6 +21,31 @@ export type TenantLandingComponent =
   | 'MoneyCapitalLanding'
   | 'FinateaLanding'
 
+/**
+ * Personalizaciones HARD-CODED del tenant. Cuando un campo tiene valor,
+ * ese pedazo del frontend NO respeta el branding configurable del admin
+ * (es un componente .vue con look/copy propio del SOFOM, mantenido en
+ * el repo y desplegado por release). El admin debe ver estos flags como
+ * read-only para no engañar a quien configura.
+ *
+ * Si un campo es `undefined`/ausente, el sistema usa el flujo genérico
+ * y respeta el branding del admin (TenantBranding en BD).
+ */
+export interface TenantCustomizations {
+  /** Componente Vue dedicado para la página marketing (landing). */
+  landing?: TenantLandingComponent
+  /**
+   * Identificador del flujo de auth custom. `undefined` = flujo estándar
+   * (selector de método + OTP + PIN). Cuando un SOFOM pide pantallas con
+   * branding extremo o métodos exóticos, se mete aquí.
+   */
+  authFlow?: string
+  /** Componente del simulador custom (gráficos, CAT desglosado, etc.). */
+  simulator?: string
+  /** Dashboard post-login custom (promos, productos cruzados). */
+  dashboard?: string
+}
+
 export interface TenantConfig {
   /** Slug del tenant (mismo valor que `X-Tenant-ID`). */
   slug: string
@@ -49,8 +74,16 @@ export interface TenantConfig {
     splashBackgroundColor: string
   }
 
-  theme: {
-    /** Color primario del tenant (HEX). */
+  /**
+   * Theme NATIVO. Afecta SOLO al splash screen + status bar de iOS/Android
+   * (donde el OS no puede leer el branding del backend al vuelo).
+   *
+   * Para colores runtime de la SPA web/PWA (botones, navbar, etc.) la
+   * fuente de verdad es `TenantBranding` en BD, configurable desde el
+   * admin sin redeploy.
+   */
+  nativeTheme: {
+    /** Color primario del tenant (HEX). Solo splash + status bar. */
     primary: string
     /** Estilo de la status bar nativa. */
     statusBar: 'light' | 'dark'
@@ -72,12 +105,17 @@ export interface TenantConfig {
   deepLinkHost?: string
 
   /**
-   * Componente de landing del tenant. Si se omite, el dispatcher usa la
-   * landing genérica (`LandingView`).
+   * Personalizaciones HARD-CODED del tenant. Cada campo poblado significa
+   * que esa parte del frontend tiene un componente custom propio que NO
+   * respeta el branding del admin (requiere release para cambiar). Ver
+   * `TenantCustomizations` para detalle.
+   *
+   * Si necesitas que algo nuevo sea customizable hard, agrega el campo
+   * al type y declara aqui qué componente lo implementa.
    */
-  landingComponent?: TenantLandingComponent
+  custom?: TenantCustomizations
 
-  /** Configuración del flujo de autenticación per-tenant. */
+  /** Configuración del flujo de autenticación per-tenant (métodos visibles). */
   auth?: {
     /** Métodos permitidos en `/:tenant/auth`. Si solo hay 1, se redirige directo. */
     methods: AuthMethod[]

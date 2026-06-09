@@ -24,7 +24,9 @@ const config: TenantConfig = {
     splashDark: 'tenants/template/splash-dark.png',
     splashBackgroundColor: '#FFFFFF',
   },
-  theme: {
+  // Theme nativo: solo afecta splash + status bar de iOS/Android.
+  // El branding web (botones, navbar, etc.) lo controla el admin desde BD.
+  nativeTheme: {
     primary: '#1E40AF',
     statusBar: 'dark',
   },
@@ -35,6 +37,13 @@ const config: TenantConfig = {
     apnsBundleId: 'mx.template.lendus',
   },
   deepLinkHost: 'app.template.mx',
+  // Personalizaciones hard-coded del tenant. Cada campo poblado significa
+  // un componente Vue dedicado que NO respeta el branding del admin
+  // (requiere release para cambiar). Dejar `custom` vacío u omitido
+  // significa que TODO el frontend respeta el admin runtime.
+  // Ejemplo: si tu SOFOM quiere su landing propia, agrega:
+  //   custom: { landing: 'AcmeLanding' }
+  // y registra el componente en `router/tenantLandings.ts`.
 }
 
 export default config

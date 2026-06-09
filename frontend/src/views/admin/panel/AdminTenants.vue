@@ -15,6 +15,9 @@ import { useToast, formatPhoneValue, stripPhoneFormatting, PHONE_INPUT_CONFIG } 
 import { getErrorMessage } from '@/types/api'
 import { logger } from '@/utils/logger'
 import { formatDate } from '@/utils/formatters'
+// Registry de configs per-tenant en build-time. Sirve para mostrar al
+// admin qué customizaciones hard-coded tiene cada tenant.
+import { getTenantCustomizations } from '@tenants'
 
 const log = logger.child('AdminTenants')
 const toast = useToast()
@@ -90,7 +93,46 @@ const configTenant = ref<Tenant | null>(null)
 const configData = ref<TenantConfig | null>(null)
 const isLoadingConfig = ref(false)
 const isSavingConfig = ref(false)
-const configActiveTab = ref<'branding' | 'apis'>('branding')
+const configActiveTab = ref<'branding' | 'apis' | 'custom'>('branding')
+
+// Personalizaciones hard-coded del tenant. Se leen estáticamente del
+// archivo `frontend/tenants/<slug>.tenant.ts` (no del backend), porque
+// son una decisión de código que viaja con el bundle del frontend. Si
+// la entrada está poblada, ese pedazo NO respeta el branding del admin.
+const customizationRows = computed(() => {
+  const slug = configTenant.value?.slug ?? null
+  const c = getTenantCustomizations(slug)
+  return [
+    {
+      key: 'landing',
+      label: 'Página de inicio (landing)',
+      value: c.landing,
+      description: 'Componente Vue dedicado para la página marketing.',
+      fallbackDescription: 'Landing genérica de LendusFind.',
+    },
+    {
+      key: 'authFlow',
+      label: 'Flujo de autenticación',
+      value: c.authFlow,
+      description: 'Pantallas de login/registro con look propio.',
+      fallbackDescription: 'Selector de método + OTP + PIN estándar.',
+    },
+    {
+      key: 'simulator',
+      label: 'Simulador de crédito',
+      value: c.simulator,
+      description: 'Calculadora con variables/visualización propia.',
+      fallbackDescription: 'Simulador estándar con productos del tenant.',
+    },
+    {
+      key: 'dashboard',
+      label: 'Dashboard post-login',
+      value: c.dashboard,
+      description: 'Home del aplicante con promociones/CTAs propios.',
+      fallbackDescription: 'Dashboard estándar con resumen y solicitudes.',
+    },
+  ]
+})
 const configSaveMessage = ref('')
 const configSaveError = ref('')
 
@@ -1285,10 +1327,11 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
               <button
                 v-for="tab in [
                   { id: 'branding', label: 'Branding', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01' },
-                  { id: 'apis', label: 'Integraciones', icon: 'M13 10V3L4 14h7v7l9-11h-7z' }
+                  { id: 'apis', label: 'Integraciones', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
+                  { id: 'custom', label: 'Personalizaciones', icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' }
                 ]"
                 :key="tab.id"
-                @click="configActiveTab = tab.id as 'branding' | 'apis'"
+                @click="configActiveTab = tab.id as 'branding' | 'apis' | 'custom'"
                 :class="[
                   'flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all border-b-2 -mb-px',
                   configActiveTab === tab.id
@@ -1318,6 +1361,63 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                 :tenant="{ name: configTenant?.name || '', slug: configTenant?.slug || '' }"
                 :show-preview-toggle="true"
               />
+            </div>
+
+            <!-- Personalizaciones Tab (read-only). Refleja lo que el tenant
+                 declara en `frontend/tenants/<slug>.tenant.ts`. Las piezas
+                 marcadas como "custom hard" NO respetan el branding del
+                 admin: son componentes Vue dedicados, requieren release
+                 para cambiar. -->
+            <div v-show="configActiveTab === 'custom'" class="p-6 space-y-4">
+              <div class="mb-4">
+                <h3 class="text-sm font-semibold text-gray-900">Personalizaciones del tenant</h3>
+                <p class="text-xs text-gray-500 mt-0.5">
+                  Indica qué pedazos del frontend tienen un componente Vue dedicado
+                  y NO respetan el branding configurado arriba. Para cambiarlos
+                  hay que pedir release del equipo de desarrollo.
+                </p>
+              </div>
+              <ul class="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+                <li v-for="row in customizationRows" :key="row.key" class="flex items-start gap-3 p-4">
+                  <span
+                    :class="[
+                      'mt-0.5 flex-shrink-0 w-2 h-2 rounded-full',
+                      row.value ? 'bg-emerald-500' : 'bg-gray-300',
+                    ]"
+                  />
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                      <p class="text-sm font-medium text-gray-900">{{ row.label }}</p>
+                      <span
+                        v-if="row.value"
+                        class="px-1.5 py-0.5 text-xs font-medium rounded-md bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200"
+                      >
+                        Custom hard
+                      </span>
+                      <span
+                        v-else
+                        class="px-1.5 py-0.5 text-xs font-medium rounded-md bg-gray-50 text-gray-600 ring-1 ring-inset ring-gray-200"
+                      >
+                        Estándar
+                      </span>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">
+                      <template v-if="row.value">
+                        Componente: <code class="font-mono text-gray-700">{{ row.value }}</code>
+                        · {{ row.description }}
+                      </template>
+                      <template v-else>
+                        {{ row.fallbackDescription }} · Respeta el branding del admin.
+                      </template>
+                    </p>
+                  </div>
+                </li>
+              </ul>
+              <p class="text-xs text-gray-400 mt-3">
+                Para agregar/quitar customizaciones, edita
+                <code class="font-mono text-gray-600">frontend/tenants/{{ configTenant?.slug }}.tenant.ts</code>
+                y haz release.
+              </p>
             </div>
 
             <!-- APIs Tab -->

@@ -20,12 +20,14 @@ const config: TenantConfig = {
     splash: 'tenants/finatea/splash.png',
     splashBackgroundColor: '#0D9488',
   },
-  theme: {
+  nativeTheme: {
     primary: '#0D9488',
     statusBar: 'light',
   },
   deepLinkHost: 'app.finatea.mx',
-  landingComponent: 'FinateaLanding',
+  custom: {
+    landing: 'FinateaLanding',
+  },
   auth: {
     methods: ['phone', 'whatsapp'],
     defaultMethod: 'whatsapp',

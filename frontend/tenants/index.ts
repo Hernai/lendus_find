@@ -23,4 +23,34 @@ export function getTenantConfig(slug: string | null | undefined): TenantConfig |
   return tenants[slug] ?? null
 }
 
-export type { TenantConfig, AuthMethod, TenantLandingComponent } from './_types'
+export type {
+  TenantConfig,
+  AuthMethod,
+  TenantLandingComponent,
+  TenantCustomizations,
+} from './_types'
+
+/**
+ * Devuelve el set de personalizaciones hard-coded del tenant. Las llaves
+ * pobladas indican qué pedazos del frontend NO respetan el branding del
+ * admin (son componentes Vue dedicados, requieren release para cambiar).
+ * Las llaves ausentes/null significan que ese pedazo usa el flujo
+ * estándar y respeta el admin.
+ *
+ * Útil para el admin: mostrar al SOFOM qué cosas son configurables y
+ * cuáles requieren release del dev team.
+ */
+export function getTenantCustomizations(slug: string | null | undefined): {
+  landing: string | null
+  authFlow: string | null
+  simulator: string | null
+  dashboard: string | null
+} {
+  const c = getTenantConfig(slug)?.custom
+  return {
+    landing: c?.landing ?? null,
+    authFlow: c?.authFlow ?? null,
+    simulator: c?.simulator ?? null,
+    dashboard: c?.dashboard ?? null,
+  }
+}

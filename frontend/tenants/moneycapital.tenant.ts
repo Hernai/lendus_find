@@ -19,13 +19,17 @@ const config: TenantConfig = {
     splash: 'tenants/moneycapital/splash.png',
     splashBackgroundColor: '#5B21B6',
   },
-  theme: {
+  nativeTheme: {
     primary: '#5B21B6',
     statusBar: 'light',
   },
   // push se configurará cuando MoneyCapital provea credenciales reales.
   deepLinkHost: 'app.moneycapital.mx',
-  landingComponent: 'MoneyCapitalLanding',
+  custom: {
+    landing: 'MoneyCapitalLanding',
+    // Auth, simulador y dashboard usan el flujo estándar y respetan el
+    // branding del admin.
+  },
   auth: {
     methods: ['phone', 'email'],
     defaultMethod: 'phone',

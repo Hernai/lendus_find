@@ -36,7 +36,10 @@ const tenantSlug = computed(() => {
 
 const resolvedComponent = computed<Component>(() => {
   const config = getTenantConfig(tenantSlug.value)
-  const key = config?.landingComponent
+  // `custom.landing` reemplaza al legacy `landingComponent`. Mantenemos
+  // compat para builds en transición que aún tengan la forma vieja, pero
+  // la fuente actual es `custom.landing`.
+  const key = config?.custom?.landing ?? (config as { landingComponent?: TenantLandingComponent } | undefined)?.landingComponent
   if (key && LANDING_COMPONENTS[key]) {
     return LANDING_COMPONENTS[key]
   }

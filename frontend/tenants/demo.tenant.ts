@@ -17,13 +17,17 @@ const config: TenantConfig = {
     splash: 'tenants/demo/splash.png',
     splashBackgroundColor: '#1E40AF',
   },
-  theme: {
+  nativeTheme: {
     primary: '#1E40AF',
     statusBar: 'light',
   },
   // push se configurará en Fase 6 cuando haya credenciales reales.
   deepLinkHost: 'demo.lendus.mx',
-  landingComponent: 'DemoLanding',
+  custom: {
+    landing: 'DemoLanding',
+    // El resto del flujo (auth, simulador, dashboard) es estándar y
+    // respeta el branding del admin.
+  },
   auth: {
     methods: ['phone', 'whatsapp', 'email'],
     defaultMethod: 'phone',
