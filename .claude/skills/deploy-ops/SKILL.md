@@ -1333,32 +1333,88 @@ acelerar puedes forzarlo via tinker:
 });"
 ```
 
-### 24.2 PgBouncer — `max_prepared_statements`
+### 24.2 PgBouncer + Laravel — desactivar prepared statements server-side
 
-PgBouncer 1.21+ soporta protocol-level prepared statement pooling, lo que
-permite usar `pool_mode=transaction` (mejor) sin que Laravel rompa con
-`SQLSTATE 26000 "no existe la sentencia preparada pdo_stmt_X"`.
+PgBouncer en `pool_mode=transaction` libera el backend Postgres al pool tras
+cada `COMMIT`. Eso destruye los prepared statements server-side que Laravel
+registra por default (`PREPARE pdo_stmt_X` + `EXECUTE pdo_stmt_X`). La
+siguiente transaction agarra un backend distinto del pool donde ese
+`pdo_stmt_X` no existe y truena con `SQLSTATE 26000` o `42P05`. Cualquier
+query posterior dentro de la misma tx cae con `SQLSTATE 25P02 "In failed
+sql transaction"`.
 
-Editar `/etc/pgbouncer/pgbouncer.ini`:
+#### Síntoma observado en LendusFind (2026-06-09)
+
+`POST /v2/applicant/auth/otp/verify` devolvía 500 en producción con
+`5512345678` y cualquier identifier. El log mostraba **solo** el 25P02 en
+el `INSERT INTO applicant_accounts`, sin el error primario que abortó la
+tx. Restart de PgBouncer y de PHP-FPM no resolvían — el bug se reproducía
+en cada request porque era estructural.
+
+#### Fix probado en producción
+
+Agregar `PDO::PGSQL_ATTR_DISABLE_PREPARES => true` al `options` de la
+conexión `pgsql` en `config/database.php`:
+
+```php
+'options' => [
+    \PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', true),
+    \PDO::PGSQL_ATTR_DISABLE_PREPARES => env('DB_DISABLE_PREPARES', true),
+],
+```
+
+Esto desactiva prepared statements **server-side** pero mantiene el
+parameter binding seguro de PDO (los `?` parameters van bound en el
+protocolo, no interpolados como strings). Trade-off: pierdes el cache
+parse-once-execute-many del backend, pero PgBouncer ya lo invalida en
+cada COMMIT igual. Impacto en perf: ~1 ms por query, no perceptible.
+
+Override con `DB_DISABLE_PREPARES=false` SOLO cuando conectes directo a
+Postgres sin PgBouncer (ej. local dev).
+
+#### Approach alternativo (PgBouncer 1.21+ con protocol-level pooling)
+
+Si tu PgBouncer es >= 1.21, en teoría `max_prepared_statements > 0`
+habilita protocol-level prepared statement pooling. En la práctica, en
+nuestro despliegue (PgBouncer en CentOS con versión `<1.21`) este approach
+**no fue suficiente** — el verifyOtp seguía tronando con 25P02. El fix
+del lado cliente (`PGSQL_ATTR_DISABLE_PREPARES`) es más robusto y no
+depende de la versión del PgBouncer remoto.
 
 ```ini
+# /etc/pgbouncer/pgbouncer.ini (solo si pgbouncer --version >= 1.21)
 pool_mode = transaction
 max_prepared_statements = 100
 ```
 
 ```bash
-# Validar versión (necesario >= 1.21)
-pgbouncer --version
-
-# Aplicar
+pgbouncer --version  # confirmar >= 1.21 antes de aplicar
 systemctl restart pgbouncer
 ```
 
-NUNCA usar `PDO::ATTR_EMULATE_PREPARES => true` como workaround. PDO
-interpola los `true` como `1` (int) y Postgres rechaza con SQLSTATE 42883
-"el operador no existe: boolean = integer" cualquier query estilo
+#### NUNCA usar `ATTR_EMULATE_PREPARES`
+
+`PDO::ATTR_EMULATE_PREPARES => true` rompe booleans: PDO interpola
+`true` como `1` (int) y Postgres rechaza con SQLSTATE 42883 "el operador
+no existe: boolean = integer" cualquier query estilo
 `where('is_active', true)`. Rompe `Tenant::activeListForSelector`,
 `/v2/config` público, etc.
+
+#### Diagnóstico rápido del 25P02
+
+Cuando aparezca `SQLSTATE 25P02` en el log de Laravel:
+
+```bash
+# 1. ¿Solo flujos con DB::transaction grandes fallan?
+#    Sí → casi seguro es PgBouncer + prepared statements
+# 2. ¿El INSERT que aparece en el log es el primero de su tx?
+#    Sí → el error PRIMARIO no se está logueando, está oculto detrás del 25P02
+# 3. Verificar que PGSQL_ATTR_DISABLE_PREPARES esté en config/database.php:
+grep PGSQL_ATTR_DISABLE_PREPARES config/database.php
+# 4. Si no está → ese es el bug. Agregar y reiniciar FPM:
+ea-php82 artisan config:clear
+systemctl restart ea-php82-php-fpm
+```
 
 ### 24.3 PHP-FPM pool — mantener más workers warm
 
