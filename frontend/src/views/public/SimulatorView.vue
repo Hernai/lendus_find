@@ -15,6 +15,46 @@ const step = ref<'select' | 'simulate'>('select')
 
 const products = computed(() => tenantStore.activeProducts)
 
+// Normaliza `required_docs` a una lista plana de docs requeridos. El backend
+// puede devolver 3 formatos:
+//   - Legacy flat:     ['INE_FRONT', ...]
+//   - Segmentado:      { nationals: [...], foreigners: [...] }
+//   - Objetos:         [{ type, required, description }, ...]
+// Solo conservamos required=true y aplanamos a un shape uniforme para el
+// template. Sin esto, hacer `.filter` sobre el objeto {nationals, foreigners}
+// truena con "filter is not a function".
+interface NormalizedDoc { type: string; description: string }
+const requiredDocs = computed<NormalizedDoc[]>(() => {
+  const raw = selectedProduct.value?.required_docs as unknown
+  if (!raw) return []
+
+  const extract = (item: unknown): NormalizedDoc | null => {
+    if (typeof item === 'string') return { type: item, description: item }
+    if (item && typeof item === 'object') {
+      const it = item as { type?: unknown; required?: unknown; description?: unknown }
+      if (it.required === false) return null
+      const type = typeof it.type === 'string' ? it.type : null
+      if (!type) return null
+      const description = typeof it.description === 'string' ? it.description : type
+      return { type, description }
+    }
+    return null
+  }
+
+  let items: unknown[] = []
+  if (Array.isArray(raw)) {
+    items = raw
+  } else if (raw && typeof raw === 'object') {
+    const seg = raw as { nationals?: unknown[]; foreigners?: unknown[] }
+    items = [...(seg.nationals ?? []), ...(seg.foreigners ?? [])]
+  }
+
+  const seen = new Set<string>()
+  return items
+    .map(extract)
+    .filter((d): d is NormalizedDoc => !!d && !seen.has(d.type) && seen.add(d.type) !== null)
+})
+
 const selectProduct = (product: Product) => {
   selectedProduct.value = product
   applicationStore.setSelectedProduct(product)
@@ -146,11 +186,11 @@ onMounted(async () => {
                   </svg>
                   <span class="text-gray-600">INE/IFE vigente</span>
                 </li>
-                <li v-for="doc in (selectedProduct?.required_docs ?? []).filter(d => typeof d === 'object' && d.required)" :key="typeof doc === 'object' ? doc.type : doc" class="flex items-start gap-3">
+                <li v-for="doc in requiredDocs" :key="doc.type" class="flex items-start gap-3">
                   <svg class="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                   </svg>
-                  <span class="text-gray-600">{{ typeof doc === 'object' ? doc.description : doc }}</span>
+                  <span class="text-gray-600">{{ doc.description }}</span>
                 </li>
                 <li class="flex items-start gap-3">
                   <svg class="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">

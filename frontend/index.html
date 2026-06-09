@@ -15,8 +15,12 @@
          Sin `crossorigin` porque el manifest es público (no necesita Bearer
          token ni cookies). Con `use-credentials` el browser exige
          Access-Control-Allow-Credentials:true y el backend tiene
-         supports_credentials=false por diseño (auth Bearer, no cookies). -->
-    <link rel="manifest" href="%VITE_API_URL%/v2/public/manifest">
+         supports_credentials=false por diseño (auth Bearer, no cookies).
+         `?tenant=<slug>` es obligatorio porque el browser pide el manifest
+         SIN nuestro interceptor que agrega X-Tenant-ID; el backend lee el
+         slug del query param como fallback. `VITE_TENANT_SLUG` se inyecta
+         en build-tenant.mjs por tenant. -->
+    <link rel="manifest" href="%VITE_API_URL%/v2/public/manifest?tenant=%VITE_TENANT_SLUG%">
     <title>LendusFind</title>
   </head>
   <body>

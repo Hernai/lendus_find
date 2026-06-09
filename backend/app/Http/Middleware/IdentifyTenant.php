@@ -70,23 +70,34 @@ class IdentifyTenant
             return $this->findTenantByIdOrSlug($tenantId);
         }
 
-        // 2. Check subdomain
+        // 2. Check subdomain (probamos pero NO bloqueamos si no resuelve:
+        //    queremos seguir al query param fallback. Antes este branch
+        //    cortaba con `return` aunque devolviera null y nunca llegaba
+        //    al query — fallaba con hosts tipo 127.0.0.1 cuyo "subdomain"
+        //    extraido es "127" y no matchea ningun tenant).
         $subdomain = $this->extractSubdomain($request->getHost());
         if ($subdomain !== null) {
-            return $this->findTenantByIdOrSlug($subdomain);
+            $tenant = $this->findTenantByIdOrSlug($subdomain);
+            if ($tenant !== null) {
+                return $tenant;
+            }
         }
 
-        // 3. Check query parameter (for development/testing only)
-        if (app()->environment('local', 'testing')) {
-            $slug = $request->query('tenant');
-            if ($slug !== null && $slug !== '') {
-                return $this->findTenantByIdOrSlug($slug);
+        // 3. Check query parameter. Necesario para requests que NO controlan
+        //    sus headers (ej. <link rel="manifest"> que el browser pide solo,
+        //    sin nuestro interceptor que agrega X-Tenant-ID). El slug no es
+        //    info sensible (esta en el subdominio publico del tenant).
+        $slug = $request->query('tenant');
+        if (is_string($slug) && $slug !== '') {
+            $tenant = $this->findTenantByIdOrSlug($slug);
+            if ($tenant !== null) {
+                return $tenant;
             }
+        }
 
-            // 4. Default tenant for development (convenience for local dev)
-            if (app()->environment('local')) {
-                return Tenant::first();
-            }
+        // 4. Default tenant for development (convenience for local dev)
+        if (app()->environment('local')) {
+            return Tenant::first();
         }
 
         return null;
