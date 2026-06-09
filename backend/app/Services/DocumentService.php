@@ -394,6 +394,19 @@ class DocumentService
             $docTypes = $requiredTypes;
         }
 
+        // Normaliza $docTypes para que siempre sea array<string>.
+        // El seeder actual guarda cada doc como ['type'=>..., 'required'=>...,
+        // 'description'=>...]; el formato legacy es array<string>. Solo
+        // consideramos los marcados required=true para no bloquear el submit
+        // por documentos opcionales.
+        $docTypes = array_values(array_filter(array_map(function ($d) {
+            if (is_array($d)) {
+                $required = $d['required'] ?? true;
+                return $required ? ($d['type'] ?? null) : null;
+            }
+            return $d;
+        }, $docTypes)));
+
         $existingTypes = Document::where('documentable_type', get_class($documentable))
             ->where('documentable_id', $documentable->id)
             ->currentVersion()

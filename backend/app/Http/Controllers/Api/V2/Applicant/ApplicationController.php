@@ -37,8 +37,12 @@ class ApplicationController extends Controller
         /** @var ApplicantAccount $account */
         $account = $request->user();
 
+        // Sin perfil aun = applicant recien registrado, todavia no completo
+        // el primer paso del onboarding. Devolvemos lista vacia en lugar de
+        // 400 para que el OnboardingLayout pueda inicializarse y dirigirlo
+        // a crear su perfil sin romper la UX con un error.
         if (!$account->person) {
-            return $this->badRequest('PROFILE_INCOMPLETE', 'Debes completar tu perfil antes de ver solicitudes.');
+            return $this->success(['applications' => []]);
         }
 
         $status = $request->query('status');
@@ -83,7 +87,14 @@ class ApplicationController extends Controller
         /** @var ApplicantAccount $account */
         $account = $request->user();
 
-        if (!$account->person) {
+        // Usamos getPersonOrFind() en lugar de $account->person porque Sanctum
+        // cachea el ApplicantAccount por 60s (CachedPersonalAccessToken). Si
+        // el perfil acaba de crearse en /profile/personal-data, el cache aun
+        // tiene person_id=null y la relacion belongsTo no encuentra nada.
+        // getPersonOrFind() hace fallback a Person::where('account_id', ...).
+        $person = $account->getPersonOrFind();
+
+        if (!$person) {
             return $this->badRequest('PROFILE_INCOMPLETE', 'Debes completar tu perfil antes de solicitar un crédito.');
         }
 
@@ -94,7 +105,7 @@ class ApplicationController extends Controller
             Application::STATUS_SYNCED,
         ];
 
-        $activeApplication = Application::where('person_id', $account->person->id)
+        $activeApplication = Application::where('person_id', $person->id)
             ->where('tenant_id', $account->tenant_id)
             ->whereNotIn('status', $terminalStatuses)
             ->first();
@@ -127,7 +138,7 @@ class ApplicationController extends Controller
 
         $application = $this->service->createForPerson(
             $tenant,
-            $account->person,
+            $person,
             $product,
             [
                 'amount' => $validated['amount'],

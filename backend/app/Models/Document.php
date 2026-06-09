@@ -114,6 +114,7 @@ class Document extends Model
     public const TYPE_PROPERTY_DEED = 'PROPERTY_DEED';
 
     // Income
+    public const TYPE_PROOF_OF_INCOME = 'PROOF_OF_INCOME';
     public const TYPE_PAYSLIP = 'PAYSLIP';
     public const TYPE_BANK_STATEMENT = 'BANK_STATEMENT';
     public const TYPE_TAX_RETURN = 'TAX_RETURN';
@@ -181,6 +182,7 @@ class Document extends Model
                 self::TYPE_PROPERTY_DEED,
             ],
             self::CATEGORY_INCOME => [
+                self::TYPE_PROOF_OF_INCOME,
                 self::TYPE_PAYSLIP,
                 self::TYPE_BANK_STATEMENT,
                 self::TYPE_TAX_RETURN,
@@ -261,14 +263,15 @@ class Document extends Model
 
     /**
      * Get all valid document types.
+     *
+     * Delegamos al enum DocumentType para que sea la fuente unica de verdad:
+     * cualquier `case` nuevo en el enum queda automaticamente aceptado por
+     * el validador de upload sin riesgo de drift entre lo que el admin ve
+     * en `staff/documents/types` (que lee el enum) y lo que aqui se valida.
      */
     public static function validTypes(): array
     {
-        $types = [];
-        foreach (self::typesByCategory() as $categoryTypes) {
-            $types = array_merge($types, $categoryTypes);
-        }
-        return $types;
+        return array_map(fn ($c) => $c->value, \App\Enums\DocumentType::cases());
     }
 
     /**

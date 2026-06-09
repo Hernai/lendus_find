@@ -32,6 +32,7 @@ enum DocumentType: string
     case PROPERTY_DEED = 'PROPERTY_DEED';
 
     // Income documents
+    case PROOF_OF_INCOME = 'PROOF_OF_INCOME';
     case PAYSLIP = 'PAYSLIP';
     case PAYSLIP_1 = 'PAYSLIP_1';
     case PAYSLIP_2 = 'PAYSLIP_2';
@@ -100,6 +101,7 @@ enum DocumentType: string
             self::LEASE_AGREEMENT => 'Contrato de arrendamiento',
             self::PROPERTY_DEED => 'Escrituras',
             // Income
+            self::PROOF_OF_INCOME => 'Comprobante de ingresos',
             self::PAYSLIP => 'Recibo de nómina',
             self::PAYSLIP_1 => 'Recibo de nómina 1',
             self::PAYSLIP_2 => 'Recibo de nómina 2',

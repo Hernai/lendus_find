@@ -75,6 +75,51 @@ class Product extends Model
     }
 
     /**
+     * Devuelve la lista plana de TYPES de documentos requeridos.
+     *
+     * Acepta los 3 formatos historicos en BD:
+     *   - Legacy flat: ['INE_FRONT', 'INE_BACK']
+     *   - Segmentado: {nationals: [...], foreigners: [...]} con strings u objetos
+     *   - Objetos:    {nationals: [{type, required, description}, ...]}
+     *
+     * Solo incluye docs marcados required=true (los opcionales no bloquean
+     * el submit ni cuentan como "faltantes").
+     *
+     * Si $isForeigner es null y la estructura esta segmentada, combina ambas
+     * categorias. Es el comportamiento seguro para validaciones que no
+     * conocen aun la nacionalidad del aplicante.
+     */
+    public function requiredDocumentTypes(?bool $isForeigner = null): array
+    {
+        $raw = $this->required_documents ?? $this->required_docs ?? [];
+        if (!$raw) {
+            return [];
+        }
+
+        if (is_array($raw) && (isset($raw['nationals']) || isset($raw['foreigners']))) {
+            if ($isForeigner === true) {
+                $items = $raw['foreigners'] ?? [];
+            } elseif ($isForeigner === false) {
+                $items = $raw['nationals'] ?? [];
+            } else {
+                $items = array_merge($raw['nationals'] ?? [], $raw['foreigners'] ?? []);
+            }
+        } else {
+            $items = $raw;
+        }
+
+        $types = array_map(function ($item) {
+            if (is_array($item)) {
+                $required = $item['required'] ?? true;
+                return $required ? ($item['type'] ?? null) : null;
+            }
+            return $item;
+        }, $items);
+
+        return array_values(array_unique(array_filter($types, fn ($t) => is_string($t) && $t !== '')));
+    }
+
+    /**
      * Scope to active products.
      */
     public function scopeActive($query)

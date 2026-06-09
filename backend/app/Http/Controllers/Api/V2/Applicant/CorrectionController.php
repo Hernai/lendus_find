@@ -159,16 +159,11 @@ class CorrectionController extends Controller
                     ];
                 }
 
-                // Add timeline entry via ApplicationStatusHistory
-                ApplicationStatusHistory::create([
-                    'application_id' => $application->id,
+                \App\Services\ActivityRecorder::recordApplicationEvent($application, 'DATA_CORRECTED', [
                     'from_status' => 'DATA_CORRECTED',
                     'to_status' => 'DATA_CORRECTED',
-                    'changed_by' => $account->id,
-                    'changed_by_type' => ApplicantAccount::class,
                     'notes' => "Dato corregido: {$this->getFieldLabel($fieldName)}",
                     'metadata' => $metadata,
-                    'created_at' => now(),
                 ]);
             }
 

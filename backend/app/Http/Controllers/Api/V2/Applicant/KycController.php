@@ -156,8 +156,11 @@ class KycController extends Controller
             return null;
         }
 
-        // First try to find existing person
-        $person = $user->person;
+        // First try to find existing person. Usamos getPersonOrFind() que
+        // hace fallback a Person::where('account_id', ...) por si el cache
+        // de Sanctum (CachedPersonalAccessToken, TTL 60s) tiene una version
+        // vieja del account sin person_id sincronizado.
+        $person = $user->getPersonOrFind();
         if ($person) {
             return $person;
         }

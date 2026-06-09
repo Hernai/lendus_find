@@ -95,25 +95,35 @@ const isUnrejecting = ref(false)
 // Rejection reasons from backend enum via tenantStore.options
 const rejectionReasons = computed(() => tenantStore.options.documentRejectionReason ?? [])
 
-// Normalize required documents to array (handles both legacy array and new object format)
-const normalizedRequiredDocuments = computed(() => {
-  const requiredDocs = props.requiredDocuments
+// Normalize required documents to a flat array<string> of types.
+// El backend manda 3 formatos historicos:
+//   - Legacy flat: ['INE_FRONT', ...]
+//   - Segmentado:  {nationals: [...], foreigners: [...]} (con strings u objetos)
+//   - Objetos:     [{type, required, description}, ...]
+// Solo respetamos required=true para no marcar opcionales como faltantes.
+const normalizedRequiredDocuments = computed<string[]>(() => {
+  const requiredDocs = props.requiredDocuments as unknown
 
-  // If it's already an array, return as-is
+  const extractType = (item: unknown): string | null => {
+    if (typeof item === 'string') return item
+    if (item && typeof item === 'object') {
+      const it = item as { type?: unknown; required?: unknown }
+      if (it.required === false) return null
+      return typeof it.type === 'string' ? it.type : null
+    }
+    return null
+  }
+
+  let items: unknown[] = []
   if (Array.isArray(requiredDocs)) {
-    return requiredDocs
+    items = requiredDocs
+  } else if (requiredDocs && typeof requiredDocs === 'object') {
+    const obj = requiredDocs as { nationals?: unknown[]; foreigners?: unknown[] }
+    items = [...(obj.nationals ?? []), ...(obj.foreigners ?? [])]
   }
 
-  // If it's an object with nationals/foreigners, we can't determine which to use
-  // without nationality info, so we'll combine both to be safe
-  if (typeof requiredDocs === 'object' && requiredDocs !== null) {
-    const nationals = requiredDocs.nationals || []
-    const foreigners = requiredDocs.foreigners || []
-    // Combine and deduplicate
-    return [...new Set([...nationals, ...foreigners])]
-  }
-
-  return []
+  const types = items.map(extractType).filter((t): t is string => !!t)
+  return [...new Set(types)]
 })
 
 // Computed

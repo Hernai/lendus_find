@@ -291,24 +291,43 @@ class ConfigController extends Controller
 
     /**
      * Format an array of document types with descriptions.
+     *
+     * Acepta dos formatos en BD:
+     *   - Legacy: array de strings, ej. ['INE_FRONT', 'INE_BACK', ...]
+     *   - Actual: array de objetos {type, required, description}, como lo
+     *     guarda DemoDataSeeder y los seeders de tenants reales.
+     *
+     * Normaliza ambos al shape unificado que el frontend espera:
+     *   [{type: 'INE_FRONT', required: true, description: 'INE (Frente)'}]
      */
     private function formatDocArray(array $docs): array
     {
         return array_map(function ($doc) {
-            // Try to get description from DocumentType enum
-            $description = $doc;
+            // Si ya viene como objeto/array, extraemos el type y lo
+            // re-formateamos para garantizar el shape esperado.
+            if (is_array($doc)) {
+                $type = $doc['type'] ?? null;
+                $required = $doc['required'] ?? true;
+                $description = $doc['description'] ?? $type;
+            } else {
+                $type = $doc;
+                $required = true;
+                $description = $doc;
+            }
+
+            // Enriquecemos description desde el enum si esta disponible.
             try {
-                $docType = \App\Enums\DocumentType::tryFrom($doc);
+                $docType = \App\Enums\DocumentType::tryFrom($type);
                 if ($docType) {
                     $description = $docType->description();
                 }
             } catch (\Throwable) {
-                // Fallback to raw type if enum doesn't have this value
+                // Fallback: usamos la description ya calculada arriba.
             }
 
             return [
-                'type' => $doc,
-                'required' => true,
+                'type' => $type,
+                'required' => $required,
                 'description' => $description,
             ];
         }, $docs);

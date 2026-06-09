@@ -80,10 +80,16 @@ class CachedPersonalAccessToken extends PersonalAccessToken
             /** @var static|null $found */
             $found = parent::findToken($token);
             if ($found) {
-                // Pre-carga el tokenable (StaffAccount) y su profile, para
-                // que el request handler los lea de la instancia cacheada
-                // en lugar de disparar queries lazy.
-                $found->load('tokenable.profile');
+                // Pre-carga el tokenable. Solo StaffAccount tiene la relacion
+                // `profile`; ApplicantAccount no, asi que usamos morphWith
+                // para eager-load profile solo cuando el tokenable_type lo
+                // soporta. Sin esto, requests autenticadas de aplicantes
+                // revientan con RelationNotFoundException.
+                $found->load(['tokenable' => function ($morphTo) {
+                    $morphTo->morphWith([
+                        StaffAccount::class => ['profile'],
+                    ]);
+                }]);
             }
             return $found;
         });

@@ -184,11 +184,17 @@ class ApplicationDocumentSnapshotService
     public function hasAllRequiredDocuments(Application $application): bool
     {
         $product = $application->product;
-        if (!$product || !isset($product->required_documents)) {
-            return true; // No requirements defined
+        if (!$product) {
+            return true;
         }
 
-        $requiredTypes = $product->required_documents;
+        // Product::requiredDocumentTypes() normaliza los 3 formatos historicos
+        // (flat, segmentado por nacionalidad, objetos {type,required,desc}) a
+        // una lista plana de strings con solo los required=true.
+        $requiredTypes = $product->requiredDocumentTypes();
+        if (empty($requiredTypes)) {
+            return true;
+        }
 
         // Get attached document types via documentable_relations
         $attachedTypes = DB::table('documentable_relations')
@@ -220,11 +226,14 @@ class ApplicationDocumentSnapshotService
     public function getMissingDocumentTypes(Application $application): array
     {
         $product = $application->product;
-        if (!$product || !isset($product->required_documents)) {
+        if (!$product) {
             return [];
         }
 
-        $requiredTypes = $product->required_documents;
+        $requiredTypes = $product->requiredDocumentTypes();
+        if (empty($requiredTypes)) {
+            return [];
+        }
 
         // Get attached document types via documentable_relations
         $attachedTypes = DB::table('documentable_relations')

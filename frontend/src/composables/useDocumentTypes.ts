@@ -47,8 +47,19 @@ async function loadDocumentTypes(): Promise<void> {
  * Get the label for a document type.
  * Falls back to the type itself if not found.
  */
-function getDocumentTypeLabel(type: string): string {
-  return documentTypes.value[type] || type.replace(/_/g, ' ')
+function getDocumentTypeLabel(type: unknown): string {
+  // Defensivo: si el caller pasa un objeto {type, required, description}
+  // (formato del backend) en lugar del string, extraemos el .type. Sin esto
+  // el fallback type.replace() truena con "type.replace is not a function".
+  let key: string
+  if (typeof type === 'string') {
+    key = type
+  } else if (type && typeof type === 'object' && typeof (type as { type?: unknown }).type === 'string') {
+    key = (type as { type: string }).type
+  } else {
+    return ''
+  }
+  return documentTypes.value[key] || key.replace(/_/g, ' ')
 }
 
 /**
