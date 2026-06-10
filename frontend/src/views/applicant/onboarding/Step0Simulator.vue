@@ -19,6 +19,23 @@ const selectedProduct = ref<Product | null>(null)
 
 const products = computed(() => tenantStore.activeProducts)
 
+// Normaliza required_docs a array plano. El backend lo manda en dos shapes:
+//   - Legacy: [{type, required, description}, ...]
+//   - Nuevo (MoneyCapital, etc.): {nationals: [...], foreigners: [...]}
+// Sin esta normalización, .filter() en el template revienta cuando el
+// producto trae el shape segmentado (object, no array).
+type RequiredDoc = { type?: string; description?: string; required?: boolean }
+const requiredDocsList = computed<Array<RequiredDoc | string>>(() => {
+  const raw = selectedProduct.value?.required_docs as unknown
+  if (!raw) return []
+  if (Array.isArray(raw)) return raw as Array<RequiredDoc | string>
+  if (typeof raw === 'object') {
+    const seg = raw as { nationals?: Array<RequiredDoc | string>; foreigners?: Array<RequiredDoc | string> }
+    return [...(seg.nationals ?? []), ...(seg.foreigners ?? [])]
+  }
+  return []
+})
+
 const selectProduct = (product: Product) => {
   log.info('Product selected', { product: product.name })
   selectedProduct.value = product
@@ -157,7 +174,7 @@ onMounted(async () => {
             </svg>
             <span class="text-gray-600">INE/IFE vigente</span>
           </li>
-          <li v-for="doc in (selectedProduct?.required_docs ?? []).filter(d => typeof d === 'object' && d.required)" :key="typeof doc === 'object' ? doc.type : doc" class="flex items-start gap-3">
+          <li v-for="doc in requiredDocsList.filter(d => typeof d === 'object' && d.required)" :key="typeof doc === 'object' ? doc.type : doc" class="flex items-start gap-3">
             <svg class="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
             </svg>
