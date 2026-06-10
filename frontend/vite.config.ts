@@ -27,7 +27,15 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//, /^\/storage\//],
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2}'],
         // Monaco editor (admin-only, ~7 MB) no se precachea — se cachea bajo demanda.
-        globIgnores: ['**/monaco-*.js', '**/ts.worker-*.js', '**/*.worker-*.js'],
+        // Chunks Admin* tampoco: solo staff los usa, precachearlos en cada
+        // dispositivo de aplicante gasta ancho de banda y storage sin beneficio.
+        // El SW los cachea on-demand cuando un usuario staff visita /admin.
+        globIgnores: [
+          '**/monaco-*.js',
+          '**/ts.worker-*.js',
+          '**/*.worker-*.js',
+          '**/Admin*.js',
+        ],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         runtimeCaching: [
           {
