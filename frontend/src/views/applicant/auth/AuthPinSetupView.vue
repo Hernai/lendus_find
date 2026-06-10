@@ -79,26 +79,39 @@ const handleSubmit = async () => {
       // Initialize application store to restore saved data from landing page
       applicationStore.init()
 
-      // Check if user already has product selected (from landing page)
-      const hasProductSelected = applicationStore.selectedProduct !== null || applicationStore.simulation !== null
+      // Sanity: simulación residual sin producto = estado huérfano de visitas
+      // previas (otro tenant, sesión vieja). Limpiar antes de evaluar para no
+      // engañar la lógica de redirección.
+      if (applicationStore.simulation && !applicationStore.selectedProduct) {
+        applicationStore.clearSimulation()
+      }
+
+      // El flujo es "elegir producto → simular → verificar". Solo se puede
+      // saltar al step de verificación cuando AMBOS están presentes. Si falta
+      // cualquiera (típicamente producto, porque la landing no obligó a elegir),
+      // mandar al simulador que muestra el grid de productos del tenant.
+      const hasProduct = applicationStore.selectedProduct !== null
+      const hasSimulation = applicationStore.simulation !== null
+      const canSkipSimulator = hasProduct && hasSimulation
 
       console.log('🔍 [PIN Setup] Checking product selection state', {
         selectedProduct: applicationStore.selectedProduct?.name || 'null',
-        hasSimulation: applicationStore.simulation !== null,
-        hasProductSelected
+        hasSimulation,
+        hasProduct,
+        canSkipSimulator
       })
 
-      if (hasProductSelected) {
-        // User came from landing with product selected, skip simulator
-        console.log('✅ [PIN Setup] User has product - skipping simulator → verification')
+      if (canSkipSimulator) {
+        // User came from landing with product + simulation, skip simulator
+        console.log('✅ [PIN Setup] Product + simulation present - skipping to verification')
         if (tenantSlug) {
           router.push(`/${tenantSlug}/solicitud/verificacion`)
         } else {
           router.push('/solicitud/verificacion')
         }
       } else {
-        // No product selected, start with simulator
-        console.log('❌ [PIN Setup] No product - starting with simulator')
+        // Falta producto o simulación → simulador (que pinta selector si hay >1)
+        console.log('➡️ [PIN Setup] Missing product or simulation - going to simulator')
         if (tenantSlug) {
           router.push(`/${tenantSlug}/solicitud`)
         } else {
@@ -138,18 +151,28 @@ const skipSetup = async () => {
     // Initialize application store to restore saved data from landing page
     applicationStore.init()
 
-    // Check if user already has product selected (from landing page)
-    const hasProductSelected = applicationStore.selectedProduct !== null || applicationStore.simulation !== null
+    // Misma sanity check que en handlePinSubmit: simulación huérfana sin
+    // producto = estado inconsistente, limpiar antes de evaluar.
+    if (applicationStore.simulation && !applicationStore.selectedProduct) {
+      applicationStore.clearSimulation()
+    }
+
+    // Solo saltamos al step de verificación cuando producto + simulación
+    // están AMBOS presentes (ver handlePinSubmit para el razonamiento).
+    const hasProduct = applicationStore.selectedProduct !== null
+    const hasSimulation = applicationStore.simulation !== null
+    const canSkipSimulator = hasProduct && hasSimulation
 
     console.log('🔍 [PIN Skip] Checking product selection state', {
       selectedProduct: applicationStore.selectedProduct?.name || 'null',
-      hasSimulation: applicationStore.simulation !== null,
-      hasProductSelected
+      hasSimulation,
+      hasProduct,
+      canSkipSimulator
     })
 
-    if (hasProductSelected) {
-      // User came from landing with product selected, skip simulator
-      console.log('✅ [PIN Skip] User has product - skipping simulator → verification')
+    if (canSkipSimulator) {
+      // User came from landing with product + simulation, skip simulator
+      console.log('✅ [PIN Skip] Product + simulation present - skipping to verification')
       if (tenantSlug) {
         router.push(`/${tenantSlug}/solicitud/verificacion`)
       } else {

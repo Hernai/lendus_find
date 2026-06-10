@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useTenantStore } from '@/stores'
+import { useTenantStore, useApplicationStore } from '@/stores'
 import { getTenantBasePath } from '@/utils/tenant'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
@@ -9,9 +9,24 @@ import { AppButton } from '@/components/common'
 
 const router = useRouter()
 const tenantStore = useTenantStore()
+const applicationStore = useApplicationStore()
 
 // '/:tenant' (path-based) o '' (subdomain) — evita prefix redundante.
 const goToAuth = () => {
+  // Si el tenant tiene >1 producto y el usuario no eligió uno todavía,
+  // mandarlo al simulador (que muestra grid de selección + simulación).
+  // Saltarse esto deja `selectedProduct=null` y confunde al onboarding —
+  // ver AuthPinSetupView.handlePinSubmit. Con 1 solo producto lo
+  // auto-seleccionamos y vamos directo a auth.
+  const products = tenantStore.activeProducts
+  if (!applicationStore.selectedProduct) {
+    if (products.length === 1) {
+      applicationStore.setSelectedProduct(products[0]!)
+    } else if (products.length > 1) {
+      router.push(`${getTenantBasePath()}/simulador`)
+      return
+    }
+  }
   router.push(`${getTenantBasePath()}/auth`)
 }
 

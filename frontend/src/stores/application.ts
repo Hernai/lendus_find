@@ -375,6 +375,14 @@ export const useApplicationStore = defineStore('application', () => {
     storage.remove(STORAGE_KEYS.SIMULATION)
   }
 
+  // Limpia solo la simulación (sin tocar selectedProduct ni currentApplication).
+  // Útil cuando detectamos simulación residual de otra sesión/tenant que dejó
+  // estado huérfano sin producto pareja — ver AuthPinSetupView.handlePinSubmit.
+  const clearSimulation = () => {
+    simulation.value = null
+    storage.remove(STORAGE_KEYS.SIMULATION)
+  }
+
   // Initialize: restore state from storage on mount
   const init = () => {
     const savedProduct = storage.get<Product>(STORAGE_KEYS.SELECTED_PRODUCT)
@@ -409,6 +417,7 @@ export const useApplicationStore = defineStore('application', () => {
     submitApplication,
     restoreProgress,
     reset,
+    clearSimulation,
     init
   }
 })
