@@ -86,42 +86,43 @@ onMounted(async () => {
   <div class="space-y-6">
     <!-- Step 1: Product Selection -->
     <template v-if="step === 'select'">
-      <div class="text-center mb-8">
-        <h2 class="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+      <div class="text-center mb-6 md:mb-8">
+        <h2 class="text-xl md:text-3xl font-bold text-gray-900 mb-1 md:mb-2">
           ¿Qué tipo de financiamiento necesitas?
         </h2>
-        <p class="text-gray-600">
+        <p class="text-sm md:text-base text-gray-600">
           Selecciona el producto que mejor se adapte a tus necesidades
         </p>
       </div>
 
-      <!-- Product Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- Product List (móvil: lista compacta; ≥md: grid 2 columnas) -->
+      <div class="space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-4">
         <button
           v-for="product in products"
           :key="product.id"
-          class="bg-white rounded-2xl p-6 shadow-sm border-2 border-transparent hover:border-primary-500 hover:shadow-md transition-all text-left group"
+          class="w-full bg-white rounded-xl md:rounded-2xl px-4 py-3 md:p-6 shadow-sm border-2 border-transparent hover:border-primary-500 hover:shadow-md transition-all text-left group flex items-center gap-3 md:items-start md:gap-4"
           @click="selectProduct(product)"
         >
-          <div class="flex items-start gap-4">
-            <div class="w-12 h-12 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0 group-hover:bg-primary-200 transition-colors">
-              <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getProductIcon(product.icon || 'user')" />
-              </svg>
-            </div>
-            <div class="flex-1 min-w-0">
-              <h3 class="font-semibold text-gray-900 mb-1">{{ product.name }}</h3>
-              <p class="text-sm text-gray-500 mb-3">{{ product.description }}</p>
-              <div class="flex flex-wrap gap-2 text-xs">
-                <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
-                  {{ formatMoney(product.rules?.min_amount ?? 0) }} - {{ formatMoney(product.rules?.max_amount ?? 0) }}
-                </span>
-                <span class="bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                  {{ product.rules?.annual_rate ?? 0 }}% anual
-                </span>
-              </div>
+          <div class="w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0 group-hover:bg-primary-200 transition-colors">
+            <svg class="w-5 h-5 md:w-6 md:h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getProductIcon(product.icon || 'user')" />
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <h3 class="font-semibold text-gray-900 text-sm md:text-base mb-0.5 md:mb-1 truncate">{{ product.name }}</h3>
+            <p class="text-xs md:text-sm text-gray-500 mb-1.5 md:mb-3 line-clamp-1 md:line-clamp-none">{{ product.description }}</p>
+            <div class="flex flex-wrap gap-1.5 md:gap-2 text-[11px] md:text-xs">
+              <span class="bg-gray-100 text-gray-600 px-1.5 py-0.5 md:px-2 md:py-1 rounded-full">
+                {{ formatMoney(product.rules?.min_amount ?? 0) }} - {{ formatMoney(product.rules?.max_amount ?? 0) }}
+              </span>
+              <span class="bg-green-100 text-green-700 px-1.5 py-0.5 md:px-2 md:py-1 rounded-full">
+                {{ product.rules?.annual_rate ?? 0 }}% anual
+              </span>
             </div>
           </div>
+          <svg class="w-5 h-5 text-gray-400 flex-shrink-0 md:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
         </button>
       </div>
     </template>
