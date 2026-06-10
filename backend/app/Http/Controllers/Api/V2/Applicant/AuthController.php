@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V2\Applicant;
 use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\ApplicantAccount;
+use App\Models\CachedPersonalAccessToken;
 use App\Services\ApplicantAuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -169,6 +170,13 @@ class AuthController extends Controller
             return $this->badRequest($result['error'] ?? 'PIN_SETUP_FAILED', $result['message']);
         }
 
+        // El cache de Sanctum (CachedPersonalAccessToken, TTL 60s) guarda un
+        // snapshot del ApplicantAccount tomado ANTES de setPin. Sin esta
+        // invalidación, el próximo /me devuelve has_pin=false durante hasta
+        // 60s y el frontend rebota a /pin/setup (router guard ve
+        // needsPinSetup=true). Misma razón aplica a changePin abajo.
+        CachedPersonalAccessToken::forget($request->user()?->currentAccessToken());
+
         return $this->success(null, $result['message']);
     }
 
@@ -201,6 +209,10 @@ class AuthController extends Controller
         if (!$result['success']) {
             return $this->badRequest($result['error'] ?? 'PIN_CHANGE_FAILED', $result['message']);
         }
+
+        // Misma razón que en setupPin: invalidar snapshot cacheado del
+        // tokenable para que /me devuelva pin_hash actualizado de inmediato.
+        CachedPersonalAccessToken::forget($request->user()?->currentAccessToken());
 
         return $this->success(null, $result['message']);
     }

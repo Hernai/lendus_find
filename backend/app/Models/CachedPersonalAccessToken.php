@@ -122,4 +122,19 @@ class CachedPersonalAccessToken extends PersonalAccessToken
         // La columna `token` en DB ya es el sha256 del plain text.
         Cache::forget("sanctum:token:{$token->token}");
     }
+
+    /**
+     * Invalida el cache del token actual del request. Usar cuando el
+     * tokenable (ApplicantAccount/StaffAccount) se modifica en una operación
+     * y el siguiente request necesita ver el estado fresco — el snapshot
+     * cacheado se serializó antes del cambio. Ejemplo: setupPin/changePin
+     * actualizan `pin_hash`; sin esto, /me devuelve `has_pin: false` por
+     * hasta 60s y el frontend rebota a /pin/setup.
+     */
+    public static function forget(mixed $token): void
+    {
+        if ($token instanceof self) {
+            static::forgetCacheFor($token);
+        }
+    }
 }

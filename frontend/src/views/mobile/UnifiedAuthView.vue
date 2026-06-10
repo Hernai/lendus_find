@@ -189,9 +189,17 @@ async function handleSubmit() {
     }
 
     if (!authStore.onboardingCompleted) {
-      const hasProductSelected =
-        applicationStore.selectedProduct !== null || applicationStore.simulation !== null
-      if (hasProductSelected) {
+      // Sanity: simulación residual sin producto = estado huérfano (sesión
+      // previa). Limpiar antes de evaluar — ver AuthPinSetupView para el
+      // razonamiento. Solo saltamos al step de verificación cuando AMBOS
+      // (producto + simulación) están presentes.
+      if (applicationStore.simulation && !applicationStore.selectedProduct) {
+        applicationStore.clearSimulation()
+      }
+      const hasProduct = applicationStore.selectedProduct !== null
+      const hasSimulation = applicationStore.simulation !== null
+      const canSkipSimulator = hasProduct && hasSimulation
+      if (canSkipSimulator) {
         await router.push(tenantSlug ? `/${tenantSlug}/solicitud/verificacion` : '/solicitud/verificacion')
       } else {
         await router.push(tenantSlug ? `/${tenantSlug}/solicitud` : '/solicitud')

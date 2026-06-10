@@ -95,26 +95,40 @@ const handleOtpComplete = async (code: string) => {
         await router.push(redirect)
       } else if (!authStore.hasApplicant) {
         // User is new, redirect to onboarding
-        // Check if user already has product selected (from landing page)
-        const hasProductSelected = applicationStore.selectedProduct !== null || applicationStore.simulation !== null
+        // Sanity: simulación residual sin producto = estado huérfano de
+        // visitas previas (otro tenant, sesión vieja). Limpiar antes de
+        // evaluar para no engañar la lógica de redirección (ver
+        // AuthPinSetupView para el razonamiento completo).
+        if (applicationStore.simulation && !applicationStore.selectedProduct) {
+          applicationStore.clearSimulation()
+        }
+
+        // Solo saltamos al step de verificación cuando producto + simulación
+        // están AMBOS presentes. Si falta cualquiera (típicamente producto,
+        // porque la landing no obligó a elegir), mandar al simulador que
+        // muestra el grid de productos del tenant.
+        const hasProduct = applicationStore.selectedProduct !== null
+        const hasSimulation = applicationStore.simulation !== null
+        const canSkipSimulator = hasProduct && hasSimulation
 
         log.info('🔍 Checking product selection state', {
           selectedProduct: applicationStore.selectedProduct?.name || 'null',
-          hasSimulation: applicationStore.simulation !== null,
-          hasProductSelected
+          hasSimulation,
+          hasProduct,
+          canSkipSimulator
         })
 
-        if (hasProductSelected) {
-          // User came from landing with product selected, skip simulator
-          log.info('✅ User has product/simulation from landing, SKIPPING simulator → going to verification')
+        if (canSkipSimulator) {
+          // User came from landing with product + simulation, skip simulator
+          log.info('✅ Product + simulation present - skipping to verification')
           if (tenantSlug) {
             await router.push(`/${tenantSlug}/solicitud/verificacion`)
           } else {
             await router.push('/solicitud/verificacion')
           }
         } else {
-          // No product selected, start with simulator
-          log.info('❌ No product selected, starting with simulator')
+          // Falta producto o simulación → simulador (que pinta selector si hay >1)
+          log.info('➡️ Missing product or simulation - going to simulator')
           if (tenantSlug) {
             await router.push(`/${tenantSlug}/solicitud`)
           } else {
