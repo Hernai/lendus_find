@@ -19,21 +19,75 @@ const selectedProduct = ref<Product | null>(null)
 
 const products = computed(() => tenantStore.activeProducts)
 
-// Normaliza required_docs a array plano. El backend lo manda en dos shapes:
-//   - Legacy: [{type, required, description}, ...]
-//   - Nuevo (MoneyCapital, etc.): {nationals: [...], foreigners: [...]}
-// Sin esta normalización, .filter() en el template revienta cuando el
-// producto trae el shape segmentado (object, no array).
+// Categorización de requisitos para presentación agrupada.
+// El backend manda required_docs en dos shapes:
+//   - Legacy plano: [{type, required, description}, ...]
+//   - Nuevo segmentado: {nationals: [...], foreigners: [...]}
+// Y los tipos de documento se clasifican en 3 categorías visuales:
+//   - ID: INE, pasaporte, residencia (depende de nacionalidad)
+//   - Comprobantes: domicilio, ingresos, etc.
+//   - Biométricos: selfie, face match
 type RequiredDoc = { type?: string; description?: string; required?: boolean }
-const requiredDocsList = computed<Array<RequiredDoc | string>>(() => {
-  const raw = selectedProduct.value?.required_docs as unknown
+
+const ID_DOC_TYPES = new Set(['INE_FRONT', 'INE_BACK', 'PASSPORT', 'RESIDENCE_CARD', 'DRIVER_LICENSE', 'VISA'])
+const BIOMETRIC_DOC_TYPES = new Set(['SELFIE', 'FACE_MATCH', 'BIOMETRIC', 'LIVENESS'])
+
+// Toggle Mexicano (default) | Extranjero. Solo se muestra si el producto
+// tiene shape segmentado con docs en ambas listas.
+const isForeigner = ref(false)
+
+function extractSegment(raw: unknown, segment: 'nationals' | 'foreigners'): RequiredDoc[] {
   if (!raw) return []
-  if (Array.isArray(raw)) return raw as Array<RequiredDoc | string>
+  if (Array.isArray(raw)) {
+    // Shape plano: los tratamos como "nationals" por defecto.
+    return segment === 'nationals'
+      ? raw.filter((d): d is RequiredDoc => typeof d === 'object' && d !== null)
+      : []
+  }
   if (typeof raw === 'object') {
-    const seg = raw as { nationals?: Array<RequiredDoc | string>; foreigners?: Array<RequiredDoc | string> }
-    return [...(seg.nationals ?? []), ...(seg.foreigners ?? [])]
+    const seg = (raw as Record<string, unknown>)[segment]
+    return Array.isArray(seg)
+      ? seg.filter((d: unknown): d is RequiredDoc => typeof d === 'object' && d !== null)
+      : []
   }
   return []
+}
+
+const idDocsNationals = computed(() => extractSegment(selectedProduct.value?.required_docs, 'nationals'))
+const idDocsForeigners = computed(() => extractSegment(selectedProduct.value?.required_docs, 'foreigners'))
+
+// Solo mostramos el toggle si hay docs distintos para extranjeros.
+const hasNationalitySplit = computed(() => idDocsForeigners.value.length > 0)
+
+const activeDocs = computed(() =>
+  isForeigner.value && hasNationalitySplit.value ? idDocsForeigners.value : idDocsNationals.value
+)
+
+const idDocs = computed(() =>
+  activeDocs.value.filter(d => d.required && d.type && ID_DOC_TYPES.has(d.type))
+)
+const otherDocs = computed(() =>
+  activeDocs.value.filter(d => d.required && d.type && !ID_DOC_TYPES.has(d.type) && !BIOMETRIC_DOC_TYPES.has(d.type))
+)
+const biometricDocs = computed(() =>
+  activeDocs.value.filter(d => d.required && d.type && BIOMETRIC_DOC_TYPES.has(d.type))
+)
+
+const eligibilityItems = computed<string[]>(() => {
+  const items: string[] = []
+  const product = selectedProduct.value
+  if (!product) return items
+
+  const elig = (product.eligibility_rules ?? {}) as { min_age?: number; max_age?: number }
+  const minAge = elig.min_age ?? product.rules?.min_age
+  const maxAge = elig.max_age ?? product.rules?.max_age
+  if (minAge && maxAge) items.push(`Edad entre ${minAge} y ${maxAge} años`)
+  else if (minAge) items.push(`Mayor de ${minAge} años`)
+
+  const minIncome = product.rules?.min_income
+  if (minIncome) items.push(`Ingresos mínimos de ${formatMoney(minIncome)} mensuales`)
+
+  return items
 })
 
 const selectProduct = (product: Product) => {
@@ -159,35 +213,77 @@ onMounted(async () => {
         @continue="handleContinue"
       />
 
-      <!-- Additional Info -->
-      <div class="mt-8 bg-white rounded-2xl p-6 shadow-sm">
-        <h3 class="font-semibold text-gray-900 mb-4">Requisitos</h3>
-        <ul class="space-y-3">
-          <li class="flex items-start gap-3">
-            <svg class="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-            </svg>
-            <span class="text-gray-600">Ser mayor de {{ selectedProduct?.rules?.min_age || 18 }} años</span>
-          </li>
-          <li class="flex items-start gap-3">
-            <svg class="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-            </svg>
-            <span class="text-gray-600">INE/IFE vigente</span>
-          </li>
-          <li v-for="doc in requiredDocsList.filter(d => typeof d === 'object' && d.required)" :key="typeof doc === 'object' ? doc.type : doc" class="flex items-start gap-3">
-            <svg class="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-            </svg>
-            <span class="text-gray-600">{{ typeof doc === 'object' ? doc.description : doc }}</span>
-          </li>
-          <li class="flex items-start gap-3">
-            <svg class="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-            </svg>
-            <span class="text-gray-600">Ingresos mínimos de {{ formatMoney(selectedProduct?.rules?.min_income || 8000) }} mensuales</span>
-          </li>
-        </ul>
+      <!-- Requisitos (agrupados por categoría) -->
+      <div class="mt-6 bg-white rounded-2xl p-5 shadow-sm space-y-5">
+        <h3 class="font-semibold text-gray-900">Requisitos</h3>
+
+        <!-- Elegibilidad: edad e ingresos mínimos del producto -->
+        <section v-if="eligibilityItems.length">
+          <h4 class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Elegibilidad</h4>
+          <ul class="space-y-2">
+            <li v-for="item in eligibilityItems" :key="item" class="flex items-start gap-2 text-sm text-gray-700">
+              <svg class="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+              </svg>
+              <span>{{ item }}</span>
+            </li>
+          </ul>
+        </section>
+
+        <!-- Identificación (con toggle Mexicano/Extranjero cuando aplique) -->
+        <section v-if="idDocs.length">
+          <div class="flex items-center justify-between mb-2 gap-2">
+            <h4 class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Identificación</h4>
+            <div v-if="hasNationalitySplit" class="flex bg-gray-100 rounded-full p-0.5 text-xs">
+              <button
+                type="button"
+                class="px-2.5 py-1 rounded-full transition-colors"
+                :class="!isForeigner ? 'bg-white shadow-sm font-medium text-gray-900' : 'text-gray-500'"
+                @click="isForeigner = false"
+              >Mexicano</button>
+              <button
+                type="button"
+                class="px-2.5 py-1 rounded-full transition-colors"
+                :class="isForeigner ? 'bg-white shadow-sm font-medium text-gray-900' : 'text-gray-500'"
+                @click="isForeigner = true"
+              >Extranjero</button>
+            </div>
+          </div>
+          <ul class="space-y-2">
+            <li v-for="doc in idDocs" :key="doc.type" class="flex items-start gap-2 text-sm text-gray-700">
+              <svg class="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+              </svg>
+              <span>{{ doc.description }}</span>
+            </li>
+          </ul>
+        </section>
+
+        <!-- Comprobantes y otros documentos -->
+        <section v-if="otherDocs.length">
+          <h4 class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Documentos</h4>
+          <ul class="space-y-2">
+            <li v-for="doc in otherDocs" :key="doc.type" class="flex items-start gap-2 text-sm text-gray-700">
+              <svg class="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+              </svg>
+              <span>{{ doc.description }}</span>
+            </li>
+          </ul>
+        </section>
+
+        <!-- Validación biométrica -->
+        <section v-if="biometricDocs.length">
+          <h4 class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Validación biométrica</h4>
+          <ul class="space-y-2">
+            <li v-for="doc in biometricDocs" :key="doc.type" class="flex items-start gap-2 text-sm text-gray-700">
+              <svg class="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+              </svg>
+              <span>{{ doc.description }}</span>
+            </li>
+          </ul>
+        </section>
       </div>
     </template>
   </div>
