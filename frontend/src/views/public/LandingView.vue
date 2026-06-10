@@ -41,10 +41,14 @@ onMounted(async () => {
   await tenantStore.loadConfig()
   tenantStore.applyTheme()
 
-  // Select "Crédito Personal" by default
-  const personalCredit = products.value.find(p => p.type === 'PERSONAL')
-  if (personalCredit) {
-    selectProduct(personalCredit)
+  // Respetar producto previamente seleccionado por el usuario (caso típico:
+  // regresa de auth, navega entre pantallas con back, recarga). Si no hay
+  // selección previa, NO auto-seleccionamos: la UX correcta es mostrar el
+  // grid de productos primero y dejar que elija. Antes esto auto-elegía
+  // "Crédito Personal" y brincaba el step de selección, lo que confundía
+  // a usuarios que querían otro producto.
+  if (applicationStore.selectedProduct) {
+    selectedProduct.value = applicationStore.selectedProduct
   }
 })
 </script>
