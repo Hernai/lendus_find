@@ -39,6 +39,7 @@ pipeline {
         booleanParam(name: 'DEPLOY_BACKEND', defaultValue: true, description: 'Desplegar el backend Laravel')
         booleanParam(name: 'DEPLOY_FRONTEND', defaultValue: true, description: 'Desplegar el frontend Vue (todos los tenants)')
         booleanParam(name: 'SKIP_SEED', defaultValue: false, description: 'Saltar db:seed (deploy urgente o cambio destructivo en seeders)')
+        booleanParam(name: 'SEED_ONLY', defaultValue: false, description: 'SOLO migrate + db:seed --force (skip composer, build, restart, frontend). Útil cuando el deploy ya está OK pero faltan correr seeders.')
         string(name: 'FRONTEND_TENANTS', defaultValue: '', description: 'Lista CSV de tenants a deployar. Vacio = todos los detectados en frontend/tenants/. Ej: "moneycapital,demo"')
     }
 
@@ -69,7 +70,7 @@ pipeline {
 
         stage('Tests') {
             when {
-                expression { !params.SKIP_TESTS }
+                expression { !params.SKIP_TESTS && !params.SEED_ONLY }
             }
             steps {
                 dir('backend') {
@@ -84,9 +85,43 @@ pipeline {
             }
         }
 
-        stage('Deploy Backend') {
+        stage('Seed Only') {
+            // Atajo: ejecuta solo migrate + db:seed --force en el APP_DIR
+            // ya desplegado. NO toca código, composer, cachés, ni servicios.
+            // Pensado para cuando hay seeders nuevos que no corrieron en el
+            // último deploy y quieres aplicarlos sin re-deployar todo.
             when {
-                expression { params.DEPLOY_BACKEND }
+                expression { params.SEED_ONLY }
+            }
+            steps {
+                script {
+                    if (params.DRY_RUN) {
+                        echo "DRY_RUN: simulando seed-only"
+                    } else {
+                        sh """
+                            sudo -u lendus bash -s <<'SEED'
+set -euo pipefail
+cd '${env.APP_DIR}'
+echo "[seed-only] migrate"
+${env.PHP_BIN} artisan migrate --force
+echo "[seed-only] db:seed --force"
+${env.PHP_BIN} artisan db:seed --force
+echo "[seed-only] cache:clear"
+${env.PHP_BIN} artisan cache:clear
+echo "[seed-only] DONE — tenants en BD:"
+${env.PHP_BIN} artisan tinker --execute='foreach(\\App\\Models\\Tenant::all() as \\\$t) echo "  - ".\\\$t->slug." -> ".(\\\$t->domain ?? "NO DOMAIN").PHP_EOL;'
+SEED
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Deploy Backend') {
+            // SEED_ONLY apaga este stage para no rsync el código ni reiniciar
+            // servicios. El stage `Seed Only` corre antes y maneja todo.
+            when {
+                expression { params.DEPLOY_BACKEND && !params.SEED_ONLY }
             }
             steps {
                 script {
@@ -139,7 +174,7 @@ DEPLOY
 
         stage('Deploy Frontend') {
             when {
-                expression { params.DEPLOY_FRONTEND }
+                expression { params.DEPLOY_FRONTEND && !params.SEED_ONLY }
             }
             steps {
                 script {
