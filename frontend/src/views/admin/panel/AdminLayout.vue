@@ -40,14 +40,14 @@ const navItems = computed(() => {
       show: true
     },
     // Solicitudes - all staff (agents only see assigned, handled by backend)
-    {
+   /* {
       path: '/admin/solicitudes',
       label: 'Solicitudes',
       icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
       show: true
-    },
+    },*/
     // Préstamos - solo si el tenant tiene loan_portfolio activo (módulo opt-in MoneyCapital)
-    {
+    /*{
       path: '/admin/prestamos',
       label: 'Préstamos',
       icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
@@ -59,7 +59,7 @@ const navItems = computed(() => {
       label: 'Productos',
       icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10',
       show: permissions.value?.canManageProducts ?? false
-    },
+    },*/
     // Usuarios - admin only (canManageUsers)
     {
       path: '/admin/usuarios',
@@ -68,12 +68,12 @@ const navItems = computed(() => {
       show: permissions.value?.canManageUsers ?? false
     },
     // Reportes - analyst+ (canViewReports)
-    {
+    /*{
       path: '/admin/reportes',
       label: 'Reportes',
       icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
       show: permissions.value?.canViewReports ?? false
-    },
+    },*/
     // Configuración - admin only, hidden if user has Tenants access (to avoid redundancy)
     {
       path: '/admin/configuracion',
@@ -82,7 +82,7 @@ const navItems = computed(() => {
       show: (permissions.value?.canManageProducts ?? false) && !(permissions.value?.canConfigureTenant ?? false)
     },
     // Notificaciones - admin+ (canManageProducts)
-    {
+    /*{
       path: '/admin/notificaciones',
       label: 'Notificaciones',
       icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9',
@@ -101,7 +101,7 @@ const navItems = computed(() => {
       label: 'Logs API',
       icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
       show: permissions.value?.canManageProducts ?? false
-    },
+    },*/
     // Tenants - super_admin only (canConfigureTenant) - replaces Configuración for SUPER_ADMINs
     {
       path: '/admin/tenants',
