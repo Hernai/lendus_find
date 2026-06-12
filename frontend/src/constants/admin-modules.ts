@@ -33,6 +33,19 @@ export type AdminModuleKey =
   | 'settings'
   | 'admin_modules_config'
 
+/**
+ * Sección a la que pertenece el módulo. Solo se usa para agrupar visualmente
+ * la matriz de configuración (`AdminModulesConfig.vue`); el sidebar los
+ * muestra todos seguidos.
+ */
+export type AdminModuleCategory = 'operations' | 'administration' | 'configuration'
+
+export const ADMIN_MODULE_CATEGORIES: { key: AdminModuleCategory; label: string }[] = [
+  { key: 'operations', label: 'Operaciones' },
+  { key: 'administration', label: 'Administración' },
+  { key: 'configuration', label: 'Configuración' },
+]
+
 export interface AdminModule {
   /** Llave estable que viaja al backend (no traducir). */
   key: AdminModuleKey

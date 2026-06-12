@@ -576,6 +576,36 @@ onUnmounted(() => {
   color: #0f172a;
 }
 
+/* En desktop centramos el contenido y le damos ancho de tarjeta, igual
+   que UnifiedAuthView. El layout sigue siendo mobile-first; aquí solo lo
+   acotamos para que no se vea estirado en pantallas grandes. */
+@media (min-width: 768px) {
+  .dyn-onboarding {
+    background: #f8fafc;
+    align-items: center;
+    padding-top: max(env(safe-area-inset-top), 32px);
+    padding-bottom: 48px;
+  }
+  .dyn-onboarding > * {
+    width: 100%;
+    max-width: 560px;
+  }
+  .dyn-header {
+    background: transparent;
+    border-bottom: none;
+  }
+  /* El "lienzo" del paso queda con fondo blanco y sombra de tarjeta */
+  .dyn-body,
+  .hero-card,
+  .options-list {
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.12);
+  }
+  .hero-card { padding: 24px; }
+  .options-list { padding: 16px; }
+}
+
 .dyn-header {
   position: sticky;
   top: 0;

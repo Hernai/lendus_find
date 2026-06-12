@@ -133,11 +133,25 @@ const navItems = computed(() => {
   return items.filter(item => item.show)
 })
 
+// Devuelve true solo para el item del menú cuya ruta hace match MÁS
+// específico con la URL actual. Sin esto, "Configuración"
+// (`/admin/configuracion`) quedaba activa también cuando estabas en
+// "Módulos" (`/admin/configuracion/modulos`), porque la segunda empieza
+// con la primera.
 const isActive = (path: string) => {
   if (path === '/admin') {
     return route.path === '/admin'
   }
-  return route.path.startsWith(path)
+  const matchesPath = route.path === path || route.path.startsWith(path + '/')
+  if (!matchesPath) return false
+  // ¿Hay OTRO item del menú con path más largo que también haga match?
+  // Si sí, el otro gana (ej. /admin/configuracion/modulos sobre /admin/configuracion).
+  const moreSpecific = navItems.value.some((it) => {
+    if (it.path === path) return false
+    if (it.path.length <= path.length) return false
+    return route.path === it.path || route.path.startsWith(it.path + '/')
+  })
+  return !moreSpecific
 }
 
 const handleLogout = async () => {
