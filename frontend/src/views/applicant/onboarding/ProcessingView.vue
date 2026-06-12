@@ -405,4 +405,30 @@ onUnmounted(() => {
   font-weight: 400;
   color: #64748b;
 }
+
+/* En desktop, la vista mobile-first se contiene en un frame centrado tipo "app". */
+@media (min-width: 768px) {
+  .pv-screen {
+    background: #f8fafc;
+    align-items: center;
+    padding-top: max(env(safe-area-inset-top), 32px);
+    padding-bottom: 48px;
+  }
+  .pv-screen > * {
+    width: 100%;
+    max-width: 560px;
+  }
+  .brand-bar {
+    background: transparent;
+    padding-bottom: 8px;
+  }
+  /* El "lienzo" principal con fondo blanco y sombra de tarjeta */
+  .pv-main {
+    flex: 0 0 auto;
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.12);
+    padding: 28px 32px 32px;
+  }
+}
 </style>

@@ -563,4 +563,42 @@ async function handleContinue() {
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+/* En desktop, la pantalla se ve como una "app" contenida en un frame centrado.
+   Selectores específicos (no `> *`) para excluir los .modal-overlay fixed,
+   que deben seguir cubriendo todo el viewport. */
+@media (min-width: 768px) {
+  .wc-screen {
+    background: #f8fafc;
+    padding-top: max(env(safe-area-inset-top), 48px);
+    padding-bottom: 48px;
+    align-items: center;
+    justify-content: flex-start;
+  }
+  .brand-bar,
+  .wc-main,
+  .wc-footer {
+    width: 100%;
+    max-width: 560px;
+  }
+  .brand-bar {
+    background: transparent;
+    padding-bottom: 8px;
+  }
+  /* Lienzo principal: tarjeta blanca con sombra */
+  .wc-main {
+    flex: 0 0 auto;
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.15);
+    padding: 28px 32px 32px;
+  }
+  .consent-card {
+    box-shadow: none;
+    border: 1px solid #e2e8f0;
+  }
+  .wc-footer {
+    padding-top: 16px;
+  }
+}
 </style>

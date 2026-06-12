@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore, useTenantStore } from '@/stores'
 import TenantSwitcher from '@/components/admin/TenantSwitcher.vue'
@@ -33,13 +33,45 @@ const userRole = computed(() => {
 // Navigation items derivados del catálogo único `ADMIN_MODULES`.
 // `isModuleVisible` combina: rol del usuario + `Tenant.features` (legacy)
 // + overrides editados por el super admin. Ver `constants/admin-modules.ts`.
-const navItemsFromCatalog = computed(() => {
+const visibleModules = computed(() => {
   const role = currentUser.value?.role ?? null
   const features = (tenantStore.tenant?.features ?? null) as Record<string, boolean> | null
   const overrides = authStore.moduleOverrides
-  return ADMIN_MODULES
-    .filter((m) => isModuleVisible(m, role, features, overrides))
-    .map((m) => ({ path: m.path, label: m.label, icon: m.icon }))
+  return ADMIN_MODULES.filter((m) => isModuleVisible(m, role, features, overrides))
+})
+
+const navItemsFromCatalog = computed(() =>
+  visibleModules.value.map((m) => ({ path: m.path, label: m.label, icon: m.icon })),
+)
+
+// El top-nav agrupa: módulos de operación/administración van planos; los de
+// `configuration` (Templates, Tenants, Configuración, Módulos) se colapsan
+// en un dropdown "Configuración" para no saturar la barra.
+const flatNavItems = computed(() =>
+  visibleModules.value
+    .filter((m) => m.category !== 'configuration')
+    .map((m) => ({ path: m.path, label: m.label, icon: m.icon })),
+)
+
+const configNavItems = computed(() =>
+  visibleModules.value
+    .filter((m) => m.category === 'configuration')
+    .map((m) => ({ path: m.path, label: m.label, icon: m.icon })),
+)
+
+const showConfigMenu = ref(false)
+
+// El trigger del dropdown se pinta activo cuando la ruta actual cae en
+// cualquiera de sus hijos.
+const isConfigActive = computed(() =>
+  configNavItems.value.some(
+    (it) => route.path === it.path || route.path.startsWith(it.path + '/'),
+  ),
+)
+
+// Cerrar el dropdown al navegar (router-link dentro del panel).
+watch(() => route.path, () => {
+  showConfigMenu.value = false
 })
 
 // Navigation items filtered by permissions (legacy; lo dejamos como
@@ -166,20 +198,21 @@ const handleLogout = async () => {
     <nav class="bg-gray-900 text-white shadow-lg">
       <div class="px-4">
         <div class="flex items-center justify-between h-14">
-          <!-- Logo & Brand (compact) -->
+          <!-- Logo & Brand (compact) — logo de LendusFind, la marca del SaaS -->
           <div class="flex items-center gap-2">
-            <div class="w-7 h-7 bg-primary-500 rounded-md flex items-center justify-center">
-              <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-            </div>
+            <img
+              src="/find-icon.png"
+              alt="LendusFind"
+              class="w-7 h-7 rounded-md object-contain bg-white/90 p-0.5"
+            />
             <span class="font-semibold text-sm hidden sm:block">{{ tenantName }}</span>
           </div>
 
-          <!-- Navigation Links (compact) -->
+          <!-- Navigation Links (compact): módulos de operación/administración
+               planos + dropdown "Configuración" con los de esa sección -->
           <div class="hidden md:flex items-center">
             <router-link
-              v-for="item in navItems"
+              v-for="item in flatNavItems"
               :key="item.path"
               :to="item.path"
               :class="[
@@ -194,6 +227,57 @@ const handleLogout = async () => {
               </svg>
               <span class="hidden lg:inline">{{ item.label }}</span>
             </router-link>
+
+            <!-- Dropdown Configuración -->
+            <div v-if="configNavItems.length > 0" class="relative">
+              <button
+                type="button"
+                :class="[
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                  isConfigActive || showConfigMenu
+                    ? 'bg-gray-800 text-white'
+                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                ]"
+                @click="showConfigMenu = !showConfigMenu"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span class="hidden lg:inline">Configuración</span>
+                <svg
+                  class="w-3 h-3 transition-transform"
+                  :class="{ 'rotate-180': showConfigMenu }"
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              <div
+                v-if="showConfigMenu"
+                class="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg py-1 z-50"
+              >
+                <router-link
+                  v-for="item in configNavItems"
+                  :key="item.path"
+                  :to="item.path"
+                  :class="[
+                    'flex items-center gap-2.5 px-3 py-2 text-sm transition-colors',
+                    isActive(item.path)
+                      ? 'bg-primary-50 text-primary-700 font-medium'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  ]"
+                >
+                  <svg class="w-4 h-4 flex-shrink-0" :class="isActive(item.path) ? 'text-primary-600' : 'text-gray-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="item.icon" />
+                  </svg>
+                  {{ item.label }}
+                </router-link>
+              </div>
+
+              <!-- Backdrop para cerrar al hacer click fuera -->
+              <div v-if="showConfigMenu" class="fixed inset-0 z-40" @click="showConfigMenu = false" />
+            </div>
           </div>
 
           <!-- Right side: Tenant Switcher, Notifications & User Menu -->

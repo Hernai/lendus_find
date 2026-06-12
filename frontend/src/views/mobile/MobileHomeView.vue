@@ -760,4 +760,31 @@ function logout() {
 .lr-amount { font-weight: 700; font-size: 14px; color: #0f172a; }
 .lr-chev { width: 16px; height: 16px; color: #94a3b8; }
 .empty-list { text-align: center; font-size: 13px; color: #94a3b8; margin: 12px 0; }
+
+/* En desktop, la vista se contiene en un frame centrado tipo "app".
+   El bottom-nav es position:fixed (viewport completo) y queda excluido. */
+@media (min-width: 768px) {
+  .home-screen {
+    background: #f8fafc;
+    align-items: center;
+    padding-top: max(env(safe-area-inset-top), 32px);
+  }
+  .hero-header,
+  .home-body {
+    width: 100%;
+    max-width: 560px;
+  }
+  /* El header morado flota como tarjeta dentro del frame */
+  .hero-header {
+    border-radius: 28px;
+    box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.2);
+  }
+  /* El "lienzo" lavanda del body como tarjeta contenida */
+  .home-body {
+    background: #f6f3ff;
+    border-radius: 20px;
+    margin-top: 14px;
+    box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.12);
+  }
+}
 </style>

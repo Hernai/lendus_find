@@ -99,4 +99,19 @@ function go(name: string) {
 .nav-item svg { width: 22px; height: 22px; }
 .nav-item--active { color: var(--tenant-primary, #5B21B6); }
 .nav-item:active { color: var(--tenant-primary, #5B21B6); }
+
+/* Desktop: la barra fija se centra y alinea al frame de 560px de las vistas */
+@media (min-width: 768px) {
+  .bottom-nav {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 560px;
+    border-radius: 16px 16px 0 0;
+    border: 1px solid #eef0f4;
+    border-bottom: none;
+    box-shadow: 0 -10px 30px -12px rgba(15, 23, 42, 0.15);
+  }
+}
 </style>

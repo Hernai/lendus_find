@@ -3,12 +3,23 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores'
 import { v2 } from '@/services/v2'
 import {
+  ADMIN_MODULE_CATEGORIES,
   OVERRIDABLE_MODULES,
   OVERRIDABLE_ROLES,
   type AdminModule,
   type OverridableRole,
 } from '@/constants/admin-modules'
 import { useToast } from '@/composables/useToast'
+
+// Filas de la matriz agrupadas por sección del catálogo (Operaciones /
+// Administración / Configuración). Secciones sin módulos overridables se
+// omiten (ej. Configuración si todos sus módulos son superAdminOnly).
+const MODULE_GROUPS = ADMIN_MODULE_CATEGORIES
+  .map((cat) => ({
+    ...cat,
+    modules: OVERRIDABLE_MODULES.filter((m) => m.category === cat.key),
+  }))
+  .filter((g) => g.modules.length > 0)
 
 const authStore = useAuthStore()
 const toast = useToast()
@@ -32,10 +43,6 @@ const matrix = ref<Record<OverridableRole, Record<string, MatrixCell>>>({
   SUPERVISOR: {},
   ADMIN: {},
 })
-
-const selectedTenant = computed<TenantOption | null>(
-  () => tenants.value.find((t) => t.id === selectedTenantId.value) ?? null,
-)
 
 const loadTenants = async () => {
   const res = await v2.staff.tenant.list({ active: true, per_page: 50 })
@@ -168,7 +175,16 @@ onMounted(async () => {
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
-          <tr v-for="mod in OVERRIDABLE_MODULES" :key="mod.key">
+          <template v-for="group in MODULE_GROUPS" :key="group.key">
+            <!-- Header de sección -->
+            <tr class="bg-gray-50/70">
+              <td colspan="5" class="px-4 py-2">
+                <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                  {{ group.label }}
+                </span>
+              </td>
+            </tr>
+            <tr v-for="mod in group.modules" :key="mod.key">
             <td class="px-4 py-3">
               <div class="font-medium text-gray-900">{{ mod.label }}</div>
               <div v-if="mod.requiresFeature" class="text-xs text-gray-500">
@@ -197,7 +213,8 @@ onMounted(async () => {
             <td class="px-4 py-3 text-xs text-gray-500 text-center whitespace-nowrap">
               {{ mod.defaultRoles.filter(r => r !== 'SUPER_ADMIN').join(', ') || '—' }}
             </td>
-          </tr>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>

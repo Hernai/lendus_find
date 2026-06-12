@@ -56,9 +56,9 @@ const goToDetail = (id: string) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 pb-32">
-    <header class="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10">
-      <div class="flex items-center justify-between">
+  <div class="min-h-screen bg-gray-50 md:bg-slate-50 pb-32">
+    <header class="bg-white md:bg-slate-50 border-b border-gray-200 md:border-transparent px-4 py-3 sticky top-0 z-10">
+      <div class="flex items-center justify-between w-full md:max-w-[560px] md:mx-auto">
         <div>
           <h1 class="text-lg font-bold text-gray-900">Mis préstamos</h1>
           <p class="text-xs text-gray-500">{{ greeting }}</p>
@@ -78,7 +78,7 @@ const goToDetail = (id: string) => {
       <div class="w-10 h-10 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
     </div>
 
-    <div v-else class="p-4 space-y-4">
+    <div v-else class="p-4 space-y-4 w-full md:max-w-[560px] md:mx-auto">
       <!-- Préstamo activo -->
       <div v-if="active" class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-3">
         <div class="flex items-center justify-between">

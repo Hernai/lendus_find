@@ -214,4 +214,28 @@ async function goToLogin() {
   text-align: center;
   color: #475569;
 }
+
+/* Desktop: la vista mobile-first se contiene en un frame centrado tipo "app" */
+@media (min-width: 768px) {
+  .mobile-screen {
+    background: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: max(env(safe-area-inset-top), 32px);
+    padding-bottom: 48px;
+  }
+  .mobile-screen > * {
+    width: 100%;
+    max-width: 560px;
+  }
+  /* El hero con fondo de marca queda dentro de la tarjeta contenida */
+  .hero {
+    border-radius: 24px;
+    box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.15);
+  }
+  .simulator-wrap {
+    margin: 16px 0 0;
+  }
+}
 </style>

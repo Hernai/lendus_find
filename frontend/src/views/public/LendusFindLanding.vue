@@ -9,10 +9,11 @@ const isVisible = ref(false)
 const heroVisible = ref(false)
 
 onMounted(() => {
-  // Set favicon for LendusFind
+  // Set favicon for LendusFind. Asset local (public/find-icon.png) — la URL
+  // remota lendus.com.mx/img/logos/find-icon.png devuelve HTML, no imagen.
   const favicon = document.querySelector<HTMLLinkElement>("link[rel~='icon']")
   if (favicon) {
-    favicon.href = 'https://lendus.com.mx/img/logos/find-icon.png'
+    favicon.href = '/find-icon.png'
   }
 
   // Set page title
