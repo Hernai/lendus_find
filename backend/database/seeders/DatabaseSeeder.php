@@ -7,32 +7,46 @@ use Illuminate\Database\Seeder;
 class DatabaseSeeder extends Seeder
 {
     /**
-     * Seed the application's database.
-     */
-    /**
-     * Seed default (fresh install). Solo crea el tenant `demo` con sus
-     * productos, staff y notification templates profesionales — listo
-     * para desarrollo, QA y como base inicial de producción.
+     * Pipeline de seed default — usado por `php artisan db:seed --force`.
      *
-     * Los tenants reales (MoneyCapital, Finatea, etc.) se activan
-     * manualmente cuando el SOFOM se incorpora, en este orden:
+     * Esta arquitectura sirve a 3 SOFOMs (instancias `*.lendus.app`) y
+     * cada uno tiene su subdominio público asignado a un `tenants.domain`.
+     * Como los 3 dominios existen permanentemente, los 3 tenants también
+     * deben existir desde el primer deploy — si no, el subdomain resuelve
+     * a un tenant fantasma y el frontend cae al fallback equivocado.
      *
-     *   php artisan db:seed --class=MoneyCapitalSeeder --force
-     *   php artisan db:seed --class=NotificationTemplateSeeder --force
-     *   php artisan db:seed --class=MoneyCapitalNotificationSeeder --force
+     * Por eso este pipeline crea TODO:
+     *   - demo.lendus.app           → Lendus Demo (sandbox/QA)
+     *   - moneycapital.lendus.app   → MoneyCapital (con unified_auth_screen)
+     *   - finatea.lendus.app        → Finatea
+     *   - superadmin@lendus.mx      → SUPER_ADMIN global (sin tenant)
+     *   - Templates pro + específicos de MC para TODOS los tenants
      *
-     *   php artisan db:seed --class=FinateaSeeder --force
-     *   php artisan db:seed --class=NotificationTemplateSeeder --force
+     * Idempotente: re-correr no duplica (updateOrCreate por slug; templates
+     * con firstOrCreate respetan ediciones del cliente).
      *
-     * NotificationTemplateSeeder es idempotente y aplica los templates
-     * profesionales a TODOS los tenants existentes en cada corrida.
+     * Para agregar un SOFOM nuevo:
+     *   1. Crea su seeder (FooSeeder) y su frontend tenant config
+     *      (frontend/tenants/foo.tenant.ts con domain = foo.lendus.app)
+     *   2. Agrégalo a este pipeline (antes de los template seeders)
+     *   3. Despliega — el siguiente `db:seed --force` lo activa
      */
     public function run(): void
     {
         $this->call([
+            // 1) Tenants + branding + productos + staff per-tenant
             DemoDataSeeder::class,
-            GlobalSuperAdminSeeder::class,   // SUPER_ADMIN global (sin tenant)
+            MoneyCapitalSeeder::class,
+            FinateaSeeder::class,
+
+            // 2) SUPER_ADMIN global (tenant_id NULL)
+            GlobalSuperAdminSeeder::class,
+
+            // 3) Notification templates — corren AL FINAL para aplicar a
+            //    todos los tenants ya creados arriba (NotificationTemplateSeeder
+            //    itera Tenant::all()).
             NotificationTemplateSeeder::class,
+            MoneyCapitalNotificationSeeder::class,
         ]);
     }
 }

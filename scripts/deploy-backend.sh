@@ -19,6 +19,8 @@
 #   SKIP_GIT            si =1, salta git fetch + reset (útil cuando el
 #                       directorio NO es un repo git y Jenkins ya hizo
 #                       rsync del workspace antes de invocar el script)
+#   SKIP_SEED           si =1, salta db:seed (útil para deploys urgentes
+#                       o cuando hubo cambios destructivos en seeders)
 # =============================================================================
 set -euo pipefail
 
@@ -28,6 +30,7 @@ PHP_BIN="${PHP_BIN:-ea-php82}"
 SKIP_COMPOSER="${SKIP_COMPOSER:-0}"
 SKIP_RESTART="${SKIP_RESTART:-0}"
 SKIP_GIT="${SKIP_GIT:-0}"
+SKIP_SEED="${SKIP_SEED:-0}"
 
 # Autodetect composer
 if [[ -z "${COMPOSER_BIN:-}" ]]; then
@@ -99,6 +102,24 @@ log "Laravel caches"
 # -----------------------------------------------------------------------------
 log "Migrate"
 "$PHP_BIN" artisan migrate --force
+
+# -----------------------------------------------------------------------------
+# 4b. Seed idempotente — sincroniza los tenants oficiales (demo,
+#     moneycapital, finatea) + super admin global + notification templates.
+#
+#     Seguro en cada deploy: los seeders usan updateOrCreate por slug y
+#     firstOrCreate para templates (respeta ediciones del cliente desde
+#     la UI). Re-correrlos NO duplica ni pisa datos editados por usuarios.
+# -----------------------------------------------------------------------------
+if [[ "$SKIP_SEED" != "1" ]]; then
+    log "Seed (idempotente)"
+    "$PHP_BIN" artisan db:seed --force
+    # Invalida cache de IdentifyTenant (lookup por slug + domain) para
+    # que los cambios del seed se vean inmediatamente.
+    "$PHP_BIN" artisan cache:clear
+else
+    log "SKIP_SEED=1, salto db:seed"
+fi
 
 # -----------------------------------------------------------------------------
 # 5. Restart servicios

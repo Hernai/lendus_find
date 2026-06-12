@@ -38,6 +38,7 @@ pipeline {
         booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Solo simular (no aplica cambios)')
         booleanParam(name: 'DEPLOY_BACKEND', defaultValue: true, description: 'Desplegar el backend Laravel')
         booleanParam(name: 'DEPLOY_FRONTEND', defaultValue: true, description: 'Desplegar el frontend Vue (todos los tenants)')
+        booleanParam(name: 'SKIP_SEED', defaultValue: false, description: 'Saltar db:seed (deploy urgente o cambio destructivo en seeders)')
         string(name: 'FRONTEND_TENANTS', defaultValue: '', description: 'Lista CSV de tenants a deployar. Vacio = todos los detectados en frontend/tenants/. Ej: "moneycapital,demo"')
     }
 
@@ -109,6 +110,7 @@ set -euo pipefail
 WORKSPACE='${env.WORKSPACE}'
 APP_DIR='${env.APP_DIR}'
 REF='${params.REF}'
+export SKIP_SEED='${params.SKIP_SEED ? "1" : "0"}'
 
 # rsync del workspace de Jenkins al APP_DIR. Sin sudo: lendus puede
 # leer el workspace (gracias al ACL) y escribir en su propio APP_DIR.
