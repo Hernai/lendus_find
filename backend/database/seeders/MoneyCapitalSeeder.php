@@ -87,6 +87,9 @@ class MoneyCapitalSeeder extends Seeder
             [
                 'id' => Tenant::where('slug', 'moneycapital')->value('id') ?? Str::uuid(),
                 'name' => 'MoneyCapital',
+                // Dominio público en producción. IdentifyTenant matchea el
+                // host exacto del request contra este campo antes que el slug.
+                'domain' => 'moneycapital.lendus.app',
                 'legal_name' => 'MoneyCapital México S.A. de C.V. SOFOM E.N.R.',
                 'rfc' => 'MMX260101AAA',
                 'branding' => [
@@ -114,9 +117,9 @@ class MoneyCapitalSeeder extends Seeder
                     'phone_score_enabled' => true,
                     'auto_disbursement' => true,
                 ],
-                'email' => 'contacto@moneycapital.mx',
+                'email' => 'contacto@moneycapital.lendus.app',
                 'phone' => '5555550000',
-                'website' => 'https://moneycapital.mx',
+                'website' => 'https://moneycapital.lendus.app',
                 'is_active' => true,
                 'activated_at' => now(),
             ],

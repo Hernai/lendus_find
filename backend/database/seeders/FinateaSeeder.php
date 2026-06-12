@@ -41,6 +41,9 @@ class FinateaSeeder extends Seeder
             [
                 'id' => Tenant::where('slug', 'finatea')->value('id') ?? Str::uuid(),
                 'name' => 'Finatea',
+                // Dominio público en producción. IdentifyTenant matchea el
+                // host exacto del request contra este campo antes que el slug.
+                'domain' => 'finatea.lendus.app',
                 'legal_name' => 'Finatea S.A. de C.V. SOFOM E.N.R.',
                 'rfc' => 'FIN260101AAA',
                 'branding' => [
@@ -62,9 +65,9 @@ class FinateaSeeder extends Seeder
                     'phone_score_enabled' => false,
                     'auto_disbursement' => false,
                 ],
-                'email' => 'contacto@finatea.mx',
+                'email' => 'contacto@finatea.lendus.app',
                 'phone' => '5555550100',
-                'website' => 'https://finatea.mx',
+                'website' => 'https://finatea.lendus.app',
                 'is_active' => true,
                 'activated_at' => now(),
             ],

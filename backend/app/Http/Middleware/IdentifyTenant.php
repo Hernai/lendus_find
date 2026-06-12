@@ -61,16 +61,32 @@ class IdentifyTenant
 
     /**
      * Resolve the tenant from the request.
+     *
+     * Orden de resolución:
+     * 1. Header `X-Tenant-ID` (slug, UUID o dominio) — gana en API calls.
+     * 2. Match exacto del host (`moneycapital.lendus.app`) contra
+     *    `tenants.domain`. Permite tenants con dominio propio.
+     * 3. Subdominio (`moneycapital` de `moneycapital.lendus.app`) → slug.
+     * 4. Query param `?tenant=slug` — fallback para requests sin headers
+     *    (ej. manifest.webmanifest pedido por el browser).
+     * 5. En `local`, primer tenant para conveniencia de dev.
      */
     protected function resolveTenant(Request $request): ?Tenant
     {
-        // 1. Check header (highest priority for API calls)
+        // 1. Header (highest priority for API calls)
         $tenantId = $request->header('X-Tenant-ID');
         if ($tenantId !== null && $tenantId !== '') {
             return $this->findTenantByIdOrSlug($tenantId);
         }
 
-        // 2. Check subdomain (probamos pero NO bloqueamos si no resuelve:
+        // 2. Match exacto por dominio público del request.
+        $host = Str::before($request->getHost(), ':');
+        $tenant = $this->findTenantByDomain($host);
+        if ($tenant !== null) {
+            return $tenant;
+        }
+
+        // 3. Subdominio (probamos pero NO bloqueamos si no resuelve:
         //    queremos seguir al query param fallback. Antes este branch
         //    cortaba con `return` aunque devolviera null y nunca llegaba
         //    al query — fallaba con hosts tipo 127.0.0.1 cuyo "subdomain"
@@ -131,8 +147,25 @@ class IdentifyTenant
                     return Tenant::find($identifier);
                 }
 
-                return null;
+                // Try by domain (ej. el cliente mandó el host completo en
+                // X-Tenant-ID: moneycapital.lendus.app)
+                return Tenant::where('domain', $identifier)->first();
             }
+        );
+    }
+
+    /**
+     * Match exacto por dominio público (`tenants.domain`). Cache 10 min,
+     * misma TTL que findTenantByIdOrSlug. No matchea por slug para evitar
+     * ambigüedad — si el host es `moneycapital.lendus.app` y el slug es
+     * `moneycapital`, solo gana cuando hay un registro `domain` exacto.
+     */
+    protected function findTenantByDomain(string $host): ?Tenant
+    {
+        return Cache::remember(
+            "tenant:domain:{$host}",
+            600,
+            fn () => Tenant::where('domain', $host)->first(),
         );
     }
 

@@ -24,7 +24,7 @@ const config: TenantConfig = {
     statusBar: 'light',
   },
   // push se configurará cuando MoneyCapital provea credenciales reales.
-  deepLinkHost: 'app.moneycapital.mx',
+  deepLinkHost: 'moneycapital.lendus.app',
   custom: {
     landing: 'MoneyCapitalLanding',
     // Auth, simulador y dashboard usan el flujo estándar y respetan el

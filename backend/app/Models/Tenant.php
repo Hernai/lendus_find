@@ -18,6 +18,7 @@ class Tenant extends Model
     protected $fillable = [
         'name',
         'slug',
+        'domain',
         'legal_name',
         'rfc',
         'branding',
@@ -61,6 +62,17 @@ class Tenant extends Model
             $originalSlug = $tenant->getOriginal('slug');
             if ($originalSlug && $originalSlug !== $tenant->slug) {
                 Cache::forget("tenant:lookup:{$originalSlug}");
+            }
+            // Lookup por dominio público (tenants.domain) — IdentifyTenant
+            // matchea el host exacto del request contra esta columna.
+            if ($tenant->domain) {
+                Cache::forget("tenant:domain:{$tenant->domain}");
+                Cache::forget("tenant:lookup:{$tenant->domain}");
+            }
+            $originalDomain = $tenant->getOriginal('domain');
+            if ($originalDomain && $originalDomain !== $tenant->domain) {
+                Cache::forget("tenant:domain:{$originalDomain}");
+                Cache::forget("tenant:lookup:{$originalDomain}");
             }
             // V2 public config: payload derivado del tenant (branding, settings,
             // integraciones). Si el tenant cambió, el config tiene que regenerarse.

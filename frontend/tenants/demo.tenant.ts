@@ -22,7 +22,7 @@ const config: TenantConfig = {
     statusBar: 'light',
   },
   // push se configurará en Fase 6 cuando haya credenciales reales.
-  deepLinkHost: 'demo.lendus.mx',
+  deepLinkHost: 'demo.lendus.app',
   custom: {
     landing: 'DemoLanding',
     // El resto del flujo (auth, simulador, dashboard) es estándar y

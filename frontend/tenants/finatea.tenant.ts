@@ -24,7 +24,7 @@ const config: TenantConfig = {
     primary: '#0D9488',
     statusBar: 'light',
   },
-  deepLinkHost: 'app.finatea.mx',
+  deepLinkHost: 'finatea.lendus.app',
   custom: {
     landing: 'FinateaLanding',
   },

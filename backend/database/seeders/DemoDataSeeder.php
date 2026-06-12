@@ -45,6 +45,9 @@ class DemoDataSeeder extends Seeder
             [
                 'id' => Tenant::where('slug', 'demo')->value('id') ?? Str::uuid(),
                 'name' => 'Lendus Demo',
+                // Dominio público en producción. IdentifyTenant matchea el
+                // host exacto del request contra este campo antes que el slug.
+                'domain' => 'demo.lendus.app',
                 'legal_name' => 'Lendus Financiera S.A. de C.V. SOFOM E.N.R.',
                 'rfc' => 'LFI180101ABC',
                 'branding' => [
@@ -65,9 +68,9 @@ class DemoDataSeeder extends Seeder
                     'max_loan_amount' => 500000,
                 ],
                 'features' => null,
-                'email' => 'contacto@lendus.mx',
+                'email' => 'contacto@demo.lendus.app',
                 'phone' => '5555555555',
-                'website' => 'https://lendus.mx',
+                'website' => 'https://demo.lendus.app',
                 'is_active' => true,
                 'activated_at' => now(),
             ],
