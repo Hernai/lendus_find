@@ -89,9 +89,18 @@ fi
 # en su classmap. Sin esto, `artisan db:seed --class=FinateaSeeder` falla
 # con "Class not found". Es rápido (~1s) e idempotente; lo corremos en
 # cada deploy.
+#
+# `-d register_argc_argv=Off` evita que composer aborte cuando el SAPI
+# de PHP detecta cgi/fpm con argc enabled (caso típico en cPanel/EA).
+# `-d disable_functions=` neutraliza el bloqueo de `exec/passthru` que
+# php.ini del web pone por seguridad — composer los necesita para correr
+# sus scripts post-autoload-dump.
 if [[ -n "${COMPOSER_BIN:-}" ]]; then
     log "composer dump-autoload (refresca classmap)"
-    "$PHP_BIN" "$COMPOSER_BIN" dump-autoload --optimize --no-interaction
+    "$PHP_BIN" \
+        -d register_argc_argv=Off \
+        -d disable_functions= \
+        "$COMPOSER_BIN" dump-autoload --optimize --no-interaction
 fi
 
 # -----------------------------------------------------------------------------
