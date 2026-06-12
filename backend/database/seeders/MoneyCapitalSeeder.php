@@ -25,14 +25,41 @@ use Illuminate\Support\Str;
  */
 class MoneyCapitalSeeder extends Seeder
 {
+    /**
+     * Catálogo oficial de productos de MoneyCapital. Cualquier producto del
+     * tenant con un code fuera de esta lista se considera huérfano (típico:
+     * productos del seed demo viejo que quedaron asignados a MC en
+     * producción) y se DESACTIVA — no se borra, porque puede tener
+     * applications históricas asociadas.
+     */
+    private const OFFICIAL_PRODUCT_CODES = ['MC-SIN-BURO'];
+
     public function run(): void
     {
         $tenant = $this->createTenant();
         $this->createBranding($tenant);
         $this->createProduct($tenant);
+        $this->deactivateForeignProducts($tenant);
         $this->createStaff($tenant);
 
         $this->command->info("✓ Tenant MoneyCapital seedeado (slug={$tenant->slug})");
+    }
+
+    /**
+     * Desactiva productos del tenant que no pertenecen a su catálogo oficial.
+     * Idempotente: la segunda corrida no encuentra nada que desactivar.
+     */
+    private function deactivateForeignProducts(Tenant $tenant): void
+    {
+        $deactivated = Product::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->whereNotIn('code', self::OFFICIAL_PRODUCT_CODES)
+            ->where('is_active', true)
+            ->update(['is_active' => false]);
+
+        if ($deactivated > 0) {
+            $this->command->warn("  ⚠ {$deactivated} producto(s) ajeno(s) al catálogo MC desactivado(s)");
+        }
     }
 
     /**

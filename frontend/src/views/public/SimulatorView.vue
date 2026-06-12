@@ -126,7 +126,11 @@ onMounted(async () => {
                 </div>
                 <div class="flex-1 min-w-0">
                   <h3 class="font-semibold text-gray-900 mb-1">{{ product.name }}</h3>
-                  <p class="text-sm text-gray-500 mb-3">{{ product.description }}</p>
+                  <!-- line-clamp-2: descripciones largas se truncan para que
+                       todas las cards del grid mantengan altura pareja -->
+                  <p class="text-sm text-gray-500 mb-3 line-clamp-2" :title="product.description ?? undefined">
+                    {{ product.description }}
+                  </p>
                   <div class="flex flex-wrap gap-2 text-xs">
                     <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
                       {{ formatMoney(product.rules?.min_amount ?? 0) }} - {{ formatMoney(product.rules?.max_amount ?? 0) }}
