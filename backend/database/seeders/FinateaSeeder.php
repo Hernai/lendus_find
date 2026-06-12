@@ -180,10 +180,20 @@ class FinateaSeeder extends Seeder
         ];
 
         foreach ($users as $u) {
-            $existing = StaffAccount::where('email', $u['email'])
-                ->where('tenant_id', $tenant->id)
+            // El email es UNIQUE global. Buscamos sin global scope para
+            // detectar la fila aunque esté en otro tenant. Si existe, la
+            // reasignamos a este tenant en vez de crear duplicado.
+            $existing = StaffAccount::withoutGlobalScope('tenant')
+                ->where('email', $u['email'])
                 ->first();
-            if ($existing) continue;
+            if ($existing) {
+                if ($existing->tenant_id !== $tenant->id) {
+                    \DB::table('staff_accounts')
+                        ->where('id', $existing->id)
+                        ->update(['tenant_id' => $tenant->id, 'updated_at' => now()]);
+                }
+                continue;
+            }
 
             $account = StaffAccount::create([
                 'tenant_id' => $tenant->id,

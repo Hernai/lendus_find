@@ -227,10 +227,22 @@ class DemoDataSeeder extends Seeder
         ];
 
         foreach ($users as $u) {
-            $existing = StaffAccount::where('email', $u['email'])
-                ->where('tenant_id', $tenant->id)
+            // El email es UNIQUE global en staff_accounts. Buscamos sin
+            // global scope para detectar la fila aunque esté asociada a
+            // otro tenant (caso típico: seed reproducido tras renombrar
+            // o re-crear el tenant). Si ya existe, NO la creamos de nuevo
+            // y reasignamos su tenant_id al actual si difiere.
+            $existing = StaffAccount::withoutGlobalScope('tenant')
+                ->where('email', $u['email'])
                 ->first();
-            if ($existing) continue;
+            if ($existing) {
+                if ($existing->tenant_id !== $tenant->id) {
+                    \DB::table('staff_accounts')
+                        ->where('id', $existing->id)
+                        ->update(['tenant_id' => $tenant->id, 'updated_at' => now()]);
+                }
+                continue;
+            }
 
             $account = StaffAccount::create([
                 'tenant_id' => $tenant->id,
