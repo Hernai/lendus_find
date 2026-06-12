@@ -1014,11 +1014,11 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
           <div class="mb-4">
             <h3 class="font-bold text-lg text-gray-900 group-hover:text-primary-600 transition-colors">{{ tenant.name }}</h3>
             <a
-              :href="`https://${tenant.slug}.losapp.com`"
+              :href="`https://${tenant.domain || `${tenant.slug}.lendus.app`}`"
               target="_blank"
               class="text-sm text-gray-500 hover:text-primary-600 inline-flex items-center gap-1"
             >
-              {{ tenant.slug }}.losapp.com
+              {{ tenant.domain || `${tenant.slug}.lendus.app` }}
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
@@ -1169,7 +1169,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
                       editingTenant ? 'bg-gray-100 cursor-not-allowed' : ''
                     ]"
                   />
-                  <span class="text-xs text-gray-500 whitespace-nowrap">.losapp.com</span>
+                  <span class="text-xs text-gray-500 whitespace-nowrap">.lendus.app</span>
                 </div>
                 <p v-if="formErrors.slug" class="mt-1 text-xs text-red-600">{{ formErrors.slug }}</p>
               </div>
@@ -1311,7 +1311,7 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
               </div>
               <div>
                 <h2 class="text-lg font-bold text-gray-900">{{ configTenant?.name }}</h2>
-                <p class="text-sm text-gray-500">{{ configTenant?.slug }}.losapp.com</p>
+                <p class="text-sm text-gray-500">{{ configTenant?.domain || `${configTenant?.slug}.lendus.app` }}</p>
               </div>
             </div>
             <button @click="showConfigModal = false" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">

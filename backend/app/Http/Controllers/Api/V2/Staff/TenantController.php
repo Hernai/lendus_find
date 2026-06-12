@@ -468,6 +468,10 @@ class TenantController extends Controller
             'id' => $tenant->id,
             'name' => $tenant->name,
             'slug' => $tenant->slug,
+            // Dominio público real (ej. moneycapital.lendus.app). Si el
+            // tenant aún no lo tiene asignado, el frontend cae a
+            // `{slug}.lendus.app` como default.
+            'domain' => $tenant->domain,
             'legal_name' => $tenant->legal_name,
             'rfc' => $tenant->rfc,
             'email' => $tenant->email,
@@ -495,6 +499,10 @@ class TenantController extends Controller
             'id' => $tenant->id,
             'name' => $tenant->name,
             'slug' => $tenant->slug,
+            // Dominio público real (ej. moneycapital.lendus.app). Si el
+            // tenant aún no lo tiene asignado, el frontend cae a
+            // `{slug}.lendus.app` como default.
+            'domain' => $tenant->domain,
             'legal_name' => $tenant->legal_name,
             'rfc' => $tenant->rfc,
             'email' => $tenant->email,

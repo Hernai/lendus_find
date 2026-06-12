@@ -27,8 +27,12 @@ const config: TenantConfig = {
   deepLinkHost: 'moneycapital.lendus.app',
   custom: {
     landing: 'MoneyCapitalLanding',
-    // Auth, simulador y dashboard usan el flujo estándar y respetan el
-    // branding del admin.
+    // Pantalla unificada de auth (UnifiedAuthView): combina celular + OTP +
+    // método de envío en una sola pantalla. Se activa en runtime cuando el
+    // backend devuelve features.unified_auth_screen=true para este tenant.
+    authFlow: 'UnifiedAuthView',
+    // Simulador y dashboard usan el flujo estándar y respetan el branding
+    // del admin.
   },
   auth: {
     methods: ['phone', 'email'],

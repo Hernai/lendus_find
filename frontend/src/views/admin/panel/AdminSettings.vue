@@ -398,7 +398,7 @@ const getProviderHelpText = (provider: string) => {
           </div>
           <div>
             <h1 class="text-xl font-bold text-gray-900">{{ tenant.name }}</h1>
-            <p class="text-sm text-gray-500">{{ tenant.slug }}.losapp.com</p>
+            <p class="text-sm text-gray-500">{{ tenant.domain || `${tenant.slug}.lendus.app` }}</p>
           </div>
         </div>
       </div>
