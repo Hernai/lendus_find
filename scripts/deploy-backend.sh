@@ -84,6 +84,16 @@ else
     log "SKIP_COMPOSER=1, salto composer install"
 fi
 
+# Regenerar autoload: el rsync de Jenkins puede haber agregado archivos
+# PHP nuevos (seeders, controllers, modelos) que composer aún no conoce
+# en su classmap. Sin esto, `artisan db:seed --class=FinateaSeeder` falla
+# con "Class not found". Es rápido (~1s) e idempotente; lo corremos en
+# cada deploy.
+if [[ -n "${COMPOSER_BIN:-}" ]]; then
+    log "composer dump-autoload (refresca classmap)"
+    "$PHP_BIN" "$COMPOSER_BIN" dump-autoload --optimize --no-interaction
+fi
+
 # -----------------------------------------------------------------------------
 # 3. Cachear Laravel
 # -----------------------------------------------------------------------------
@@ -112,8 +122,24 @@ log "Migrate"
 #     la UI). Re-correrlos NO duplica ni pisa datos editados por usuarios.
 # -----------------------------------------------------------------------------
 if [[ "$SKIP_SEED" != "1" ]]; then
-    log "Seed (idempotente)"
-    "$PHP_BIN" artisan db:seed --force
+    # Llamar a cada seeder POR NOMBRE en lugar de `db:seed` genérico.
+    # Razón: DatabaseSeeder.php puede no haberse actualizado en el rsync
+    # (timestamps, --update, exclusiones) y entonces `db:seed` solo
+    # ejecuta los que el DatabaseSeeder viejo conoce — los SOFOMs nuevos
+    # nunca se crean. Llamando por nombre forzamos los que SÍ existen
+    # en disco. Cada uno es idempotente (updateOrCreate por slug,
+    # firstOrCreate para templates).
+    log "Seed (idempotente, por nombre)"
+    for SEEDER in DemoDataSeeder MoneyCapitalSeeder FinateaSeeder \
+                  GlobalSuperAdminSeeder NotificationTemplateSeeder \
+                  MoneyCapitalNotificationSeeder; do
+        if [[ -f "database/seeders/${SEEDER}.php" ]]; then
+            log "  -> ${SEEDER}"
+            "$PHP_BIN" artisan db:seed --class="$SEEDER" --force
+        else
+            log "  -> SKIP ${SEEDER} (no existe en disco)"
+        fi
+    done
     # Invalida cache de IdentifyTenant (lookup por slug + domain) para
     # que los cambios del seed se vean inmediatamente.
     "$PHP_BIN" artisan cache:clear
