@@ -58,13 +58,13 @@ pipeline {
                     $class: 'GitSCM',
                     branches: [[name: "${params.REF}"]],
                     userRemoteConfigs: [[
-                        // GitLab es la fuente de verdad activa. Los commits
-                        // se empujan a ambos remotes (gitlab + origin) pero
-                        // si alguno se queda atrás, GitLab es el bueno.
-                        url: 'git@gitlab.com:ITSolutionMX/lendus-find-mobile.git',
-                        credentialsId: 'gitlab-deploy-key',
-                        // Fallback a GitHub si no hay credenciales de GitLab:
-                        // url: 'https://github.com/Hernai/lendus_find.git',
+                        // GitLab es la fuente de verdad. HTTPS + credential
+                        // `gitlab-token-lendusfind` (mismo PAT que usa el
+                        // SCM declarativo automático arriba). Si se usa
+                        // SSH (git@gitlab.com) hay que registrar el host
+                        // key en /var/lib/jenkins/.ssh/known_hosts.
+                        url: 'https://gitlab.com/ITSolutionMX/lendus-find-mobile.git',
+                        credentialsId: 'gitlab-token-lendusfind',
                     ]],
                 ])
                 sh 'git log -1 --pretty=format:"%h %an %s"'
