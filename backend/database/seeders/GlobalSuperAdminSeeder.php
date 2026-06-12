@@ -45,11 +45,16 @@ class GlobalSuperAdminSeeder extends Seeder
         if ($account) {
             // Promueve a global si no lo es ya.
             if ($account->tenant_id !== null || $account->role !== StaffAccount::ROLE_SUPER_ADMIN) {
-                $account->update([
-                    'tenant_id' => null,
-                    'role' => StaffAccount::ROLE_SUPER_ADMIN,
-                    'is_active' => true,
-                ]);
+                // Update directo en BD para saltarse el HasTenant::creating
+                // que reasigna tenant_id automáticamente desde app('tenant.id').
+                \DB::table('staff_accounts')
+                    ->where('id', $account->id)
+                    ->update([
+                        'tenant_id' => null,
+                        'role' => StaffAccount::ROLE_SUPER_ADMIN,
+                        'is_active' => true,
+                        'updated_at' => now(),
+                    ]);
             }
             return;
         }
@@ -62,6 +67,14 @@ class GlobalSuperAdminSeeder extends Seeder
             'is_active' => true,
             'email_verified_at' => now(),
         ]);
+
+        // Forzar tenant_id=NULL después del create: el trait HasTenant
+        // (boot creating) sobrescribe con app('tenant.id') si está bound,
+        // aunque le pasemos null explícitamente. El raw update evita los
+        // eventos del modelo y deja el super admin verdaderamente global.
+        \DB::table('staff_accounts')
+            ->where('id', $account->id)
+            ->update(['tenant_id' => null]);
 
         StaffProfile::firstOrCreate(
             ['account_id' => $account->id],

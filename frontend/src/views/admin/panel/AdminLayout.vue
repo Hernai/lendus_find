@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore, useTenantStore } from '@/stores'
 import TenantSwitcher from '@/components/admin/TenantSwitcher.vue'
 import { ToastContainer } from '@/components/common'
+import { ADMIN_MODULES, isModuleVisible } from '@/constants/admin-modules'
 
 const router = useRouter()
 const route = useRoute()
@@ -29,8 +30,26 @@ const userRole = computed(() => {
   return option?.label || 'Staff'
 })
 
-// Navigation items filtered by permissions
+// Navigation items derivados del catálogo único `ADMIN_MODULES`.
+// `isModuleVisible` combina: rol del usuario + `Tenant.features` (legacy)
+// + overrides editados por el super admin. Ver `constants/admin-modules.ts`.
+const navItemsFromCatalog = computed(() => {
+  const role = currentUser.value?.role ?? null
+  const features = (tenantStore.tenant?.features ?? null) as Record<string, boolean> | null
+  const overrides = authStore.moduleOverrides
+  return ADMIN_MODULES
+    .filter((m) => isModuleVisible(m, role, features, overrides))
+    .map((m) => ({ path: m.path, label: m.label, icon: m.icon }))
+})
+
+// Navigation items filtered by permissions (legacy; lo dejamos como
+// fallback hasta que migremos todos los items al catálogo).
 const navItems = computed(() => {
+  // Si el catálogo ya cubre el rol (vino con overrides del backend o el
+  // usuario es staff típico) lo usamos; sino caemos al legacy.
+  if (navItemsFromCatalog.value.length > 0) {
+    return navItemsFromCatalog.value
+  }
   const items = [
     // Dashboard - all staff can see
     {

@@ -18,6 +18,8 @@ export interface V2Tenant {
   id: string
   name: string
   slug: string
+  /** Dominio público (ej. moneycapital.lendus.app). Null si aún no asignado. */
+  domain: string | null
   legal_name: string | null
   rfc: string | null
   email: string | null
@@ -331,6 +333,41 @@ export async function testApiConfig(
   return response.data
 }
 
+/**
+ * Override granular guardado en la BD: una EXCEPCIÓN al default declarado
+ * en el catálogo del frontend (`constants/admin-modules.ts`).
+ */
+export interface V2TenantModuleOverride {
+  role: 'ANALYST' | 'SUPERVISOR' | 'ADMIN'
+  module_key: string
+  enabled: boolean
+}
+
+/** Lista los overrides del tenant. Solo SUPER_ADMIN global. */
+export async function getModules(
+  tenantId: string,
+): Promise<V2ApiResponse<{ tenant: { id: string; slug: string; name: string }; overrides: V2TenantModuleOverride[] }>> {
+  const response = await api.get<V2ApiResponse<{ tenant: { id: string; slug: string; name: string }; overrides: V2TenantModuleOverride[] }>>(
+    `${BASE_PATH}/${tenantId}/modules`,
+  )
+  return response.data
+}
+
+/**
+ * Reemplaza el conjunto completo de overrides del tenant. Las filas no
+ * incluidas se borran (equivale a "restaurar default").
+ */
+export async function updateModules(
+  tenantId: string,
+  overrides: V2TenantModuleOverride[],
+): Promise<V2ApiResponse<{ tenant_id: string; overrides_count: number }>> {
+  const response = await api.put<V2ApiResponse<{ tenant_id: string; overrides_count: number }>>(
+    `${BASE_PATH}/${tenantId}/modules`,
+    { overrides },
+  )
+  return response.data
+}
+
 export default {
   list,
   get,
@@ -345,4 +382,6 @@ export default {
   saveApiConfig,
   deleteApiConfig,
   testApiConfig,
+  getModules,
+  updateModules,
 }

@@ -524,6 +524,13 @@ const routes: RouteRecordRaw[] = [
         component: AdminTenants
       },
       {
+        // Solo SUPER_ADMIN global. La validación efectiva la hace el endpoint
+        // backend; aquí solo controlamos visibilidad del sidebar.
+        path: 'configuracion/modulos',
+        name: 'admin-modules-config',
+        component: () => import('@/views/admin/panel/AdminModulesConfig.vue'),
+      },
+      {
         path: 'prestamos',
         name: 'admin-loans',
         component: () => import('@/views/admin/panel/AdminLoans.vue')

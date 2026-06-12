@@ -111,6 +111,14 @@ export const useAuthStore = defineStore('auth', () => {
   // Permissions state (for staff users)
   const permissions = ref<UserPermissions | null>(null)
 
+  // Overrides granulares de módulos del tenant activo.
+  // Mapa { "ROLE.module_key": bool } poblado al login y persistido en
+  // storage. El catálogo `ADMIN_MODULES` (frontend) decide el default; este
+  // mapa SOLO contiene las excepciones editadas por el super admin.
+  const moduleOverrides = ref<Record<string, boolean>>(
+    storage.get<Record<string, boolean>>(STORAGE_KEYS.MODULE_OVERRIDES) ?? {},
+  )
+
   // Cache control for checkAuth
   const authChecked = ref(false)
   const authCheckPromise = ref<Promise<boolean> | null>(null)
@@ -708,6 +716,7 @@ export const useAuthStore = defineStore('auth', () => {
           is_active: boolean
           is_super_admin_global?: boolean
           available_tenants?: Array<{id: string; slug: string; name: string}>
+          module_overrides?: Record<string, boolean>
           profile?: { full_name: string; phone?: string }
           permissions: Record<string, boolean>
           created_at?: string
@@ -741,6 +750,12 @@ export const useAuthStore = defineStore('auth', () => {
         storage.set(STORAGE_KEYS.AUTH_TOKEN, apiToken)
         storage.set(STORAGE_KEYS.CURRENT_USER_ID, apiUser.id)
         storage.set(STORAGE_KEYS.CURRENT_USER_TYPE, 'staff')
+
+        // Overrides de módulos del tenant activo — usados por AdminLayout
+        // para mostrar/ocultar items del sidebar. Si el endpoint no los
+        // devuelve, queda `{}` (todo usa los defaults del catálogo).
+        moduleOverrides.value = apiUser.module_overrides ?? {}
+        storage.set(STORAGE_KEYS.MODULE_OVERRIDES, moduleOverrides.value)
 
         // Super admin global: persistir flag y lista de tenants para el
         // dropdown del header. Si solo hay 1, auto-seleccionarlo.
@@ -877,6 +892,7 @@ export const useAuthStore = defineStore('auth', () => {
     isStaff,
     // Permissions
     permissions,
+    moduleOverrides,
     // Actions
     sendOtp,
     verifyOtp,

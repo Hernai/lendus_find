@@ -27,6 +27,8 @@ interface Tenant {
   id: string
   name: string
   slug: string
+  /** Dominio público (ej. moneycapital.lendus.app). Null si aún no asignado. */
+  domain: string | null
   legal_name: string | null
   rfc: string | null
   email: string | null

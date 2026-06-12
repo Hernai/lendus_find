@@ -239,6 +239,7 @@ export const STORAGE_KEYS = {
   SELECTED_TENANT_ID: 'selected_tenant_id',
   IS_SUPER_ADMIN_GLOBAL: 'is_super_admin_global',
   AVAILABLE_TENANTS: 'available_tenants',
+  MODULE_OVERRIDES: 'module_overrides',
   SELECTED_PRODUCT: 'selected_product',
   SIMULATION: 'simulation',
   ONBOARDING_STEP: 'onboarding_step',

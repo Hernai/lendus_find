@@ -24,6 +24,8 @@ export interface Branding {
 export interface TenantPreviewInfo {
   name: string
   slug: string
+  /** Dominio público (ej. moneycapital.lendus.app). Si está vacío se muestra el fallback {slug}.lendus.app */
+  domain?: string | null
 }
 
 const props = defineProps<{

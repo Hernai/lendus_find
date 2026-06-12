@@ -294,6 +294,13 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
             ->middleware('etag');
 
         // =============================================
+        // Configuración de módulos visibles por (tenant, rol)
+        // SUPER_ADMIN global only — validación en controller
+        // =============================================
+        Route::get('/tenants/{id}/modules', [\App\Http\Controllers\Api\V2\Staff\TenantModuleController::class, 'index']);
+        Route::put('/tenants/{id}/modules', [\App\Http\Controllers\Api\V2\Staff\TenantModuleController::class, 'update']);
+
+        // =============================================
         // Device tokens (push notifications)
         // =============================================
         Route::post('/devices', [StaffDeviceController::class, 'register']);

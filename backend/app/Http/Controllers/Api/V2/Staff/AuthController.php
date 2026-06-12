@@ -274,7 +274,26 @@ class AuthController extends Controller
             'last_login_at' => $account->last_login_at?->toIso8601String(),
             'permissions' => $account->getPermissionsArray(),
             'available_tenants' => $availableTenants,
+            // Overrides de módulos del tenant ACTIVO (X-Tenant-ID o tenant del
+            // staff). Mapa { "ROLE.module_key": bool }. El frontend lo combina
+            // con el catálogo + features para decidir qué items del sidebar
+            // muestra. Para super admin global devolvemos los overrides del
+            // tenant que esté resolviendo IdentifyTenant.
+            'module_overrides' => $this->moduleOverridesForActiveTenant(),
         ];
+    }
+
+    /**
+     * Mapa { "ROLE.module_key": bool } de overrides del tenant activo del
+     * request, o `{}` si no hay tenant resuelto (ej. requests sin contexto
+     * de tenant).
+     */
+    private function moduleOverridesForActiveTenant(): array
+    {
+        if (!app()->bound('tenant.id')) {
+            return [];
+        }
+        return \App\Models\TenantRoleModuleOverride::mapForTenant(app('tenant.id'));
     }
 
     /**

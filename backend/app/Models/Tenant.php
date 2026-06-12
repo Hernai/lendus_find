@@ -154,6 +154,16 @@ class Tenant extends Model
     }
 
     /**
+     * Overrides granulares de visibilidad de módulos por (rol, módulo).
+     * Una fila por excepción; si no hay fila, el frontend usa el default
+     * declarado en `frontend/src/constants/admin-modules.ts`.
+     */
+    public function moduleOverrides(): HasMany
+    {
+        return $this->hasMany(TenantRoleModuleOverride::class);
+    }
+
+    /**
      * Check si una feature flag está habilitada para este tenant.
      *
      * Flags reconocidas:
