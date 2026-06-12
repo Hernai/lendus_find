@@ -198,12 +198,13 @@ const handleLogout = async () => {
     <nav class="bg-gray-900 text-white shadow-lg">
       <div class="px-4">
         <div class="flex items-center justify-between h-14">
-          <!-- Logo & Brand (compact) — logo de LendusFind, la marca del SaaS -->
+          <!-- Logo & Brand (compact) — logo del tenant si lo configuró en
+               Branding; fallback al ícono de LendusFind (marca del SaaS) -->
           <div class="flex items-center gap-2">
             <img
-              src="/find-icon.png"
-              alt="LendusFind"
-              class="w-7 h-7 rounded-md object-contain bg-white/90 p-0.5"
+              :src="tenantStore.tenant?.branding?.logo_url || '/find-icon.png'"
+              :alt="tenantName"
+              class="w-8 h-8 rounded-lg object-contain bg-white p-1"
             />
             <span class="font-semibold text-sm hidden sm:block">{{ tenantName }}</span>
           </div>
