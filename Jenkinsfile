@@ -58,10 +58,13 @@ pipeline {
                     $class: 'GitSCM',
                     branches: [[name: "${params.REF}"]],
                     userRemoteConfigs: [[
-                        url: 'https://github.com/Hernai/lendus_find.git',
-                        // O GitLab si prefieres usar ese remote:
-                        // url: 'git@gitlab.com:ITSolutionMX/lendus-find-mobile.git',
-                        // credentialsId: 'gitlab-deploy-key',
+                        // GitLab es la fuente de verdad activa. Los commits
+                        // se empujan a ambos remotes (gitlab + origin) pero
+                        // si alguno se queda atrás, GitLab es el bueno.
+                        url: 'git@gitlab.com:ITSolutionMX/lendus-find-mobile.git',
+                        credentialsId: 'gitlab-deploy-key',
+                        // Fallback a GitHub si no hay credenciales de GitLab:
+                        // url: 'https://github.com/Hernai/lendus_find.git',
                     ]],
                 ])
                 sh 'git log -1 --pretty=format:"%h %an %s"'
