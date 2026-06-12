@@ -85,22 +85,41 @@ else
 fi
 
 # Regenerar autoload: el rsync de Jenkins puede haber agregado archivos
-# PHP nuevos (seeders, controllers, modelos) que composer aún no conoce
-# en su classmap. Sin esto, `artisan db:seed --class=FinateaSeeder` falla
-# con "Class not found". Es rápido (~1s) e idempotente; lo corremos en
-# cada deploy.
+# PHP nuevos (seeders, controllers, modelos). Para que el classmap
+# optimizado los incluya hay que correr `composer dump-autoload`.
 #
-# `-d register_argc_argv=Off` evita que composer aborte cuando el SAPI
-# de PHP detecta cgi/fpm con argc enabled (caso típico en cPanel/EA).
-# `-d disable_functions=` neutraliza el bloqueo de `exec/passthru` que
-# php.ini del web pone por seguridad — composer los necesita para correr
-# sus scripts post-autoload-dump.
+# Caveat cPanel/EasyApache: `ea-php82` por default es cgi/fcgi. composer
+# en cgi no recibe argv → ignora `dump-autoload` y solo muestra el help.
+# Buscamos un binario PHP CLI real (suele estar en /opt/cpanel/ea-php82/
+# root/usr/bin/php). Si no hay, intentamos con flags. Si todo falla, NO
+# abortamos el deploy: Laravel cae al autoload PSR-4 que sí encuentra
+# los seeders nuevos por filesystem.
 if [[ -n "${COMPOSER_BIN:-}" ]]; then
     log "composer dump-autoload (refresca classmap)"
-    "$PHP_BIN" \
-        -d register_argc_argv=Off \
-        -d disable_functions= \
-        "$COMPOSER_BIN" dump-autoload --optimize --no-interaction
+    PHP_CLI=""
+    for cand in /opt/cpanel/ea-php82/root/usr/bin/php-cli \
+                /opt/cpanel/ea-php82/root/usr/bin/php \
+                /usr/local/bin/ea-php82-cli \
+                ea-php82-cli; do
+        if command -v "$cand" >/dev/null 2>&1; then
+            SAPI=$("$cand" -r 'echo PHP_SAPI;' 2>/dev/null || echo "")
+            if [[ "$SAPI" == "cli" ]]; then
+                PHP_CLI="$cand"
+                break
+            fi
+        fi
+    done
+
+    if [[ -n "$PHP_CLI" ]]; then
+        log "  usando PHP CLI: $PHP_CLI"
+        "$PHP_CLI" "$COMPOSER_BIN" dump-autoload --optimize --no-interaction \
+            || log "  WARN: dump-autoload falló (Laravel usará PSR-4 fallback)"
+    else
+        log "  no se encontró binario PHP CLI puro, intentando con $PHP_BIN + flags"
+        "$PHP_BIN" -d register_argc_argv=Off -d disable_functions= \
+            "$COMPOSER_BIN" dump-autoload --optimize --no-interaction \
+            || log "  WARN: dump-autoload falló (Laravel usará PSR-4 fallback)"
+    fi
 fi
 
 # -----------------------------------------------------------------------------
