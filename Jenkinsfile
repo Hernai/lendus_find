@@ -86,10 +86,14 @@ pipeline {
         }
 
         stage('Seed Only') {
-            // Atajo: ejecuta solo migrate + db:seed --force en el APP_DIR
-            // ya desplegado. NO toca código, composer, cachés, ni servicios.
-            // Pensado para cuando hay seeders nuevos que no corrieron en el
-            // último deploy y quieres aplicarlos sin re-deployar todo.
+            // Atajo: ejecuta solo migrate + db:seed en el APP_DIR ya
+            // desplegado, llamando a cada seeder POR NOMBRE en vez de
+            // confiar en DatabaseSeeder (que puede estar desactualizado
+            // en producción si el último deploy no actualizó el código).
+            //
+            // NO toca código, composer, cachés ni servicios. Si el output
+            // del diagnóstico muestra que el código del seeder es viejo,
+            // necesitas un deploy completo (desmarca SEED_ONLY).
             when {
                 expression { params.SEED_ONLY }
             }
@@ -102,14 +106,58 @@ pipeline {
                             sudo -u lendus bash -s <<'SEED'
 set -euo pipefail
 cd '${env.APP_DIR}'
-echo "[seed-only] migrate"
+
+echo "════════════════════════════════════════════════════════════"
+echo "  DIAGNÓSTICO PRE-SEED"
+echo "════════════════════════════════════════════════════════════"
+echo "APP_DIR: \$(pwd)"
+echo "Commit (si es repo git): \$(git log -1 --oneline 2>/dev/null || echo 'NO es repo git — código vino por rsync')"
+echo ""
+echo "Seeders disponibles en disco:"
+ls -1 database/seeders/*.php 2>/dev/null | sed 's|^|  |'
+echo ""
+echo "DatabaseSeeder.php llama a:"
+grep -E "::class" database/seeders/DatabaseSeeder.php 2>/dev/null | sed 's|^|  |'
+echo "════════════════════════════════════════════════════════════"
+
+echo ""
+echo "[1/6] migrate --force"
 ${env.PHP_BIN} artisan migrate --force
-echo "[seed-only] db:seed --force"
-${env.PHP_BIN} artisan db:seed --force
-echo "[seed-only] cache:clear"
+
+# Correr cada seeder EXPLÍCITAMENTE por nombre. Si alguno no existe en
+# disco (deploy desactualizado), el comando falla con error claro en vez
+# de pasarse silenciosamente. Cada uno es idempotente (updateOrCreate).
+echo ""
+echo "[2/6] DemoDataSeeder"
+${env.PHP_BIN} artisan db:seed --class=DemoDataSeeder --force
+
+echo ""
+echo "[3/6] MoneyCapitalSeeder"
+${env.PHP_BIN} artisan db:seed --class=MoneyCapitalSeeder --force
+
+echo ""
+echo "[4/6] FinateaSeeder"
+${env.PHP_BIN} artisan db:seed --class=FinateaSeeder --force
+
+echo ""
+echo "[5/6] GlobalSuperAdminSeeder"
+${env.PHP_BIN} artisan db:seed --class=GlobalSuperAdminSeeder --force
+
+echo ""
+echo "[6/6] NotificationTemplateSeeder + MoneyCapitalNotificationSeeder"
+${env.PHP_BIN} artisan db:seed --class=NotificationTemplateSeeder --force
+${env.PHP_BIN} artisan db:seed --class=MoneyCapitalNotificationSeeder --force
+
+echo ""
+echo "[cache:clear]"
 ${env.PHP_BIN} artisan cache:clear
-echo "[seed-only] DONE — tenants en BD:"
-${env.PHP_BIN} artisan tinker --execute='foreach(\\App\\Models\\Tenant::all() as \\\$t) echo "  - ".\\\$t->slug." -> ".(\\\$t->domain ?? "NO DOMAIN").PHP_EOL;'
+
+echo ""
+echo "════════════════════════════════════════════════════════════"
+echo "  RESULTADO"
+echo "════════════════════════════════════════════════════════════"
+${env.PHP_BIN} artisan tinker --execute='foreach(\\App\\Models\\Tenant::orderBy("slug")->get() as \\\$t) echo "  - ".str_pad(\\\$t->slug,14)." -> ".(\\\$t->domain ?? "NO DOMAIN")." | active=".(\\\$t->is_active?"Y":"N").PHP_EOL;'
+echo "════════════════════════════════════════════════════════════"
 SEED
                         """
                     }
