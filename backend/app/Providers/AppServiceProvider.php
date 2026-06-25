@@ -15,8 +15,8 @@ use App\Observers\V2ConfigCacheObserver;
 use App\Services\ApiLoggerService;
 use App\Services\DocumentService;
 use App\Services\ExternalApi\NubariumService;
-use App\Services\ExternalApi\TwilioService;
 use App\Services\KycServiceFactory;
+use App\Services\SmsServiceFactory;
 use App\Services\TwilioServiceFactory;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -34,11 +34,18 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(ApiLoggerInterface::class, ApiLoggerService::class);
         $this->app->bind(DocumentStorageInterface::class, DocumentService::class);
 
-        // SmsServiceInterface binding requires tenant context
-        // TwilioService is instantiated with tenant ID, so we use a factory
+        // SmsServiceInterface: la factory resuelve el proveedor SMS activo del
+        // tenant (Twilio o Nubarium) leyendo TenantApiConfig. Cae a Twilio
+        // (no configurado) si no hay proveedor activo, para no romper
+        // type-hints que esperan una instancia no nula.
         $this->app->bind(SmsServiceInterface::class, function ($app) {
             $tenantId = $app->bound('tenant.id') ? $app->make('tenant.id') : null;
-            return new TwilioService($tenantId);
+            return (new SmsServiceFactory($tenantId))->forCurrentTenant();
+        });
+
+        $this->app->bind(SmsServiceFactory::class, function ($app) {
+            $tenantId = $app->bound('tenant.id') ? $app->make('tenant.id') : null;
+            return new SmsServiceFactory($tenantId);
         });
 
         // KycServiceInterface binding requires tenant context

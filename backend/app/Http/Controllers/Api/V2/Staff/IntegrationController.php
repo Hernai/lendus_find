@@ -71,7 +71,11 @@ class IntegrationController extends Controller
     public function options(): JsonResponse
     {
         return $this->success([
-            'providers' => TenantApiConfig::PROVIDERS,
+            // Catálogo con estado (available | beta | coming_soon) para que el
+            // admin muestre badges y bloquee los "próximamente" en el alta.
+            'providers' => TenantApiConfig::providerCatalog(),
+            // Compat: mapa key=>label por si algún consumidor viejo lo usa.
+            'providers_map' => TenantApiConfig::PROVIDERS,
             'service_types' => TenantApiConfig::SERVICE_TYPES,
         ]);
     }
@@ -108,6 +112,16 @@ class IntegrationController extends Controller
 
         if ($validator->fails()) {
             return $this->validationError('Error de validación', $validator->errors()->toArray());
+        }
+
+        // Bloquear proveedores "próximamente" (sin implementación real) — el
+        // frontend ya los deshabilita en el dropdown, esto es defensa server-side.
+        if (TenantApiConfig::statusFor($request->provider) === 'coming_soon') {
+            return $this->error(
+                'PROVIDER_NOT_AVAILABLE',
+                'Este proveedor aún no está disponible (próximamente).',
+                422
+            );
         }
 
         // Check if config already exists
@@ -198,7 +212,7 @@ class IntegrationController extends Controller
 
         // Validation depends on provider/service type
         $rules = [];
-        if ($config->provider === 'twilio' && in_array($config->service_type, ['sms', 'whatsapp'])) {
+        if (in_array($config->provider, ['twilio', 'nubarium'], true) && in_array($config->service_type, ['sms', 'whatsapp'])) {
             $rules['test_phone'] = 'required|string';
         } elseif ($config->service_type === 'email') {
             $rules['test_email'] = 'required|email';
@@ -235,6 +249,26 @@ class IntegrationController extends Controller
                 } else {
                     return $this->badRequest('AUTH_FAILED', $result['message'] ?? 'Error de autenticación');
                 }
+            }
+
+            // Test Nubarium OTP SMS - envía un OTP real (Nubarium genera el código)
+            if ($config->provider === 'nubarium' && in_array($config->service_type, ['sms', 'whatsapp'])) {
+                $tenantModel = \App\Models\Tenant::withoutGlobalScopes()->find($tenant->id);
+                $otpService = new \App\Services\ExternalApi\Nubarium\NubariumOtpService($tenantModel, $config->service_type);
+                $result = $otpService->sendSmsOtp($request->test_phone);
+
+                $config->update([
+                    'last_tested_at' => now(),
+                    'last_test_success' => $result['success'],
+                    'last_test_error' => $result['success'] ? null : ($result['message'] ?? 'Error desconocido'),
+                ]);
+
+                if ($result['success']) {
+                    return $this->success([
+                        'details' => ['validation_code' => $result['validation_code'] ?? null],
+                    ], 'OTP enviado — revisa el SMS en el teléfono de prueba');
+                }
+                return $this->badRequest('SEND_FAILED', $result['message'] ?? 'No se pudo enviar el OTP');
             }
 
             // Test Twilio SMS/WhatsApp - send real test message

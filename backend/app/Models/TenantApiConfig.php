@@ -92,6 +92,62 @@ class TenantApiConfig extends Model
     ];
 
     /**
+     * Estado de implementación de cada proveedor:
+     *   - 'available'   : integración real y probada (se puede usar en prod)
+     *   - 'beta'        : implementación parcial / stub (devuelve mocks)
+     *   - 'coming_soon' : sólo en el catálogo, sin código aún
+     *
+     * Lo consume el admin de integraciones para mostrar badges y deshabilitar
+     * en el alta los que aún no funcionan. Single source of truth: este array.
+     */
+    public const PROVIDER_STATUS = [
+        'twilio' => 'available',
+        'nubarium' => 'available',
+        'smtp' => 'available',
+        'nubarium_phone_score' => 'beta',
+        'stp' => 'beta',
+        'conekta' => 'beta',
+        'openpay' => 'beta',
+        'messagebird' => 'coming_soon',
+        'vonage' => 'coming_soon',
+        'mailgun' => 'coming_soon',
+        'sendgrid' => 'coming_soon',
+        'ses' => 'coming_soon',
+        'circulo_credito' => 'coming_soon',
+        'mati' => 'coming_soon',
+        'onfido' => 'coming_soon',
+        'jumio' => 'coming_soon',
+        'fcm' => 'coming_soon',
+        'apns' => 'coming_soon',
+    ];
+
+    /**
+     * Estado de un proveedor (default 'coming_soon' si no está listado).
+     */
+    public static function statusFor(string $provider): string
+    {
+        return self::PROVIDER_STATUS[$provider] ?? 'coming_soon';
+    }
+
+    /**
+     * Catálogo de proveedores con label + estado, para el dropdown del admin.
+     *
+     * @return array<int, array{key: string, label: string, status: string}>
+     */
+    public static function providerCatalog(): array
+    {
+        return array_map(
+            fn ($key, $label) => [
+                'key' => $key,
+                'label' => $label,
+                'status' => self::statusFor($key),
+            ],
+            array_keys(self::PROVIDERS),
+            array_values(self::PROVIDERS),
+        );
+    }
+
+    /**
      * Get the tenant.
      */
     public function tenant(): BelongsTo
@@ -181,6 +237,7 @@ class TenantApiConfig extends Model
             'id' => $this->id,
             'provider' => $this->provider,
             'provider_label' => self::PROVIDERS[$this->provider] ?? $this->provider,
+            'provider_status' => self::statusFor($this->provider),
             'service_type' => $this->service_type,
             'service_type_label' => self::SERVICE_TYPES[$this->service_type] ?? $this->service_type,
             'from_number' => $this->from_number,

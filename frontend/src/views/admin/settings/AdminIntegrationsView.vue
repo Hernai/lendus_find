@@ -48,7 +48,15 @@
                     <span class="text-lg font-bold text-gray-600">{{ integration.provider_label.charAt(0) }}</span>
                   </div>
                   <div>
-                    <h3 class="font-semibold text-gray-900">{{ integration.provider_label }}</h3>
+                    <div class="flex items-center gap-2">
+                      <h3 class="font-semibold text-gray-900">{{ integration.provider_label }}</h3>
+                      <!-- Estado de implementación del proveedor -->
+                      <span
+                        :class="['px-2 py-0.5 text-[10px] font-semibold rounded-full', statusMeta(integration.provider_status).classes]"
+                      >
+                        {{ statusMeta(integration.provider_status).label }}
+                      </span>
+                    </div>
                     <p class="text-xs text-gray-500">{{ integration.service_type_label }}</p>
                   </div>
                 </div>
@@ -262,7 +270,14 @@
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100"
               >
                 <option value="">Seleccionar...</option>
-                <option v-for="(label, key) in providers" :key="key" :value="key">{{ label }}</option>
+                <option
+                  v-for="p in providers"
+                  :key="p.key"
+                  :value="p.key"
+                  :disabled="p.status === 'coming_soon'"
+                >
+                  {{ p.label }}{{ p.status === 'coming_soon' ? ' — Próximamente' : (p.status === 'beta' ? ' (Beta)' : '') }}
+                </option>
               </select>
             </div>
 
@@ -704,7 +719,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { v2 } from '@/services/v2'
-import type { V2Integration, V2IntegrationPayload } from '@/services/v2/integration.staff.service'
+import type { V2Integration, V2IntegrationPayload, V2ProviderOption, ProviderStatus } from '@/services/v2/integration.staff.service'
 import { getErrorMessage } from '@/types/api'
 import { AppConfirmModal } from '@/components/common'
 import { useToast } from '@/composables'
@@ -716,8 +731,16 @@ const toast = useToast()
 type Integration = V2Integration
 
 const integrations = ref<Integration[]>([])
-const providers = ref<Record<string, string>>({})
+const providers = ref<V2ProviderOption[]>([])
 const serviceTypes = ref<Record<string, string>>({})
+
+// Etiqueta + clases del badge de estado de proveedor.
+const STATUS_META: Record<ProviderStatus, { label: string; classes: string }> = {
+  available: { label: 'Disponible', classes: 'bg-green-100 text-green-700' },
+  beta: { label: 'Beta', classes: 'bg-amber-100 text-amber-700' },
+  coming_soon: { label: 'Próximamente', classes: 'bg-gray-100 text-gray-500' },
+}
+const statusMeta = (status?: ProviderStatus) => STATUS_META[status ?? 'coming_soon']
 const isLoading = ref(true)
 const error = ref<string | null>(null)
 
@@ -782,7 +805,7 @@ const loadIntegrations = async () => {
 const loadOptions = async () => {
   try {
     const response = await v2.staff.integration.getOptions()
-    providers.value = response.data?.providers ?? {}
+    providers.value = response.data?.providers ?? []
     serviceTypes.value = response.data?.service_types ?? {}
   } catch (err) {
     log.error('Error al cargar opciones', { error: err })

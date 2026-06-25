@@ -9,6 +9,11 @@ use App\Models\ApplicantIdentity;
 use App\Models\AuditLog;
 use App\Models\OtpCode;
 use App\Models\OtpRequest;
+use App\Models\Tenant;
+use App\Models\TenantApiConfig;
+use App\Services\ExternalApi\Nubarium\NubariumOtpService;
+use App\Services\ExternalApi\SmtpService;
+use App\Services\ExternalApi\TwilioService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -78,50 +83,64 @@ class ApplicantAuthService
             'masked_target' => $this->maskIdentifier($type, $identifier),
         ];
 
-        // Exponer el codigo en la respuesta cuando NO se va a enviar de
-        // verdad. Dos casos:
-        //   1. Ambiente local/testing (dev local).
-        //   2. El tenant no tiene proveedor activo (Twilio/Mailgun/etc.)
-        //      para el canal solicitado — onboarding inicial, demo, sandbox.
-        //
-        // Si el tenant TIENE proveedor activo NO se expone nunca, aunque el
-        // envio real falle por saldo/numero no verificado/etc. — para eso
-        // estan los logs.
         $isDevelopment = app()->environment('local', 'testing');
-        $hasProvider = $this->tenantHasActiveProvider($tenantId, $channel);
-        $exposeCode = $isDevelopment || ! $hasProvider;
+        $config = $this->otpConfigFor($tenantId, $channel);
 
-        if ($exposeCode) {
+        // CASO 1 — sin proveedor: no se puede enviar nada. Exponemos el código
+        // en la respuesta (verificación contra BD). Onboarding/demo/sandbox.
+        if ($config === null) {
             $data['code'] = $otpRequest->code;
             $data['dev_mode'] = true;
-            $data['dev_reason'] = $isDevelopment ? 'environment' : 'no_provider_configured';
+            $data['dev_reason'] = 'no_provider_configured';
+
+            $message = $isDevelopment
+                ? '[DEV] Código generado (sin proveedor configurado)'
+                : "[Sin proveedor de {$channel} configurado] Código: {$otpRequest->code}";
+
+            return ['success' => true, 'message' => $message, 'data' => $data];
         }
 
-        // Mensaje del response: contexto distinto segun por que se expone.
-        if ($isDevelopment) {
-            $message = '[DEV] Código generado (no enviado - modo desarrollo)';
-        } elseif (! $hasProvider) {
-            $message = "[Sin proveedor de {$channel} configurado] Código: {$otpRequest->code}";
-        } else {
-            $message = $this->getOtpSentMessage($channel);
+        // CASO 2 — hay proveedor: enviar de verdad.
+        //   - Nubarium: OTP administrado. Genera su propio código (ignora el
+        //     nuestro) y lo valida en su lado. Nunca exponemos código.
+        //   - Twilio / SMTP: enviamos NUESTRO código y verificamos contra BD.
+        $managed = $this->isManagedProvider($config->provider);
+        $send = $this->dispatchOtp($tenantId, $channel, $identifier, $otpRequest, $config);
+
+        if (! ($send['success'] ?? false)) {
+            Log::warning('OTP dispatch failed', [
+                'tenant_id' => $tenantId,
+                'channel' => $channel,
+                'provider' => $config->provider,
+                'error' => $send['message'] ?? 'unknown',
+            ]);
+            return [
+                'success' => false,
+                'message' => 'No pudimos enviar el código. Intenta de nuevo.',
+                'error' => 'OTP_SEND_FAILED',
+            ];
+        }
+
+        // En dev con proveedor NO administrado el código guardado es el que se
+        // envió, así que lo exponemos para facilitar pruebas. Con Nubarium
+        // (administrado) el código real lo tiene el proveedor → nunca se expone.
+        if ($isDevelopment && ! $managed) {
+            $data['code'] = $otpRequest->code;
+            $data['dev_mode'] = true;
+            $data['dev_reason'] = 'environment';
         }
 
         return [
             'success' => true,
-            'message' => $message,
+            'message' => $this->getOtpSentMessage($channel),
             'data' => $data,
         ];
     }
 
     /**
-     * ¿El tenant tiene un proveedor activo para el canal solicitado?
-     *
-     * Mapeo channel -> service_type:
-     *   SMS, PHONE  -> sms
-     *   WHATSAPP    -> whatsapp
-     *   EMAIL       -> email
+     * Config activa del tenant para el canal del OTP.
      */
-    private function tenantHasActiveProvider(string $tenantId, string $channel): bool
+    private function otpConfigFor(string $tenantId, string $channel): ?TenantApiConfig
     {
         $serviceType = match (strtoupper($channel)) {
             'WHATSAPP' => 'whatsapp',
@@ -129,11 +148,99 @@ class ApplicantAuthService
             default    => 'sms',
         };
 
-        return \App\Models\TenantApiConfig::query()
+        return TenantApiConfig::query()
             ->where('tenant_id', $tenantId)
             ->where('service_type', $serviceType)
             ->where('is_active', true)
-            ->exists();
+            ->first();
+    }
+
+    /**
+     * ¿El proveedor administra el ciclo de vida del código (lo genera y valida
+     * él mismo)? Nubarium sí; Twilio/SMTP no (nosotros generamos y validamos).
+     */
+    private function isManagedProvider(string $provider): bool
+    {
+        return $provider === 'nubarium';
+    }
+
+    /**
+     * Envía el OTP por el proveedor configurado. Para Nubarium (administrado)
+     * el código lo genera el proveedor vía placeholder #code#; para los demás
+     * enviamos el código que ya generamos en $otpRequest.
+     *
+     * @return array{success: bool, message?: string}
+     */
+    private function dispatchOtp(
+        string $tenantId,
+        string $channel,
+        string $identifier,
+        OtpRequest $otpRequest,
+        TenantApiConfig $config
+    ): array {
+        try {
+            $ch = strtoupper($channel);
+
+            if ($config->provider === 'nubarium') {
+                $tenant = Tenant::withoutGlobalScopes()->find($tenantId);
+                $svc = new NubariumOtpService($tenant, $ch === 'EMAIL' ? 'email' : 'sms');
+                // Nubarium genera el código; le pasamos sólo el template.
+                return $ch === 'EMAIL'
+                    ? $svc->sendEmailOtp($identifier)
+                    : $svc->sendSmsOtp($identifier);
+            }
+
+            if ($config->provider === 'twilio') {
+                $svc = new TwilioService($tenantId);
+                $r = $svc->sendOtp(
+                    $identifier,
+                    $otpRequest->code,
+                    $ch === 'WHATSAPP' ? 'whatsapp' : 'sms'
+                );
+                return ['success' => (bool) ($r['success'] ?? false), 'message' => $r['message'] ?? null];
+            }
+
+            if ($ch === 'EMAIL') {
+                // SMTP u otro proveedor de email: enviamos nuestro código.
+                $r = SmtpService::createFromConfig($config)->sendEmail(
+                    $identifier,
+                    'Tu código de verificación',
+                    "Tu código de verificación es: {$otpRequest->code}\n\nExpira en 10 minutos."
+                );
+                return ['success' => (bool) ($r['success'] ?? false), 'message' => $r['message'] ?? null];
+            }
+
+            return ['success' => false, 'message' => "Proveedor '{$config->provider}' no soportado para {$channel}"];
+        } catch (\Throwable $e) {
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Valida un OTP contra un proveedor administrado (Nubarium). Devuelve
+     * ['success'=>bool] según la respuesta del proveedor.
+     */
+    private function validateManagedOtp(
+        string $tenantId,
+        string $channel,
+        string $identifier,
+        string $code
+    ): array {
+        try {
+            $tenant = Tenant::withoutGlobalScopes()->find($tenantId);
+            $ch = strtoupper($channel);
+            $svc = new NubariumOtpService($tenant, $ch === 'EMAIL' ? 'email' : 'sms');
+            return $ch === 'EMAIL'
+                ? $svc->validateEmailOtp($identifier, $code)
+                : $svc->validateSmsOtp($identifier, $code);
+        } catch (\Throwable $e) {
+            Log::error('OTP managed validation error', [
+                'tenant_id' => $tenantId,
+                'channel' => $channel,
+                'error' => $e->getMessage(),
+            ]);
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
     }
 
     /**
@@ -161,8 +268,39 @@ class ApplicantAuthService
             ];
         }
 
-        // Verify the code
-        if (!$otpRequest->verify($code)) {
+        // ¿El canal de este OTP usa un proveedor administrado? Nubarium valida
+        // el código en su lado; los demás (Twilio/SMTP) comparan contra BD.
+        $otpConfig = $this->otpConfigFor($tenantId, $otpRequest->channel);
+        $managed = $otpConfig && $this->isManagedProvider($otpConfig->provider);
+
+        if ($managed) {
+            $res = $this->validateManagedOtp($tenantId, $otpRequest->channel, $identifier, $code);
+
+            if (! ($res['success'] ?? false)) {
+                $otpRequest->increment('attempts');
+                $this->logOtpVerificationFailed($tenantId, $type, $identifier, 'invalid_code');
+
+                if ($otpRequest->hasTooManyAttempts()) {
+                    return [
+                        'success' => false,
+                        'message' => 'Demasiados intentos fallidos. Solicita un nuevo código.',
+                        'error' => 'TOO_MANY_ATTEMPTS',
+                        'data' => ['remaining_attempts' => 0],
+                    ];
+                }
+
+                return [
+                    'success' => false,
+                    'message' => 'Código incorrecto',
+                    'error' => 'INVALID_CODE',
+                    'data' => ['remaining_attempts' => $otpRequest->remaining_attempts],
+                ];
+            }
+
+            // Válido según el proveedor — marcar verificado sin comparar BD.
+            $otpRequest->verified_at = now();
+            $otpRequest->saveQuietly();
+        } elseif (!$otpRequest->verify($code)) {
             $reason = 'invalid_code';
             if ($otpRequest->isExpired()) {
                 $reason = 'expired';
