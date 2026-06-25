@@ -65,12 +65,13 @@ class NubariumOtpService extends BaseNubariumService implements SmsServiceInterf
     {
         $mensaje = $this->buildOtpMessage($message);
 
-        // El endpoint global valida el campo `message` (inglés); el doc también
-        // muestra `mensaje`. Mandamos ambos para compatibilidad — `numeroMovil`
-        // sí es el nombre correcto del teléfono (Nubarium lo aceptó en pruebas).
+        // El endpoint global usa nombres en inglés (`message`, `phone`) aunque
+        // el doc mostraba `mensaje`/`numeroMovil`. Mandamos ambos nombres y
+        // ambos formatos de teléfono (10 dígitos y 52+10) para compatibilidad.
         $response = $this->apiCall('global', 'POST', '/glo/otp/v1/send-sms', [
             'message' => $mensaje,
             'mensaje' => $mensaje,
+            'phone' => $this->toE164Digits($to),
             'numeroMovil' => $this->toNationalNumber($to),
         ]);
         $this->logResponse($response, '/glo/otp/v1/send-sms', 'otp_send_sms');
@@ -83,8 +84,10 @@ class NubariumOtpService extends BaseNubariumService implements SmsServiceInterf
      */
     public function validateSmsOtp(string $to, string $otp): array
     {
+        // Mismos nombres/formatos de teléfono que en el envío (ver sendSmsOtp).
         $response = $this->apiCall('global', 'POST', '/glo/otp/v1/validate-sms', [
             'otp' => $otp,
+            'phone' => $this->toE164Digits($to),
             'numeroMovil' => $this->toNationalNumber($to),
         ]);
         $this->logResponse($response, '/glo/otp/v1/validate-sms', 'otp_validate_sms');
