@@ -78,16 +78,10 @@
                     <span class="text-lg font-bold text-gray-600">{{ integration.provider_label.charAt(0) }}</span>
                   </div>
                   <div>
-                    <div class="flex items-center gap-2">
-                      <h3 class="font-semibold text-gray-900">{{ integration.provider_label }}</h3>
-                      <!-- Estado de implementación del proveedor -->
-                      <span
-                        :class="['px-2 py-0.5 text-[10px] font-semibold rounded-full', statusMeta(integration.provider_status).classes]"
-                      >
-                        {{ statusMeta(integration.provider_status).label }}
-                      </span>
-                    </div>
-                    <p class="text-xs text-gray-500">{{ integration.service_type_label }}</p>
+                    <!-- El proveedor + estado ya van en el encabezado del grupo;
+                         aquí destacamos el servicio para no repetir. -->
+                    <h3 class="font-semibold text-gray-900">{{ integration.service_type_label }}</h3>
+                    <p class="text-xs text-gray-500">{{ integration.provider_label }}</p>
                   </div>
                 </div>
                 <span
@@ -668,9 +662,10 @@
               <label class="block text-sm font-medium text-gray-700 mb-1">
                 Número de teléfono de prueba *
               </label>
-              <div class="flex">
-                <span class="inline-flex items-center gap-1 px-3 rounded-l-lg border border-r-0 border-gray-300 bg-gray-50 text-gray-600 text-sm font-medium select-none">
-                  🇲🇽 +52
+              <div class="flex items-stretch">
+                <span class="inline-flex flex-shrink-0 items-center gap-1.5 px-3 py-2 rounded-l-lg border border-r-0 border-gray-300 bg-gray-50 text-sm font-medium text-gray-600 whitespace-nowrap select-none">
+                  <span class="text-base leading-none">🇲🇽</span>
+                  <span>+52</span>
                 </span>
                 <input
                   :value="testForm.test_phone"
@@ -680,7 +675,7 @@
                   required
                   :maxlength="PHONE_INPUT_CONFIG.maxLength"
                   :placeholder="PHONE_INPUT_CONFIG.placeholder"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-r-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  class="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-r-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 focus:z-10"
                 />
               </div>
               <p class="mt-1 text-xs text-gray-500">
