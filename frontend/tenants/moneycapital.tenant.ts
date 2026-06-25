@@ -10,7 +10,7 @@ import type { TenantConfig } from './_types'
  */
 const config: TenantConfig = {
   slug: 'moneycapital',
-  appId: 'mx.moneycapital.app',
+  appId: 'io.money.capital',
   appName: 'MoneyCapital',
   // Backend (VITE_API_URL) y Reverb (VITE_REVERB_*) viven en `.env*` —
   // son compartidos en la arquitectura B, no per-tenant.

@@ -132,9 +132,21 @@ function copyIfExists(src, dest) {
   console.log(`  · ${src} → ${dest.replace(frontendRoot + '/', '')}`)
 }
 
+function resolveCmd(cmd) {
+  // On Windows, npm/npx are .cmd wrappers — spawn needs the full name.
+  if (process.platform === 'win32' && ['npm', 'npx'].includes(cmd)) return `${cmd}.cmd`
+  return cmd
+}
+
 function runCommand(cmd, args, opts) {
   return new Promise((resolveP, rejectP) => {
-    const child = spawn(cmd, args, { stdio: 'inherit', cwd: frontendRoot, ...opts })
+    const isWin = process.platform === 'win32'
+    const child = spawn(resolveCmd(cmd), args, {
+      stdio: 'inherit',
+      cwd: frontendRoot,
+      shell: isWin,
+      ...opts,
+    })
     child.on('error', rejectP)
     child.on('exit', (code) => {
       if (code === 0) resolveP()

@@ -239,7 +239,7 @@ const handleLogout = async () => {
 <template>
   <div class="min-h-screen bg-gray-50">
     <!-- Header -->
-    <header class="bg-gradient-to-br from-primary-600 to-primary-700 px-4 pt-3 pb-12">
+    <header class="bg-gradient-to-br from-primary-600 to-primary-700 px-4 pb-12" style="padding-top: calc(16px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))">
       <div class="max-w-2xl mx-auto">
         <div class="flex items-center justify-between mb-3">
           <button
