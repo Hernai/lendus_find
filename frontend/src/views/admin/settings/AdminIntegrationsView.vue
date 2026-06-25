@@ -258,41 +258,92 @@
           </button>
         </div>
 
-        <form @submit.prevent="saveIntegration" class="p-6 space-y-4">
-          <!-- Provider and Service Type -->
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Proveedor *</label>
-              <select
-                v-model="form.provider"
-                required
-                :disabled="!!editingIntegration"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100"
-              >
-                <option value="">Seleccionar...</option>
-                <option
-                  v-for="p in providers"
-                  :key="p.key"
-                  :value="p.key"
-                  :disabled="p.status === 'coming_soon'"
-                >
-                  {{ p.label }}{{ p.status === 'coming_soon' ? ' — Próximamente' : (p.status === 'beta' ? ' (Beta)' : '') }}
-                </option>
-              </select>
+        <form @submit.prevent="saveIntegration" class="p-6 space-y-5">
+          <!-- Step 1: Provider selection -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              <span class="inline-flex items-center justify-center w-5 h-5 mr-1.5 rounded-full bg-primary-100 text-primary-700 text-xs font-bold">1</span>
+              Proveedor *
+            </label>
+
+            <!-- Edit mode: provider is locked -->
+            <div v-if="editingIntegration" class="flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-gray-50">
+              <div class="w-9 h-9 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-sm font-bold text-gray-600">
+                {{ providerLabel(form.provider).charAt(0) }}
+              </div>
+              <div>
+                <p class="font-medium text-sm text-gray-900">{{ providerLabel(form.provider) }}</p>
+                <p class="text-xs text-gray-500">El proveedor no se puede cambiar al editar</p>
+              </div>
             </div>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de Servicio *</label>
-              <select
-                v-model="form.service_type"
-                required
-                :disabled="!!editingIntegration"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100"
+            <!-- New mode: visual grid picker -->
+            <div v-else class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <button
+                v-for="p in sortedProviders"
+                :key="p.key"
+                type="button"
+                :disabled="p.status === 'coming_soon'"
+                @click="selectProvider(p)"
+                :class="[
+                  'relative flex flex-col items-start gap-1.5 p-3 rounded-xl border text-left transition-all',
+                  form.provider === p.key
+                    ? 'border-primary-500 ring-2 ring-primary-500/20 bg-primary-50'
+                    : 'border-gray-200 bg-white',
+                  p.status === 'coming_soon'
+                    ? 'opacity-50 cursor-not-allowed'
+                    : 'hover:border-primary-300 hover:shadow-sm cursor-pointer'
+                ]"
               >
-                <option value="">Seleccionar...</option>
-                <option v-for="(label, key) in serviceTypes" :key="key" :value="key">{{ label }}</option>
-              </select>
+                <!-- Selected check -->
+                <span
+                  v-if="form.provider === p.key"
+                  class="absolute top-2 right-2 w-5 h-5 rounded-full bg-primary-600 flex items-center justify-center"
+                >
+                  <svg class="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                  </svg>
+                </span>
+                <div class="flex items-center gap-2 w-full pr-5">
+                  <div class="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0">
+                    {{ p.label.charAt(0) }}
+                  </div>
+                  <span class="font-medium text-sm text-gray-900 truncate">{{ p.label }}</span>
+                </div>
+                <span :class="['px-1.5 py-0.5 text-[10px] font-semibold rounded-full', statusMeta(p.status).classes]">
+                  {{ statusMeta(p.status).label }}
+                </span>
+              </button>
             </div>
+          </div>
+
+          <!-- Step 2: Service type (only providers' own services) -->
+          <div v-if="form.provider">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              <span class="inline-flex items-center justify-center w-5 h-5 mr-1.5 rounded-full bg-primary-100 text-primary-700 text-xs font-bold">2</span>
+              Tipo de Servicio *
+            </label>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="s in availableServiceTypes"
+                :key="s.key"
+                type="button"
+                :disabled="!!editingIntegration"
+                @click="form.service_type = s.key"
+                :class="[
+                  'px-3.5 py-2 rounded-lg border text-sm font-medium transition-all',
+                  form.service_type === s.key
+                    ? 'border-primary-500 bg-primary-50 text-primary-700 ring-1 ring-primary-500/30'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-primary-300',
+                  editingIntegration ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
+                ]"
+              >
+                {{ s.label }}
+              </button>
+            </div>
+            <p class="mt-1.5 text-xs text-gray-500">
+              Sólo se muestran los servicios que ofrece {{ providerLabel(form.provider) }}.
+            </p>
           </div>
 
           <!-- Provider-Specific Fields -->
@@ -573,21 +624,29 @@
         </div>
 
         <form @submit.prevent="runTest" class="p-6 space-y-4">
-          <!-- SMS/WhatsApp: Require phone number -->
+          <!-- SMS/WhatsApp: Require phone number (10 dígitos nacionales) -->
           <template v-if="testingIntegration && ['sms', 'whatsapp'].includes(testingIntegration.service_type)">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">
                 Número de teléfono de prueba *
               </label>
-              <input
-                v-model="testForm.test_phone"
-                type="tel"
-                required
-                placeholder="+521234567890"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              />
+              <div class="flex">
+                <span class="inline-flex items-center gap-1 px-3 rounded-l-lg border border-r-0 border-gray-300 bg-gray-50 text-gray-600 text-sm font-medium select-none">
+                  🇲🇽 +52
+                </span>
+                <input
+                  :value="testForm.test_phone"
+                  @input="onTestPhoneInput"
+                  type="tel"
+                  inputmode="numeric"
+                  required
+                  :maxlength="PHONE_INPUT_CONFIG.maxLength"
+                  :placeholder="PHONE_INPUT_CONFIG.placeholder"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-r-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+              </div>
               <p class="mt-1 text-xs text-gray-500">
-                Se enviará un mensaje de prueba a este número (formato E.164)
+                10 dígitos del celular, sin lada de país (México +52 se agrega solo).
               </p>
             </div>
           </template>
@@ -717,13 +776,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { v2 } from '@/services/v2'
 import type { V2Integration, V2IntegrationPayload, V2ProviderOption, ProviderStatus } from '@/services/v2/integration.staff.service'
 import { getErrorMessage } from '@/types/api'
 import { AppConfirmModal } from '@/components/common'
 import { useToast } from '@/composables'
 import { logger } from '@/utils/logger'
+import { formatPhoneInput, stripPhoneFormatting, PHONE_INPUT_CONFIG } from '@/utils/formatters'
 
 const log = logger.child('AdminIntegrationsView')
 const toast = useToast()
@@ -766,12 +826,51 @@ const form = ref({
   is_sandbox: false,
 })
 
-// Auto-select service_type when provider changes
-watch(() => form.value.provider, (provider) => {
-  if (provider === 'smtp' && !editingIntegration.value) {
-    form.value.service_type = 'email'
+// Proveedores ordenados: disponibles primero, luego beta, luego próximamente.
+const STATUS_ORDER: Record<ProviderStatus, number> = { available: 0, beta: 1, coming_soon: 2 }
+const sortedProviders = computed(() =>
+  [...providers.value].sort(
+    (a, b) => (STATUS_ORDER[a.status] - STATUS_ORDER[b.status]) || a.label.localeCompare(b.label),
+  ),
+)
+
+// Etiqueta legible de un proveedor por su key.
+const providerLabel = (key: string) =>
+  providers.value.find((p) => p.key === key)?.label ?? key
+
+// Sólo los tipos de servicio que ofrece el proveedor seleccionado. Si el
+// proveedor no trae `services` (fallback), se muestran todos.
+const availableServiceTypes = computed(() => {
+  const provider = providers.value.find((p) => p.key === form.value.provider)
+  const keys = provider?.services ?? Object.keys(serviceTypes.value)
+  return keys
+    .filter((k) => serviceTypes.value[k])
+    .map((k) => ({ key: k, label: serviceTypes.value[k] ?? k }))
+})
+
+// Seleccionar proveedor desde el grid visual (sólo alta).
+const selectProvider = (p: V2ProviderOption) => {
+  if (p.status === 'coming_soon') return
+  form.value.provider = p.key
+}
+
+// Al cambiar el proveedor (alta), ajusta el tipo de servicio: si sólo hay uno
+// lo autoselecciona; si el actual ya no aplica al proveedor, lo limpia.
+watch(() => form.value.provider, () => {
+  if (editingIntegration.value) return
+  const services = availableServiceTypes.value
+  const only = services.length === 1 ? services[0] : undefined
+  if (only) {
+    form.value.service_type = only.key
+  } else if (!services.some((s) => s.key === form.value.service_type)) {
+    form.value.service_type = ''
   }
 })
+
+// Formatea el teléfono de prueba a 10 dígitos nacionales mientras se escribe.
+const onTestPhoneInput = (e: Event) => {
+  testForm.value.test_phone = formatPhoneInput((e.target as HTMLInputElement).value)
+}
 
 // Test Modal
 const showTestModal = ref(false)
@@ -786,18 +885,22 @@ const testResult = ref<{ success: boolean; message: string; error?: string } | n
 // Toggle status
 const isTogglingStatus = ref<string | null>(null)
 
-// Load integrations
-const loadIntegrations = async () => {
+// Load integrations.
+// `silent` evita activar el spinner de página completa (isLoading), que al
+// recargar tras una acción (probar, pausar, guardar) ocultaba todas las
+// tarjetas y se veía como una "pantalla en blanco / recarga total" detrás del
+// modal. Sólo la carga inicial muestra el spinner.
+const loadIntegrations = async ({ silent = false }: { silent?: boolean } = {}) => {
   try {
-    isLoading.value = true
+    if (!silent) isLoading.value = true
     error.value = null
     const response = await v2.staff.integration.list()
     integrations.value = response.data?.integrations ?? []
   } catch (err: unknown) {
-    error.value = getErrorMessage(err, 'Error al cargar integraciones')
+    if (!silent) error.value = getErrorMessage(err, 'Error al cargar integraciones')
     log.error('Error al cargar integraciones', { error: err })
   } finally {
-    isLoading.value = false
+    if (!silent) isLoading.value = false
   }
 }
 
@@ -867,6 +970,10 @@ const closeEditModal = () => {
 
 // Save integration
 const saveIntegration = async () => {
+  if (!form.value.provider || !form.value.service_type) {
+    toast.error('Selecciona un proveedor y un tipo de servicio')
+    return
+  }
   try {
     isSaving.value = true
     const payload: V2IntegrationPayload = {
@@ -894,7 +1001,7 @@ const saveIntegration = async () => {
     }
 
     await v2.staff.integration.save(payload)
-    await loadIntegrations()
+    await loadIntegrations({ silent: true })
     closeEditModal()
     toast.success('Integración guardada')
   } catch (err: unknown) {
@@ -930,14 +1037,20 @@ const runTest = async () => {
   try {
     isTesting.value = true
     testResult.value = null
-    const response = await v2.staff.integration.test(testingIntegration.value.id, testForm.value)
+    // Enviar el teléfono como 10 dígitos limpios (sin formato ni lada país).
+    const response = await v2.staff.integration.test(testingIntegration.value.id, {
+      test_phone: stripPhoneFormatting(testForm.value.test_phone),
+      test_email: testForm.value.test_email || undefined,
+    })
     // Map response to expected test result format
     testResult.value = {
       success: response.success,
       message: response.message ?? 'Test completado',
       error: !response.success ? (response.message ?? 'Error desconocido') : undefined,
     }
-    await loadIntegrations() // Reload to show updated test status
+    // Recarga SILENCIOSA: refresca el estado de la prueba en la tarjeta sin
+    // parpadear la pantalla detrás del modal.
+    await loadIntegrations({ silent: true })
   } catch (err: unknown) {
     testResult.value = {
       success: false,
@@ -962,7 +1075,7 @@ const toggleIntegrationStatus = async (integration: Integration) => {
   try {
     isTogglingStatus.value = integration.id
     await v2.staff.integration.toggle(integration.id)
-    await loadIntegrations()
+    await loadIntegrations({ silent: true })
     toast.success(integration.is_active ? 'Integración pausada' : 'Integración activada')
   } catch (err: unknown) {
     log.error('Error al cambiar estado de integración', { error: err })
@@ -987,7 +1100,7 @@ const deleteIntegration = async () => {
   try {
     await v2.staff.integration.destroy(integrationToDelete.value.id)
     showDeleteModal.value = false
-    await loadIntegrations()
+    await loadIntegrations({ silent: true })
     toast.success('Integración eliminada')
   } catch (err: unknown) {
     log.error('Error al eliminar integración', { error: err })

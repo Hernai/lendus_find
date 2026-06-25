@@ -17,11 +17,13 @@ const BASE_PATH = '/v2/staff/integrations'
 /** Estado de implementación de un proveedor. */
 export type ProviderStatus = 'available' | 'beta' | 'coming_soon'
 
-/** Item del catálogo de proveedores (dropdown del alta). */
+/** Item del catálogo de proveedores (selección visual del alta). */
 export interface V2ProviderOption {
   key: string
   label: string
   status: ProviderStatus
+  /** Claves de `service_types` soportadas por este proveedor. */
+  services?: string[]
 }
 
 export interface V2Integration {

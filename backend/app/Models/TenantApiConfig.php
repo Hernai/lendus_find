@@ -122,6 +122,37 @@ class TenantApiConfig extends Model
     ];
 
     /**
+     * Tipos de servicio que ofrece cada proveedor (claves de SERVICE_TYPES).
+     *
+     * Lo consume el admin de integraciones para que, tras elegir un proveedor,
+     * sólo se muestren los servicios válidos de ESE proveedor (no la lista
+     * completa). Single source of truth: este array.
+     *
+     * @var array<string, array<int, string>>
+     */
+    public const PROVIDER_SERVICES = [
+        'twilio' => ['sms', 'whatsapp'],
+        'messagebird' => ['sms', 'whatsapp'],
+        'vonage' => ['sms', 'whatsapp'],
+        // Nubarium OTP soporta SMS y Email; WhatsApp NO (ver NubariumOtpService).
+        'nubarium' => ['kyc', 'sms', 'email'],
+        'smtp' => ['email'],
+        'mailgun' => ['email'],
+        'sendgrid' => ['email'],
+        'ses' => ['email'],
+        'circulo_credito' => ['credit_bureau'],
+        'mati' => ['kyc', 'document_validation'],
+        'onfido' => ['kyc', 'document_validation'],
+        'jumio' => ['kyc', 'document_validation'],
+        'fcm' => ['push'],
+        'apns' => ['push'],
+        'nubarium_phone_score' => ['phone_score'],
+        'stp' => ['loan_disbursement'],
+        'conekta' => ['payment_collection'],
+        'openpay' => ['payment_collection'],
+    ];
+
+    /**
      * Estado de un proveedor (default 'coming_soon' si no está listado).
      */
     public static function statusFor(string $provider): string
@@ -130,9 +161,21 @@ class TenantApiConfig extends Model
     }
 
     /**
-     * Catálogo de proveedores con label + estado, para el dropdown del admin.
+     * Servicios soportados por un proveedor (claves de SERVICE_TYPES). Si el
+     * proveedor no está mapeado, devuelve todas las claves (fallback seguro).
      *
-     * @return array<int, array{key: string, label: string, status: string}>
+     * @return array<int, string>
+     */
+    public static function servicesFor(string $provider): array
+    {
+        return self::PROVIDER_SERVICES[$provider] ?? array_keys(self::SERVICE_TYPES);
+    }
+
+    /**
+     * Catálogo de proveedores con label + estado + servicios, para el alta del
+     * admin (selección visual de proveedor y filtrado de tipo de servicio).
+     *
+     * @return array<int, array{key: string, label: string, status: string, services: array<int, string>}>
      */
     public static function providerCatalog(): array
     {
@@ -141,6 +184,7 @@ class TenantApiConfig extends Model
                 'key' => $key,
                 'label' => $label,
                 'status' => self::statusFor($key),
+                'services' => self::servicesFor($key),
             ],
             array_keys(self::PROVIDERS),
             array_values(self::PROVIDERS),
