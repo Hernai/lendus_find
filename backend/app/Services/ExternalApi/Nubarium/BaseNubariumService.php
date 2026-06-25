@@ -248,7 +248,11 @@ abstract class BaseNubariumService extends BaseExternalApiService
      */
     protected function serviceHttp(string $service): \Illuminate\Http\Client\PendingRequest
     {
+        // asJson() garantiza que el body se serialice como JSON (todos los
+        // endpoints de Nubarium esperan JSON). Sin esto, un default de form-encode
+        // haría que el endpoint no encuentre los campos (p.ej. "message missing").
         return Http::baseUrl($this->getServiceUrl($service))
+            ->asJson()
             ->timeout($this->timeout)
             ->withHeaders($this->getDefaultHeaders());
     }

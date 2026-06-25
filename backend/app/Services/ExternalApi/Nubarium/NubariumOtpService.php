@@ -66,14 +66,19 @@ class NubariumOtpService extends BaseNubariumService implements SmsServiceInterf
         $mensaje = $this->buildOtpMessage($message);
 
         // Doc Nubarium (Global → OTP & Contact Validation → Send SMS - OTP):
-        //   POST /glo/otp/v1/send-sms  { mensaje, numeroMovil }
-        //   - `numeroMovil`: número NACIONAL de 10 dígitos (sin lada de país).
-        //   - `codigoPais` (opcional): único valor aceptado "+52" (default México).
-        // OJO: `phone`/`message` son del endpoint de SMS plano
-        // (/glo/notifications/v1/send-sms), NO de este. No mezclar.
+        //   POST /glo/otp/v1/send-sms  { mensaje, numeroMovil }, codigoPais? = "+52"
+        //   - número NACIONAL de 10 dígitos (sin lada de país).
+        //
+        // CONFLICTO doc↔API: la doc usa `mensaje`/`numeroMovil`, pero el endpoint
+        // en producción rechaza con "The message is missing or invalid." cuando
+        // falta `message`. Para ser robustos a esa discrepancia mandamos AMBAS
+        // variantes (es+en). Los campos extra los ignora el endpoint.
+        $national = $this->toNationalNumber($to);
         $response = $this->apiCall('global', 'POST', '/glo/otp/v1/send-sms', [
             'mensaje' => $mensaje,
-            'numeroMovil' => $this->toNationalNumber($to),
+            'message' => $mensaje,
+            'numeroMovil' => $national,
+            'phone' => $national,
             'codigoPais' => '+52',
         ]);
         $this->logResponse($response, '/glo/otp/v1/send-sms', 'otp_send_sms');
@@ -86,10 +91,13 @@ class NubariumOtpService extends BaseNubariumService implements SmsServiceInterf
      */
     public function validateSmsOtp(string $to, string $otp): array
     {
-        // Doc: POST /glo/otp/v1/validate-sms  { otp, numeroMovil (10 dígitos) }
+        // Doc: POST /glo/otp/v1/validate-sms  { otp, numeroMovil (10 dígitos) }.
+        // Mandamos numeroMovil + phone por la misma discrepancia doc↔API del envío.
+        $national = $this->toNationalNumber($to);
         $response = $this->apiCall('global', 'POST', '/glo/otp/v1/validate-sms', [
             'otp' => $otp,
-            'numeroMovil' => $this->toNationalNumber($to),
+            'numeroMovil' => $national,
+            'phone' => $national,
         ]);
         $this->logResponse($response, '/glo/otp/v1/validate-sms', 'otp_validate_sms');
 
