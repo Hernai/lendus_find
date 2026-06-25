@@ -1081,8 +1081,5 @@ const saveTenantBranding = async () => {
         </div>
       </div>
     </Teleport>
-
-      @update:show="showDeleteApiModal = $event"
-    />
   </div>
 </template>
