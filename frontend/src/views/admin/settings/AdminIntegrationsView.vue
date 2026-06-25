@@ -32,13 +32,43 @@
           </button>
         </div>
 
-        <!-- Integrations Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          <div
-            v-for="integration in integrations"
-            :key="integration.id"
-            class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
-          >
+        <!-- Empty State -->
+        <div v-if="integrations.length === 0" class="text-center py-12">
+          <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <h3 class="mt-2 text-sm font-medium text-gray-900">No hay integraciones configuradas</h3>
+          <p class="mt-1 text-sm text-gray-500">Comienza agregando una nueva integración.</p>
+        </div>
+
+        <!-- Integraciones agrupadas por proveedor -->
+        <div v-else class="space-y-8">
+          <section v-for="group in integrationsByProvider" :key="group.provider">
+            <!-- Provider section header -->
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-9 h-9 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-base font-bold text-gray-600">
+                {{ group.provider_label.charAt(0) }}
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <h2 class="text-base font-semibold text-gray-900 truncate">{{ group.provider_label }}</h2>
+                  <span :class="['px-2 py-0.5 text-[10px] font-semibold rounded-full', statusMeta(group.provider_status).classes]">
+                    {{ statusMeta(group.provider_status).label }}
+                  </span>
+                </div>
+                <p class="text-xs text-gray-500">
+                  {{ group.items.length }} {{ group.items.length === 1 ? 'servicio configurado' : 'servicios configurados' }}
+                </p>
+              </div>
+            </div>
+
+            <!-- Tarjetas de servicio del proveedor (cada una con su prueba independiente) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              <div
+                v-for="integration in group.items"
+                :key="integration.id"
+                class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
+              >
             <!-- Card Header -->
             <div class="px-5 py-4 border-b border-gray-100 bg-gray-50/50">
               <div class="flex items-center justify-between">
@@ -230,16 +260,9 @@
                 </button>
               </div>
             </div>
-          </div>
-
-          <!-- Empty State -->
-          <div v-if="integrations.length === 0" class="col-span-full text-center py-12">
-            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            <h3 class="mt-2 text-sm font-medium text-gray-900">No hay integraciones configuradas</h3>
-            <p class="mt-1 text-sm text-gray-500">Comienza agregando una nueva integración.</p>
-          </div>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </div>
@@ -324,15 +347,29 @@
               Tipo de Servicio *
             </label>
             <div class="flex flex-wrap gap-2">
+              <!-- Seleccionar / quitar todos (solo alta, si hay más de uno) -->
+              <button
+                v-if="!editingIntegration && availableServiceTypes.length > 1"
+                type="button"
+                @click="toggleAllServices"
+                :class="[
+                  'px-3.5 py-2 rounded-lg border text-sm font-medium transition-all cursor-pointer',
+                  allServicesSelected
+                    ? 'border-primary-600 bg-primary-600 text-white'
+                    : 'border-dashed border-primary-300 bg-white text-primary-700 hover:border-primary-400'
+                ]"
+              >
+                {{ allServicesSelected ? 'Quitar todos' : 'Todos' }}
+              </button>
               <button
                 v-for="s in availableServiceTypes"
                 :key="s.key"
                 type="button"
                 :disabled="!!editingIntegration"
-                @click="form.service_type = s.key"
+                @click="toggleService(s.key)"
                 :class="[
                   'px-3.5 py-2 rounded-lg border text-sm font-medium transition-all',
-                  form.service_type === s.key
+                  form.service_types.includes(s.key)
                     ? 'border-primary-500 bg-primary-50 text-primary-700 ring-1 ring-primary-500/30'
                     : 'border-gray-200 bg-white text-gray-700 hover:border-primary-300',
                   editingIntegration ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
@@ -343,6 +380,7 @@
             </div>
             <p class="mt-1.5 text-xs text-gray-500">
               Sólo se muestran los servicios que ofrece {{ providerLabel(form.provider) }}.
+              <template v-if="!editingIntegration"> Puedes elegir varios; se crea una integración por servicio (mismas credenciales).</template>
             </p>
           </div>
 
@@ -548,7 +586,7 @@
               />
             </div>
 
-            <div v-if="form.service_type === 'email'">
+            <div v-if="form.service_types.includes('email')">
               <label class="block text-sm font-medium text-gray-700 mb-1">Email de Origen</label>
               <input
                 v-model="form.from_email"
@@ -810,7 +848,7 @@ const editingIntegration = ref<Integration | null>(null)
 const isSaving = ref(false)
 const form = ref({
   provider: '',
-  service_type: '',
+  service_types: [] as string[],
   account_sid: '',
   auth_token: '',
   api_key: '',
@@ -838,6 +876,24 @@ const sortedProviders = computed(() =>
 const providerLabel = (key: string) =>
   providers.value.find((p) => p.key === key)?.label ?? key
 
+// Integraciones agrupadas por proveedor (para mostrar cada proveedor con sus
+// servicios configurados y probar cada uno de forma independiente).
+const integrationsByProvider = computed(() => {
+  const map = new Map<
+    string,
+    { provider: string; provider_label: string; provider_status: ProviderStatus; items: Integration[] }
+  >()
+  for (const it of integrations.value) {
+    let g = map.get(it.provider)
+    if (!g) {
+      g = { provider: it.provider, provider_label: it.provider_label, provider_status: it.provider_status, items: [] }
+      map.set(it.provider, g)
+    }
+    g.items.push(it)
+  }
+  return [...map.values()]
+})
+
 // Sólo los tipos de servicio que ofrece el proveedor seleccionado. Si el
 // proveedor no trae `services` (fallback), se muestran todos.
 const availableServiceTypes = computed(() => {
@@ -854,18 +910,29 @@ const selectProvider = (p: V2ProviderOption) => {
   form.value.provider = p.key
 }
 
-// Al cambiar el proveedor (alta), ajusta el tipo de servicio: si sólo hay uno
-// lo autoselecciona; si el actual ya no aplica al proveedor, lo limpia.
-watch(() => form.value.provider, () => {
+// Al cambiar el proveedor (alta), preselecciona TODOS sus servicios; el admin
+// puede quitar los que no quiera. Se crea una integración por servicio.
+watch(() => form.value.provider, (provider) => {
   if (editingIntegration.value) return
-  const services = availableServiceTypes.value
-  const only = services.length === 1 ? services[0] : undefined
-  if (only) {
-    form.value.service_type = only.key
-  } else if (!services.some((s) => s.key === form.value.service_type)) {
-    form.value.service_type = ''
-  }
+  form.value.service_types = provider ? availableServiceTypes.value.map((s) => s.key) : []
 })
+
+// Multi-selección de servicios (sólo alta).
+const allServicesSelected = computed(() =>
+  availableServiceTypes.value.length > 0 &&
+  availableServiceTypes.value.every((s) => form.value.service_types.includes(s.key)),
+)
+const toggleService = (key: string) => {
+  if (editingIntegration.value) return
+  const i = form.value.service_types.indexOf(key)
+  if (i === -1) form.value.service_types.push(key)
+  else form.value.service_types.splice(i, 1)
+}
+const toggleAllServices = () => {
+  form.value.service_types = allServicesSelected.value
+    ? []
+    : availableServiceTypes.value.map((s) => s.key)
+}
 
 // Formatea el teléfono de prueba a 10 dígitos nacionales mientras se escribe.
 const onTestPhoneInput = (e: Event) => {
@@ -920,7 +987,7 @@ const openNewIntegrationModal = () => {
   editingIntegration.value = null
   form.value = {
     provider: '',
-    service_type: '',
+    service_types: [] as string[],
     account_sid: '',
     auth_token: '',
     api_key: '',
@@ -944,7 +1011,7 @@ const openEditModal = (integration: Integration) => {
   const extra = integration.extra_config ?? {}
   form.value = {
     provider: integration.provider,
-    service_type: integration.service_type,
+    service_types: [integration.service_type],
     account_sid: '',
     auth_token: '',
     api_key: '',
@@ -970,40 +1037,46 @@ const closeEditModal = () => {
 
 // Save integration
 const saveIntegration = async () => {
-  if (!form.value.provider || !form.value.service_type) {
-    toast.error('Selecciona un proveedor y un tipo de servicio')
+  if (!form.value.provider || form.value.service_types.length === 0) {
+    toast.error('Selecciona un proveedor y al menos un tipo de servicio')
     return
   }
+  const count = form.value.service_types.length
   try {
     isSaving.value = true
-    const payload: V2IntegrationPayload = {
-      provider: form.value.provider,
-      service_type: form.value.service_type,
-      account_sid: form.value.account_sid || undefined,
-      auth_token: form.value.auth_token || undefined,
-      api_key: form.value.api_key || undefined,
-      api_secret: form.value.api_secret || undefined,
-      from_number: form.value.from_number || undefined,
-      from_email: form.value.from_email || undefined,
-      domain: form.value.domain || undefined,
-      is_active: form.value.is_active,
-      is_sandbox: form.value.is_sandbox,
-    }
 
-    // Pack SMTP fields into extra_config
-    if (form.value.provider === 'smtp') {
-      payload.extra_config = {
-        host: form.value.smtp_host,
-        port: form.value.smtp_port,
-        encryption: form.value.smtp_encryption,
-        from_name: form.value.smtp_from_name,
+    // Una integración por servicio seleccionado, con las mismas credenciales.
+    for (const service_type of form.value.service_types) {
+      const payload: V2IntegrationPayload = {
+        provider: form.value.provider,
+        service_type,
+        account_sid: form.value.account_sid || undefined,
+        auth_token: form.value.auth_token || undefined,
+        api_key: form.value.api_key || undefined,
+        api_secret: form.value.api_secret || undefined,
+        from_number: form.value.from_number || undefined,
+        from_email: form.value.from_email || undefined,
+        domain: form.value.domain || undefined,
+        is_active: form.value.is_active,
+        is_sandbox: form.value.is_sandbox,
       }
+
+      // Pack SMTP fields into extra_config
+      if (form.value.provider === 'smtp') {
+        payload.extra_config = {
+          host: form.value.smtp_host,
+          port: form.value.smtp_port,
+          encryption: form.value.smtp_encryption,
+          from_name: form.value.smtp_from_name,
+        }
+      }
+
+      await v2.staff.integration.save(payload)
     }
 
-    await v2.staff.integration.save(payload)
     await loadIntegrations({ silent: true })
     closeEditModal()
-    toast.success('Integración guardada')
+    toast.success(count > 1 ? `${count} integraciones guardadas` : 'Integración guardada')
   } catch (err: unknown) {
     log.error('Error al guardar integración', { error: err })
     toast.error(getErrorMessage(err, 'Error al guardar integración'))
