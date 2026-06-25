@@ -27,5 +27,21 @@ export default defineConfigWithVueTs(
   ...pluginVue.configs['flat/essential'],
   vueTsConfigs.recommended,
 
+  {
+    name: 'app/rules',
+    rules: {
+      // Permitir args/vars/errores intencionalmente sin usar prefijados con `_`
+      // (p.ej. params conservados por compatibilidad de firma).
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+    },
+  },
+
   skipFormatting,
 )
