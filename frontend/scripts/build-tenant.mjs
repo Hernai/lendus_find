@@ -109,11 +109,19 @@ if (tenant.assets.splashDark) {
   copyIfExists(tenant.assets.splashDark, join(assetsRoot, 'splash-dark.png'))
 }
 
-// Si existen proyectos nativos, sincronizar Capacitor.
+// Si existen proyectos nativos, generar iconos/splash con @capacitor/assets
+// y luego sincronizar Capacitor.
 const hasIos = existsSync(join(frontendRoot, 'ios'))
 const hasAndroid = existsSync(join(frontendRoot, 'android'))
 
 if (hasIos || hasAndroid) {
+  console.log('▶ Generando iconos y splash con @capacitor/assets...')
+  const platforms = [
+    ...(hasAndroid ? ['--android'] : []),
+    ...(hasIos ? ['--ios'] : []),
+  ]
+  await runCommand('npx', ['@capacitor/assets', 'generate', ...platforms], { env })
+
   console.log('▶ Capacitor sync...')
   await runCommand('npx', ['cap', 'sync'], { env })
 } else {
