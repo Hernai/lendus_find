@@ -7,6 +7,7 @@
 
 import { api } from '../api'
 import type { V2ApiResponse } from '@/types/v2'
+import type { V2ProviderOption } from './integration.staff.service'
 
 const BASE_PATH = '/v2/staff/tenants'
 
@@ -148,6 +149,10 @@ export interface V2TenantConfig {
   }
   branding: V2TenantBranding
   api_configs: V2TenantApiConfig[]
+  /** Catálogo unificado con estado + servicios por proveedor (nuevo). */
+  providers?: V2ProviderOption[]
+  service_types?: Record<string, string>
+  /** Compat hacia atrás. */
   available_providers: Record<string, string>
   available_service_types: Record<string, string>
 }
