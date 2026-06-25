@@ -228,114 +228,19 @@ class IntegrationController extends Controller
         // Clear cache before testing to ensure fresh credentials
         $this->clearIntegrationCache($tenant->id, $config->provider, $config->service_type);
 
-        try {
-            // Test Nubarium KYC - just obtain token (no phone needed)
-            if ($config->provider === 'nubarium' && $config->service_type === 'kyc') {
-                $nubariumService = $this->kycFactory->forTenant($tenant);
-                $result = $nubariumService->testConnection();
+        // Prueba real vía servicio compartido (misma lógica que ConfigController
+        // y TenantController). Envía SMS/OTP/email según el proveedor.
+        $result = app(\App\Services\IntegrationTester::class)->test(
+            $config,
+            $request->input('test_phone'),
+            $request->input('test_email'),
+        );
 
-                $config->update([
-                    'last_tested_at' => now(),
-                    'last_test_success' => $result['success'],
-                    'last_test_error' => $result['success'] ? null : ($result['error'] ?? 'Unknown error'),
-                ]);
-
-                if ($result['success']) {
-                    return $this->success([
-                        'details' => [
-                            'token_preview' => $result['token_preview'] ?? null,
-                        ],
-                    ], 'Conexión exitosa - Token obtenido');
-                } else {
-                    return $this->badRequest('AUTH_FAILED', $result['message'] ?? 'Error de autenticación');
-                }
-            }
-
-            // Test Nubarium OTP SMS - envía un OTP real (Nubarium genera el código)
-            if ($config->provider === 'nubarium' && in_array($config->service_type, ['sms', 'whatsapp'])) {
-                $tenantModel = \App\Models\Tenant::withoutGlobalScopes()->find($tenant->id);
-                $otpService = new \App\Services\ExternalApi\Nubarium\NubariumOtpService($tenantModel, $config->service_type);
-                $result = $otpService->sendSmsOtp($request->test_phone);
-
-                $config->update([
-                    'last_tested_at' => now(),
-                    'last_test_success' => $result['success'],
-                    'last_test_error' => $result['success'] ? null : ($result['message'] ?? 'Error desconocido'),
-                ]);
-
-                if ($result['success']) {
-                    return $this->success([
-                        'details' => ['validation_code' => $result['validation_code'] ?? null],
-                    ], 'OTP enviado — revisa el SMS en el teléfono de prueba');
-                }
-                return $this->badRequest('SEND_FAILED', $result['message'] ?? 'No se pudo enviar el OTP');
-            }
-
-            // Test Twilio SMS/WhatsApp - send real test message
-            if ($config->provider === 'twilio' && in_array($config->service_type, ['sms', 'whatsapp'])) {
-                // Use createFromConfig to test even inactive integrations
-                $twilioService = \App\Services\ExternalApi\TwilioService::createFromConfig($config);
-                $testMessage = 'Prueba de integración desde LendusFind - ' . now()->format('H:i:s');
-
-                if ($config->service_type === 'whatsapp') {
-                    $result = $twilioService->sendWhatsApp($request->test_phone, $testMessage);
-                } else {
-                    $result = $twilioService->sendSms($request->test_phone, $testMessage);
-                }
-
-                $config->update([
-                    'last_tested_at' => now(),
-                    'last_test_success' => $result['success'],
-                    'last_test_error' => $result['success'] ? null : ($result['error'] ?? 'Unknown error'),
-                ]);
-
-                if ($result['success']) {
-                    return $this->success([
-                        'details' => [
-                            'sid' => $result['sid'] ?? null,
-                            'status' => $result['status'] ?? null,
-                        ],
-                    ], 'Mensaje enviado exitosamente');
-                } else {
-                    return $this->badRequest('SEND_FAILED', $result['error'] ?? 'No se pudo enviar');
-                }
-            }
-
-            // Test SMTP email
-            if ($config->provider === 'smtp' && $config->service_type === 'email') {
-                $smtpService = \App\Services\ExternalApi\SmtpService::createFromConfig($config);
-
-                if ($request->filled('test_email')) {
-                    $result = $smtpService->sendTestEmail($request->test_email);
-                } else {
-                    $result = $smtpService->testConnection();
-                }
-
-                $config->update([
-                    'last_tested_at' => now(),
-                    'last_test_success' => $result['success'],
-                    'last_test_error' => $result['success'] ? null : ($result['error'] ?? $result['message'] ?? 'Error desconocido'),
-                ]);
-
-                if ($result['success']) {
-                    return $this->success([
-                        'details' => $result['details'] ?? null,
-                    ], $result['message'] ?? 'Prueba exitosa');
-                } else {
-                    return $this->badRequest('SMTP_ERROR', $result['message'] ?? 'Error de conexión SMTP');
-                }
-            }
-
-            return $this->error('NOT_IMPLEMENTED', 'Test not implemented for this provider/service type', 501);
-        } catch (\Exception $e) {
-            $config->update([
-                'last_tested_at' => now(),
-                'last_test_success' => false,
-                'last_test_error' => $e->getMessage(),
-            ]);
-
-            return $this->serverError('Error en la prueba: ' . $e->getMessage());
+        if ($result['success']) {
+            return $this->success(['details' => $result['details'] ?? []], $result['message']);
         }
+
+        return $this->badRequest($result['error'] ?? 'TEST_FAILED', $result['message']);
     }
 
     /**

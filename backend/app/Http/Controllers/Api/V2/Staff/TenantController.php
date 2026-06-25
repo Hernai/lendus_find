@@ -408,23 +408,22 @@ class TenantController extends Controller
             ->where('id', $configId)
             ->firstOrFail();
 
-        // Simple test - just check credentials
-        $success = $config->hasCredentials();
-        $error = $success ? null : 'Credenciales incompletas';
+        // Prueba real vía servicio compartido (envía SMS/OTP/email según el
+        // proveedor). Acepta test_phone / test_email del request.
+        $result = app(\App\Services\IntegrationTester::class)->test(
+            $config,
+            $request->input('test_phone'),
+            $request->input('test_email'),
+        );
 
-        $config->update([
-            'last_tested_at' => now(),
-            'last_test_success' => $success,
-            'last_test_error' => $error,
-        ]);
-
-        if ($success) {
+        if ($result['success']) {
             return $this->success([
-                'api_config' => $config->fresh()->toApiArray()
-            ], 'Conexión exitosa');
+                'api_config' => $config->fresh()->toApiArray(),
+                'details' => $result['details'] ?? [],
+            ], $result['message']);
         }
 
-        return $this->badRequest('TEST_FAILED', $error ?? 'Error en la prueba');
+        return $this->badRequest($result['error'] ?? 'TEST_FAILED', $result['message']);
     }
 
     /**

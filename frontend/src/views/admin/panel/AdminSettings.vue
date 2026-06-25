@@ -285,18 +285,54 @@ const deleteApiConfig = async () => {
   apiToDelete.value = null
 }
 
+// Modal de prueba: para SMS/WhatsApp/Email pedimos un destino real porque la
+// prueba ENVÍA un mensaje/OTP de verdad (Twilio/Nubarium/SMTP). Para KYC u
+// otros se prueba directo (sólo valida credenciales/token).
+const showApiTestModal = ref(false)
+const apiTestTarget = ref<ApiConfig | null>(null)
+const apiTestPhone = ref('')
+const apiTestEmail = ref('')
+const apiTesting = ref(false)
+const apiTestResult = ref<{ success: boolean; message: string } | null>(null)
+
 const testApiConfig = async (config: ApiConfig) => {
+  const needsPhone = ['sms', 'whatsapp'].includes(config.service_type)
+  const needsEmail = config.service_type === 'email'
+
+  if (needsPhone || needsEmail) {
+    apiTestTarget.value = config
+    apiTestPhone.value = ''
+    apiTestEmail.value = ''
+    apiTestResult.value = null
+    showApiTestModal.value = true
+    return
+  }
+
+  await runApiTest(config)
+}
+
+const runApiTest = async (config: ApiConfig) => {
+  apiTesting.value = true
+  apiTestResult.value = null
   try {
-    const response = await v2.staff.config.testApiConfig(config.id)
-    if (response.success) {
-      saveMessage.value = 'Conexion exitosa'
-    } else {
-      saveError.value = response.message || 'Error en la prueba'
+    const payload: { test_phone?: string; test_email?: string } = {}
+    if (['sms', 'whatsapp'].includes(config.service_type)) payload.test_phone = apiTestPhone.value
+    if (config.service_type === 'email') payload.test_email = apiTestEmail.value
+
+    const response = await v2.staff.config.testApiConfig(config.id, payload)
+    apiTestResult.value = {
+      success: !!response.success,
+      message: response.message || (response.success ? 'Prueba exitosa' : 'Error en la prueba'),
+    }
+    if (response.success && !(showApiTestModal.value)) {
+      saveMessage.value = response.message || 'Conexion exitosa'
+      clearMessageAfterDelay()
     }
     await loadConfig()
-    clearMessageAfterDelay()
   } catch (e) {
-    saveError.value = 'Error al probar conexion'
+    apiTestResult.value = { success: false, message: 'Error al probar la conexión' }
+  } finally {
+    apiTesting.value = false
   }
 }
 
@@ -917,5 +953,69 @@ const getProviderHelpText = (provider: string) => {
       @confirm="deleteApiConfig"
       @update:show="showDeleteApiModal = $event"
     />
+
+    <!-- Modal de prueba de integración (envía SMS/OTP/email real) -->
+    <div
+      v-if="showApiTestModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4"
+      @click.self="showApiTestModal = false"
+    >
+      <div class="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6">
+        <h3 class="text-lg font-bold text-gray-900 mb-1">
+          Probar {{ apiTestTarget?.provider_label }}
+        </h3>
+        <p class="text-sm text-gray-500 mb-4">
+          Se enviará un mensaje/OTP real al destino que indiques.
+        </p>
+
+        <!-- Teléfono (SMS/WhatsApp) -->
+        <div v-if="apiTestTarget && ['sms','whatsapp'].includes(apiTestTarget.service_type)">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Número de prueba *</label>
+          <input
+            v-model="apiTestPhone"
+            type="tel"
+            placeholder="+525512345678"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+          <p class="mt-1 text-xs text-gray-500">Formato E.164. Llega un OTP/SMS de verdad a este número.</p>
+        </div>
+
+        <!-- Email -->
+        <div v-else-if="apiTestTarget?.service_type === 'email'">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Email de prueba *</label>
+          <input
+            v-model="apiTestEmail"
+            type="email"
+            placeholder="tu@correo.com"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+        </div>
+
+        <!-- Resultado -->
+        <div
+          v-if="apiTestResult"
+          class="mt-4 p-3 rounded-lg text-sm"
+          :class="apiTestResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'"
+        >
+          {{ apiTestResult.message }}
+        </div>
+
+        <div class="mt-5 flex justify-end gap-2">
+          <button
+            class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+            @click="showApiTestModal = false"
+          >
+            Cerrar
+          </button>
+          <button
+            class="px-4 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-lg disabled:opacity-50"
+            :disabled="apiTesting || (apiTestTarget && ['sms','whatsapp'].includes(apiTestTarget.service_type) ? !apiTestPhone : !apiTestEmail)"
+            @click="apiTestTarget && runApiTest(apiTestTarget)"
+          >
+            {{ apiTesting ? 'Enviando…' : 'Enviar prueba' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
