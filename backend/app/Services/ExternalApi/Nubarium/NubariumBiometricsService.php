@@ -293,12 +293,37 @@ class NubariumBiometricsService extends BaseNubariumService
                 $status = $data['status'] ?? $data['estatus'] ?? '';
                 $messageCode = $data['messageCode'] ?? $data['codigoMensaje'] ?? -1;
 
+                // El endpoint compare-id-face devuelve el id de validación con typo
+                // en la doc ('validacionCode', sin la "t"); lo capturamos primero.
+                $validationCode = $data['validacionCode'] ?? $data['validationCode'] ?? $data['codigoValidacion'] ?? null;
+
                 if ($status === 'ERROR') {
+                    // messageCode=1 ('Similarity not found') es un NO-MATCH de negocio
+                    // legítimo, no un fallo de servicio. Otros códigos (100, etc.) sí
+                    // son errores técnicos.
+                    if ($messageCode === 1) {
+                        return [
+                            'success' => true,
+                            'match' => false,
+                            'score' => 0.0,
+                            'threshold' => $threshold,
+                            'message_code' => $messageCode,
+                            'validation_code' => $validationCode,
+                            'data' => [
+                                'score' => 0.0,
+                                'match' => false,
+                                'threshold' => $threshold,
+                                'message' => 'Los rostros no coinciden',
+                            ],
+                            'raw_response' => $data,
+                        ];
+                    }
+
                     return [
                         'success' => false,
                         'error' => $data['message'] ?? $data['mensaje'] ?? 'Error en comparación facial',
                         'error_code' => $messageCode,
-                        'validation_code' => $data['validationCode'] ?? $data['codigoValidacion'] ?? null,
+                        'validation_code' => $validationCode,
                     ];
                 }
 
@@ -311,7 +336,7 @@ class NubariumBiometricsService extends BaseNubariumService
                     'score' => $score,
                     'threshold' => $threshold,
                     'message_code' => $messageCode,
-                    'validation_code' => $data['validationCode'] ?? $data['codigoValidacion'] ?? null,
+                    'validation_code' => $validationCode,
                     'data' => [
                         'score' => $score,
                         'match' => $match,
@@ -368,7 +393,7 @@ class NubariumBiometricsService extends BaseNubariumService
                 Log::info('Nubarium Liveness raw response', [
                     'status' => $data['status'] ?? 'NOT_FOUND',
                     'messageCode' => $data['messageCode'] ?? 'NOT_FOUND',
-                    'liveness' => $data['liveness'] ?? 'NOT_FOUND',
+                    'score' => $data['score'] ?? 'NOT_FOUND',
                 ]);
 
                 $status = $data['status'] ?? '';
@@ -383,7 +408,8 @@ class NubariumBiometricsService extends BaseNubariumService
                     ];
                 }
 
-                $livenessScore = (float) ($data['liveness'] ?? $data['score'] ?? 0);
+                // La doc devuelve `score`; `liveness` queda como fallback defensivo.
+                $livenessScore = (float) ($data['score'] ?? $data['liveness'] ?? 0);
 
                 // Normalize to 0-100 if needed
                 if ($livenessScore > 0 && $livenessScore <= 1) {
@@ -421,7 +447,16 @@ class NubariumBiometricsService extends BaseNubariumService
     }
 
     /**
-     * Get JWT token for Biometric SDK.
+     * Genera el JWT de acceso para el SDK biométrico de Nubarium.
+     *
+     * Doc (SDK → Security access tokens → Generate an access token):
+     *   POST https://api.sdk.nubarium.com/jwt/v1/generate
+     *   Basic Auth (api_key/api_secret del tenant), SIN body.
+     *   → { bearer_token, exp (timestamp Unix), ... }
+     *
+     * El token no depende del `transactionId` (es un access token general del
+     * SDK), por eso se cachea por tenant; `transaction_id` sólo se devuelve para
+     * que el front lo correlacione.
      */
     public function getBiometricToken(string $transactionId): array
     {
@@ -429,39 +464,49 @@ class NubariumBiometricsService extends BaseNubariumService
             return ['success' => false, 'error' => 'Servicio no configurado'];
         }
 
-        $cacheKey = "nubarium_token_{$this->tenant->id}_{$transactionId}";
+        try {
+            $cacheKey = "nubarium_sdk_jwt_{$this->tenant->id}";
 
-        return \Illuminate\Support\Facades\Cache::remember($cacheKey, 300, function () use ($transactionId) {
-            $this->logRequest('POST', 'auth/token', ['transaction_id' => $transactionId]);
+            $cached = \Illuminate\Support\Facades\Cache::remember($cacheKey, 300, function () {
+                $this->logRequest('POST', 'jwt/v1/generate', []);
 
-            try {
-                $response = $this->serviceHttp('auth')->post('/auth/token', [
-                    'transaction_id' => $transactionId,
-                    'tenant_id' => $this->tenant->id,
-                ]);
+                $response = \Illuminate\Support\Facades\Http::withBasicAuth($this->getUsername(), $this->getPassword())
+                    ->timeout($this->timeout)
+                    ->post($this->serviceUrls['sdk'] . '/jwt/v1/generate');
 
-                $this->logResponse($response, 'auth/token');
+                $this->logResponse($response, 'jwt/v1/generate');
 
                 if ($response->successful()) {
-                    $data = $response->json();
+                    $data = $response->json() ?? [];
+                    $token = $data['bearer_token'] ?? $data['token'] ?? null;
 
-                    return [
-                        'success' => true,
-                        'token' => $data['token'] ?? $data['jwt'] ?? null,
-                        'expires_in' => $data['expires_in'] ?? 3600,
-                        'transaction_id' => $transactionId,
-                    ];
+                    if ($token) {
+                        // `exp` es timestamp Unix; derivamos los segundos restantes.
+                        $expiresIn = isset($data['exp']) ? max(60, (int) $data['exp'] - time()) : 3600;
+                        return ['token' => $token, 'expires_in' => $expiresIn];
+                    }
                 }
 
-                return $this->handleError($response, 'Generación de token biométrico');
-            } catch (\Exception $e) {
-                Log::error('Nubarium token generation error', ['error' => static::sanitizeError($e)]);
+                return null;
+            });
 
-                return [
-                    'success' => false,
-                    'error' => 'Error al generar token: ' . static::sanitizeError($e),
-                ];
+            if (!$cached) {
+                return ['success' => false, 'error' => 'No se pudo generar el token del SDK biométrico'];
             }
-        });
+
+            return [
+                'success' => true,
+                'token' => $cached['token'],
+                'expires_in' => $cached['expires_in'],
+                'transaction_id' => $transactionId,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Nubarium SDK token generation error', ['error' => static::sanitizeError($e)]);
+
+            return [
+                'success' => false,
+                'error' => 'Error al generar token del SDK: ' . static::sanitizeError($e),
+            ];
+        }
     }
 }

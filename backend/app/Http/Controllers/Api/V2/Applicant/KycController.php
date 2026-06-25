@@ -10,7 +10,6 @@ use App\Http\Requests\Kyc\CheckFieldsVerifiedRequest;
 use App\Http\Requests\Kyc\CheckOfacRequest;
 use App\Http\Requests\Kyc\CheckPldBlacklistsRequest;
 use App\Http\Requests\Kyc\GetCurpRequest;
-use App\Http\Requests\Kyc\GetImssHistoryRequest;
 use App\Http\Requests\Kyc\RecordVerificationsRequest;
 use App\Http\Requests\Kyc\ValidateCedulaRequest;
 use App\Http\Requests\Kyc\ValidateCepRequest;
@@ -231,7 +230,9 @@ class KycController extends Controller
         $services = [
             'nubarium' => [
                 'configured' => $service->isConfigured(),
-                'services' => $service->isConfigured() ? $service->getAvailableServices() : [],
+                // Lista de claves de servicios disponibles (string[]), p.ej.
+                // ['curp','rfc','ine',...]. El front la tipa como string[].
+                'services' => $service->isConfigured() ? array_keys($service->getAvailableServices()) : [],
             ],
         ];
 
@@ -422,11 +423,19 @@ class KycController extends Controller
             if (!empty($data['fecha_nacimiento'])) {
                 $this->verificationService->verify($applicant, 'birth_date', $data['fecha_nacimiento'], VerificationMethod::RENAPO);
             }
-            if (!empty($data['entidad_nacimiento'])) {
-                $this->verificationService->verify($applicant, 'birth_state', $data['entidad_nacimiento'], VerificationMethod::RENAPO);
+            if (!empty($data['estado_nacimiento'])) {
+                $this->verificationService->verify($applicant, 'birth_state', $data['estado_nacimiento'], VerificationMethod::RENAPO);
             }
             if (!empty($data['sexo'])) {
-                $this->verificationService->verify($applicant, 'gender', $data['sexo'], VerificationMethod::RENAPO);
+                // RENAPO devuelve 'HOMBRE'/'MUJER'; el enum Gender usa M/F/O.
+                $gender = match (strtoupper((string) $data['sexo'])) {
+                    'HOMBRE', 'MASCULINO', 'M', 'H' => 'M',
+                    'MUJER', 'FEMENINO', 'F' => 'F',
+                    default => null,
+                };
+                if ($gender) {
+                    $this->verificationService->verify($applicant, 'gender', $gender, VerificationMethod::RENAPO);
+                }
             }
 
             $this->verificationService->updateKycStatus($applicant);
@@ -736,11 +745,13 @@ class KycController extends Controller
         }
 
         $result = $service->validateCep($request->only([
+            'tipo_criterio',
             'clave_rastreo',
-            'fecha_operacion',
+            'fecha_pago',
+            'institucion_emisora',
+            'institucion_receptora',
+            'cuenta_beneficiaria',
             'monto',
-            'cuenta_beneficiario',
-            'cuenta_ordenante',
         ]));
 
         $this->logKycAction($request, 'cep_validation', [
@@ -825,31 +836,6 @@ class KycController extends Controller
             'checked_at' => $result['checked_at'],
             'warning' => $result['warning'] ?? null,
         ], 'Consulta de listas negras completada');
-    }
-
-    /**
-     * Get IMSS employment history.
-     */
-    public function getImssHistory(GetImssHistoryRequest $request): JsonResponse
-    {
-        $service = $this->getKycService($request);
-
-        if ($error = $this->ensureServiceConfigured($service)) {
-            return $error;
-        }
-
-        $result = $service->getImssHistory($request->curp, $request->nss);
-
-        $this->logKycAction($request, 'imss_history', [
-            'curp' => $this->maskCurp($request->curp),
-            'success' => $result['success'] ?? false,
-        ]);
-
-        if (!$result['success']) {
-            return $this->badRequest('IMSS_QUERY_FAILED', $result['error'] ?? 'Error al consultar IMSS');
-        }
-
-        return $this->success($result['data'], 'Historial IMSS obtenido');
     }
 
     /**

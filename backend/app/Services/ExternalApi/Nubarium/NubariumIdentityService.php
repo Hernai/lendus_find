@@ -148,13 +148,16 @@ class NubariumIdentityService extends BaseNubariumService
             }
         }
 
+        // Doc (RENAPO → Get CURP): el nombre va en `nombre` (singular).
+        // `documento` = "0" para no requerir datos del documento probatorio.
         $payload = [
-            'nombres' => strtoupper($data['nombres']),
+            'nombre' => strtoupper($data['nombres']),
             'primerApellido' => strtoupper($data['apellido_paterno']),
             'segundoApellido' => strtoupper($data['apellido_materno'] ?? ''),
             'fechaNacimiento' => $this->formatDate($data['fecha_nacimiento']),
             'sexo' => strtoupper(substr($data['sexo'], 0, 1)),
             'entidad' => strtoupper($data['entidad_nacimiento']),
+            'documento' => '0',
         ];
 
         $this->logRequest('POST', 'renapo/obtener_curp', $payload);
@@ -180,7 +183,20 @@ class NubariumIdentityService extends BaseNubariumService
                     'success' => true,
                     'curp' => $result['curp'] ?? null,
                     'validation_code' => $result['codigoValidacion'] ?? null,
-                    'data' => $result,
+                    // Normalizado a snake_case (igual que validateCurp) para que el
+                    // controller y el tipo TS compartido lean las mismas claves.
+                    // RENAPO entrega camelCase: nombre/apellidoPaterno/estadoNacimiento.
+                    'data' => [
+                        'curp' => $result['curp'] ?? null,
+                        'nombres' => $result['nombre'] ?? null,
+                        'apellido_paterno' => $result['apellidoPaterno'] ?? null,
+                        'apellido_materno' => $result['apellidoMaterno'] ?? null,
+                        'fecha_nacimiento' => $result['fechaNacimiento'] ?? null,
+                        'sexo' => $result['sexo'] ?? null,
+                        'pais_nacimiento' => $result['paisNacimiento'] ?? 'MEXICO',
+                        'estado_nacimiento' => $result['estadoNacimiento'] ?? null,
+                    ],
+                    'raw_response' => $result,
                 ];
             }
 

@@ -33,6 +33,7 @@ abstract class BaseNubariumService extends BaseExternalApiService
         'ocr' => 'https://ocr.nubarium.com',
         'sat' => 'https://sat.nubarium.com',
         'global' => 'https://api.nubarium.com',
+        'sdk' => 'https://api.sdk.nubarium.com',
     ];
 
     /**

@@ -27,6 +27,13 @@ return new class extends Migration
     {
         // Helper function to drop FK if it exists
         $dropFk = function (string $table, string $constraint) {
+            // information_schema sólo existe en Postgres/MySQL. En SQLite (tests
+            // en :memory:) no existe y, además, DROP TABLE no falla por estar
+            // referenciada, así que no hace falta soltar las FKs primero.
+            if (!in_array(DB::getDriverName(), ['pgsql', 'mysql', 'mariadb'], true)) {
+                return;
+            }
+
             $exists = DB::selectOne("
                 SELECT 1 FROM information_schema.table_constraints
                 WHERE constraint_name = ? AND table_name = ?

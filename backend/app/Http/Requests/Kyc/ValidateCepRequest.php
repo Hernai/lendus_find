@@ -19,27 +19,33 @@ class ValidateCepRequest extends FormRequest
 
     public function rules(): array
     {
+        // Campos que exige BANXICO (/banxico/v2/valida_cep).
         return [
+            'tipo_criterio' => 'nullable|in:T,R',
             'clave_rastreo' => 'required|string|max:50',
-            'fecha_operacion' => 'required|date',
+            'fecha_pago' => 'required|date',
+            'institucion_emisora' => 'required|string|max:10',
+            'institucion_receptora' => 'required|string|max:10',
+            'cuenta_beneficiaria' => 'required|string|max:20',
             'monto' => 'required|numeric|min:0.01',
-            'cuenta_beneficiario' => 'nullable|string|max:20',
-            'cuenta_ordenante' => 'nullable|string|max:20',
         ];
     }
 
     public function messages(): array
     {
         return [
+            'tipo_criterio.in' => 'El tipo de criterio debe ser T (clave de rastreo) o R (referencia)',
             'clave_rastreo.required' => 'La clave de rastreo es requerida',
             'clave_rastreo.max' => 'La clave de rastreo no debe exceder 50 caracteres',
-            'fecha_operacion.required' => 'La fecha de operación es requerida',
-            'fecha_operacion.date' => 'La fecha de operación no es válida',
+            'fecha_pago.required' => 'La fecha de pago es requerida',
+            'fecha_pago.date' => 'La fecha de pago no es válida',
+            'institucion_emisora.required' => 'La institución emisora es requerida',
+            'institucion_receptora.required' => 'La institución receptora es requerida',
+            'cuenta_beneficiaria.required' => 'La cuenta beneficiaria es requerida',
+            'cuenta_beneficiaria.max' => 'La cuenta beneficiaria no debe exceder 20 caracteres',
             'monto.required' => 'El monto es requerido',
             'monto.numeric' => 'El monto debe ser numérico',
             'monto.min' => 'El monto debe ser mayor a 0',
-            'cuenta_beneficiario.max' => 'La cuenta del beneficiario no debe exceder 20 caracteres',
-            'cuenta_ordenante.max' => 'La cuenta del ordenante no debe exceder 20 caracteres',
         ];
     }
 }

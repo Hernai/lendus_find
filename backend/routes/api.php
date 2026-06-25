@@ -243,10 +243,14 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'log.request'])
 
             Route::middleware('throttle:kyc')->group(function () {
                 Route::post('/curp/validate', [ApplicantKycController::class, 'validateCurp']);
+                Route::post('/curp/get', [ApplicantKycController::class, 'getCurp']);
                 Route::post('/rfc/validate', [ApplicantKycController::class, 'validateRfc']);
                 Route::post('/ine/validate', [ApplicantKycController::class, 'validateIne']);
                 Route::post('/ofac/check', [ApplicantKycController::class, 'checkOfac']);
                 Route::post('/pld/check', [ApplicantKycController::class, 'checkPldBlacklists']);
+                // Servicios México síncronos (Banxico / SEP)
+                Route::post('/cep/validate', [ApplicantKycController::class, 'validateCep']);
+                Route::post('/cedula/validate', [ApplicantKycController::class, 'validateCedula']);
             });
 
             Route::middleware('throttle:kyc-biometric')->group(function () {
@@ -257,6 +261,7 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'log.request'])
 
             Route::post('/verifications', [ApplicantKycController::class, 'recordVerifications']);
             Route::get('/verifications', [ApplicantKycController::class, 'getVerifications']);
+            Route::post('/verifications/check', [ApplicantKycController::class, 'checkFieldsVerified']);
         });
 
         // =============================================

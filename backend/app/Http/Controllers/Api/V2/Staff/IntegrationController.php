@@ -71,7 +71,11 @@ class IntegrationController extends Controller
     public function options(): JsonResponse
     {
         return $this->success([
-            'providers' => TenantApiConfig::PROVIDERS,
+            // Catálogo con estado (available | beta | coming_soon) para que el
+            // admin muestre badges y bloquee los "próximamente" en el alta.
+            'providers' => TenantApiConfig::providerCatalog(),
+            // Compat: mapa key=>label por si algún consumidor viejo lo usa.
+            'providers_map' => TenantApiConfig::PROVIDERS,
             'service_types' => TenantApiConfig::SERVICE_TYPES,
         ]);
     }
@@ -108,6 +112,16 @@ class IntegrationController extends Controller
 
         if ($validator->fails()) {
             return $this->validationError('Error de validación', $validator->errors()->toArray());
+        }
+
+        // Bloquear proveedores "próximamente" (sin implementación real) — el
+        // frontend ya los deshabilita en el dropdown, esto es defensa server-side.
+        if (TenantApiConfig::statusFor($request->provider) === 'coming_soon') {
+            return $this->error(
+                'PROVIDER_NOT_AVAILABLE',
+                'Este proveedor aún no está disponible (próximamente).',
+                422
+            );
         }
 
         // Check if config already exists
@@ -198,7 +212,7 @@ class IntegrationController extends Controller
 
         // Validation depends on provider/service type
         $rules = [];
-        if ($config->provider === 'twilio' && in_array($config->service_type, ['sms', 'whatsapp'])) {
+        if (in_array($config->provider, ['twilio', 'nubarium'], true) && in_array($config->service_type, ['sms', 'whatsapp'])) {
             $rules['test_phone'] = 'required|string';
         } elseif ($config->service_type === 'email') {
             $rules['test_email'] = 'required|email';
@@ -214,94 +228,19 @@ class IntegrationController extends Controller
         // Clear cache before testing to ensure fresh credentials
         $this->clearIntegrationCache($tenant->id, $config->provider, $config->service_type);
 
-        try {
-            // Test Nubarium KYC - just obtain token (no phone needed)
-            if ($config->provider === 'nubarium' && $config->service_type === 'kyc') {
-                $nubariumService = $this->kycFactory->forTenant($tenant);
-                $result = $nubariumService->testConnection();
+        // Prueba real vía servicio compartido (misma lógica que ConfigController
+        // y TenantController). Envía SMS/OTP/email según el proveedor.
+        $result = app(\App\Services\IntegrationTester::class)->test(
+            $config,
+            $request->input('test_phone'),
+            $request->input('test_email'),
+        );
 
-                $config->update([
-                    'last_tested_at' => now(),
-                    'last_test_success' => $result['success'],
-                    'last_test_error' => $result['success'] ? null : ($result['error'] ?? 'Unknown error'),
-                ]);
-
-                if ($result['success']) {
-                    return $this->success([
-                        'details' => [
-                            'token_preview' => $result['token_preview'] ?? null,
-                        ],
-                    ], 'Conexión exitosa - Token obtenido');
-                } else {
-                    return $this->badRequest('AUTH_FAILED', $result['message'] ?? 'Error de autenticación');
-                }
-            }
-
-            // Test Twilio SMS/WhatsApp - send real test message
-            if ($config->provider === 'twilio' && in_array($config->service_type, ['sms', 'whatsapp'])) {
-                // Use createFromConfig to test even inactive integrations
-                $twilioService = \App\Services\ExternalApi\TwilioService::createFromConfig($config);
-                $testMessage = 'Prueba de integración desde LendusFind - ' . now()->format('H:i:s');
-
-                if ($config->service_type === 'whatsapp') {
-                    $result = $twilioService->sendWhatsApp($request->test_phone, $testMessage);
-                } else {
-                    $result = $twilioService->sendSms($request->test_phone, $testMessage);
-                }
-
-                $config->update([
-                    'last_tested_at' => now(),
-                    'last_test_success' => $result['success'],
-                    'last_test_error' => $result['success'] ? null : ($result['error'] ?? 'Unknown error'),
-                ]);
-
-                if ($result['success']) {
-                    return $this->success([
-                        'details' => [
-                            'sid' => $result['sid'] ?? null,
-                            'status' => $result['status'] ?? null,
-                        ],
-                    ], 'Mensaje enviado exitosamente');
-                } else {
-                    return $this->badRequest('SEND_FAILED', $result['error'] ?? 'No se pudo enviar');
-                }
-            }
-
-            // Test SMTP email
-            if ($config->provider === 'smtp' && $config->service_type === 'email') {
-                $smtpService = \App\Services\ExternalApi\SmtpService::createFromConfig($config);
-
-                if ($request->filled('test_email')) {
-                    $result = $smtpService->sendTestEmail($request->test_email);
-                } else {
-                    $result = $smtpService->testConnection();
-                }
-
-                $config->update([
-                    'last_tested_at' => now(),
-                    'last_test_success' => $result['success'],
-                    'last_test_error' => $result['success'] ? null : ($result['error'] ?? $result['message'] ?? 'Error desconocido'),
-                ]);
-
-                if ($result['success']) {
-                    return $this->success([
-                        'details' => $result['details'] ?? null,
-                    ], $result['message'] ?? 'Prueba exitosa');
-                } else {
-                    return $this->badRequest('SMTP_ERROR', $result['message'] ?? 'Error de conexión SMTP');
-                }
-            }
-
-            return $this->error('NOT_IMPLEMENTED', 'Test not implemented for this provider/service type', 501);
-        } catch (\Exception $e) {
-            $config->update([
-                'last_tested_at' => now(),
-                'last_test_success' => false,
-                'last_test_error' => $e->getMessage(),
-            ]);
-
-            return $this->serverError('Error en la prueba: ' . $e->getMessage());
+        if ($result['success']) {
+            return $this->success(['details' => $result['details'] ?? []], $result['message']);
         }
+
+        return $this->badRequest($result['error'] ?? 'TEST_FAILED', $result['message']);
     }
 
     /**

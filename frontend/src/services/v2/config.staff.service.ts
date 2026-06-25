@@ -177,8 +177,14 @@ export async function deleteApiConfig(id: string): Promise<V2ApiResponse<null>> 
 /**
  * Test an API configuration.
  */
-export async function testApiConfig(id: string): Promise<V2ApiResponse<{ api_config: V2ApiConfig }>> {
-  const response = await api.post<V2ApiResponse<{ api_config: V2ApiConfig }>>(`${BASE_PATH}/api-configs/${id}/test`)
+export async function testApiConfig(
+  id: string,
+  payload?: { test_phone?: string; test_email?: string },
+): Promise<V2ApiResponse<{ api_config: V2ApiConfig }>> {
+  const response = await api.post<V2ApiResponse<{ api_config: V2ApiConfig }>>(
+    `${BASE_PATH}/api-configs/${id}/test`,
+    payload,
+  )
   return response.data
 }
 

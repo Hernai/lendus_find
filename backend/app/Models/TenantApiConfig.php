@@ -92,6 +92,106 @@ class TenantApiConfig extends Model
     ];
 
     /**
+     * Estado de implementación de cada proveedor:
+     *   - 'available'   : integración real y probada (se puede usar en prod)
+     *   - 'beta'        : implementación parcial / stub (devuelve mocks)
+     *   - 'coming_soon' : sólo en el catálogo, sin código aún
+     *
+     * Lo consume el admin de integraciones para mostrar badges y deshabilitar
+     * en el alta los que aún no funcionan. Single source of truth: este array.
+     */
+    public const PROVIDER_STATUS = [
+        'twilio' => 'available',
+        'nubarium' => 'available',
+        'smtp' => 'available',
+        'nubarium_phone_score' => 'beta',
+        'stp' => 'beta',
+        'conekta' => 'beta',
+        'openpay' => 'beta',
+        'messagebird' => 'coming_soon',
+        'vonage' => 'coming_soon',
+        'mailgun' => 'coming_soon',
+        'sendgrid' => 'coming_soon',
+        'ses' => 'coming_soon',
+        'circulo_credito' => 'coming_soon',
+        'mati' => 'coming_soon',
+        'onfido' => 'coming_soon',
+        'jumio' => 'coming_soon',
+        'fcm' => 'coming_soon',
+        'apns' => 'coming_soon',
+    ];
+
+    /**
+     * Tipos de servicio que ofrece cada proveedor (claves de SERVICE_TYPES).
+     *
+     * Lo consume el admin de integraciones para que, tras elegir un proveedor,
+     * sólo se muestren los servicios válidos de ESE proveedor (no la lista
+     * completa). Single source of truth: este array.
+     *
+     * @var array<string, array<int, string>>
+     */
+    public const PROVIDER_SERVICES = [
+        'twilio' => ['sms', 'whatsapp'],
+        'messagebird' => ['sms', 'whatsapp'],
+        'vonage' => ['sms', 'whatsapp'],
+        // Nubarium OTP soporta SMS y Email; WhatsApp NO (ver NubariumOtpService).
+        'nubarium' => ['kyc', 'sms', 'email'],
+        'smtp' => ['email'],
+        'mailgun' => ['email'],
+        'sendgrid' => ['email'],
+        'ses' => ['email'],
+        'circulo_credito' => ['credit_bureau'],
+        'mati' => ['kyc', 'document_validation'],
+        'onfido' => ['kyc', 'document_validation'],
+        'jumio' => ['kyc', 'document_validation'],
+        'fcm' => ['push'],
+        'apns' => ['push'],
+        'nubarium_phone_score' => ['phone_score'],
+        'stp' => ['loan_disbursement'],
+        'conekta' => ['payment_collection'],
+        'openpay' => ['payment_collection'],
+    ];
+
+    /**
+     * Estado de un proveedor (default 'coming_soon' si no está listado).
+     */
+    public static function statusFor(string $provider): string
+    {
+        return self::PROVIDER_STATUS[$provider] ?? 'coming_soon';
+    }
+
+    /**
+     * Servicios soportados por un proveedor (claves de SERVICE_TYPES). Si el
+     * proveedor no está mapeado, devuelve todas las claves (fallback seguro).
+     *
+     * @return array<int, string>
+     */
+    public static function servicesFor(string $provider): array
+    {
+        return self::PROVIDER_SERVICES[$provider] ?? array_keys(self::SERVICE_TYPES);
+    }
+
+    /**
+     * Catálogo de proveedores con label + estado + servicios, para el alta del
+     * admin (selección visual de proveedor y filtrado de tipo de servicio).
+     *
+     * @return array<int, array{key: string, label: string, status: string, services: array<int, string>}>
+     */
+    public static function providerCatalog(): array
+    {
+        return array_map(
+            fn ($key, $label) => [
+                'key' => $key,
+                'label' => $label,
+                'status' => self::statusFor($key),
+                'services' => self::servicesFor($key),
+            ],
+            array_keys(self::PROVIDERS),
+            array_values(self::PROVIDERS),
+        );
+    }
+
+    /**
      * Get the tenant.
      */
     public function tenant(): BelongsTo
@@ -181,6 +281,7 @@ class TenantApiConfig extends Model
             'id' => $this->id,
             'provider' => $this->provider,
             'provider_label' => self::PROVIDERS[$this->provider] ?? $this->provider,
+            'provider_status' => self::statusFor($this->provider),
             'service_type' => $this->service_type,
             'service_type_label' => self::SERVICE_TYPES[$this->service_type] ?? $this->service_type,
             'from_number' => $this->from_number,

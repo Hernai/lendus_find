@@ -19,8 +19,10 @@ class CheckFieldsVerifiedRequest extends FormRequest
 
     public function rules(): array
     {
+        // El solicitante se deriva del usuario autenticado en el controller
+        // (getOrCreateApplicant); `applicant_id` es opcional y no se usa.
         return [
-            'applicant_id' => 'required|uuid',
+            'applicant_id' => 'nullable|uuid',
             'fields' => 'required|array',
             'fields.*' => 'string',
         ];
@@ -29,7 +31,6 @@ class CheckFieldsVerifiedRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'applicant_id.required' => 'El ID del solicitante es requerido',
             'applicant_id.uuid' => 'El ID del solicitante debe ser un UUID válido',
             'fields.required' => 'Los campos son requeridos',
             'fields.array' => 'Los campos deben ser un arreglo',
