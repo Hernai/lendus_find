@@ -253,6 +253,12 @@ class TenantController extends Controller
             ],
             'branding' => $tenant->brandingConfig?->toApiArray() ?? $this->getDefaultBranding(),
             'api_configs' => $tenant->apiConfigs->map->toApiArray(),
+            // Catálogo unificado (mismo shape que IntegrationController::options())
+            // para que el componente compartido filtre servicios por proveedor y
+            // muestre el estado (available|beta|coming_soon).
+            'providers' => TenantApiConfig::providerCatalog(),
+            'service_types' => TenantApiConfig::SERVICE_TYPES,
+            // Compat hacia atrás (consumidores viejos).
             'available_providers' => TenantApiConfig::PROVIDERS,
             'available_service_types' => TenantApiConfig::SERVICE_TYPES,
         ]);

@@ -179,8 +179,22 @@ fi
 # 5. Restart servicios
 # -----------------------------------------------------------------------------
 if [[ "$SKIP_RESTART" != "1" ]]; then
-    log "Restart httpd + reverb"
-    # Sudo sin password (configurado en /etc/sudoers.d/lendusfind-deploy)
+    log "Restart php-fpm (limpia OPcache) + httpd + reverb"
+    # CRÍTICO: reiniciar PHP-FPM es lo único que limpia OPcache. Un `reload httpd`
+    # (graceful) NO recompila los .php cuando opcache.validate_timestamps=0, así
+    # que el código recién desplegado NO toma efecto sin esto. Probamos los
+    # nombres de servicio FPM comunes (cPanel/EasyApache usa ea-php82-php-fpm).
+    # Sudo sin password debe permitir `restart` del servicio FPM en
+    # /etc/sudoers.d/lendusfind-deploy.
+    fpm_ok=0
+    for svc in ea-php82-php-fpm php-fpm php82-php-fpm; do
+        if sudo systemctl restart "$svc" 2>/dev/null; then
+            log "  PHP-FPM reiniciado (OPcache limpio): $svc"
+            fpm_ok=1
+            break
+        fi
+    done
+    [[ "$fpm_ok" == "1" ]] || log "  WARN: no se pudo reiniciar php-fpm — OPcache puede quedar VIEJO. Revisa el nombre del servicio y el sudoers."
     sudo systemctl reload httpd 2>&1 || sudo systemctl restart httpd
     sudo systemctl restart lendusfind-reverb 2>&1 || log "WARN: reverb no se reinició (puede no estar instalado)"
 else
