@@ -20,8 +20,8 @@ interface TenantSnapshot {
 }
 
 let snapshot: TenantSnapshot = {
-  appId: 'mx.lendus.app',
-  appName: 'LendusFind',
+  appId: 'io.money.capital',
+  appName: 'Money Capital',
   splashColor: '#FFFFFF',
 }
 
@@ -58,6 +58,13 @@ const config: CapacitorConfig = {
       backgroundColor: snapshot.splashColor,
       showSpinner: false,
     },
+    // Inyecta --safe-area-inset-* en el WebView para Android < 140 donde
+    // env(safe-area-inset-top) no funciona. Usar siempre:
+    //   var(--safe-area-inset-top, env(safe-area-inset-top, 0px))
+    SystemBars: {
+      insetsHandling: 'css',
+      style: 'LIGHT',
+    },
   },
   ios: {
     contentInset: 'always',
@@ -65,6 +72,10 @@ const config: CapacitorConfig = {
   },
   android: {
     allowMixedContent: false,
+    // Habilita edge-to-edge para que env(safe-area-inset-top) funcione en Android.
+    // Sin esto, el WebView no recibe los insets del sistema y el contenido
+    // queda pegado a la status bar.
+    edgeToEdge: true,
   },
 }
 

@@ -443,7 +443,7 @@ function logout() {
 .hero-header {
   background: var(--tenant-primary, #371F91);
   color: #ffffff;
-  padding: calc(14px + env(safe-area-inset-top)) 18px 24px;
+  padding: calc(14px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 18px 24px;
   border-radius: 0 0 28px 28px;
 }
 .hero-top {
@@ -767,7 +767,7 @@ function logout() {
   .home-screen {
     background: #f8fafc;
     align-items: center;
-    padding-top: max(env(safe-area-inset-top), 32px);
+    padding-top: max(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), 32px);
   }
   .hero-header,
   .home-body {

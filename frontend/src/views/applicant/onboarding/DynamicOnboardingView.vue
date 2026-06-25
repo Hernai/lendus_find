@@ -572,7 +572,7 @@ onUnmounted(() => {
   min-height: 100vh;
   min-height: 100dvh;
   background: #ffffff;
-  padding-top: env(safe-area-inset-top);
+  padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   color: #0f172a;
 }
 
@@ -583,7 +583,7 @@ onUnmounted(() => {
   .dyn-onboarding {
     background: #f8fafc;
     align-items: center;
-    padding-top: max(env(safe-area-inset-top), 32px);
+    padding-top: max(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), 32px);
     padding-bottom: 48px;
   }
   .dyn-onboarding > * {
@@ -616,7 +616,7 @@ onUnmounted(() => {
   gap: 8px;
   background: #ffffff;
   border-bottom: 1px solid #eef0f4;
-  padding-top: calc(10px + env(safe-area-inset-top));
+  padding-top: calc(10px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
 }
 .header-row {
   display: flex;

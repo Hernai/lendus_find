@@ -358,7 +358,7 @@ watch(method, () => {
   min-height: 100vh;
   min-height: 100dvh;
   background: #ffffff;
-  padding-top: env(safe-area-inset-top);
+  padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   padding-bottom: calc(20px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
@@ -377,7 +377,7 @@ watch(method, () => {
 @media (min-width: 768px) {
   .ua-screen {
     background: #f8fafc;
-    padding-top: max(env(safe-area-inset-top), 48px);
+    padding-top: max(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), 48px);
     padding-bottom: 48px;
     align-items: center;
     justify-content: flex-start;
