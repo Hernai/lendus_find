@@ -73,8 +73,9 @@ class IntegrationTester
             );
         }
 
-        // Nubarium OTP por SMS/WhatsApp: envía un OTP real (Nubarium genera el código).
-        if ($provider === 'nubarium' && in_array($serviceType, ['sms', 'whatsapp'], true)) {
+        // Nubarium OTP por SMS: envía un OTP real (Nubarium genera el código).
+        // Nubarium NO soporta OTP por WhatsApp; ese canal cae al fallback.
+        if ($provider === 'nubarium' && $serviceType === 'sms') {
             if (!$testPhone) {
                 return $this->needs('test_phone', 'Se requiere un número de teléfono de prueba');
             }

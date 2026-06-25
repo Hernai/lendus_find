@@ -65,16 +65,16 @@ class NubariumOtpService extends BaseNubariumService implements SmsServiceInterf
     {
         $mensaje = $this->buildOtpMessage($message);
 
-        // El endpoint OTP global usa nombres en inglés (`message`, `phone`) y,
-        // con país por defecto = México, espera el número NACIONAL de 10 dígitos
-        // (él antepone la lada). Mandamos `phone` y `numeroMovil`, ambos a 10
-        // dígitos, + `message`/`mensaje` por compatibilidad de nombres.
-        $national = $this->toNationalNumber($to);
+        // Doc Nubarium (Global → OTP & Contact Validation → Send SMS - OTP):
+        //   POST /glo/otp/v1/send-sms  { mensaje, numeroMovil }
+        //   - `numeroMovil`: número NACIONAL de 10 dígitos (sin lada de país).
+        //   - `codigoPais` (opcional): único valor aceptado "+52" (default México).
+        // OJO: `phone`/`message` son del endpoint de SMS plano
+        // (/glo/notifications/v1/send-sms), NO de este. No mezclar.
         $response = $this->apiCall('global', 'POST', '/glo/otp/v1/send-sms', [
-            'message' => $mensaje,
             'mensaje' => $mensaje,
-            'phone' => $national,
-            'numeroMovil' => $national,
+            'numeroMovil' => $this->toNationalNumber($to),
+            'codigoPais' => '+52',
         ]);
         $this->logResponse($response, '/glo/otp/v1/send-sms', 'otp_send_sms');
 
@@ -86,12 +86,10 @@ class NubariumOtpService extends BaseNubariumService implements SmsServiceInterf
      */
     public function validateSmsOtp(string $to, string $otp): array
     {
-        // Mismos nombres/formato (10 dígitos nacional) que en el envío.
-        $national = $this->toNationalNumber($to);
+        // Doc: POST /glo/otp/v1/validate-sms  { otp, numeroMovil (10 dígitos) }
         $response = $this->apiCall('global', 'POST', '/glo/otp/v1/validate-sms', [
             'otp' => $otp,
-            'phone' => $national,
-            'numeroMovil' => $national,
+            'numeroMovil' => $this->toNationalNumber($to),
         ]);
         $this->logResponse($response, '/glo/otp/v1/validate-sms', 'otp_validate_sms');
 
@@ -106,10 +104,10 @@ class NubariumOtpService extends BaseNubariumService implements SmsServiceInterf
     {
         $msg = $this->buildOtpMessage($message);
 
+        // Doc (Send Email - OTP): body { email, message }.
         $response = $this->apiCall('global', 'POST', '/glo/otp/v1/email-send-otp', [
             'email' => $email,
             'message' => $msg,
-            'mensaje' => $msg,
         ]);
         $this->logResponse($response, '/glo/otp/v1/email-send-otp', 'otp_send_email');
 

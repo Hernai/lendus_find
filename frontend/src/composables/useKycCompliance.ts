@@ -90,7 +90,7 @@ export function useKycCompliance(): UseKycComplianceReturn {
 
       ofacResult.value = {
         found: data.found,
-        matches: data.matches,
+        matches: data.matches.map((m) => ({ ...m, score: m.score ?? 0 })),
         count: data.count || 0,
         warning: data.warning
       }

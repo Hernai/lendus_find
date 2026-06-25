@@ -156,10 +156,13 @@ export type LivenessResponse = V2Response<LivenessData>
  */
 export interface OfacCheckData {
   found: boolean
+  // Los records de Nubarium son heterogéneos (SDN vs UN) y `score` deriva de
+  // `similarity`, que puede faltar; por eso todos los campos son opcionales.
   matches: Array<{
-    name: string
-    score: number
-    list: string
+    name?: string
+    score?: number | null
+    list?: string
+    [key: string]: unknown
   }>
   count: number
   validation_code?: string
@@ -194,12 +197,6 @@ export interface CepValidationData {
 }
 
 export type CepValidationResponse = V2Response<CepValidationData>
-
-/**
- * IMSS history response type.
- * Backend returns: { success: true, data: {...}, message: "..." }
- */
-export type ImssHistoryResponse = V2Response<unknown>
 
 /**
  * Cédula validation data structure.
@@ -409,15 +406,18 @@ export async function validateLiveness(faceImage: string): Promise<LivenessData>
 }
 
 /**
- * Validate SPEI CEP (payment proof).
+ * Validate SPEI CEP (payment proof) against BANXICO.
+ * Campos exigidos por el endpoint /banxico/v2/valida_cep (ver ValidateCepRequest).
  * Returns the unwrapped data from the V2 response.
  */
 export async function validateCep(data: {
   clave_rastreo: string
-  fecha_operacion: string
+  fecha_pago: string
+  institucion_emisora: string
+  institucion_receptora: string
+  cuenta_beneficiaria: string
   monto: number
-  cuenta_beneficiario: string
-  cuenta_ordenante?: string
+  tipo_criterio?: 'T' | 'R'
 }): Promise<CepValidationData> {
   const response = await api.post<CepValidationResponse>(`${BASE_PATH}/cep/validate`, data)
   return response.data.data
@@ -448,18 +448,6 @@ export async function checkPldBlacklists(
     name,
     curp,
     similarity,
-  })
-  return response.data.data
-}
-
-/**
- * Get IMSS employment history.
- * Returns the unwrapped data from the V2 response.
- */
-export async function getImssHistory(curp: string, nss?: string): Promise<unknown> {
-  const response = await api.post<ImssHistoryResponse>(`${BASE_PATH}/imss/history`, {
-    curp,
-    nss,
   })
   return response.data.data
 }
@@ -525,7 +513,6 @@ export default {
   validateCep,
   checkOfac,
   checkPldBlacklists,
-  getImssHistory,
   validateCedula,
   recordVerifications,
   getVerifications,

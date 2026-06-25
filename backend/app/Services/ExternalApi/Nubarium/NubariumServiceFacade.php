@@ -32,18 +32,29 @@ class NubariumServiceFacade
     protected ?string $entityId = null;
 
     /**
-     * Available validation services.
+     * Servicios de validación disponibles (key => etiqueta). Refleja lo que
+     * está realmente implementado contra la doc de Nubarium. Los servicios
+     * asíncronos por webhook (IMSS/ISSSTE) van marcados como "próximamente"
+     * porque requieren un receptor de callback que aún no existe.
      */
     public const SERVICES = [
+        // Identidad (RENAPO / SAT)
         'curp' => 'Validación de CURP',
         'rfc' => 'Validación de RFC',
+        // INE + biometría
         'ine' => 'Validación de INE',
-        'cedula_sep' => 'Validación de Cédula Profesional SEP',
-        'spei_cep' => 'Validación de CEP SPEI',
-        'imss' => 'Historial IMSS',
-        'issste' => 'Historial ISSSTE',
-        'ofac' => 'Consulta Lista OFAC',
+        'face_match' => 'Comparación facial (selfie vs INE)',
+        'liveness' => 'Prueba de vida (liveness)',
         'biometric_token' => 'Token para SDK Biométrico',
+        // México (síncronos)
+        'cedula_sep' => 'Validación de Cédula Profesional (SEP)',
+        'spei_cep' => 'Validación de CEP SPEI (Banxico)',
+        // Cumplimiento / listas
+        'ofac' => 'Listas OFAC y ONU',
+        'pld' => 'Listas negras PLD / PEP',
+        // Asíncronos por webhook — pendientes de receptor de callback.
+        'imss' => 'Historial IMSS (webhook — próximamente)',
+        'issste' => 'Historial ISSSTE (webhook — próximamente)',
     ];
 
     public function __construct(Tenant $tenant)
@@ -285,14 +296,6 @@ class NubariumServiceFacade
     public function checkPldBlacklists(string $fullName, ?string $curp = null, int $similarity = 80): array
     {
         return $this->compliance()->checkPldBlacklists($fullName, $curp, $similarity);
-    }
-
-    /**
-     * Get IMSS employment history.
-     */
-    public function getImssHistory(string $curp, ?string $nss = null): array
-    {
-        return $this->compliance()->getImssHistory($curp, $nss);
     }
 
     /**

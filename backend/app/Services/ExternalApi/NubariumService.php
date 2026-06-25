@@ -33,19 +33,10 @@ class NubariumService extends BaseExternalApiService
     protected NubariumServiceFacade $facade;
 
     /**
-     * Available validation services.
+     * Servicios de validación disponibles. Única fuente de verdad: el Facade
+     * (evita que ambos catálogos se desincronicen).
      */
-    public const SERVICES = [
-        'curp' => 'Validación de CURP',
-        'rfc' => 'Validación de RFC',
-        'ine' => 'Validación de INE',
-        'cedula_sep' => 'Validación de Cédula Profesional SEP',
-        'spei_cep' => 'Validación de CEP SPEI',
-        'imss' => 'Historial IMSS',
-        'issste' => 'Historial ISSSTE',
-        'ofac' => 'Consulta Lista OFAC',
-        'biometric_token' => 'Token para SDK Biométrico',
-    ];
+    public const SERVICES = NubariumServiceFacade::SERVICES;
 
     /**
      * Mexican states for CURP generation.
@@ -221,14 +212,6 @@ class NubariumService extends BaseExternalApiService
     public function checkPldBlacklists(string $fullName, ?string $curp = null, int $similarity = 80): array
     {
         return $this->facade->checkPldBlacklists($fullName, $curp, $similarity);
-    }
-
-    /**
-     * Get IMSS employment history.
-     */
-    public function getImssHistory(string $curp, ?string $nss = null): array
-    {
-        return $this->facade->getImssHistory($curp, $nss);
     }
 
     /**

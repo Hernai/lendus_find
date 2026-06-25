@@ -248,9 +248,15 @@ export async function performComplianceCheck(data: {
   return {
     ofac: {
       found: ofacData.found,
-      matches: ofacData.matches,
+      // Los records OFAC son heterogéneos; rellenamos los campos faltantes
+      // (name/list opcionales, score deriva de similarity y puede faltar).
+      matches: ofacData.matches.map(m => ({
+        name: m.name ?? '',
+        score: m.score ?? 0,
+        list: m.list ?? '',
+      })),
       score: ofacData.matches.length > 0
-        ? Math.max(...ofacData.matches.map(m => m.score))
+        ? Math.max(...ofacData.matches.map(m => m.score ?? 0))
         : 0
     },
     pld: {
