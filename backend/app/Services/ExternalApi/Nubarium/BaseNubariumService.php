@@ -52,6 +52,28 @@ abstract class BaseNubariumService extends BaseExternalApiService
     }
 
     /**
+     * Carga la config del tenant para este service_type; si no existe, cae a
+     * CUALQUIER integración Nubarium activa.
+     *
+     * Razón: Nubarium usa UNA sola credencial (api_key/api_secret) para todos
+     * sus servicios (KYC/identidad, validación bancaria, OTP…). Así, tener
+     * cualquier integración Nubarium activa basta para autenticar — p. ej. la
+     * validación de CLABE (service_type 'bank_validation') funciona aunque el
+     * tenant solo tenga configurado Nubarium con otro service_type.
+     */
+    protected function loadConfig(): void
+    {
+        parent::loadConfig();
+
+        if ($this->config === null) {
+            $this->config = \App\Models\TenantApiConfig::where('tenant_id', $this->tenant->id)
+                ->where('provider', $this->provider)
+                ->where('is_active', true)
+                ->first();
+        }
+    }
+
+    /**
      * Get the username for Basic Auth.
      */
     protected function getUsername(): string

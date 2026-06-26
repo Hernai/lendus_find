@@ -62,8 +62,8 @@ class IntegrationTester
         $provider = $config->provider;
         $serviceType = $config->service_type;
 
-        // Nubarium KYC: sólo genera el token (sin teléfono).
-        if ($provider === 'nubarium' && $serviceType === 'kyc') {
+        // Nubarium KYC / Validación bancaria: sólo genera el token (sin teléfono).
+        if ($provider === 'nubarium' && in_array($serviceType, ['kyc', 'bank_validation'], true)) {
             $r = (new NubariumService($tenant))->testConnection();
             return $this->ok(
                 (bool) ($r['success'] ?? false),

@@ -83,6 +83,7 @@ class TenantApiConfig extends Model
         'whatsapp' => 'WhatsApp',
         'email' => 'Email',
         'kyc' => 'KYC/Identidad',
+        'bank_validation' => 'Validación bancaria',
         'credit_bureau' => 'Buró de Crédito',
         'document_validation' => 'Validación de Documentos',
         'push' => 'Push Notifications',
@@ -100,7 +101,8 @@ class TenantApiConfig extends Model
         'sms' => 'Envío de SMS y códigos OTP por mensaje de texto.',
         'whatsapp' => 'Envío de mensajes y OTP por WhatsApp.',
         'email' => 'Envío de correos y códigos OTP por email.',
-        'kyc' => 'Validación de identidad (CURP, RFC, INE), listas OFAC/PLD y validación de cuenta bancaria (CLABE).',
+        'kyc' => 'Validación de identidad: CURP, RFC, INE y listas OFAC/PLD.',
+        'bank_validation' => 'Validación de CLABE y tarjeta de débito contra el banco (titularidad de la cuenta).',
         'credit_bureau' => 'Consulta de historial en buró de crédito.',
         'document_validation' => 'Validación y OCR de documentos (comprobantes, identificaciones).',
         'push' => 'Notificaciones push a la app móvil.',
@@ -153,7 +155,8 @@ class TenantApiConfig extends Model
         'messagebird' => ['sms', 'whatsapp'],
         'vonage' => ['sms', 'whatsapp'],
         // Nubarium OTP soporta SMS y Email; WhatsApp NO (ver NubariumOtpService).
-        'nubarium' => ['kyc', 'sms', 'email'],
+        // 'bank_validation' (CLABE/débito) es API Plus, distinto a KYC/identidad.
+        'nubarium' => ['kyc', 'bank_validation', 'sms', 'email'],
         'smtp' => ['email'],
         'mailgun' => ['email'],
         'sendgrid' => ['email'],

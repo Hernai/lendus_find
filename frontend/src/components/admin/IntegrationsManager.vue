@@ -207,7 +207,7 @@
               <!-- Primary Actions Row -->
               <div class="flex gap-2">
                 <button
-                  v-if="['sms', 'whatsapp', 'kyc', 'email'].includes(integration.service_type)"
+                  v-if="['sms', 'whatsapp', 'kyc', 'email', 'bank_validation'].includes(integration.service_type)"
                   @click="openQuickTestModal(integration)"
                   class="flex-1 px-3 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors flex items-center justify-center gap-1.5 font-medium"
                 >
