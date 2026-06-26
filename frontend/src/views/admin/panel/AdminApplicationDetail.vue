@@ -3129,6 +3129,7 @@ onUnmounted(() => {
             <BankAccountsSection
               :accounts="application.bank_accounts"
               :can-verify="canVerifyRefs"
+              :application-id="application.id"
               @verify="openBankAccountVerifyModal"
               @unverify="openBankAccountUnverifyModal"
             />

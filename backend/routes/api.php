@@ -463,6 +463,10 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
             ->middleware('permission:canVerifyReferences');
         Route::put('/applications/{appId}/bank-accounts/{baId}/unverify', [StaffAppController::class, 'unverifyBankAccount'])
             ->middleware('permission:canVerifyReferences');
+        // Validar la CLABE con Nubarium (async) + consultar el resultado
+        Route::post('/applications/{appId}/bank-accounts/{baId}/validate-clabe', [StaffAppController::class, 'validateBankAccountClabe'])
+            ->middleware('permission:canVerifyReferences');
+        Route::get('/nubarium-validations/{id}', [StaffAppController::class, 'getNubariumValidation']);
 
         // Application Data Verification
         Route::put('/applications/{id}/verify-data', [StaffAppController::class, 'verifyData'])

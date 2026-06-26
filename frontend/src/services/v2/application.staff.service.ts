@@ -376,6 +376,49 @@ export async function unverifyBankAccount(
   return response.data
 }
 
+/** Validación asíncrona de Nubarium (CLABE) iniciada. */
+export interface NubariumValidationStart {
+  validation_id: string
+  validation_code: string | null
+  status: string
+}
+
+/** Estado/resultado de una validación asíncrona de Nubarium. */
+export interface NubariumValidationData {
+  id: string
+  type: string
+  status: 'pending' | 'completed' | 'failed'
+  validation_code: string | null
+  result: Record<string, unknown> | null
+  error: string | null
+  received_at: string | null
+  created_at: string | null
+}
+
+/**
+ * Inicia la validación de la CLABE de una cuenta bancaria con Nubarium (async).
+ * Requires: canVerifyReferences.
+ */
+export async function validateBankAccountClabe(
+  applicationId: string,
+  bankAccountId: string
+): Promise<V2ApiResponse<NubariumValidationStart>> {
+  const response = await api.post<V2ApiResponse<NubariumValidationStart>>(
+    `${BASE_PATH}/${applicationId}/bank-accounts/${bankAccountId}/validate-clabe`
+  )
+  return response.data
+}
+
+/** Consulta el estado/resultado de una validación asíncrona de Nubarium. */
+export async function getNubariumValidation(
+  id: string
+): Promise<V2ApiResponse<NubariumValidationData>> {
+  const response = await api.get<V2ApiResponse<NubariumValidationData>>(
+    `/v2/staff/nubarium-validations/${id}`
+  )
+  return response.data
+}
+
 // =====================================================
 // Data Verification Operations
 // =====================================================
@@ -434,6 +477,8 @@ export default {
   // Bank accounts
   verifyBankAccount,
   unverifyBankAccount,
+  validateBankAccountClabe,
+  getNubariumValidation,
   // Data verification
   verifyData,
 }

@@ -1360,6 +1360,70 @@ class ApplicationController extends Controller
     }
 
     /**
+     * Inicia la validación de la CLABE de una cuenta bancaria con Nubarium
+     * (API Plus, asíncrono por webhook). Devuelve una validación `pending`; el
+     * resultado se consulta con getNubariumValidation.
+     *
+     * POST /v2/staff/applications/{appId}/bank-accounts/{baId}/validate-clabe
+     */
+    public function validateBankAccountClabe(Request $request, string $appId, string $baId): JsonResponse
+    {
+        /** @var StaffAccount $staff */
+        $staff = $request->user();
+
+        $application = Application::where('id', $appId)
+            ->where('tenant_id', $this->scopedTenantId($staff))
+            ->with('person.bankAccounts')
+            ->first();
+
+        if (!$application || !$application->person) {
+            return $this->notFound('Solicitud no encontrada.');
+        }
+
+        $bankAccount = $application->person->bankAccounts->firstWhere('id', $baId);
+
+        if (!$bankAccount) {
+            return $this->notFound('Cuenta bancaria no encontrada.');
+        }
+
+        $tenant = \App\Models\Tenant::withoutGlobalScopes()->find($this->scopedTenantId($staff));
+        $service = new \App\Services\ExternalApi\NubariumService($tenant);
+
+        $result = $service->validateClabe($bankAccount->holder_name, $bankAccount->clabe, $bankAccount);
+
+        if (!($result['success'] ?? false)) {
+            return $this->badRequest('CLABE_VALIDATION_FAILED', $result['error'] ?? 'No se pudo iniciar la validación de CLABE');
+        }
+
+        return $this->success([
+            'validation_id' => $result['validation_id'] ?? null,
+            'validation_code' => $result['validation_code'] ?? null,
+            'status' => $result['status'] ?? 'pending',
+        ], $result['message'] ?? 'Validación de CLABE iniciada');
+    }
+
+    /**
+     * Consulta el estado/resultado de una validación asíncrona de Nubarium.
+     *
+     * GET /v2/staff/nubarium-validations/{id}
+     */
+    public function getNubariumValidation(Request $request, string $id): JsonResponse
+    {
+        /** @var StaffAccount $staff */
+        $staff = $request->user();
+
+        $validation = \App\Models\NubariumAsyncValidation::where('id', $id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
+            ->first();
+
+        if (!$validation) {
+            return $this->notFound('Validación no encontrada.');
+        }
+
+        return $this->success($validation->toApiArray());
+    }
+
+    /**
      * Mask CLABE for display (show only last 4 digits).
      */
     private function maskClabe(?string $clabe): string
