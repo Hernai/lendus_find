@@ -1567,6 +1567,8 @@ class ApplicationController extends Controller
             'is_primary' => $bankAccount->is_primary,
             'is_verified' => $bankAccount->is_verified,
             'verified_at' => $bankAccount->verified_at?->toIso8601String(),
+            // Resultado persistido de la validación de CLABE con Nubarium (o null).
+            'clabe_validation' => $bankAccount->verification_data['nubarium_clabe'] ?? null,
             'created_at' => $bankAccount->created_at?->toIso8601String(),
         ];
     }

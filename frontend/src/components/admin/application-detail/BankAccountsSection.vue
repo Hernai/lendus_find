@@ -2,6 +2,21 @@
 import { computed, ref, onUnmounted } from 'vue'
 import applicationService, { type NubariumValidationData } from '@/services/v2/application.staff.service'
 
+// Resultado persistido de la validación de CLABE con Nubarium (lo guarda el
+// webhook en verification_data['nubarium_clabe']). Queda visible aunque se
+// cierre el modal.
+interface ClabeValidationSummary {
+  status: 'completed' | 'failed' | 'pending'
+  message_code: number | null
+  message: string | null
+  similarity: number | null
+  holder_name_real: string | null
+  bank: string | null
+  validation_code: string | null
+  validation_id: string | null
+  validated_at: string | null
+}
+
 interface BankAccount {
   id: string
   type: string
@@ -15,6 +30,7 @@ interface BankAccount {
   is_primary: boolean
   is_own_account: boolean
   is_verified: boolean
+  clabe_validation?: ClabeValidationSummary | null
   created_at?: string
 }
 
@@ -75,6 +91,25 @@ const validationOutcome = computed(() => {
   return { label: v.error || res.message || 'CLABE no válida o error', badge: 'bg-red-100 text-red-700', holder, bank, similarity }
 })
 
+// Interpreta el resultado PERSISTIDO (guardado en la cuenta) para mostrarlo en
+// la tarjeta. Misma lógica de 3 estados que el modal.
+const clabeOutcome = (cv: ClabeValidationSummary) => {
+  const code = cv.message_code
+  if (cv.status === 'completed' || code === 0) {
+    return { label: 'CLABE válida — el titular coincide', badge: 'bg-green-100 text-green-800' }
+  }
+  if (code === 3) {
+    return { label: 'CLABE válida, pero el titular NO coincide', badge: 'bg-amber-100 text-amber-800' }
+  }
+  return { label: cv.message || 'CLABE no válida o error', badge: 'bg-red-100 text-red-700' }
+}
+
+const formatDateTime = (iso?: string | null) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
+}
+
 const validateWithNubarium = async (account: BankAccount) => {
   validatingId.value = account.id
   nubariumError.value = ''
@@ -110,11 +145,13 @@ const pollNubarium = async (id: string, account: BankAccount) => {
         try {
           await applicationService.verifyBankAccount(props.applicationId, account.id)
           autoVerified.value = true
-          emit('refresh')
         } catch {
           // No bloquea el modal; el analista puede marcar manualmente.
         }
       }
+      // Refresca para reflejar el resultado persistido en la tarjeta (lo guardó
+      // el webhook en verification_data), tanto si coincide como si no.
+      emit('refresh')
       showNubariumModal.value = true
       return
     }
@@ -197,6 +234,37 @@ onUnmounted(() => { nubariumPollCancelled = true })
           <div class="flex justify-between">
             <span class="text-gray-500">Cuenta propia</span>
             <span class="text-gray-900">{{ account.is_own_account ? 'Sí' : 'No' }}</span>
+          </div>
+        </div>
+
+        <!-- Resultado persistido de la validación de CLABE con Nubarium -->
+        <div
+          v-if="account.clabe_validation"
+          class="mt-3 pt-3 border-t border-gray-100 space-y-2"
+        >
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <span
+              :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', clabeOutcome(account.clabe_validation).badge]"
+            >
+              {{ clabeOutcome(account.clabe_validation).label }}
+            </span>
+            <span v-if="account.clabe_validation.validated_at" class="text-xs text-gray-400">
+              {{ formatDateTime(account.clabe_validation.validated_at) }}
+            </span>
+          </div>
+          <div
+            v-if="account.clabe_validation.holder_name_real"
+            class="flex justify-between gap-4 text-xs"
+          >
+            <span class="text-gray-500 flex-shrink-0">Titular real (banco)</span>
+            <span class="text-gray-900 text-right font-medium">{{ account.clabe_validation.holder_name_real }}</span>
+          </div>
+          <div
+            v-if="account.clabe_validation.similarity !== null"
+            class="flex justify-between gap-4 text-xs"
+          >
+            <span class="text-gray-500 flex-shrink-0">Coincidencia de nombre</span>
+            <span class="text-gray-900 text-right font-medium">{{ Math.round((account.clabe_validation.similarity ?? 0) * 100) }}%</span>
           </div>
         </div>
 

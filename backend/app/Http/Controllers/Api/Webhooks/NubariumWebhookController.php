@@ -54,7 +54,41 @@ class NubariumWebhookController extends Controller
             'received_at' => now(),
         ]);
 
+        // Persiste el resultado en la cuenta bancaria ligada (si la hay), para
+        // que quede visible de forma permanente aunque se cierre el modal.
+        $this->persistToBankAccount($validation);
+
         return response()->json(['received' => true]);
+    }
+
+    /**
+     * Guarda el resumen de la validación (CLABE / tarjeta) en la cuenta bancaria
+     * vinculada, dentro de `verification_data['nubarium_clabe']`. No toca
+     * `is_verified` — la verificación (atribuida al analista) la maneja el flujo
+     * de staff; aquí solo persistimos la respuesta de Nubarium.
+     *
+     * Sin tenant en el request: resolvemos la cuenta sin el global scope.
+     */
+    private function persistToBankAccount(NubariumAsyncValidation $validation): void
+    {
+        if ($validation->entity_type !== \App\Models\BankAccount::class || !$validation->entity_id) {
+            return;
+        }
+
+        $summary = $validation->clabeSummary();
+        if ($summary === null) {
+            return;
+        }
+
+        $account = \App\Models\BankAccount::withoutGlobalScopes()->find($validation->entity_id);
+        if (!$account) {
+            return;
+        }
+
+        $data = $account->verification_data ?? [];
+        $data['nubarium_clabe'] = $summary;
+        $account->verification_data = $data;
+        $account->save();
     }
 
     /**
