@@ -63,9 +63,12 @@ class NubariumWebhookController extends Controller
 
     /**
      * Guarda el resumen de la validación (CLABE / tarjeta) en la cuenta bancaria
-     * vinculada, dentro de `verification_data['nubarium_clabe']`. No toca
-     * `is_verified` — la verificación (atribuida al analista) la maneja el flujo
-     * de staff; aquí solo persistimos la respuesta de Nubarium.
+     * vinculada, dentro de `verification_data['nubarium_clabe']`, y —si Nubarium
+     * confirmó la titularidad (match)— marca la cuenta como verificada
+     * automáticamente (verification_method = 'nubarium_clabe', sin actor staff).
+     *
+     * Si NO coincidió el nombre, solo persiste el resultado: la cuenta queda sin
+     * verificar para que un analista la valide manualmente.
      *
      * Sin tenant en el request: resolvemos la cuenta sin el global scope.
      */
@@ -88,6 +91,16 @@ class NubariumWebhookController extends Controller
         $data = $account->verification_data ?? [];
         $data['nubarium_clabe'] = $summary;
         $account->verification_data = $data;
+
+        // Auto-verificación: solo si coincide la titularidad y aún no está
+        // verificada (no pisamos una verificación manual previa).
+        if ($validation->status === NubariumAsyncValidation::STATUS_COMPLETED && !$account->is_verified) {
+            $account->is_verified = true;
+            $account->verified_at = now();
+            $account->verified_by = null; // sistema
+            $account->verification_method = 'nubarium_clabe';
+        }
+
         $account->save();
     }
 

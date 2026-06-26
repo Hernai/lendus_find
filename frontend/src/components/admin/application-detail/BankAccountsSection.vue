@@ -30,6 +30,7 @@ interface BankAccount {
   is_primary: boolean
   is_own_account: boolean
   is_verified: boolean
+  verified_by_nubarium?: boolean
   clabe_validation?: ClabeValidationSummary | null
   created_at?: string
 }
@@ -147,6 +148,15 @@ const formatDateTime = (iso?: string | null) => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
+// --- Detalle de la validación persistida (visible para TODOS los usuarios) ---
+const showDetailModal = ref(false)
+const detailValidation = ref<ClabeValidationSummary | null>(null)
+
+const openDetail = (cv: ClabeValidationSummary) => {
+  detailValidation.value = cv
+  showDetailModal.value = true
+}
+
 const validateWithNubarium = async (account: BankAccount) => {
   validatingId.value = account.id
   nubariumError.value = ''
@@ -176,18 +186,10 @@ const pollNubarium = async (id: string, account: BankAccount) => {
     if (data && data.status !== 'pending') {
       if (nubariumPollCancelled) return
       nubariumResult.value = data
-      // Si Nubarium confirmó la CLABE, marcamos la cuenta como verificada
-      // (verified_by = el analista logueado) y refrescamos la solicitud.
-      if (data.status === 'completed' && !account.is_verified) {
-        try {
-          await applicationService.verifyBankAccount(props.applicationId, account.id)
-          autoVerified.value = true
-        } catch {
-          // No bloquea el modal; el analista puede marcar manualmente.
-        }
-      }
-      // Refresca para reflejar el resultado persistido en la tarjeta (lo guardó
-      // el webhook en verification_data), tanto si coincide como si no.
+      // La verificación automática (cuando el titular coincide) la hace el
+      // webhook en el servidor; aquí solo reflejamos el resultado. Refrescamos
+      // para traer is_verified y el resultado persistido en la tarjeta.
+      autoVerified.value = data.status === 'completed' && !account.is_verified
       emit('refresh')
       showNubariumModal.value = true
       return
@@ -274,36 +276,32 @@ onUnmounted(() => { nubariumPollCancelled = true })
           </div>
         </div>
 
-        <!-- Resultado persistido de la validación de CLABE con Nubarium -->
-        <div
+        <!-- Resultado persistido de la validación de CLABE con Nubarium.
+             Visible y clickable para TODOS los usuarios: muestra la hora de la
+             última validación y, al darle clic, abre el detalle. -->
+        <button
           v-if="account.clabe_validation"
-          class="mt-3 pt-3 border-t border-gray-100 space-y-2"
+          type="button"
+          class="w-full mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap text-left hover:opacity-80 transition-opacity"
+          @click="openDetail(account.clabe_validation)"
         >
-          <div class="flex items-center justify-between gap-2 flex-wrap">
+          <span class="flex items-center gap-2 flex-wrap">
             <span
               :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', clabeOutcome(account.clabe_validation).badge]"
             >
               {{ clabeOutcome(account.clabe_validation).label }}
             </span>
-            <span v-if="account.clabe_validation.validated_at" class="text-xs text-gray-400">
-              {{ formatDateTime(account.clabe_validation.validated_at) }}
+            <span class="text-xs text-primary-600 inline-flex items-center gap-0.5">
+              Ver
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
             </span>
-          </div>
-          <div
-            v-if="account.clabe_validation.holder_name_real"
-            class="flex justify-between gap-4 text-xs"
-          >
-            <span class="text-gray-500 flex-shrink-0">Titular real (banco)</span>
-            <span class="text-gray-900 text-right font-medium">{{ account.clabe_validation.holder_name_real }}</span>
-          </div>
-          <div
-            v-if="account.clabe_validation.similarity !== null"
-            class="flex justify-between gap-4 text-xs"
-          >
-            <span class="text-gray-500 flex-shrink-0">Coincidencia de nombre</span>
-            <span class="text-gray-900 text-right font-medium">{{ Math.round((account.clabe_validation.similarity ?? 0) * 100) }}%</span>
-          </div>
-        </div>
+          </span>
+          <span v-if="account.clabe_validation.validated_at" class="text-xs text-gray-400">
+            Última validación: {{ formatDateTime(account.clabe_validation.validated_at) }}
+          </span>
+        </button>
 
         <!-- Verification actions -->
         <div v-if="canVerify || canEdit" class="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
@@ -312,15 +310,22 @@ onUnmounted(() => { nubariumPollCancelled = true })
             class="flex-1 px-3 py-1.5 text-sm text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors font-medium"
             @click="emit('verify', account)"
           >
-            Verificar
+            {{ account.clabe_validation ? 'Validar manualmente' : 'Verificar' }}
           </button>
           <button
-            v-else-if="canVerify && account.is_verified"
+            v-else-if="canVerify && account.is_verified && (!account.verified_by_nubarium || canEdit)"
             class="flex-1 px-3 py-1.5 text-sm text-yellow-700 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors font-medium"
             @click="emit('unverify', account)"
           >
             Quitar verificación
           </button>
+          <!-- Validada por Nubarium: el analista no puede quitarla (solo super admin). -->
+          <span
+            v-else-if="account.is_verified && account.verified_by_nubarium && !canEdit"
+            class="flex-1 px-3 py-1.5 text-xs text-gray-500 bg-gray-50 rounded-lg inline-flex items-center justify-center text-center"
+          >
+            Validada por Nubarium · solo un super admin puede quitarla
+          </span>
           <!-- Validar la CLABE contra el banco con Nubarium -->
           <button
             v-if="canVerify"
@@ -501,6 +506,69 @@ onUnmounted(() => { nubariumPollCancelled = true })
             @click="saveEdit"
           >
             {{ editSaving ? 'Guardando…' : 'Guardar' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Modal: detalle de la última validación de CLABE (visible para todos) -->
+  <Teleport to="body">
+    <div
+      v-if="showDetailModal && detailValidation"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      @click.self="showDetailModal = false"
+    >
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h3 class="text-lg font-semibold text-gray-900">Validación de CLABE</h3>
+          <button class="text-gray-400 hover:text-gray-600" @click="showDetailModal = false">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span :class="['inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium', clabeOutcome(detailValidation).badge]">
+              {{ clabeOutcome(detailValidation).label }}
+            </span>
+            <span v-if="detailValidation.validation_code" class="text-xs text-gray-500 font-mono">
+              código: {{ detailValidation.validation_code }}
+            </span>
+          </div>
+
+          <div class="border border-gray-200 rounded-lg divide-y divide-gray-100">
+            <div v-if="detailValidation.holder_name_real" class="flex justify-between gap-4 px-3 py-2 text-sm">
+              <span class="text-gray-500 flex-shrink-0">Titular real (banco)</span>
+              <span class="text-gray-900 text-right font-medium">{{ detailValidation.holder_name_real }}</span>
+            </div>
+            <div v-if="detailValidation.bank" class="flex justify-between gap-4 px-3 py-2 text-sm">
+              <span class="text-gray-500 flex-shrink-0">Banco</span>
+              <span class="text-gray-900 text-right">{{ detailValidation.bank }}</span>
+            </div>
+            <div v-if="detailValidation.similarity !== null" class="flex justify-between gap-4 px-3 py-2 text-sm">
+              <span class="text-gray-500 flex-shrink-0">Coincidencia de nombre</span>
+              <span class="text-gray-900 text-right font-medium">{{ Math.round((detailValidation.similarity ?? 0) * 100) }}%</span>
+            </div>
+            <div v-if="detailValidation.validated_at" class="flex justify-between gap-4 px-3 py-2 text-sm">
+              <span class="text-gray-500 flex-shrink-0">Fecha de validación</span>
+              <span class="text-gray-900 text-right">{{ formatDateTime(detailValidation.validated_at) }}</span>
+            </div>
+          </div>
+
+          <p v-if="detailValidation.message" class="text-xs text-gray-500">
+            Mensaje de Nubarium: {{ detailValidation.message }}
+          </p>
+        </div>
+
+        <div class="px-6 py-4 border-t border-gray-200 flex justify-end">
+          <button
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            @click="showDetailModal = false"
+          >
+            Cerrar
           </button>
         </div>
       </div>

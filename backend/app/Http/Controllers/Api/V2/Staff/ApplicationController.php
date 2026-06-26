@@ -1294,6 +1294,9 @@ class ApplicationController extends Controller
         $bankAccount->is_verified = true;
         $bankAccount->verified_at = now();
         $bankAccount->verified_by = $staff->id;
+        // Verificación manual (la distingue de 'nubarium_clabe' para la regla de
+        // desverificación: las de Nubarium solo las quita un super admin).
+        $bankAccount->verification_method = 'manual';
         $bankAccount->save();
 
         \App\Services\ActivityRecorder::recordApplicationEvent($application, 'DATA_VERIFIED', [
@@ -1337,10 +1340,18 @@ class ApplicationController extends Controller
             return $this->notFound('Cuenta bancaria no encontrada.');
         }
 
+        // Si la cuenta fue validada por Nubarium, solo un SUPER_ADMIN puede quitar
+        // la verificación (las verificaciones manuales las puede quitar cualquier
+        // analista con permiso).
+        if ($bankAccount->verification_method === 'nubarium_clabe' && !$staff->isSuperAdmin()) {
+            return $this->forbidden('Esta cuenta fue validada por Nubarium; solo un super admin puede quitar la verificación.');
+        }
+
         $wasVerified = $bankAccount->is_verified;
         $bankAccount->is_verified = false;
         $bankAccount->verified_at = null;
         $bankAccount->verified_by = null;
+        $bankAccount->verification_method = null;
         $bankAccount->save();
 
         \App\Services\ActivityRecorder::recordApplicationEvent($application, 'DATA_REJECTED', [
@@ -1626,6 +1637,9 @@ class ApplicationController extends Controller
             'is_primary' => $bankAccount->is_primary,
             'is_verified' => $bankAccount->is_verified,
             'verified_at' => $bankAccount->verified_at?->toIso8601String(),
+            'verification_method' => $bankAccount->verification_method,
+            // true si la verificación la hizo Nubarium (solo super admin desverifica).
+            'verified_by_nubarium' => $bankAccount->verification_method === 'nubarium_clabe',
             // Resultado persistido de la validación de CLABE con Nubarium (o null).
             'clabe_validation' => $bankAccount->verification_data['nubarium_clabe'] ?? null,
             'created_at' => $bankAccount->created_at?->toIso8601String(),

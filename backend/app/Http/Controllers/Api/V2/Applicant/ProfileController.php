@@ -936,6 +936,16 @@ class ProfileController extends Controller
             $bankAccount->save();
         }
 
+        // Validación de CLABE con Nubarium: se dispara EN SEGUNDO PLANO (después
+        // de responder) para no bloquear al usuario — Nubarium tarda y la
+        // respuesta real llega luego por webhook. Solo aplica a cuentas CLABE.
+        if (!$isCard) {
+            \App\Jobs\StartClabeValidationJob::dispatchAfterResponse(
+                $bankAccount->id,
+                $bankAccount->tenant_id,
+            );
+        }
+
         // Record event if there's an active application
         $application = $this->getCurrentApplication($person);
         if ($application) {
