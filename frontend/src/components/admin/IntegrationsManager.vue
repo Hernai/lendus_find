@@ -294,18 +294,27 @@
               Proveedor *
             </label>
 
-            <!-- Edit mode: provider is locked -->
-            <div v-if="editingIntegration" class="flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-gray-50">
+            <!-- Proveedor ya elegido (al editar, o seleccionado en el alta):
+                 tarjeta compacta para no empujar credenciales/Guardar fuera de vista -->
+            <div v-if="editingIntegration || form.provider" class="flex items-center gap-3 p-3 rounded-xl border border-primary-200 bg-primary-50">
               <div class="w-9 h-9 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-sm font-bold text-gray-600">
                 {{ providerLabel(form.provider).charAt(0) }}
               </div>
-              <div>
+              <div class="flex-1 min-w-0">
                 <p class="font-medium text-sm text-gray-900">{{ providerLabel(form.provider) }}</p>
-                <p class="text-xs text-gray-500">El proveedor no se puede cambiar al editar</p>
+                <p class="text-xs text-gray-500">{{ editingIntegration ? 'El proveedor no se puede cambiar al editar' : 'Proveedor seleccionado' }}</p>
               </div>
+              <button
+                v-if="!editingIntegration"
+                type="button"
+                class="flex-shrink-0 text-sm font-medium text-primary-700 hover:text-primary-800"
+                @click="form.provider = ''"
+              >
+                Cambiar
+              </button>
             </div>
 
-            <!-- New mode: visual grid picker -->
+            <!-- Alta sin proveedor: grid visual -->
             <div v-else class="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <button
                 v-for="p in sortedProviders"
