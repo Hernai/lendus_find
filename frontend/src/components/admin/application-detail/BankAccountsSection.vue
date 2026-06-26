@@ -27,6 +27,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'verify', account: BankAccount): void
   (e: 'unverify', account: BankAccount): void
+  (e: 'refresh'): void
 }>()
 
 const stats = computed(() => ({
@@ -39,6 +40,7 @@ const validatingId = ref<string | null>(null)
 const showNubariumModal = ref(false)
 const nubariumResult = ref<NubariumValidationData | null>(null)
 const nubariumError = ref('')
+const autoVerified = ref(false)
 let nubariumPollCancelled = false
 
 const statusLabel = computed(() => {
@@ -63,12 +65,13 @@ const validateWithNubarium = async (account: BankAccount) => {
   validatingId.value = account.id
   nubariumError.value = ''
   nubariumResult.value = null
+  autoVerified.value = false
   nubariumPollCancelled = false
   try {
     const res = await applicationService.validateBankAccountClabe(props.applicationId, account.id)
     const id = res.data?.validation_id
     if (!id) throw new Error('sin id')
-    await pollNubarium(id)
+    await pollNubarium(id, account)
   } catch {
     if (!nubariumPollCancelled) {
       nubariumError.value = 'No se pudo iniciar la validación con Nubarium'
@@ -80,13 +83,24 @@ const validateWithNubarium = async (account: BankAccount) => {
 }
 
 // Nubarium responde por webhook; sondeamos ~60s (20 intentos × 3s).
-const pollNubarium = async (id: string) => {
+const pollNubarium = async (id: string, account: BankAccount) => {
   for (let i = 0; i < 20 && !nubariumPollCancelled; i++) {
     const res = await applicationService.getNubariumValidation(id)
     const data = res.data
     if (data && data.status !== 'pending') {
       if (nubariumPollCancelled) return
       nubariumResult.value = data
+      // Si Nubarium confirmó la CLABE, marcamos la cuenta como verificada
+      // (verified_by = el analista logueado) y refrescamos la solicitud.
+      if (data.status === 'completed' && !account.is_verified) {
+        try {
+          await applicationService.verifyBankAccount(props.applicationId, account.id)
+          autoVerified.value = true
+          emit('refresh')
+        } catch {
+          // No bloquea el modal; el analista puede marcar manualmente.
+        }
+      }
       showNubariumModal.value = true
       return
     }
@@ -236,6 +250,13 @@ onUnmounted(() => { nubariumPollCancelled = true })
                 código: {{ nubariumResult.validation_code }}
               </span>
             </div>
+
+            <p v-if="autoVerified" class="text-sm text-green-700 flex items-center gap-1.5">
+              <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+              Cuenta marcada como verificada automáticamente.
+            </p>
 
             <!-- Campos que devolvió Nubarium -->
             <div v-if="resultEntries.length" class="border border-gray-200 rounded-lg divide-y divide-gray-100">

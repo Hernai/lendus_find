@@ -3132,6 +3132,7 @@ onUnmounted(() => {
               :application-id="application.id"
               @verify="openBankAccountVerifyModal"
               @unverify="openBankAccountUnverifyModal"
+              @refresh="fetchApplication"
             />
           </div>
 
