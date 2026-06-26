@@ -495,6 +495,48 @@ export async function checkFieldsVerified(fields: string[]): Promise<CheckFields
   return response.data.data
 }
 
+/**
+ * Validación asíncrona de Nubarium (CLABE, débito, IMSS, ISSSTE).
+ */
+export interface AsyncValidationData {
+  id: string
+  type: string
+  status: 'pending' | 'completed' | 'failed'
+  validation_code: string | null
+  result: Record<string, unknown> | null
+  error: string | null
+  received_at: string | null
+  created_at: string | null
+}
+
+/** Respuesta al iniciar una validación async (queda `pending`). */
+export interface AsyncValidationStart {
+  validation_id: string
+  validation_code: string | null
+  status: string
+}
+
+/**
+ * Inicia la validación de una CLABE contra el banco (Nubarium API Plus).
+ * Es ASÍNCRONA: devuelve una validación `pending`; consulta el resultado con
+ * getAsyncValidation usando `validation_id`.
+ */
+export async function validateClabe(name: string, clabe: string): Promise<AsyncValidationStart> {
+  const response = await api.post<V2Response<AsyncValidationStart>>(`${BASE_PATH}/clabe/validate`, {
+    name,
+    clabe,
+  })
+  return response.data.data
+}
+
+/**
+ * Consulta el estado/resultado de una validación asíncrona por su id.
+ */
+export async function getAsyncValidation(id: string): Promise<AsyncValidationData> {
+  const response = await api.get<V2Response<AsyncValidationData>>(`${BASE_PATH}/async/${id}`)
+  return response.data.data
+}
+
 // =====================================================
 // Default Export
 // =====================================================
@@ -514,6 +556,8 @@ export default {
   checkOfac,
   checkPldBlacklists,
   validateCedula,
+  validateClabe,
+  getAsyncValidation,
   recordVerifications,
   getVerifications,
   checkFieldsVerified,

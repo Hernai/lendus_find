@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { V2ProfileBankAccount } from '@/types/v2'
 import { useTenantStore } from '@/stores'
+import { v2 } from '@/services/v2'
 
 // Support both V2ProfileBankAccount and legacy BankAccount types
 interface BankAccountLike {
@@ -42,6 +43,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
+  clabePollCancelled = true
 })
 
 const accountTypeLabel = computed(() => {
@@ -74,6 +76,52 @@ const handleDelete = () => {
   isDeleting.value = true
   showMenu.value = false
   emit('delete', props.account.id)
+}
+
+// --- Validación de CLABE con Nubarium (asíncrona por webhook) ---
+const clabeStatus = ref<'idle' | 'validating' | 'completed' | 'failed' | 'timeout'>('idle')
+const clabeMessage = ref('')
+let clabePollCancelled = false
+
+const clabeMessageClass = computed(() => {
+  if (clabeStatus.value === 'completed') return 'text-green-600'
+  if (clabeStatus.value === 'failed') return 'text-red-600'
+  return 'text-gray-500'
+})
+
+const runClabeValidation = async () => {
+  clabeStatus.value = 'validating'
+  clabeMessage.value = ''
+  clabePollCancelled = false
+  try {
+    const start = await v2.applicant.kyc.validateClabe(props.account.holder_name, props.account.clabe)
+    await pollClabe(start.validation_id)
+  } catch {
+    if (!clabePollCancelled) {
+      clabeStatus.value = 'failed'
+      clabeMessage.value = 'No se pudo iniciar la validación'
+    }
+  }
+}
+
+// Nubarium responde por webhook; sondeamos ~60s (20 intentos × 3s).
+const pollClabe = async (id: string) => {
+  for (let i = 0; i < 20 && !clabePollCancelled; i++) {
+    const res = await v2.applicant.kyc.getAsyncValidation(id)
+    if (res.status !== 'pending') {
+      if (clabePollCancelled) return
+      clabeStatus.value = res.status === 'completed' ? 'completed' : 'failed'
+      clabeMessage.value = res.status === 'completed'
+        ? 'CLABE válida (verificada con el banco)'
+        : (res.error || 'La CLABE no pudo validarse')
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+  }
+  if (!clabePollCancelled) {
+    clabeStatus.value = 'timeout'
+    clabeMessage.value = 'La validación sigue en proceso; revisa más tarde.'
+  }
 }
 </script>
 
@@ -161,7 +209,7 @@ const handleDelete = () => {
     </div>
 
     <!-- Verification Badge -->
-    <div class="mt-3 pt-3 border-t border-gray-100">
+    <div class="mt-3 pt-3 border-t border-gray-100 space-y-2">
       <div v-if="account.is_verified" class="flex items-center gap-1.5 text-green-600 text-sm">
         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
           <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
@@ -174,6 +222,24 @@ const handleDelete = () => {
         </svg>
         Pendiente de verificacion
       </div>
+
+      <!-- Validar CLABE contra el banco (Nubarium) -->
+      <button
+        type="button"
+        :disabled="clabeStatus === 'validating'"
+        class="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-primary-200 text-primary-700 bg-primary-50 hover:bg-primary-100 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+        @click="runClabeValidation"
+      >
+        <svg v-if="clabeStatus === 'validating'" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        {{ clabeStatus === 'validating' ? 'Validando CLABE…' : 'Validar CLABE con Nubarium' }}
+      </button>
+      <p v-if="clabeMessage" :class="clabeMessageClass" class="text-xs">{{ clabeMessage }}</p>
     </div>
   </div>
 
