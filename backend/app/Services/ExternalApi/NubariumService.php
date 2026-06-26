@@ -222,6 +222,26 @@ class NubariumService extends BaseExternalApiService
         return $this->facade->validateCedulaProfesional($cedula);
     }
 
+    /**
+     * Validar CLABE contra el banco (asíncrono por webhook).
+     *
+     * @param  mixed  $entity
+     */
+    public function validateClabe(string $name, string $clabe, $entity = null): array
+    {
+        return $this->facade->validateClabe($name, $clabe, $entity);
+    }
+
+    /**
+     * Validar tarjeta de débito vía CLABE (asíncrono por webhook).
+     *
+     * @param  mixed  $entity
+     */
+    public function validateDebitCard(string $name, string $clabe, $entity = null): array
+    {
+        return $this->facade->validateDebitCard($name, $clabe, $entity);
+    }
+
     // ==================== Utility Methods ====================
 
     /**

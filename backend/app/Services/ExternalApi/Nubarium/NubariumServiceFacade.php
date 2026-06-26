@@ -314,6 +314,26 @@ class NubariumServiceFacade
         return $this->compliance()->validateCedulaProfesional($cedula);
     }
 
+    /**
+     * Validar CLABE contra el banco (Nubarium API Plus, asíncrono por webhook).
+     *
+     * @param  mixed  $entity
+     */
+    public function validateClabe(string $name, string $clabe, $entity = null): array
+    {
+        return $this->compliance()->validateClabe($name, $clabe, $entity);
+    }
+
+    /**
+     * Validar tarjeta de débito vía CLABE (asíncrono por webhook).
+     *
+     * @param  mixed  $entity
+     */
+    public function validateDebitCard(string $name, string $clabe, $entity = null): array
+    {
+        return $this->compliance()->validateDebitCard($name, $clabe, $entity);
+    }
+
     // ==================== Utility Methods ====================
 
     /**

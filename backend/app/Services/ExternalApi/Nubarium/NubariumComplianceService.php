@@ -2,7 +2,9 @@
 
 namespace App\Services\ExternalApi\Nubarium;
 
+use App\Models\NubariumAsyncValidation;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * Nubarium Compliance Service.
@@ -322,5 +324,123 @@ class NubariumComplianceService extends BaseNubariumService
         } catch (\Exception) {
             return $date;
         }
+    }
+
+    // =====================================================
+    // Validaciones ASÍNCRONAS (Nubarium API Plus, por webhook)
+    // =====================================================
+
+    /**
+     * Valida una CLABE contra el banco vía Nubarium (API Plus).
+     *
+     * Doc: POST /mex/plus/v1/validate-clabe  { url, name, clabe }
+     * Es ASÍNCRONO: responde "Validation created" + validationCode y publica el
+     * resultado real a nuestra URL de callback. Devuelve la validación pendiente.
+     *
+     * @param  mixed  $entity  Entidad opcional a la que se vincula (BankAccount, Person).
+     * @return array<string, mixed>
+     */
+    public function validateClabe(string $name, string $clabe, $entity = null): array
+    {
+        return $this->startAsyncValidation(
+            NubariumAsyncValidation::TYPE_CLABE,
+            '/mex/plus/v1/validate-clabe',
+            ['name' => $name, 'clabe' => $clabe],
+            $entity,
+        );
+    }
+
+    /**
+     * Valida una tarjeta de débito (vía CLABE) contra Nubarium (API Plus).
+     *
+     * Doc: POST /mex/plus/v1/validate-debit-card  { url, name, clabe }. Async webhook.
+     *
+     * @param  mixed  $entity
+     * @return array<string, mixed>
+     */
+    public function validateDebitCard(string $name, string $clabe, $entity = null): array
+    {
+        return $this->startAsyncValidation(
+            NubariumAsyncValidation::TYPE_DEBIT_CARD,
+            '/mex/plus/v1/validate-debit-card',
+            ['name' => $name, 'clabe' => $clabe],
+            $entity,
+        );
+    }
+
+    /**
+     * Inicia una validación asíncrona: crea el registro pendiente (con token de
+     * callback), llama a Nubarium con nuestra URL de webhook y guarda el
+     * validationCode. El resultado llega después por NubariumWebhookController.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  mixed  $entity
+     * @return array<string, mixed>
+     */
+    protected function startAsyncValidation(string $type, string $endpoint, array $payload, $entity = null): array
+    {
+        if (!$this->isConfigured()) {
+            return ['success' => false, 'error' => 'Servicio no configurado'];
+        }
+
+        $record = new NubariumAsyncValidation();
+        $record->tenant_id = $this->tenant->id;
+        $record->type = $type;
+        $record->callback_token = Str::random(64);
+        $record->status = NubariumAsyncValidation::STATUS_PENDING;
+        $record->request_payload = $payload;
+        if ($entity && isset($entity->id)) {
+            $record->entity_type = get_class($entity);
+            $record->entity_id = $entity->id;
+        }
+        $record->save();
+
+        $callbackUrl = $this->buildCallbackUrl($type, $record->callback_token);
+
+        try {
+            $response = $this->apiCall('global', 'POST', $endpoint, array_merge($payload, [
+                'url' => $callbackUrl,
+            ]), 60);
+
+            $this->logResponse($response, $endpoint);
+
+            $data = $response->successful() ? ($response->json() ?? []) : [];
+            $ok = $response->successful()
+                && strtoupper((string) ($data['status'] ?? '')) === 'OK'
+                && (($data['messageCode'] ?? null) === 0 || ($data['messageCode'] ?? null) === '0');
+
+            if (!$ok) {
+                $msg = $data['message'] ?? 'No se pudo iniciar la validación con Nubarium';
+                $record->update(['status' => NubariumAsyncValidation::STATUS_FAILED, 'error' => $msg]);
+
+                return ['success' => false, 'error' => $msg, 'validation_id' => $record->id];
+            }
+
+            $record->update(['validation_code' => $data['validationCode'] ?? null]);
+
+            return [
+                'success' => true,
+                // pending: el resultado real llega por webhook.
+                'status' => NubariumAsyncValidation::STATUS_PENDING,
+                'validation_id' => $record->id,
+                'validation_code' => $record->validation_code,
+                'message' => 'Validación iniciada; el resultado llegará por webhook.',
+            ];
+        } catch (\Exception $e) {
+            $record->update(['status' => NubariumAsyncValidation::STATUS_FAILED, 'error' => static::sanitizeError($e)]);
+            Log::error('Nubarium async validation error', ['type' => $type, 'error' => static::sanitizeError($e)]);
+
+            return ['success' => false, 'error' => 'Error al iniciar la validación: ' . static::sanitizeError($e), 'validation_id' => $record->id];
+        }
+    }
+
+    /**
+     * URL pública de callback que Nubarium invocará con el resultado.
+     */
+    protected function buildCallbackUrl(string $type, string $token): string
+    {
+        $base = rtrim((string) config('app.url'), '/');
+
+        return "{$base}/api/webhooks/nubarium/{$type}/{$token}";
     }
 }

@@ -99,6 +99,13 @@ Route::get('ops/opcache-stats', \App\Http\Controllers\Ops\OpcacheStatsController
 // dispara cron `/etc/cron.d/lendus-apifind-warmup` cada minuto.
 Route::get('ops/warmup', \App\Http\Controllers\Ops\WarmupController::class);
 
+// Webhooks entrantes de Nubarium (validaciones asíncronas: CLABE, débito,
+// IMSS, ISSSTE). PÚBLICO: Nubarium llama desde fuera, sin auth ni tenant. La
+// seguridad es el `token` secreto y aleatorio en la URL (uno por validación).
+Route::post('webhooks/nubarium/{type}/{token}', [\App\Http\Controllers\Api\Webhooks\NubariumWebhookController::class, 'handle'])
+    ->where('type', 'clabe|debit_card|imss_nss|imss_employment|issste')
+    ->where('token', '[A-Za-z0-9]+');
+
 // =============================================
 // V2: PUBLIC SIMULATOR (no authentication required)
 // =============================================
@@ -251,6 +258,8 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'log.request'])
                 // Servicios México síncronos (Banxico / SEP)
                 Route::post('/cep/validate', [ApplicantKycController::class, 'validateCep']);
                 Route::post('/cedula/validate', [ApplicantKycController::class, 'validateCedula']);
+                // Validación de cuenta bancaria (CLABE) — async por webhook
+                Route::post('/clabe/validate', [ApplicantKycController::class, 'validateClabe']);
             });
 
             Route::middleware('throttle:kyc-biometric')->group(function () {
@@ -262,6 +271,9 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'log.request'])
             Route::post('/verifications', [ApplicantKycController::class, 'recordVerifications']);
             Route::get('/verifications', [ApplicantKycController::class, 'getVerifications']);
             Route::post('/verifications/check', [ApplicantKycController::class, 'checkFieldsVerified']);
+
+            // Estado/resultado de una validación asíncrona (CLABE, débito, etc.)
+            Route::get('/async/{id}', [ApplicantKycController::class, 'getAsyncValidation']);
         });
 
         // =============================================

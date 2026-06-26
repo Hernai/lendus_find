@@ -866,6 +866,58 @@ class KycController extends Controller
         ], 'Cédula validada');
     }
 
+    /**
+     * Inicia la validación de una CLABE contra el banco (Nubarium API Plus).
+     *
+     * Es ASÍNCRONA: regresa una validación `pending` con su `validation_id`; el
+     * resultado real llega por webhook y se consulta con getAsyncValidation.
+     */
+    public function validateClabe(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:200',
+            'clabe' => ['required', 'string', 'size:18', 'regex:/^\d{18}$/'],
+        ]);
+
+        $service = $this->getKycService($request);
+
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
+        }
+
+        $result = $service->validateClabe($validated['name'], $validated['clabe']);
+
+        $this->logKycAction($request, 'clabe_validation_started', [
+            'clabe' => substr($validated['clabe'], 0, 3) . '***' . substr($validated['clabe'], -2),
+            'success' => $result['success'] ?? false,
+        ]);
+
+        if (!($result['success'] ?? false)) {
+            return $this->badRequest('CLABE_VALIDATION_FAILED', $result['error'] ?? 'No se pudo iniciar la validación de CLABE');
+        }
+
+        return $this->success([
+            'validation_id' => $result['validation_id'] ?? null,
+            'validation_code' => $result['validation_code'] ?? null,
+            'status' => $result['status'] ?? 'pending',
+        ], $result['message'] ?? 'Validación de CLABE iniciada');
+    }
+
+    /**
+     * Consulta el estado/resultado de una validación asíncrona de Nubarium
+     * (CLABE, tarjeta de débito, IMSS, ISSSTE). Scope de tenant automático.
+     */
+    public function getAsyncValidation(Request $request, string $id): JsonResponse
+    {
+        $validation = \App\Models\NubariumAsyncValidation::where('id', $id)->first();
+
+        if (!$validation) {
+            return $this->notFound('Validación no encontrada');
+        }
+
+        return $this->success($validation->toApiArray());
+    }
+
     // =========================================================================
     // DATA VERIFICATION ENDPOINTS
     // =========================================================================
