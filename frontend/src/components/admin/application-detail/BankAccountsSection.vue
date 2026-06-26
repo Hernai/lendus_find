@@ -43,23 +43,37 @@ const nubariumError = ref('')
 const autoVerified = ref(false)
 let nubariumPollCancelled = false
 
-const statusLabel = computed(() => {
-  const s = nubariumResult.value?.status
-  if (s === 'completed') return 'CLABE válida'
-  if (s === 'failed') return 'No válida'
-  return 'En proceso'
+// Vista tipada de los campos relevantes del resultado de Nubarium (validate-clabe).
+interface ClabeResultData {
+  messageCode?: number
+  message?: string
+  data?: {
+    similarity?: number
+    spei?: {
+      beneficiary?: { name?: string; receivingBank?: string }
+    }
+  }
+}
+
+// Interpreta el resultado en 3 casos: coincide / cuenta válida sin coincidencia
+// de nombre / inválida o error. messageCode 0 = match, 3 = "Match not found".
+const validationOutcome = computed(() => {
+  const v = nubariumResult.value
+  if (!v) return null
+  const res = (v.result ?? {}) as ClabeResultData
+  const code = res.messageCode
+  const holder = res.data?.spei?.beneficiary?.name ?? null
+  const bank = res.data?.spei?.beneficiary?.receivingBank ?? null
+  const similarity = typeof res.data?.similarity === 'number' ? res.data.similarity : null
+
+  if (v.status === 'completed' || code === 0) {
+    return { label: 'CLABE válida — el titular coincide', badge: 'bg-green-100 text-green-800', holder, bank, similarity }
+  }
+  if (code === 3) {
+    return { label: 'CLABE válida, pero el titular NO coincide', badge: 'bg-amber-100 text-amber-800', holder, bank, similarity }
+  }
+  return { label: v.error || res.message || 'CLABE no válida o error', badge: 'bg-red-100 text-red-700', holder, bank, similarity }
 })
-const statusBadgeClass = computed(() => {
-  const s = nubariumResult.value?.status
-  if (s === 'completed') return 'bg-green-100 text-green-800'
-  if (s === 'failed') return 'bg-red-100 text-red-700'
-  return 'bg-gray-100 text-gray-600'
-})
-const resultEntries = computed<[string, unknown][]>(() =>
-  Object.entries(nubariumResult.value?.result ?? {})
-)
-const formatVal = (v: unknown): string =>
-  v !== null && typeof v === 'object' ? JSON.stringify(v) : String(v)
 
 const validateWithNubarium = async (account: BankAccount) => {
   validatingId.value = account.id
@@ -241,10 +255,10 @@ onUnmounted(() => { nubariumPollCancelled = true })
             {{ nubariumError }}
           </div>
 
-          <template v-else-if="nubariumResult">
+          <template v-else-if="nubariumResult && validationOutcome">
             <div class="flex items-center gap-2 flex-wrap">
-              <span :class="['inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium', statusBadgeClass]">
-                {{ statusLabel }}
+              <span :class="['inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium', validationOutcome.badge]">
+                {{ validationOutcome.label }}
               </span>
               <span v-if="nubariumResult.validation_code" class="text-xs text-gray-500 font-mono">
                 código: {{ nubariumResult.validation_code }}
@@ -258,18 +272,24 @@ onUnmounted(() => { nubariumPollCancelled = true })
               Cuenta marcada como verificada automáticamente.
             </p>
 
-            <!-- Campos que devolvió Nubarium -->
-            <div v-if="resultEntries.length" class="border border-gray-200 rounded-lg divide-y divide-gray-100">
-              <div
-                v-for="[key, val] in resultEntries"
-                :key="key"
-                class="flex justify-between gap-4 px-3 py-2 text-sm"
-              >
-                <span class="text-gray-500 flex-shrink-0">{{ key }}</span>
-                <span class="text-gray-900 text-right break-all font-mono">{{ formatVal(val) }}</span>
+            <!-- Datos clave de la validación (titular real + banco + similitud) -->
+            <div
+              v-if="validationOutcome.holder || validationOutcome.similarity !== null"
+              class="border border-gray-200 rounded-lg divide-y divide-gray-100"
+            >
+              <div v-if="validationOutcome.holder" class="flex justify-between gap-4 px-3 py-2 text-sm">
+                <span class="text-gray-500 flex-shrink-0">Titular real de la cuenta</span>
+                <span class="text-gray-900 text-right font-medium">{{ validationOutcome.holder }}</span>
+              </div>
+              <div v-if="validationOutcome.bank" class="flex justify-between gap-4 px-3 py-2 text-sm">
+                <span class="text-gray-500 flex-shrink-0">Banco</span>
+                <span class="text-gray-900 text-right">{{ validationOutcome.bank }}</span>
+              </div>
+              <div v-if="validationOutcome.similarity !== null" class="flex justify-between gap-4 px-3 py-2 text-sm">
+                <span class="text-gray-500 flex-shrink-0">Coincidencia de nombre</span>
+                <span class="text-gray-900 text-right font-medium">{{ Math.round(validationOutcome.similarity * 100) }}%</span>
               </div>
             </div>
-            <p v-else class="text-sm text-gray-500">Nubarium no devolvió campos adicionales.</p>
 
             <!-- Cadena cruda completa -->
             <details class="text-xs">
