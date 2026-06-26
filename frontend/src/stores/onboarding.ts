@@ -844,8 +844,11 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           if (ba?.bank_code && ba?.account_number) {
             const num = ba.account_number.replace(/\D/g, '')
             const pd = profileStore.profile?.personal_data
+            // Nombre real del titular. Si el store aún no lo tiene, lo dejamos
+            // vacío y el backend lo completa con el nombre de la persona (NUNCA
+            // mandamos el literal "Titular", que se persistía como "TITULAR").
             const holder = [pd?.first_name, pd?.last_name_1, pd?.last_name_2]
-              .filter(Boolean).join(' ').trim() || 'Titular'
+              .filter(Boolean).join(' ').trim()
             // Borrar cuentas existentes para no duplicar al reeditar/retroceder.
             try {
               const existing = await profileService.listBankAccounts()

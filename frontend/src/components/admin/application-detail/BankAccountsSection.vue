@@ -37,6 +37,7 @@ interface BankAccount {
 const props = defineProps<{
   accounts: BankAccount[]
   canVerify: boolean
+  canEdit?: boolean
   applicationId: string
 }>()
 
@@ -50,6 +51,42 @@ const stats = computed(() => ({
   total: props.accounts.length,
   verified: props.accounts.filter(ba => ba.is_verified).length,
 }))
+
+// --- Edición del titular (solo SUPER_ADMIN, vía canEdit) ---
+const showEditModal = ref(false)
+const editAccount = ref<BankAccount | null>(null)
+const editHolderName = ref('')
+const editHolderRfc = ref('')
+const editSaving = ref(false)
+const editError = ref('')
+
+const openEdit = (account: BankAccount) => {
+  editAccount.value = account
+  editHolderName.value = account.holder_name ?? ''
+  editHolderRfc.value = account.holder_rfc ?? ''
+  editError.value = ''
+  showEditModal.value = true
+}
+
+const saveEdit = async () => {
+  if (!editAccount.value) return
+  const name = editHolderName.value.trim()
+  if (!name) { editError.value = 'El nombre del titular es requerido.'; return }
+  editSaving.value = true
+  editError.value = ''
+  try {
+    await applicationService.updateBankAccount(props.applicationId, editAccount.value.id, {
+      holder_name: name,
+      holder_rfc: editHolderRfc.value.trim() || null,
+    })
+    showEditModal.value = false
+    emit('refresh')
+  } catch {
+    editError.value = 'No se pudo actualizar el titular.'
+  } finally {
+    editSaving.value = false
+  }
+}
 
 // --- Validación CLABE con Nubarium (asíncrona por webhook) ---
 const validatingId = ref<string | null>(null)
@@ -269,16 +306,16 @@ onUnmounted(() => { nubariumPollCancelled = true })
         </div>
 
         <!-- Verification actions -->
-        <div v-if="canVerify" class="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
+        <div v-if="canVerify || canEdit" class="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
           <button
-            v-if="!account.is_verified"
+            v-if="canVerify && !account.is_verified"
             class="flex-1 px-3 py-1.5 text-sm text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors font-medium"
             @click="emit('verify', account)"
           >
             Verificar
           </button>
           <button
-            v-else
+            v-else-if="canVerify && account.is_verified"
             class="flex-1 px-3 py-1.5 text-sm text-yellow-700 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors font-medium"
             @click="emit('unverify', account)"
           >
@@ -286,6 +323,7 @@ onUnmounted(() => { nubariumPollCancelled = true })
           </button>
           <!-- Validar la CLABE contra el banco con Nubarium -->
           <button
+            v-if="canVerify"
             class="flex-1 px-3 py-1.5 text-sm text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
             :disabled="validatingId === account.id"
             @click="validateWithNubarium(account)"
@@ -295,6 +333,17 @@ onUnmounted(() => { nubariumPollCancelled = true })
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
             {{ validatingId === account.id ? 'Validando…' : 'Validar con Nubarium' }}
+          </button>
+          <!-- Editar titular (solo SUPER_ADMIN) -->
+          <button
+            v-if="canEdit"
+            class="flex-1 px-3 py-1.5 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors font-medium inline-flex items-center justify-center gap-1.5"
+            @click="openEdit(account)"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Editar titular
           </button>
         </div>
       </div>
@@ -373,6 +422,85 @@ onUnmounted(() => { nubariumPollCancelled = true })
             @click="showNubariumModal = false"
           >
             Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Modal: editar titular de la cuenta (solo SUPER_ADMIN) -->
+  <Teleport to="body">
+    <div
+      v-if="showEditModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      @click.self="showEditModal = false"
+    >
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h3 class="text-lg font-semibold text-gray-900">Editar titular de la cuenta</h3>
+          <button class="text-gray-400 hover:text-gray-600" @click="showEditModal = false">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <div v-if="editError" class="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">
+            {{ editError }}
+          </div>
+
+          <p v-if="editAccount" class="text-xs text-gray-500">
+            {{ editAccount.bank_name }} · CLABE <span class="font-mono">{{ editAccount.clabe }}</span>
+          </p>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Nombre del titular *</label>
+            <input
+              v-model="editHolderName"
+              type="text"
+              maxlength="200"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm uppercase focus:ring-primary-500 focus:border-primary-500"
+              placeholder="NOMBRE COMPLETO"
+            />
+          </div>
+
+          <!-- Atajo: usar el titular real que reportó el banco vía Nubarium -->
+          <button
+            v-if="editAccount?.clabe_validation?.holder_name_real && editAccount.clabe_validation.holder_name_real !== editHolderName"
+            type="button"
+            class="text-xs text-primary-700 hover:underline"
+            @click="editHolderName = editAccount?.clabe_validation?.holder_name_real || editHolderName"
+          >
+            Usar titular real del banco: {{ editAccount.clabe_validation.holder_name_real }}
+          </button>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">RFC del titular <span class="text-gray-400">(opcional)</span></label>
+            <input
+              v-model="editHolderRfc"
+              type="text"
+              maxlength="13"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono uppercase focus:ring-primary-500 focus:border-primary-500"
+              placeholder="XAXX010101000"
+            />
+          </div>
+        </div>
+
+        <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+          <button
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            :disabled="editSaving"
+            @click="showEditModal = false"
+          >
+            Cancelar
+          </button>
+          <button
+            class="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            :disabled="editSaving"
+            @click="saveEdit"
+          >
+            {{ editSaving ? 'Guardando…' : 'Guardar' }}
           </button>
         </div>
       </div>

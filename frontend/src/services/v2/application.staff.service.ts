@@ -376,6 +376,22 @@ export async function unverifyBankAccount(
   return response.data
 }
 
+/**
+ * Edita el titular de una cuenta bancaria (corregir nombre/RFC).
+ * Requires: canConfigureTenant (SUPER_ADMIN).
+ */
+export async function updateBankAccount(
+  applicationId: string,
+  bankAccountId: string,
+  payload: { holder_name: string; holder_rfc?: string | null }
+): Promise<V2ApiResponse<{ holder_name: string; holder_rfc: string | null }>> {
+  const response = await api.put<V2ApiResponse<{ holder_name: string; holder_rfc: string | null }>>(
+    `${BASE_PATH}/${applicationId}/bank-accounts/${bankAccountId}`,
+    payload
+  )
+  return response.data
+}
+
 /** Validación asíncrona de Nubarium (CLABE) iniciada. */
 export interface NubariumValidationStart {
   validation_id: string
@@ -477,6 +493,7 @@ export default {
   // Bank accounts
   verifyBankAccount,
   unverifyBankAccount,
+  updateBankAccount,
   validateBankAccountClabe,
   getNubariumValidation,
   // Data verification

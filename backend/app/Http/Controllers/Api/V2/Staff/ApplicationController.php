@@ -1360,6 +1360,65 @@ class ApplicationController extends Controller
     }
 
     /**
+     * Edita los datos del titular de una cuenta bancaria (corrección de
+     * nombre/RFC). Restringido a SUPER_ADMIN (ver middleware de la ruta).
+     *
+     * Caso de uso: el onboarding llegó a persistir el titular como "TITULAR"
+     * cuando el perfil no tenía nombre cargado; esto permite corregirlo.
+     *
+     * PUT /v2/staff/applications/{appId}/bank-accounts/{baId}
+     */
+    public function updateBankAccount(Request $request, string $appId, string $baId): JsonResponse
+    {
+        /** @var StaffAccount $staff */
+        $staff = $request->user();
+
+        $validated = $request->validate([
+            'holder_name' => 'required|string|max:200',
+            'holder_rfc' => 'nullable|string|max:13',
+        ]);
+
+        $application = Application::where('id', $appId)
+            ->where('tenant_id', $this->scopedTenantId($staff))
+            ->with('person.bankAccounts')
+            ->first();
+
+        if (!$application || !$application->person) {
+            return $this->notFound('Solicitud no encontrada.');
+        }
+
+        $bankAccount = $application->person->bankAccounts->firstWhere('id', $baId);
+
+        if (!$bankAccount) {
+            return $this->notFound('Cuenta bancaria no encontrada.');
+        }
+
+        $old = ['holder_name' => $bankAccount->holder_name, 'holder_rfc' => $bankAccount->holder_rfc];
+
+        $bankAccount->holder_name = strtoupper(trim($validated['holder_name']));
+        if (array_key_exists('holder_rfc', $validated)) {
+            $rfc = trim((string) ($validated['holder_rfc'] ?? ''));
+            $bankAccount->holder_rfc = $rfc !== '' ? strtoupper($rfc) : null;
+        }
+        $bankAccount->save();
+
+        \App\Services\ActivityRecorder::recordApplicationEvent($application, 'DATA_UPDATED', [
+            'from_status' => 'BANK_ACCOUNT_EDIT',
+            'to_status' => 'BANK_ACCOUNT_EDIT',
+            'notes' => "Titular de la cuenta '{$bankAccount->bank_name}' actualizado a '{$bankAccount->holder_name}'",
+            'entity' => $bankAccount,
+            'old_values' => $old,
+            'new_values' => ['holder_name' => $bankAccount->holder_name, 'holder_rfc' => $bankAccount->holder_rfc],
+            'metadata' => ['bank_name' => $bankAccount->bank_name, 'kind' => 'bank_account_updated'],
+        ]);
+
+        return $this->success([
+            'holder_name' => $bankAccount->holder_name,
+            'holder_rfc' => $bankAccount->holder_rfc,
+        ], 'Titular actualizado.');
+    }
+
+    /**
      * Inicia la validación de la CLABE de una cuenta bancaria con Nubarium
      * (API Plus, asíncrono por webhook). Devuelve una validación `pending`; el
      * resultado se consulta con getNubariumValidation.

@@ -851,12 +851,26 @@ class ProfileController extends Controller
             'clabe' => 'nullable|string|size:18|required_without:card_number',
             'card_number' => 'nullable|string|size:16|required_without:clabe',
             'bank_name' => 'nullable|string|max:100',
-            'holder_name' => 'required|string|max:100',
+            'holder_name' => 'nullable|string|max:100',
             'account_type' => 'nullable|string',
         ]);
 
         $account = $request->user();
         $person = $this->profileService->getOrCreatePerson($account);
+
+        // Titular real: el front (onboarding) mandaba el literal "Titular" como
+        // relleno cuando el perfil aún no tenía nombre cargado en el store, y se
+        // persistía como "TITULAR". Si el valor viene vacío o es ese placeholder,
+        // tomamos el nombre real de la persona (fuente autoritativa en el backend).
+        $holderName = trim((string) ($validated['holder_name'] ?? ''));
+        if ($holderName === '' || mb_strtolower($holderName) === 'titular') {
+            $holderName = trim((string) $person->full_name);
+        }
+        if ($holderName === '') {
+            return $this->validationError('Falta el titular de la cuenta', [
+                'holder_name' => ['No se pudo determinar el titular. Captura tu nombre antes de agregar la cuenta.'],
+            ]);
+        }
 
         // Normalize account_type using enum
         $accountType = BankAccountType::DEBIT;
@@ -910,7 +924,7 @@ class ProfileController extends Controller
             'bank_name' => $clabeValidation['bank_name'] ?? $validated['bank_name'] ?? 'Sin especificar',
             'clabe' => $validated['clabe'] ?? null,
             'card_number_last4' => $isCard ? substr($validated['card_number'], -4) : null,
-            'holder_name' => strtoupper($validated['holder_name']),
+            'holder_name' => strtoupper($holderName),
             'account_type' => $accountType->value,
             'is_primary' => $isFirst,
             'status' => 'ACTIVE',

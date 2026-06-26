@@ -463,6 +463,9 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
             ->middleware('permission:canVerifyReferences');
         Route::put('/applications/{appId}/bank-accounts/{baId}/unverify', [StaffAppController::class, 'unverifyBankAccount'])
             ->middleware('permission:canVerifyReferences');
+        // Editar el titular de la cuenta (corregir nombre/RFC). Solo SUPER_ADMIN.
+        Route::put('/applications/{appId}/bank-accounts/{baId}', [StaffAppController::class, 'updateBankAccount'])
+            ->middleware('permission:canConfigureTenant');
         // Validar la CLABE con Nubarium (async) + consultar el resultado
         Route::post('/applications/{appId}/bank-accounts/{baId}/validate-clabe', [StaffAppController::class, 'validateBankAccountClabe'])
             ->middleware('permission:canVerifyReferences');
