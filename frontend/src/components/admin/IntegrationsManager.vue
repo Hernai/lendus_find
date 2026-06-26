@@ -22,7 +22,7 @@
         <!-- Add New Integration Button -->
         <div class="mb-6 flex justify-end">
           <button
-            @click="openNewIntegrationModal"
+            @click="openNewIntegrationModal()"
             class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -60,6 +60,17 @@
                   {{ group.items.length }} {{ group.items.length === 1 ? 'servicio configurado' : 'servicios configurados' }}
                 </p>
               </div>
+              <!-- Activar otro servicio del proveedor (KYC, Email, etc.) -->
+              <button
+                type="button"
+                class="flex-shrink-0 inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-primary-200 text-primary-700 bg-primary-50 hover:bg-primary-100 transition-colors"
+                @click="openNewIntegrationModal(group.provider)"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Servicio
+              </button>
             </div>
 
             <!-- Tarjetas de servicio del proveedor (cada una con su prueba independiente) -->
@@ -375,6 +386,7 @@
             <p class="mt-1.5 text-xs text-gray-500">
               Sólo se muestran los servicios que ofrece {{ providerLabel(form.provider) }}.
               <template v-if="!editingIntegration"> Puedes elegir varios; se crea una integración por servicio (mismas credenciales).</template>
+              <template v-else> El servicio no se puede cambiar al editar. Para activar otro servicio de {{ providerLabel(form.provider) }} (p. ej. KYC), usa <b>Nueva Integración</b> o el botón <b>+ Servicio</b> del proveedor.</template>
             </p>
           </div>
 
@@ -984,7 +996,7 @@ const loadOptions = async () => {
 }
 
 // Open new integration modal
-const openNewIntegrationModal = () => {
+const openNewIntegrationModal = (provider = '') => {
   editingIntegration.value = null
   form.value = {
     provider: '',
@@ -1002,6 +1014,11 @@ const openNewIntegrationModal = () => {
     smtp_from_name: '',
     is_active: true,
     is_sandbox: false,
+  }
+  // Preselección de proveedor (desde el botón "+ Servicio" del grupo): dispara
+  // el watch que marca los servicios de ese proveedor para agregarlos.
+  if (provider) {
+    form.value.provider = provider
   }
   showEditModal.value = true
 }
