@@ -388,6 +388,20 @@
               <template v-if="!editingIntegration"> Puedes elegir varios; se crea una integración por servicio (mismas credenciales).</template>
               <template v-else> El servicio no se puede cambiar al editar. Para activar otro servicio de {{ providerLabel(form.provider) }} (p. ej. KYC), usa <b>Nueva Integración</b> o el botón <b>+ Servicio</b> del proveedor.</template>
             </p>
+
+            <!-- Qué habilita cada servicio seleccionado -->
+            <div v-if="selectedServiceInfo.length" class="mt-3 rounded-lg bg-gray-50 border border-gray-100 p-3 space-y-2">
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Estás habilitando</p>
+              <div v-for="s in selectedServiceInfo" :key="s.key" class="flex gap-2 text-xs">
+                <svg class="w-4 h-4 text-primary-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                </svg>
+                <div>
+                  <span class="font-medium text-gray-900">{{ s.label }}</span>
+                  <span class="text-gray-500"> — {{ s.description }}</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Provider-Specific Fields -->
@@ -845,6 +859,7 @@ type Integration = V2Integration
 const integrations = ref<Integration[]>([])
 const providers = ref<V2ProviderOption[]>([])
 const serviceTypes = ref<Record<string, string>>({})
+const serviceTypeDescriptions = ref<Record<string, string>>({})
 
 // Etiqueta + clases del badge de estado de proveedor.
 const STATUS_META: Record<ProviderStatus, { label: string; classes: string }> = {
@@ -915,8 +930,19 @@ const availableServiceTypes = computed(() => {
   const keys = provider?.services ?? Object.keys(serviceTypes.value)
   return keys
     .filter((k) => serviceTypes.value[k])
-    .map((k) => ({ key: k, label: serviceTypes.value[k] ?? k }))
+    .map((k) => ({
+      key: k,
+      label: serviceTypes.value[k] ?? k,
+      description: serviceTypeDescriptions.value[k] ?? '',
+    }))
 })
+
+// Servicios seleccionados con su descripción (qué habilita el admin).
+const selectedServiceInfo = computed(() =>
+  availableServiceTypes.value.filter(
+    (s) => form.value.service_types.includes(s.key) && s.description,
+  ),
+)
 
 // Seleccionar proveedor desde el grid visual (sólo alta).
 const selectProvider = (p: V2ProviderOption) => {
@@ -990,6 +1016,7 @@ const loadOptions = async () => {
     const options = await props.adapter.getOptions()
     providers.value = options.providers
     serviceTypes.value = options.service_types
+    serviceTypeDescriptions.value = options.service_type_descriptions
   } catch (err) {
     log.error('Error al cargar opciones', { error: err })
   }

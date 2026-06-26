@@ -152,6 +152,8 @@ export interface V2TenantConfig {
   /** Catálogo unificado con estado + servicios por proveedor (nuevo). */
   providers?: V2ProviderOption[]
   service_types?: Record<string, string>
+  /** Descripción de cada servicio (qué habilita el admin). */
+  service_type_descriptions?: Record<string, string>
   /** Compat hacia atrás. */
   available_providers: Record<string, string>
   available_service_types: Record<string, string>

@@ -15,7 +15,11 @@ import type {
 } from '@/services/v2/integration.staff.service'
 
 export interface IntegrationsAdapter {
-  getOptions(): Promise<{ providers: V2ProviderOption[]; service_types: Record<string, string> }>
+  getOptions(): Promise<{
+    providers: V2ProviderOption[]
+    service_types: Record<string, string>
+    service_type_descriptions: Record<string, string>
+  }>
   list(): Promise<V2Integration[]>
   save(payload: V2IntegrationPayload): Promise<void>
   test(id: string, payload: V2IntegrationTestPayload): Promise<{ success: boolean; message: string }>
@@ -27,7 +31,11 @@ export interface IntegrationsAdapter {
 export const selfIntegrationsAdapter: IntegrationsAdapter = {
   async getOptions() {
     const res = await v2.staff.integration.getOptions()
-    return { providers: res.data?.providers ?? [], service_types: res.data?.service_types ?? {} }
+    return {
+      providers: res.data?.providers ?? [],
+      service_types: res.data?.service_types ?? {},
+      service_type_descriptions: res.data?.service_type_descriptions ?? {},
+    }
   },
   async list() {
     const res = await v2.staff.integration.list()
@@ -57,7 +65,11 @@ export function tenantIntegrationsAdapter(tenantId: string): IntegrationsAdapter
   return {
     async getOptions() {
       const res = await v2.staff.tenant.getConfig(tenantId)
-      return { providers: res.data?.providers ?? [], service_types: res.data?.service_types ?? {} }
+      return {
+        providers: res.data?.providers ?? [],
+        service_types: res.data?.service_types ?? {},
+        service_type_descriptions: res.data?.service_type_descriptions ?? {},
+      }
     },
     async list() {
       const res = await v2.staff.tenant.getConfig(tenantId)

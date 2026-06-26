@@ -258,6 +258,7 @@ class TenantController extends Controller
             // muestre el estado (available|beta|coming_soon).
             'providers' => TenantApiConfig::providerCatalog(),
             'service_types' => TenantApiConfig::SERVICE_TYPES,
+            'service_type_descriptions' => TenantApiConfig::SERVICE_TYPE_DESCRIPTIONS,
             // Compat hacia atrás (consumidores viejos).
             'available_providers' => TenantApiConfig::PROVIDERS,
             'available_service_types' => TenantApiConfig::SERVICE_TYPES,

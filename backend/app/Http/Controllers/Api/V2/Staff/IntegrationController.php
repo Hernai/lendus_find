@@ -77,6 +77,8 @@ class IntegrationController extends Controller
             // Compat: mapa key=>label por si algún consumidor viejo lo usa.
             'providers_map' => TenantApiConfig::PROVIDERS,
             'service_types' => TenantApiConfig::SERVICE_TYPES,
+            // Descripción de cada servicio: para que el admin sepa qué habilita.
+            'service_type_descriptions' => TenantApiConfig::SERVICE_TYPE_DESCRIPTIONS,
         ]);
     }
 

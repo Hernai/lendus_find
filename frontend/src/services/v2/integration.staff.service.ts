@@ -57,6 +57,8 @@ export interface V2IntegrationOptions {
   /** Compat: mapa key=>label. */
   providers_map?: Record<string, string>
   service_types: Record<string, string>
+  /** Descripción de cada servicio (qué habilita el admin). */
+  service_type_descriptions?: Record<string, string>
 }
 
 export interface V2IntegrationPayload {

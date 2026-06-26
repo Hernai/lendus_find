@@ -92,6 +92,24 @@ class TenantApiConfig extends Model
     ];
 
     /**
+     * Descripción de cada tipo de servicio: qué habilita el admin al activarlo.
+     * Lo consume la UI de integraciones para que el usuario sepa qué está
+     * habilitando. Single source of truth: este array.
+     */
+    public const SERVICE_TYPE_DESCRIPTIONS = [
+        'sms' => 'Envío de SMS y códigos OTP por mensaje de texto.',
+        'whatsapp' => 'Envío de mensajes y OTP por WhatsApp.',
+        'email' => 'Envío de correos y códigos OTP por email.',
+        'kyc' => 'Validación de identidad (CURP, RFC, INE), listas OFAC/PLD y validación de cuenta bancaria (CLABE).',
+        'credit_bureau' => 'Consulta de historial en buró de crédito.',
+        'document_validation' => 'Validación y OCR de documentos (comprobantes, identificaciones).',
+        'push' => 'Notificaciones push a la app móvil.',
+        'phone_score' => 'Score de riesgo del número telefónico.',
+        'loan_disbursement' => 'Dispersión de préstamos a cuentas bancarias.',
+        'payment_collection' => 'Cobranza y conciliación de pagos.',
+    ];
+
+    /**
      * Estado de implementación de cada proveedor:
      *   - 'available'   : integración real y probada (se puede usar en prod)
      *   - 'beta'        : implementación parcial / stub (devuelve mocks)
