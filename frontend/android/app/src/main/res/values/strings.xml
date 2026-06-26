@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">MoneyCapital</string>
     <string name="title_activity_main">MoneyCapital</string>
-    <string name="package_name">mx.moneycapital.app</string>
-    <string name="custom_url_scheme">mx.moneycapital.app</string>
+    <string name="package_name">io.money.capital</string>
+    <string name="custom_url_scheme">io.money.capital</string>
 </resources>
