@@ -12,6 +12,7 @@ use App\Services\ApplicationEventService;
 use App\Services\ApplicantProfileService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 /**
  * V2 Applicant Profile Controller.
@@ -22,6 +23,12 @@ use Illuminate\Http\Request;
 class ProfileController extends Controller
 {
     use ApiResponses;
+
+    /**
+     * Titular provisional cuando se crea la cuenta antes de capturar el nombre.
+     * Se reemplaza por el nombre real al completar los datos personales.
+     */
+    public const HOLDER_PLACEHOLDER = 'TITULAR NO DEFINIDO';
 
     public function __construct(
         protected ApplicantProfileService $profileService,
@@ -383,6 +390,13 @@ class ProfileController extends Controller
         ));
 
         $person->update($validated);
+
+        // Si se completó/cambió el nombre, actualiza el titular de las cuentas
+        // que quedaron con el placeholder y dispara su validación con Nubarium.
+        $nameChanged = (bool) array_intersect($changedFields, ['first_name', 'last_name_1', 'last_name_2']);
+        if ($nameChanged) {
+            $this->backfillBankAccountHolders($person);
+        }
 
         // Record event if there's an active application
         $application = $this->getCurrentApplication($person);
@@ -859,17 +873,20 @@ class ProfileController extends Controller
         $person = $this->profileService->getOrCreatePerson($account);
 
         // Titular real: el front (onboarding) mandaba el literal "Titular" como
-        // relleno cuando el perfil aún no tenía nombre cargado en el store, y se
-        // persistía como "TITULAR". Si el valor viene vacío o es ese placeholder,
-        // tomamos el nombre real de la persona (fuente autoritativa en el backend).
+        // relleno cuando el perfil aún no tenía nombre cargado en el store. Si el
+        // valor viene vacío o es ese placeholder, tomamos el nombre real de la
+        // persona (fuente autoritativa). Si AÚN no hay nombre, NO bloqueamos la
+        // creación: usamos el placeholder "TITULAR NO DEFINIDO" y el titular se
+        // completa después, cuando el usuario capture su nombre (ver
+        // backfillBankAccountHolders en updatePersonalData), momento en que se
+        // dispara la validación con Nubarium.
         $holderName = trim((string) ($validated['holder_name'] ?? ''));
         if ($holderName === '' || mb_strtolower($holderName) === 'titular') {
             $holderName = trim((string) $person->full_name);
         }
-        if ($holderName === '') {
-            return $this->validationError('Falta el titular de la cuenta', [
-                'holder_name' => ['No se pudo determinar el titular. Captura tu nombre antes de agregar la cuenta.'],
-            ]);
+        $holderIsReal = $holderName !== '';
+        if (!$holderIsReal) {
+            $holderName = self::HOLDER_PLACEHOLDER;
         }
 
         // Normalize account_type using enum
@@ -936,10 +953,20 @@ class ProfileController extends Controller
             $bankAccount->save();
         }
 
+        Log::info('BankAccount creada', [
+            'bank_account_id' => $bankAccount->id,
+            'person_id' => $person->id,
+            'is_card' => $isCard,
+            'holder_is_real' => $holderIsReal,
+            'holder_name' => $bankAccount->holder_name,
+            'will_validate_clabe' => !$isCard && $holderIsReal,
+        ]);
+
         // Validación de CLABE con Nubarium: se dispara EN SEGUNDO PLANO (después
         // de responder) para no bloquear al usuario — Nubarium tarda y la
-        // respuesta real llega luego por webhook. Solo aplica a cuentas CLABE.
-        if (!$isCard) {
+        // respuesta real llega luego por webhook. Solo si es CLABE y ya hay un
+        // titular real (si es placeholder, se disparará al completar el nombre).
+        if (!$isCard && $holderIsReal) {
             \App\Jobs\StartClabeValidationJob::dispatchAfterResponse(
                 $bankAccount->id,
                 $bankAccount->tenant_id,
@@ -960,6 +987,46 @@ class ProfileController extends Controller
         return $this->created([
             'bank_account' => $this->formatBankAccount($bankAccount),
         ], 'Cuenta bancaria creada');
+    }
+
+    /**
+     * Completa el titular de las cuentas que quedaron con el placeholder
+     * "TITULAR NO DEFINIDO" (creadas antes de capturar el nombre) usando el
+     * nombre real de la persona, y dispara la validación de CLABE con Nubarium
+     * en ese momento (en segundo plano). Solo cuentas CLABE no verificadas.
+     */
+    private function backfillBankAccountHolders($person): void
+    {
+        $fullName = trim((string) $person->full_name);
+        if ($fullName === '') {
+            return;
+        }
+
+        $accounts = $person->bankAccounts()->get();
+
+        foreach ($accounts as $bankAccount) {
+            $current = strtoupper(trim((string) $bankAccount->holder_name));
+            if (!in_array($current, [self::HOLDER_PLACEHOLDER, 'TITULAR'], true)) {
+                continue;
+            }
+
+            $bankAccount->holder_name = strtoupper($fullName);
+            $bankAccount->save();
+
+            Log::info('BankAccount titular completado al capturar el nombre', [
+                'bank_account_id' => $bankAccount->id,
+                'person_id' => $person->id,
+                'holder_name' => $bankAccount->holder_name,
+            ]);
+
+            // Disparar la validación ahora que hay nombre real (solo CLABE no verificada).
+            if (!empty($bankAccount->clabe) && !$bankAccount->is_verified) {
+                \App\Jobs\StartClabeValidationJob::dispatchAfterResponse(
+                    $bankAccount->id,
+                    $bankAccount->tenant_id,
+                );
+            }
+        }
     }
 
     /**
