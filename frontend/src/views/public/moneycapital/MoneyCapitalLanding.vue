@@ -74,7 +74,7 @@ onMounted(async () => {
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-                Datos protegidos (CNBV)
+                Datos protegidos
               </span>
               <span class="trust-item">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
