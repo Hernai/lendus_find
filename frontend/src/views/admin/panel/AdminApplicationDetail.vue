@@ -514,14 +514,7 @@ const fetchApplication = async () => {
       | string[]
       | { nationals: string[]; foreigners: string[] }
     const isForeigner = isForeignNationality(person?.personal_data?.nationality)
-    let requiredDocsArray: string[] = []
-    if (Array.isArray(requiredDocTypesRaw)) {
-      requiredDocsArray = requiredDocTypesRaw
-    } else if (typeof requiredDocTypesRaw === 'object' && requiredDocTypesRaw !== null) {
-      requiredDocsArray = isForeigner
-        ? (requiredDocTypesRaw.foreigners || [])
-        : (requiredDocTypesRaw.nationals || [])
-    }
+    const requiredDocsArray = requiredDocTypesFor(requiredDocTypesRaw, isForeigner)
     const requiredTypes = new Set(requiredDocsArray)
     const approvedRequiredCount = docs.filter(d =>
       d.status === 'APPROVED' && requiredTypes.has(d.type)
@@ -1164,6 +1157,24 @@ function isForeignNationality(nat?: string | null): boolean {
   return !MEXICAN_NATIONALITY.has(v)
 }
 
+// Normaliza required_documents a una lista plana de TIPOS (string[]).
+// Acepta: array plano legacy (string[] u objetos {type}) o el formato nuevo
+// { nationals: [...], foreigners: [...] } cuyas entradas son objetos
+// { type, required, description }. Sin esto, comparar `Set(objetos).has(string)`
+// daba siempre falso (de ahí "0/3 aprobados" con 3 docs aprobados).
+function requiredDocTypesFor(raw: unknown, foreigner: boolean): string[] {
+  let list: unknown[] = []
+  if (Array.isArray(raw)) {
+    list = raw
+  } else if (raw && typeof raw === 'object') {
+    const o = raw as { nationals?: unknown[]; foreigners?: unknown[] }
+    list = (foreigner ? o.foreigners : o.nationals) ?? []
+  }
+  return list
+    .map((d) => (typeof d === 'string' ? d : (d as { type?: string })?.type))
+    .filter((t): t is string => typeof t === 'string' && t.length > 0)
+}
+
 // Computed: check if applicant is foreigner
 const isForeigner = computed(() => {
   return isForeignNationality(application.value?.applicant?.nationality)
@@ -1195,17 +1206,7 @@ const allDocuments = computed(() => {
   const uploadedTypes = new Set(uploadedDocs.map(d => d.type))
   const requiredDocs = application.value.required_documents || []
 
-  // Handle new structure: {nationals: [], foreigners: []} or legacy flat array
-  let requiredDocsArray: string[] = []
-  if (Array.isArray(requiredDocs)) {
-    // Legacy format: flat array
-    requiredDocsArray = requiredDocs
-  } else if (typeof requiredDocs === 'object' && requiredDocs !== null) {
-    // New format: {nationals: [], foreigners: []}
-    requiredDocsArray = isForeigner.value
-      ? (requiredDocs.foreigners || [])
-      : (requiredDocs.nationals || [])
-  }
+  const requiredDocsArray = requiredDocTypesFor(requiredDocs, isForeigner.value)
 
   // Create list with uploaded docs first
   const result: Array<Document & { missing?: boolean }> = [...uploadedDocs]
@@ -1230,27 +1231,10 @@ const allDocuments = computed(() => {
 const requiresSignature = computed(() => {
   const requiredDocs = application.value?.required_documents ?? []
 
-  // Handle new structure: {nationals: [], foreigners: []} or legacy flat array
   const isForeigner = isForeignNationality(application.value?.applicant?.nationality)
-  let requiredDocsArray: (string | { type: string })[] = []
-  if (Array.isArray(requiredDocs)) {
-    // Legacy format: flat array
-    requiredDocsArray = requiredDocs
-  } else if (typeof requiredDocs === 'object' && requiredDocs !== null) {
-    // New format: {nationals: [], foreigners: []}
-    const byNationality = requiredDocs as {
-      nationals?: (string | { type: string })[]
-      foreigners?: (string | { type: string })[]
-    }
-    requiredDocsArray = isForeigner
-      ? (byNationality.foreigners || [])
-      : (byNationality.nationals || [])
-  }
+  const requiredDocsArray = requiredDocTypesFor(requiredDocs, isForeigner)
 
-  return requiredDocsArray.some((doc: { type: string } | string) => {
-    const docType = typeof doc === 'string' ? doc : doc.type
-    return docType === 'SIGNATURE'
-  })
+  return requiredDocsArray.includes('SIGNATURE')
 })
 
 // Completeness calculation

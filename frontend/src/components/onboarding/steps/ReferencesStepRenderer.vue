@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import type { ReferencesStep } from '@/types/v2/onboardingStep'
 import { formatPhoneInput } from '@/utils/formatters'
+import { useAuthStore } from '@/stores/auth'
 
 /**
  * Renderiza step `references`: usuario agrega referencias familiar y personal.
@@ -45,8 +46,33 @@ const validName = (n: string) => {
 }
 const validPhone = (p: string) => p.replace(/\D/g, '').length === 10
 
-const familyValid = computed(() => validName(family.value.name) && validPhone(family.value.phone))
-const personalValid = computed(() => validName(personal.value.name) && validPhone(personal.value.phone))
+// Las referencias deben ser personas DISTINTAS entre sí y distintas del propio
+// cliente. Validamos teléfono y nombre repetidos (y contra el del cliente).
+const authStore = useAuthStore()
+const digits = (p: string) => p.replace(/\D/g, '')
+const normName = (n: string) => n.trim().toLowerCase().replace(/\s+/g, ' ')
+const ownPhone = computed(() => digits(authStore.user?.phone ?? ''))
+
+const samePhone = computed(() => {
+  const a = digits(family.value.phone)
+  return a.length === 10 && a === digits(personal.value.phone)
+})
+const sameName = computed(() => {
+  const a = normName(family.value.name)
+  return a !== '' && a === normName(personal.value.name)
+})
+const phoneIsOwn = computed(() =>
+  ownPhone.value !== '' &&
+  (digits(family.value.phone) === ownPhone.value || digits(personal.value.phone) === ownPhone.value),
+)
+
+// Mensaje de error visible para el cliente (y por qué no puede continuar).
+const dupError = computed(() => {
+  if (samePhone.value) return 'Las dos referencias tienen el mismo teléfono. Deben ser personas distintas.'
+  if (sameName.value) return 'Las dos referencias tienen el mismo nombre. Deben ser personas distintas.'
+  if (phoneIsOwn.value) return 'El teléfono de una referencia es el tuyo. Usa el de otra persona.'
+  return ''
+})
 
 function handlePhoneInput(ref: Reference, ev: Event) {
   const input = ev.target as HTMLInputElement
@@ -189,6 +215,9 @@ watch(
         </svg>
       </div>
     </section>
+
+    <!-- Aviso: referencias repetidas o iguales al cliente -->
+    <p v-if="dupError" class="ref-error" role="alert">{{ dupError }}</p>
   </div>
 </template>
 
@@ -203,6 +232,16 @@ watch(
   color: #64748b;
   margin: 0;
   line-height: 1.5;
+}
+.ref-error {
+  font-size: 13px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 0;
+  line-height: 1.4;
 }
 .ref-section {
   display: flex;

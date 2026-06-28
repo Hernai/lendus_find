@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useTenantStore } from '@/stores/tenant'
 import { useApplicationStore } from '@/stores/application'
 import { useOnboardingStore } from '@/stores/onboarding'
+import { useAuthStore } from '@/stores/auth'
 import OnboardingStepRenderer from '@/components/onboarding/OnboardingStepRenderer.vue'
 import type { OnboardingStep } from '@/types/v2/onboardingStep'
 import { logger } from '@/utils/logger'
@@ -34,6 +35,7 @@ const route = useRoute()
 const tenantStore = useTenantStore()
 const applicationStore = useApplicationStore()
 const onboardingStore = useOnboardingStore()
+const authStore = useAuthStore()
 
 const isLoading = ref(true)
 
@@ -92,11 +94,20 @@ const canContinue = computed(() => {
   if (s.type === 'references') {
     const refs = v as Array<{ name: string; phone: string }> | null
     if (!refs || refs.length < 2) return false
-    return refs.every((r) => {
+    const eachValid = refs.every((r) => {
       const parts = (r.name || '').trim().split(/\s+/).filter(Boolean)
       const nameOk = parts.length >= 2 && parts.every((p) => p.length >= 2)
       return nameOk && r.phone.replace(/\D/g, '').length === 10
     })
+    if (!eachValid) return false
+    // Referencias distintas entre sí y distintas del propio cliente.
+    const phones = refs.map((r) => r.phone.replace(/\D/g, ''))
+    const names = refs.map((r) => (r.name || '').trim().toLowerCase().replace(/\s+/g, ' '))
+    if (new Set(phones).size !== phones.length) return false
+    if (new Set(names).size !== names.length) return false
+    const ownPhone = (authStore.user?.phone ?? '').replace(/\D/g, '')
+    if (ownPhone && phones.includes(ownPhone)) return false
+    return true
   }
   if (s.type === 'bank_account') {
     const ba = v as { type?: string; bank_code?: string; account_number?: string } | null
