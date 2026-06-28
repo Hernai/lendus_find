@@ -962,12 +962,13 @@ class ProfileController extends Controller
             'will_validate_clabe' => !$isCard && $holderIsReal,
         ]);
 
-        // Validación de CLABE con Nubarium: se dispara EN SEGUNDO PLANO (después
-        // de responder) para no bloquear al usuario — Nubarium tarda y la
-        // respuesta real llega luego por webhook. Solo si es CLABE y ya hay un
-        // titular real (si es placeholder, se disparará al completar el nombre).
+        // Validación de CLABE con Nubarium: se encola (worker en background) para
+        // no bloquear al usuario ni ocupar el proceso PHP-FPM con la llamada a
+        // Nubarium (hasta 60s). El resultado real llega luego por webhook. Solo
+        // si es CLABE y ya hay un titular real (si es placeholder, se dispara al
+        // completar el nombre).
         if (!$isCard && $holderIsReal) {
-            \App\Jobs\StartClabeValidationJob::dispatchAfterResponse(
+            \App\Jobs\StartClabeValidationJob::dispatch(
                 $bankAccount->id,
                 $bankAccount->tenant_id,
             );
@@ -1019,9 +1020,9 @@ class ProfileController extends Controller
                 'holder_name' => $bankAccount->holder_name,
             ]);
 
-            // Disparar la validación ahora que hay nombre real (solo CLABE no verificada).
+            // Encolar la validación ahora que hay nombre real (solo CLABE no verificada).
             if (!empty($bankAccount->clabe) && !$bankAccount->is_verified) {
-                \App\Jobs\StartClabeValidationJob::dispatchAfterResponse(
+                \App\Jobs\StartClabeValidationJob::dispatch(
                     $bankAccount->id,
                     $bankAccount->tenant_id,
                 );

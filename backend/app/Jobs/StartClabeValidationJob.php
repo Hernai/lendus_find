@@ -6,7 +6,9 @@ use App\Models\BankAccount;
 use App\Models\Tenant;
 use App\Services\ExternalApi\NubariumService;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
@@ -22,9 +24,13 @@ use Illuminate\Support\Facades\Log;
  * Tolerante a fallos: si el tenant no tiene Nubarium configurado o el POST
  * falla, solo se loguea — nunca rompe el alta de la cuenta.
  */
-class StartClabeValidationJob
+class StartClabeValidationJob implements ShouldQueue
 {
-    use Dispatchable, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    /** Reintentos y timeout holgado (la llamada a Nubarium es de hasta 60s). */
+    public int $tries = 2;
+    public int $timeout = 90;
 
     public function __construct(
         public string $bankAccountId,
