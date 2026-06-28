@@ -507,7 +507,7 @@ const fetchApplication = async () => {
     const requiredDocTypesRaw = (data.required_documents || []) as unknown as
       | string[]
       | { nationals: string[]; foreigners: string[] }
-    const isForeigner = person?.personal_data?.nationality !== 'MX'
+    const isForeigner = isForeignNationality(person?.personal_data?.nationality)
     let requiredDocsArray: string[] = []
     if (Array.isArray(requiredDocTypesRaw)) {
       requiredDocsArray = requiredDocTypesRaw
@@ -1140,9 +1140,21 @@ const getMexicanStateName = (stateCode: string | undefined): string => {
   return option?.label || stateCode
 }
 
+// Nacionalidad mexicana: distintos flujos guardan el valor de formas diferentes
+// (MX / MEX / MEXICO / MEXICANA…). Normalizamos para no marcar como extranjero a
+// un mexicano. Sin dato => NO asumimos extranjero.
+const MEXICAN_NATIONALITY = new Set([
+  'MX', 'MEX', 'MEXICO', 'MÉXICO', 'MEXICANA', 'MEXICANO', 'MEXICAN', 'MXN',
+])
+function isForeignNationality(nat?: string | null): boolean {
+  const v = (nat ?? '').trim().toUpperCase()
+  if (v === '') return false
+  return !MEXICAN_NATIONALITY.has(v)
+}
+
 // Computed: check if applicant is foreigner
 const isForeigner = computed(() => {
-  return application.value?.applicant?.nationality !== 'MX'
+  return isForeignNationality(application.value?.applicant?.nationality)
 })
 
 // Computed: normalize required documents based on nationality
@@ -1207,7 +1219,7 @@ const requiresSignature = computed(() => {
   const requiredDocs = application.value?.required_documents ?? []
 
   // Handle new structure: {nationals: [], foreigners: []} or legacy flat array
-  const isForeigner = application.value?.applicant?.nationality !== 'MX'
+  const isForeigner = isForeignNationality(application.value?.applicant?.nationality)
   let requiredDocsArray: (string | { type: string })[] = []
   if (Array.isArray(requiredDocs)) {
     // Legacy format: flat array

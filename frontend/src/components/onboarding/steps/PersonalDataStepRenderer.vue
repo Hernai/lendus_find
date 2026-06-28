@@ -41,7 +41,7 @@ const form = ref<PersonalExtra>({
   gender: props.modelValue?.gender ?? '',
   is_mexican: props.modelValue?.is_mexican ?? 'SI',
   birth_state: props.modelValue?.birth_state ?? '',
-  nationality: props.modelValue?.nationality ?? 'MEX',
+  nationality: props.modelValue?.nationality ?? 'MX',
   rfc: props.modelValue?.rfc ?? '',
 })
 
@@ -169,7 +169,7 @@ watch(form, () => {
           type="button"
           class="seg-btn"
           :class="{ 'seg-btn--active': form.is_mexican === 'SI' }"
-          @click="form.is_mexican = 'SI'; form.nationality = 'MEX'"
+          @click="form.is_mexican = 'SI'; form.nationality = 'MX'"
         >Mexicano/a</button>
         <button
           type="button"
