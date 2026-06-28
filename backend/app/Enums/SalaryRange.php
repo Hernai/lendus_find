@@ -46,4 +46,27 @@ enum SalaryRange: string
             self::GT_15000 => 20000,
         };
     }
+
+    /**
+     * Reconstruye el rango a partir del ingreso mensual guardado.
+     *
+     * El onboarding captura un rango pero persiste solo el punto medio en
+     * monthly_income; esto permite volver a mostrar el rango original en el
+     * admin. Mapea por cota superior (tolera valores no exactos al midpoint).
+     */
+    public static function fromIncome(?float $income): ?self
+    {
+        if ($income === null) {
+            return null;
+        }
+
+        return match (true) {
+            $income <= 3000 => self::LT_3000,
+            $income <= 6000 => self::R_3001_6000,
+            $income <= 9000 => self::R_6001_9000,
+            $income <= 12000 => self::R_9001_12000,
+            $income <= 15000 => self::R_12001_15000,
+            default => self::GT_15000,
+        };
+    }
 }

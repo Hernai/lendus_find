@@ -119,6 +119,7 @@ interface Application {
   created_at: string
   updated_at: string
   assigned_to?: string
+  online_loans_count?: number | null
   completeness: ApplicationCompleteness
   required_documents: string[] | { nationals: string[]; foreigners: string[] }
   applicant: {
@@ -145,6 +146,10 @@ interface Application {
     passport_number?: string
     passport_issue_date?: string
     passport_expiry_date?: string
+    marital_status?: string
+    marital_status_label?: string
+    education_level?: string
+    education_level_label?: string
   }
   address: {
     street: string
@@ -164,6 +169,7 @@ interface Application {
     company_name?: string
     position?: string
     monthly_income: number
+    income_range_label?: string
     seniority_months?: number
   }
   loan: {
@@ -528,6 +534,7 @@ const fetchApplication = async () => {
       created_at: data.created_at,
       updated_at: data.updated_at,
       assigned_to: workflow?.assigned_to?.name ?? undefined,
+      online_loans_count: data.online_loans_count ?? null,
       required_documents: requiredDocTypesRaw,
       completeness: {
         personal_data: !!person,
@@ -562,7 +569,11 @@ const fetchApplication = async () => {
         gender: person.personal_data.gender || '',
         passport_number: person.identifications.passport_number || '',
         passport_issue_date: person.identifications.passport_issue_date || '',
-        passport_expiry_date: person.identifications.passport_expiry_date || ''
+        passport_expiry_date: person.identifications.passport_expiry_date || '',
+        marital_status: person.personal_data.marital_status || '',
+        marital_status_label: person.personal_data.marital_status_label || '',
+        education_level: person.personal_data.education_level || '',
+        education_level_label: person.personal_data.education_level_label || ''
       } : company ? {
         id: company.id,
         full_name: company.legal_name,
@@ -627,6 +638,7 @@ const fetchApplication = async () => {
         company_name: personEmployment.employer_name || '',
         position: personEmployment.job_title || '',
         monthly_income: personEmployment.monthly_income || 0,
+        income_range_label: personEmployment.income_range_label || '',
         seniority_months: personEmployment.start_date
           ? Math.floor((Date.now() - new Date(personEmployment.start_date).getTime()) / (1000 * 60 * 60 * 24 * 30))
           : (personEmployment.years_employed || 0) * 12 + (personEmployment.months_employed || 0)
@@ -2219,6 +2231,22 @@ onUnmounted(() => {
                       </span>
                     </p>
                   </div>
+                  <!-- Estado civil (capturado en el onboarding) -->
+                  <div class="group relative">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span class="w-2 h-2 rounded-full flex-shrink-0" :class="application.applicant.marital_status_label ? 'bg-blue-500' : 'bg-gray-300'"></span>
+                      <span class="text-xs text-gray-500">Estado civil</span>
+                    </div>
+                    <p class="font-medium text-gray-900">{{ application.applicant.marital_status_label || '—' }}</p>
+                  </div>
+                  <!-- Nivel educativo (capturado en el onboarding) -->
+                  <div class="group relative">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span class="w-2 h-2 rounded-full flex-shrink-0" :class="application.applicant.education_level_label ? 'bg-blue-500' : 'bg-gray-300'"></span>
+                      <span class="text-xs text-gray-500">Nivel educativo</span>
+                    </div>
+                    <p class="font-medium text-gray-900">{{ application.applicant.education_level_label || '—' }}</p>
+                  </div>
                   <!-- Email -->
                   <div class="group relative">
                     <div class="flex items-center gap-1.5 mb-0.5">
@@ -3012,8 +3040,23 @@ onUnmounted(() => {
                       <p class="font-medium text-gray-900">{{ formatTenureFromMonths(application.employment.seniority_months) }}</p>
                     </div>
                     <div class="col-span-2">
-                      <p class="text-xs text-gray-500">Ingreso Mensual</p>
-                      <p class="font-bold text-gray-900">{{ formatMoney(application.employment.monthly_income) }}</p>
+                      <p class="text-xs text-gray-500">
+                        Ingreso mensual<span v-if="application.employment.income_range_label"> (rango del onboarding)</span>
+                      </p>
+                      <p class="font-bold text-gray-900">
+                        {{ application.employment.income_range_label || formatMoney(application.employment.monthly_income) }}
+                        <span v-if="application.employment.income_range_label" class="text-xs font-normal text-gray-500">
+                          (≈ {{ formatMoney(application.employment.monthly_income) }}/mes)
+                        </span>
+                      </p>
+                    </div>
+                    <div class="col-span-2">
+                      <p class="text-xs text-gray-500">Créditos en línea (onboarding)</p>
+                      <p class="font-medium text-gray-900">
+                        {{ application.online_loans_count != null
+                          ? (application.online_loans_count === 10 ? '10 o más' : application.online_loans_count)
+                          : '—' }}
+                      </p>
                     </div>
                   </div>
                 </div>

@@ -499,7 +499,9 @@ export interface V2ApplicationPerson {
       flag?: string
     } | null
     marital_status: string | null
+    marital_status_label?: string | null
     education_level: string | null
+    education_level_label?: string | null
     dependents_count: number
   }
   identifications: {
@@ -581,6 +583,8 @@ export interface V2ApplicationEmployment {
   job_title: string | null
   department: string | null
   monthly_income: number | null
+  income_range?: string | null
+  income_range_label?: string | null
   additional_income: number | null
   payment_frequency: string | null
   start_date: string | null
@@ -694,6 +698,8 @@ export interface V2ApplicationDetail {
   submitted_at: string | null
   loan: V2ApplicationLoan
   required_documents: string[]
+  // Historial de créditos en línea captado en el onboarding (de metadata).
+  online_loans_count?: number | null
   applicant: V2ApplicationApplicant | null
   verification: V2ApplicationVerification
   documents: V2ApplicationDocument[]

@@ -721,6 +721,9 @@ class ApplicationController extends Controller
         // Required documents from product (for document checklist)
         $data['required_documents'] = $app->product?->required_documents ?? [];
 
+        // Historial de créditos en línea captado en el onboarding (metadata).
+        $data['online_loans_count'] = $app->metadata['online_loans_count'] ?? null;
+
         // =========================================================
         // APPLICANT - Person or Company with all related data
         // Structure mirrors profile API response
@@ -748,7 +751,13 @@ class ApplicationController extends Controller
                         'nationality' => $person->nationality,
                         'nationality_info' => \App\Helpers\CountryHelper::getCountryInfo($person->nationality),
                         'marital_status' => $person->marital_status,
+                        'marital_status_label' => $person->marital_status
+                            ? (\App\Enums\MaritalStatus::tryFrom($person->marital_status)?->label() ?? $person->marital_status)
+                            : null,
                         'education_level' => $person->education_level,
+                        'education_level_label' => $person->education_level
+                            ? (\App\Enums\EducationLevel::tryFrom($person->education_level)?->label() ?? $person->education_level)
+                            : null,
                         'dependents_count' => $person->dependents_count ?? 0,
                     ],
                     'identifications' => [
@@ -1581,6 +1590,10 @@ class ApplicationController extends Controller
             'job_title' => $employment->job_title,
             'department' => $employment->department,
             'monthly_income' => $employment->monthly_income,
+            // Rango de ingresos del onboarding reconstruido desde monthly_income
+            // (se captura como rango pero se persiste solo el punto medio).
+            'income_range' => \App\Enums\SalaryRange::fromIncome($employment->monthly_income)?->value,
+            'income_range_label' => \App\Enums\SalaryRange::fromIncome($employment->monthly_income)?->label(),
             'additional_income' => $employment->additional_income,
             'payment_frequency' => $employment->payment_frequency,
             'start_date' => $employment->start_date?->format('Y-m-d'),
