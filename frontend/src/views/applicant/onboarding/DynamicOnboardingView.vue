@@ -328,9 +328,26 @@ async function persistCurrentStep() {
   }
 }
 
+// Guardados en segundo plano en curso. El avance entre pasos es OPTIMISTA
+// (navega sin esperar el POST) para que cada paso se sienta instantáneo; los
+// datos ya quedan en el borrador local. Antes de ENVIAR esperamos que terminen.
+const pendingSaves: Promise<void>[] = []
+function saveInBackground() {
+  // persistCurrentStep captura step/valor de forma síncrona al invocarse,
+  // así que es seguro llamarlo antes de navegar.
+  const p = persistCurrentStep()
+  pendingSaves.push(p)
+  void p.finally(() => {
+    const i = pendingSaves.indexOf(p)
+    if (i >= 0) pendingSaves.splice(i, 1)
+  })
+}
+
 async function finishOnboarding() {
   try {
     const app = await ensureApplication()
+    // Garantiza que todos los guardados optimistas terminaron antes de enviar.
+    await Promise.all(pendingSaves)
     await persistCurrentStep()
     if (app?.id) {
       try {
@@ -355,12 +372,13 @@ watch(currentValue, async (v, prev) => {
   if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer)
   autoAdvanceTimer = setTimeout(async () => {
     if (!canContinue.value) return
-    await persistCurrentStep()
     const nextIdx = currentIndex.value + 1
     if (nextIdx >= steps.value.length) {
       await finishOnboarding()
       return
     }
+    // Avance optimista: guarda en segundo plano y navega de inmediato.
+    saveInBackground()
     sheetOpen.value = false
     const nextId = steps.value[nextIdx]!.id
     await router.push({ name: 'm-onboarding-step', params: { stepId: nextId } })
@@ -369,12 +387,13 @@ watch(currentValue, async (v, prev) => {
 
 async function next() {
   if (!canContinue.value || !currentStep.value) return
-  await persistCurrentStep()
   const nextIdx = currentIndex.value + 1
   if (nextIdx >= steps.value.length) {
     await finishOnboarding()
     return
   }
+  // Avance optimista: guarda en segundo plano y navega de inmediato.
+  saveInBackground()
   const nextId = steps.value[nextIdx]!.id
   await router.push({ name: 'm-onboarding-step', params: { stepId: nextId } })
 }
