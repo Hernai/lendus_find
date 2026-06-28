@@ -98,7 +98,8 @@ class DebugQueryLog
 
     private function shouldLog(Request $request): bool
     {
-        if (env('DEBUG_QUERIES', false)) {
+        // Vía config (no env directo) para que funcione con config:cache en prod.
+        if (config('app.debug_queries', false)) {
             return true;
         }
 

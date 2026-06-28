@@ -164,4 +164,25 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Debug Queries — IPs permitidas
+    |--------------------------------------------------------------------------
+    |
+    | IPs que pueden activar el profiling de queries por request enviando el
+    | header `X-Debug-Queries: 1` (ver App\Http\Middleware\DebugQueryLog). Así
+    | se mide UN endpoint en prod sin el overhead global de DEBUG_QUERIES=1.
+    | CSV en el env: DEBUG_QUERIES_ALLOWED_IPS="187.x.x.x,201.x.x.x"
+    |
+    | `debug_queries` = toggle global (loguea TODOS los requests). Se lee vía
+    | config (no env directo) para que funcione con `config:cache` en prod.
+    |
+    */
+    'debug_queries' => env('DEBUG_QUERIES', false),
+
+    'debug_queries_allowed_ips' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('DEBUG_QUERIES_ALLOWED_IPS', ''))
+    ))),
+
 ];
