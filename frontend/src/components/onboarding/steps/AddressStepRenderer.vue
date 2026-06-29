@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useTenantStore } from '@/stores/tenant'
+import { lookupPostalCode } from '@/services/v2/postalCode.service'
 
 /**
  * Step `address`: domicilio completo (calle, número, colonia, ciudad, estado,
@@ -67,6 +68,76 @@ const housingOptions = [
 
 const isCpValid = computed(() => /^\d{5}$/.test(form.value.postal_code))
 
+// --- Autollenado por código postal (SEPOMEX) ---
+const cpLoading = ref(false)
+const cpNotFound = ref(false)
+const coloniaOptions = ref<string[]>([])
+// Cuando hay colonias del CP, mostramos un select; "Otra" revela el texto libre.
+const coloniaIsOther = ref(false)
+let cpTimer: ReturnType<typeof setTimeout> | null = null
+let lastLookupCp = ''
+
+// Normaliza para comparar nombres de estado (mayúsculas, sin acentos).
+const norm = (s: string) =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim()
+
+function matchStateValue(estado: string): string {
+  const target = norm(estado)
+  const found = mexicanStates.value.find(
+    (s) => norm(s.value) === target || norm(s.label) === target,
+  )
+  return found?.value ?? form.value.state
+}
+
+async function lookupCp(cp: string) {
+  if (cp === lastLookupCp) return
+  lastLookupCp = cp
+  cpLoading.value = true
+  cpNotFound.value = false
+  try {
+    const res = await lookupPostalCode(cp)
+    if (!res) {
+      cpNotFound.value = true
+      coloniaOptions.value = []
+      return
+    }
+    // Autollenar estado/municipio/ciudad.
+    form.value.state = matchStateValue(res.estado)
+    form.value.municipality = res.municipio || form.value.municipality
+    if (res.ciudad) form.value.city = res.ciudad
+    // Colonias: si hay una sola, la fijamos; si hay varias, dropdown.
+    coloniaOptions.value = res.colonias.map((c) => c.nombre)
+    coloniaIsOther.value = false
+    if (coloniaOptions.value.length === 1) {
+      form.value.neighborhood = coloniaOptions.value[0]!
+    } else if (!coloniaOptions.value.includes(form.value.neighborhood)) {
+      form.value.neighborhood = ''
+    }
+  } finally {
+    cpLoading.value = false
+  }
+}
+
+// Dispara la consulta (con debounce) cuando el CP tiene 5 dígitos.
+watch(() => form.value.postal_code, (cp) => {
+  if (cpTimer) clearTimeout(cpTimer)
+  if (!/^\d{5}$/.test(cp)) {
+    cpNotFound.value = false
+    return
+  }
+  cpTimer = setTimeout(() => lookupCp(cp), 350)
+})
+
+function onColoniaSelect(value: string) {
+  if (value === '__other') {
+    coloniaIsOther.value = true
+    form.value.neighborhood = ''
+  } else {
+    coloniaIsOther.value = false
+    form.value.neighborhood = value
+  }
+}
+
 const isComplete = computed(() => {
   const f = form.value
   return (
@@ -105,6 +176,8 @@ watch(form, () => {
       <div class="field" :class="{ 'field--ok': isCpValid, 'field--err': form.postal_code.length === 5 && !isCpValid }">
         <label>Código postal</label>
         <input v-model="form.postal_code" type="text" inputmode="numeric" maxlength="5" placeholder="06700" />
+        <span v-if="cpLoading" class="cp-hint">Buscando colonia…</span>
+        <span v-else-if="cpNotFound" class="cp-hint cp-hint--warn">CP no encontrado — llena los campos a mano.</span>
       </div>
       <div class="field">
         <label>Estado</label>
@@ -128,7 +201,17 @@ watch(form, () => {
 
     <div class="field">
       <label>Colonia</label>
-      <input v-model="form.neighborhood" type="text" placeholder="Ej. Roma Norte" />
+      <!-- Si el CP trajo colonias, dropdown; "Otra" revela el texto libre. -->
+      <select
+        v-if="coloniaOptions.length > 0 && !coloniaIsOther"
+        :value="form.neighborhood"
+        @change="onColoniaSelect(($event.target as HTMLSelectElement).value)"
+      >
+        <option value="" disabled>Selecciona tu colonia</option>
+        <option v-for="c in coloniaOptions" :key="c" :value="c">{{ c }}</option>
+        <option value="__other">Otra (escribir)…</option>
+      </select>
+      <input v-else v-model="form.neighborhood" type="text" placeholder="Ej. Roma Norte" />
     </div>
 
     <div class="field">
@@ -202,6 +285,8 @@ watch(form, () => {
 .field input:focus, .field select:focus { border-color: var(--tenant-primary, #5B21B6); }
 .field--ok input { border-color: #16a34a; }
 .field--err input { border-color: #ef4444; }
+.cp-hint { font-size: 12px; color: #64748b; }
+.cp-hint--warn { color: #b45309; }
 
 .field-inline {
   display: flex; align-items: center; gap: 6px;
