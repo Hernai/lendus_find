@@ -84,6 +84,8 @@ Route::middleware(['tenant', 'metadata', 'etag'])->prefix('v2')->group(function 
     Route::get('/config', [V2ConfigController::class, 'index']);
     Route::get('/public/manifest', V2ManifestController::class);
     Route::get('/public/version', V2VersionController::class);
+    // Catálogo SEPOMEX: estado/municipio/colonias por CP (autollenado de domicilio).
+    Route::get('/public/postal-codes/{cp}', [\App\Http\Controllers\Api\V2\Public\PostalCodeController::class, 'show']);
 });
 
 // Health check no requiere tenant (es status del backend).
