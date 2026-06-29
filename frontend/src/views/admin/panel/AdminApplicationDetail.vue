@@ -482,8 +482,14 @@ useWebSocket({
 
 // Fetch application data from API
 const fetchApplication = async () => {
-  loading.value = true
-  error.value = ''
+  // El spinner de página completa SOLO se muestra en la carga inicial (cuando
+  // aún no hay datos). Los refrescos tras acciones/eventos actualizan la vista
+  // EN SITIO, sin recargar toda la pantalla (evita el parpadeo visual).
+  const initialLoad = application.value === null
+  if (initialLoad) {
+    loading.value = true
+    error.value = ''
+  }
 
   try {
     const appId = route.params.id as string
@@ -740,9 +746,15 @@ const fetchApplication = async () => {
     console.error('Error message:', e instanceof Error ? e.message : String(e))
     console.error('Error stack:', e instanceof Error ? e.stack : 'No stack')
     log.error('Error al cargar solicitud', { error: e })
-    error.value = 'Error al cargar la solicitud'
+    // En un refresco no blanqueamos la vista con el estado de error; mantenemos
+    // los datos actuales (el error inicial sí se muestra).
+    if (initialLoad) {
+      error.value = 'Error al cargar la solicitud'
+    }
   } finally {
-    loading.value = false
+    if (initialLoad) {
+      loading.value = false
+    }
   }
 }
 
