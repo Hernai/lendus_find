@@ -165,8 +165,8 @@ class MoneyCapitalSeeder extends Seeder
 
     private function createBranding(Tenant $tenant): void
     {
-        TenantBranding::updateOrCreate(
-            ['tenant_id' => $tenant->id],
+        TenantBranding::seedFor(
+            $tenant->id,
             [
                 'id' => TenantBranding::where('tenant_id', $tenant->id)->value('id') ?? Str::uuid(),
                 'primary_color' => '#371F91',

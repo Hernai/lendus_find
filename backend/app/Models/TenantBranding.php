@@ -15,6 +15,7 @@ class TenantBranding extends Model
 
     protected $fillable = [
         'tenant_id',
+        'is_locked',
         'primary_color',
         'secondary_color',
         'accent_color',
@@ -41,6 +42,7 @@ class TenantBranding extends Model
     ];
 
     protected $casts = [
+        'is_locked' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -51,6 +53,24 @@ class TenantBranding extends Model
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    /**
+     * Sembrar branding de fábrica RESPETANDO el lock: si el branding del tenant
+     * ya fue marcado como definitivo (is_locked) desde el admin, no se pisa.
+     * Lo usan los seeders para no revertir branding personalizado en cada deploy.
+     *
+     * @param  array<string, mixed>  $attrs
+     */
+    public static function seedFor(string $tenantId, array $attrs): void
+    {
+        $existing = static::where('tenant_id', $tenantId)->first();
+
+        if ($existing && $existing->is_locked) {
+            return; // branding definitivo: no sobreescribir.
+        }
+
+        static::updateOrCreate(['tenant_id' => $tenantId], $attrs);
     }
 
     /**

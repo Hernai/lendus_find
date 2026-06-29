@@ -291,9 +291,11 @@ class TenantController extends Controller
             'custom_css' => 'nullable|string|max:10000',
         ]);
 
+        // Marcamos el branding como definitivo: los seeders dejan de
+        // sobreescribirlo en los deploys (ver TenantBranding::seedFor).
         $branding = TenantBranding::updateOrCreate(
             ['tenant_id' => $tenant->id],
-            $validated
+            array_merge($validated, ['is_locked' => true])
         );
 
         return $this->success([
