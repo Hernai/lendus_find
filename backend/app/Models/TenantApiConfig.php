@@ -92,6 +92,9 @@ class TenantApiConfig extends Model
         'loan_disbursement' => 'Dispersión de préstamos',
         'payment_collection' => 'Cobranza',
         'geocoding' => 'Geocodificación / Mapas',
+        'sdk' => 'SDK biométrico',
+        'phone_risk' => 'Riesgo telefónico',
+        'email_risk' => 'Riesgo de correo',
     ];
 
     /**
@@ -112,6 +115,9 @@ class TenantApiConfig extends Model
         'loan_disbursement' => 'Dispersión de préstamos a cuentas bancarias.',
         'payment_collection' => 'Cobranza y conciliación de pagos.',
         'geocoding' => 'Geolocalización y autollenado de domicilio (coordenadas → dirección) en el onboarding.',
+        'sdk' => 'SDK biométrico móvil (captura de liveness/rostro en la app).',
+        'phone_risk' => 'Riesgo del teléfono (score y nivel) tras confirmar el OTP.',
+        'email_risk' => 'Riesgo del correo (score y deliverability) tras confirmar el OTP.',
     ];
 
     /**
@@ -160,7 +166,7 @@ class TenantApiConfig extends Model
         'vonage' => ['sms', 'whatsapp'],
         // Nubarium OTP soporta SMS y Email; WhatsApp NO (ver NubariumOtpService).
         // 'bank_validation' (CLABE/débito) es API Plus, distinto a KYC/identidad.
-        'nubarium' => ['kyc', 'bank_validation', 'sms', 'email'],
+        'nubarium' => ['kyc', 'sdk', 'bank_validation', 'sms', 'email', 'phone_risk', 'email_risk'],
         'smtp' => ['email'],
         'mailgun' => ['email'],
         'sendgrid' => ['email'],

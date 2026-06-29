@@ -435,6 +435,59 @@ export async function getNubariumValidation(
   return response.data
 }
 
+/** Una evaluación de riesgo de contacto (phone/email risk). */
+export interface RiskContactItem {
+  id: string
+  type: string
+  provider: string
+  identifier: string | null
+  status: 'completed' | 'failed'
+  score: number | null
+  level: string | null
+  recommendation: string | null
+  result: Record<string, unknown> | null
+  error: string | null
+  created_at: string | null
+}
+
+/** Verificación de campo (KYC/biometría) tal como la devuelve el detalle. */
+export interface RiskFieldVerification {
+  status?: string
+  verified?: boolean
+  method?: string | null
+  method_label?: string | null
+  verified_at?: string | null
+  metadata?: Record<string, unknown> | null
+}
+
+/** Vista consolidada de riesgos/validaciones del solicitante. */
+export interface ApplicationRisks {
+  kyc_status: string | null
+  kyc_verified_at: string | null
+  contact_risk: { phone: RiskContactItem | null; email: RiskContactItem | null }
+  identity: Record<string, RiskFieldVerification>
+  biometrics: Record<string, RiskFieldVerification>
+  bank: Array<{
+    bank_name: string
+    clabe: string
+    is_verified: boolean
+    clabe_validation: Record<string, unknown> | null
+  }>
+  pld: unknown
+  credit_bureau: unknown
+  circulo: unknown
+}
+
+/** Consolidado de riesgos/validaciones Nubarium del solicitante (tab "Riesgos"). */
+export async function getRisks(
+  applicationId: string
+): Promise<V2ApiResponse<ApplicationRisks>> {
+  const response = await api.get<V2ApiResponse<ApplicationRisks>>(
+    `${BASE_PATH}/${applicationId}/risks`
+  )
+  return response.data
+}
+
 // =====================================================
 // Data Verification Operations
 // =====================================================
@@ -496,6 +549,7 @@ export default {
   updateBankAccount,
   validateBankAccountClabe,
   getNubariumValidation,
+  getRisks,
   // Data verification
   verifyData,
 }

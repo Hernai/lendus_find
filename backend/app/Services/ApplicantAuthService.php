@@ -352,6 +352,8 @@ class ApplicantAuthService
                 // Record phone/email verification in DataVerification if person exists
                 if ($wasJustVerified) {
                     $this->recordIdentityVerification($identity->account, $type, $identifier);
+                    // Riesgo de contacto (Nubarium) tras confirmar el OTP, en cola.
+                    \App\Jobs\RunContactRiskJob::dispatch($identity->account->id, $type)->afterCommit();
                 }
 
                 return $this->createLoginResponse($identity->account, 'OTP_' . $type);
@@ -640,6 +642,9 @@ class ApplicantAuthService
         // Record phone/email verification (new accounts are verified via OTP)
         // Note: At this point person doesn't exist yet, so we'll record when person is created
         // The verification will be recorded when the profile is created and linked
+
+        // Riesgo de contacto (Nubarium) tras confirmar el OTP, en cola.
+        \App\Jobs\RunContactRiskJob::dispatch($account->id, $type)->afterCommit();
 
         return $this->createLoginResponse($account, 'OTP_' . $type, true);
     }

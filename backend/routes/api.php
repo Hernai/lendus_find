@@ -428,6 +428,8 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
         Route::get('/applications/unassigned', [StaffAppController::class, 'unassigned']);
         Route::get('/applications/my-queue', [StaffAppController::class, 'myQueue']);
         Route::get('/applications/{id}', [StaffAppController::class, 'show']);
+        // Vista consolidada de riesgos/validaciones Nubarium (tab "Riesgos").
+        Route::get('/applications/{id}/risks', [StaffAppController::class, 'risks']);
         // Audit logs por applicant/application eliminados: el feed unificado
         // los expone via /applications/{id}/activity?kind=audit.
 

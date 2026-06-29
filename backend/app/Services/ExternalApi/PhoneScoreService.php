@@ -3,44 +3,48 @@
 namespace App\Services\ExternalApi;
 
 use App\Models\Tenant;
-use Illuminate\Support\Facades\Log;
+use App\Services\ExternalApi\Nubarium\NubariumRiskService;
 
 /**
- * Stub de Phone Score (Nubarium Phone Risk).
- *
- * Devuelve un score de riesgo del teléfono del solicitante. Cuando
- * MoneyCapital provea credenciales reales de Nubarium Phone Score,
- * este servicio se conecta. Por ahora retorna LOW por defecto.
- *
- * Credenciales esperadas en TenantApiConfig:
- *  - provider='nubarium_phone_score', service_type='phone_score'
- *  - extra_config: { api_url, api_key }
+ * Phone Score (Nubarium Phone Risk). Wrapper legacy: delega en
+ * NubariumRiskService (API Plus real). El flujo nuevo persiste el resultado vía
+ * RunContactRiskJob → RiskAssessment; este wrapper se mantiene por compatibilidad.
  */
 class PhoneScoreService
 {
     /**
      * Retorna el score y nivel de riesgo del teléfono.
      *
-     * @return array{score: int, risk: string, factors: array<int, string>}
+     * @return array{score: ?int, risk: string, factors: array<int, string>}
      */
     public function score(string $phone, ?Tenant $tenant = null): array
     {
-        $config = $tenant?->getApiConfig('nubarium_phone_score', 'phone_score');
+        $default = ['score' => null, 'risk' => 'UNKNOWN', 'factors' => []];
 
-        if (! $config || ! ($config->extra_config['api_url'] ?? null)) {
-            Log::info('PhoneScore stub: returning default LOW risk', ['phone' => $phone]);
-            return [
-                'score' => 700,
-                'risk' => 'LOW',
-                'factors' => [],
-            ];
+        if (! $tenant) {
+            return $default;
         }
 
-        // TODO: implementar llamada real a Nubarium Phone Risk.
+        $res = (new NubariumRiskService($tenant))->phoneRisk($phone);
+        if (! ($res['success'] ?? false)) {
+            return $default;
+        }
+
         return [
-            'score' => 700,
-            'risk' => 'LOW',
-            'factors' => [],
+            'score' => $res['score'] ?? null,
+            'risk' => self::mapLevel($res['level'] ?? null),
+            'factors' => array_filter([$res['recommendation'] ?? null]),
         ];
+    }
+
+    /** Normaliza el nivel de Nubarium (very-low/low/moderate/high) a LOW/MEDIUM/HIGH. */
+    private static function mapLevel(?string $level): string
+    {
+        return match (strtolower((string) $level)) {
+            'very-low', 'low' => 'LOW',
+            'moderate', 'medium' => 'MEDIUM',
+            'high', 'very-high' => 'HIGH',
+            default => 'UNKNOWN',
+        };
     }
 }

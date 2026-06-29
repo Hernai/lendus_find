@@ -1509,6 +1509,83 @@ class ApplicationController extends Controller
     }
 
     /**
+     * Vista consolidada de riesgos/validaciones de Nubarium del solicitante.
+     * Agrega lo ya persistido (no dispara nada). Estructura extensible para
+     * sumar más adelante PLD, Buró y Círculo de Crédito.
+     *
+     * GET /v2/staff/applications/{id}/risks
+     */
+    public function risks(Request $request, string $id): JsonResponse
+    {
+        /** @var StaffAccount $staff */
+        $staff = $request->user();
+
+        $app = Application::where('id', $id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
+            ->with(['person.account', 'person.bankAccounts'])
+            ->first();
+
+        if (!$app) {
+            return $this->notFound('Solicitud no encontrada.');
+        }
+
+        $person = $app->person;
+        $account = $person?->account;
+
+        // Riesgo de contacto (phone_risk / email_risk) — el más reciente por tipo.
+        $contact = collect();
+        if ($account || $person) {
+            $contact = \App\Models\RiskAssessment::query()
+                ->where(function ($q) use ($account, $person) {
+                    if ($account) {
+                        $q->orWhere('account_id', $account->id);
+                    }
+                    if ($person) {
+                        $q->orWhere('person_id', $person->id);
+                    }
+                })
+                ->orderByDesc('created_at')
+                ->get()
+                ->groupBy('type')
+                ->map(fn ($g) => $g->first()->toApiArray());
+        }
+
+        // KYC / biometría: reutilizamos las verificaciones de campo ya calculadas.
+        $fields = $this->getFieldVerifications($app);
+        $identity = collect($fields)
+            ->filter(fn ($v, $k) => in_array($k, ['curp', 'rfc'], true) || str_starts_with($k, 'ine'))
+            ->all();
+        $biometrics = collect($fields)->only(['face_match', 'liveness'])->all();
+
+        // Validación bancaria (CLABE) persistida en la cuenta.
+        $bank = ($person?->bankAccounts ?? collect())
+            ->map(fn ($ba) => [
+                'bank_name' => $ba->bank_name,
+                'clabe' => $this->maskClabe($ba->clabe),
+                'is_verified' => $ba->is_verified,
+                'clabe_validation' => $ba->verification_data['nubarium_clabe'] ?? null,
+            ])
+            ->filter(fn ($b) => $b['clabe_validation'] !== null)
+            ->values();
+
+        return $this->success([
+            'kyc_status' => $person?->kyc_status,
+            'kyc_verified_at' => $person?->kyc_verified_at?->toIso8601String(),
+            'contact_risk' => [
+                'phone' => $contact['phone_risk'] ?? null,
+                'email' => $contact['email_risk'] ?? null,
+            ],
+            'identity' => $identity,
+            'biometrics' => $biometrics, // resultados del SDK biométrico
+            'bank' => $bank,
+            // Estructura lista para futuro (PLD / Buró / Círculo):
+            'pld' => null,
+            'credit_bureau' => null,
+            'circulo' => null,
+        ]);
+    }
+
+    /**
      * Mask CLABE for display (show only last 4 digits).
      */
     private function maskClabe(?string $clabe): string

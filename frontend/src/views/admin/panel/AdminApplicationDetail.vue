@@ -10,6 +10,7 @@ import {
   BankAccountsSection,
   NotesSection,
   ApplicantDataSection,
+  RisksSection,
 } from '@/components/admin/application-detail'
 import { v2 } from '@/services/v2'
 import { platform } from '@/platform'
@@ -403,6 +404,7 @@ const tabs = [
   { id: 'documents', label: 'Documentos' },
   { id: 'references', label: 'Referencias' },
   { id: 'bank_accounts', label: 'Cuentas Bancarias' },
+  { id: 'risks', label: 'Riesgos' },
   // Tab unica que reemplaza a Historial + Actividad + Logs API. Lee del
   // endpoint /v2/staff/applications/{id}/activity (feed unificado).
   { id: 'activity', label: 'Actividad' },
@@ -3225,6 +3227,11 @@ onUnmounted(() => {
               @unverify="openBankAccountUnverifyModal"
               @refresh="fetchApplication"
             />
+          </div>
+
+          <!-- Risks Tab: consolidado de riesgos/validaciones Nubarium -->
+          <div v-if="activeTab === 'risks'">
+            <RisksSection :application-id="application.id" />
           </div>
 
           <!-- Activity Tab unificado: eventos de negocio + auditoria + integraciones -->
