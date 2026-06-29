@@ -560,6 +560,7 @@ export interface V2ApplicationAddress {
   exterior_number: string
   interior_number: string | null
   neighborhood: string
+  city: string | null
   municipality: string
   state: string
   postal_code: string

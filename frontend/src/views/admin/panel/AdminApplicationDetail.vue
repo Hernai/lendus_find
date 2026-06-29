@@ -133,6 +133,8 @@ interface Application {
     curp: string
     rfc: string
     ine_clave?: string
+    ine_ocr?: string
+    ine_folio?: string
     birth_date: string
     birth_state?: string
     nationality: string
@@ -156,6 +158,7 @@ interface Application {
     ext_number: string
     int_number?: string
     neighborhood: string
+    city?: string
     postal_code: string
     municipality: string
     state: string
@@ -555,6 +558,8 @@ const fetchApplication = async () => {
         curp: person.identifications.curp || '',
         rfc: person.identifications.rfc || '',
         ine_clave: person.identifications.ine_clave || '',
+        ine_ocr: person.identifications.ine_ocr || '',
+        ine_folio: person.identifications.ine_folio || '',
         birth_date: person.personal_data.birth_date || '',
         birth_state: person.personal_data.birth_state || '',
         nationality: person.personal_data.nationality || '',
@@ -609,6 +614,7 @@ const fetchApplication = async () => {
         ext_number: personAddress.exterior_number,
         int_number: personAddress.interior_number || undefined,
         neighborhood: personAddress.neighborhood,
+        city: personAddress.city || undefined,
         postal_code: personAddress.postal_code,
         municipality: personAddress.municipality,
         state: personAddress.state,
@@ -2767,6 +2773,25 @@ onUnmounted(() => {
                       Verificado automáticamente - No modificable
                     </p>
                   </div>
+                  <!-- OCR del INE (capturado en onboarding sin proveedor KYC) -->
+                  <div v-if="application.applicant.ine_ocr" class="group relative">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span class="w-2 h-2 rounded-full flex-shrink-0 bg-blue-500"></span>
+                      <span class="text-xs text-gray-500">OCR (INE)</span>
+                    </div>
+                    <p class="font-mono text-sm text-gray-900">{{ application.applicant.ine_ocr }}</p>
+                  </div>
+                  <!-- Folio / CIC del INE -->
+                  <div
+                    v-if="application.applicant.ine_folio && application.applicant.ine_folio !== application.applicant.ine_clave"
+                    class="group relative"
+                  >
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span class="w-2 h-2 rounded-full flex-shrink-0 bg-blue-500"></span>
+                      <span class="text-xs text-gray-500">Folio (INE)</span>
+                    </div>
+                    <p class="font-mono text-sm text-gray-900">{{ application.applicant.ine_folio }}</p>
+                  </div>
                   <!-- Fecha Nacimiento -->
                   <div class="group relative">
                     <div class="flex items-center gap-1.5 mb-0.5">
@@ -2836,6 +2861,16 @@ onUnmounted(() => {
                     </p>
                     <p v-if="isFieldLocked('birth_date')" class="text-[10px] text-gray-500 mt-0.5">
                       Verificado automáticamente - No modificable
+                    </p>
+                  </div>
+                  <!-- Género (capturado en el onboarding) -->
+                  <div class="group relative">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                      <span class="w-2 h-2 rounded-full flex-shrink-0" :class="application.applicant.gender ? 'bg-blue-500' : 'bg-gray-300'"></span>
+                      <span class="text-xs text-gray-500">Género</span>
+                    </div>
+                    <p class="font-medium text-gray-900">
+                      {{ application.applicant.gender === 'M' ? 'Masculino' : application.applicant.gender === 'F' ? 'Femenino' : (application.applicant.gender || '—') }}
                     </p>
                   </div>
                 </div>
@@ -2924,6 +2959,10 @@ onUnmounted(() => {
                     <div>
                       <p class="text-xs text-gray-500">C.P.</p>
                       <p class="font-medium text-gray-900">{{ application.address.postal_code || '—' }}</p>
+                    </div>
+                    <div v-if="application.address.city && application.address.city !== application.address.municipality">
+                      <p class="text-xs text-gray-500">Ciudad</p>
+                      <p class="font-medium text-gray-900">{{ application.address.city }}</p>
                     </div>
                     <div>
                       <p class="text-xs text-gray-500">Municipio/Estado</p>

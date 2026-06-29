@@ -768,7 +768,10 @@ class ApplicationController extends Controller
                         'curp_verified' => $identifications->firstWhere('type', 'CURP')?->status === 'VERIFIED',
                         'rfc' => $rfc,
                         'rfc_verified' => $identifications->firstWhere('type', 'RFC')?->status === 'VERIFIED',
-                        'ine_clave' => $ineData?->identifier_value,
+                        // INE: clave de elector, OCR y folio (CIC) viven en document_data.
+                        'ine_clave' => ($ineData?->document_data['clave_elector'] ?? null) ?: $ineData?->identifier_value,
+                        'ine_ocr' => $ineData?->document_data['ocr'] ?? null,
+                        'ine_folio' => $ineData?->document_data['cic'] ?? $ineData?->identifier_value,
                         'ine_verified' => $ineData?->status === 'VERIFIED',
                         // Passport data for foreigners
                         'passport_number' => $passportData?->identifier_value,
@@ -1563,6 +1566,7 @@ class ApplicationController extends Controller
             'exterior_number' => $address->exterior_number,
             'interior_number' => $address->interior_number,
             'neighborhood' => $address->neighborhood,
+            'city' => $address->city,
             'municipality' => $address->municipality,
             'state' => $address->state,
             'postal_code' => $address->postal_code,
