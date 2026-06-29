@@ -33,6 +33,7 @@ use App\Http\Controllers\Api\V2\Applicant\CorrectionController as ApplicantCorre
 use App\Http\Controllers\Api\V2\Applicant\DocumentController as ApplicantDocController;
 use App\Http\Controllers\Api\V2\Applicant\DocumentHistoryController as ApplicantDocHistoryController;
 use App\Http\Controllers\Api\V2\Applicant\ProfileController as ApplicantProfileController;
+use App\Http\Controllers\Api\V2\Applicant\GeoController as ApplicantGeoController;
 use App\Http\Controllers\Api\V2\Applicant\KycController as ApplicantKycController;
 use App\Http\Controllers\Api\V2\Staff\ApplicationController as StaffAppController;
 use App\Http\Controllers\Api\V2\Staff\DocumentController as StaffDocController;
@@ -178,6 +179,9 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'log.request'])
         // Profile Management
         // =============================================
         Route::get('/profile', [ApplicantProfileController::class, 'show']);
+        // Geolocalización: "Estoy en mi domicilio" → dirección (Google si está
+        // configurado; si no, devuelve solo coordenadas y el CP autollena).
+        Route::post('/geo/reverse', [ApplicantGeoController::class, 'reverse']);
         Route::prefix('profile')->group(function () {
             // Personal data
             Route::patch('/personal-data', [ApplicantProfileController::class, 'updatePersonalData']);

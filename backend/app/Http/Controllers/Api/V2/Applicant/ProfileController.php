@@ -645,6 +645,9 @@ class ProfileController extends Controller
             'housing_type' => 'required|string',
             'years_at_address' => 'nullable|integer|min:0|max:99',
             'months_at_address' => 'nullable|integer|min:0|max:11',
+            // Coordenadas opcionales ("Estoy en mi domicilio").
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
         ]);
 
         // Map frontend field names to database column names
@@ -660,6 +663,8 @@ class ProfileController extends Controller
             'housing_type' => $this->normalizeHousingType($validated['housing_type']),
             'years_at_address' => $validated['years_at_address'] ?? null,
             'months_at_address' => $validated['months_at_address'] ?? null,
+            'latitude' => $validated['latitude'] ?? null,
+            'longitude' => $validated['longitude'] ?? null,
         ];
 
         $account = $request->user();

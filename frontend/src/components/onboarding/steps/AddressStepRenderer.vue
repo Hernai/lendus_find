@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useTenantStore } from '@/stores/tenant'
 import { lookupPostalCode } from '@/services/v2/postalCode.service'
+import { reverseGeocode } from '@/services/v2/geo.service'
 
 /**
  * Step `address`: domicilio completo (calle, número, colonia, ciudad, estado,
@@ -20,6 +21,8 @@ interface AddressData {
   housing_type: 'OWN' | 'RENT' | 'FAMILY' | 'OTHER' | ''
   years_at_address: number
   months_at_address: number
+  latitude?: number | null
+  longitude?: number | null
 }
 
 const props = defineProps<{
@@ -52,6 +55,8 @@ const form = ref<AddressData>({
   housing_type: props.modelValue?.housing_type ?? '',
   years_at_address: props.modelValue?.years_at_address ?? 0,
   months_at_address: props.modelValue?.months_at_address ?? 0,
+  latitude: props.modelValue?.latitude ?? null,
+  longitude: props.modelValue?.longitude ?? null,
 })
 
 const mexicanStates = computed(() => {
@@ -108,14 +113,59 @@ async function lookupCp(cp: string) {
     // Colonias: si hay una sola, la fijamos; si hay varias, dropdown.
     coloniaOptions.value = res.colonias.map((c) => c.nombre)
     coloniaIsOther.value = false
-    if (coloniaOptions.value.length === 1) {
+    if (form.value.neighborhood && !coloniaOptions.value.includes(form.value.neighborhood)) {
+      // Conserva una colonia ya puesta (p.ej. de geolocalización) como opción.
+      coloniaOptions.value.unshift(form.value.neighborhood)
+    } else if (!form.value.neighborhood && coloniaOptions.value.length === 1) {
       form.value.neighborhood = coloniaOptions.value[0]!
-    } else if (!coloniaOptions.value.includes(form.value.neighborhood)) {
-      form.value.neighborhood = ''
     }
   } finally {
     cpLoading.value = false
   }
+}
+
+// --- "Estoy en mi domicilio": geolocalización del dispositivo ---
+const geoLoading = ref(false)
+const geoError = ref('')
+const geoCaptured = ref(false)
+
+function useMyLocation() {
+  geoError.value = ''
+  if (!('geolocation' in navigator)) {
+    geoError.value = 'Tu dispositivo no permite geolocalización.'
+    return
+  }
+  geoLoading.value = true
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const { latitude, longitude } = pos.coords
+      form.value.latitude = latitude
+      form.value.longitude = longitude
+      try {
+        const res = await reverseGeocode(latitude, longitude)
+        if (res && res.source === 'google') {
+          if (res.state) form.value.state = matchStateValue(res.state)
+          if (res.municipality) form.value.municipality = res.municipality
+          if (res.city) form.value.city = res.city
+          if (res.neighborhood) form.value.neighborhood = res.neighborhood
+          if (res.street) form.value.street = res.street
+          if (res.ext_number) form.value.ext_number = res.ext_number
+          // El CP dispara además el autollenado de colonias (SEPOMEX).
+          if (res.postal_code) form.value.postal_code = res.postal_code
+        }
+        geoCaptured.value = true
+      } finally {
+        geoLoading.value = false
+      }
+    },
+    (err) => {
+      geoLoading.value = false
+      geoError.value = err.code === err.PERMISSION_DENIED
+        ? 'Permiso de ubicación denegado. Actívalo o llena tu domicilio a mano.'
+        : 'No se pudo obtener tu ubicación. Intenta de nuevo.'
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
+  )
 }
 
 // Dispara la consulta (con debounce) cuando el CP tiene 5 dígitos.
@@ -170,6 +220,19 @@ watch(form, () => {
     <p class="step-hint">
       Ingresa los datos de tu domicilio actual. Debe coincidir con tu
       comprobante de domicilio.
+    </p>
+
+    <!-- Estoy en mi domicilio: geolocaliza y autollena -->
+    <button type="button" class="geo-btn" :disabled="geoLoading" @click="useMyLocation">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 21s7-5.7 7-11a7 7 0 10-14 0c0 5.3 7 11 7 11z" stroke="currentColor" stroke-width="1.6" />
+        <circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="1.6" />
+      </svg>
+      <span>{{ geoLoading ? 'Obteniendo tu ubicación…' : 'Estoy en mi domicilio' }}</span>
+    </button>
+    <p v-if="geoError" class="cp-hint cp-hint--warn">{{ geoError }}</p>
+    <p v-else-if="geoCaptured" class="cp-hint cp-hint--ok">
+      Ubicación capturada{{ form.latitude && form.postal_code ? ' y domicilio autollenado' : '. Ingresa tu CP para autollenar tu colonia.' }}
     </p>
 
     <div class="grid-2">
@@ -287,6 +350,21 @@ watch(form, () => {
 .field--err input { border-color: #ef4444; }
 .cp-hint { font-size: 12px; color: #64748b; }
 .cp-hint--warn { color: #b45309; }
+.cp-hint--ok { color: #15803d; }
+.geo-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid var(--tenant-primary, #5B21B6);
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--tenant-primary, #5B21B6);
+  font-size: 14px; font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.geo-btn:disabled { opacity: 0.6; cursor: progress; }
+.geo-btn svg { width: 20px; height: 20px; }
 
 .field-inline {
   display: flex; align-items: center; gap: 6px;

@@ -937,6 +937,8 @@ export const useOnboardingStore = defineStore('onboarding', () => {
             housing_type: housing,
             years_at_address: Number(ad.years_at_address || 0),
             months_at_address: Number(ad.months_at_address || 0),
+            latitude: ad.latitude != null ? Number(ad.latitude) : undefined,
+            longitude: ad.longitude != null ? Number(ad.longitude) : undefined,
           } as never)
           break
         }

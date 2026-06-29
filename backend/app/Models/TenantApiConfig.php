@@ -73,6 +73,7 @@ class TenantApiConfig extends Model
         'stp' => 'STP — Dispersión',
         'conekta' => 'Conekta — Cobranza',
         'openpay' => 'OpenPay — Cobranza',
+        'google_maps' => 'Google Maps',
     ];
 
     /**
@@ -90,6 +91,7 @@ class TenantApiConfig extends Model
         'phone_score' => 'Phone Score',
         'loan_disbursement' => 'Dispersión de préstamos',
         'payment_collection' => 'Cobranza',
+        'geocoding' => 'Geocodificación / Mapas',
     ];
 
     /**
@@ -109,6 +111,7 @@ class TenantApiConfig extends Model
         'phone_score' => 'Score de riesgo del número telefónico.',
         'loan_disbursement' => 'Dispersión de préstamos a cuentas bancarias.',
         'payment_collection' => 'Cobranza y conciliación de pagos.',
+        'geocoding' => 'Geolocalización y autollenado de domicilio (coordenadas → dirección) en el onboarding.',
     ];
 
     /**
@@ -128,6 +131,7 @@ class TenantApiConfig extends Model
         'stp' => 'beta',
         'conekta' => 'beta',
         'openpay' => 'beta',
+        'google_maps' => 'available',
         'messagebird' => 'coming_soon',
         'vonage' => 'coming_soon',
         'mailgun' => 'coming_soon',
@@ -171,6 +175,7 @@ class TenantApiConfig extends Model
         'stp' => ['loan_disbursement'],
         'conekta' => ['payment_collection'],
         'openpay' => ['payment_collection'],
+        'google_maps' => ['geocoding'],
     ];
 
     /**
@@ -271,7 +276,7 @@ class TenantApiConfig extends Model
         return match ($this->provider) {
             'twilio' => !empty($this->account_sid) && !empty($this->auth_token),
             'mailgun' => !empty($this->api_key) && !empty($this->domain),
-            'sendgrid', 'mati' => !empty($this->api_key),
+            'sendgrid', 'mati', 'google_maps' => !empty($this->api_key),
             'nubarium', 'circulo_credito' => !empty($this->api_key) && !empty($this->api_secret),
             'smtp' => !empty($this->extra_config['host']) && !empty($this->extra_config['port']),
             default => !empty($this->api_key),
