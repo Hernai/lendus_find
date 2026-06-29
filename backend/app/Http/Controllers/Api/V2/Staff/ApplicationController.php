@@ -721,8 +721,11 @@ class ApplicationController extends Controller
         // Required documents from product (for document checklist)
         $data['required_documents'] = $app->product?->required_documents ?? [];
 
-        // Historial de créditos en línea captado en el onboarding (metadata).
-        $data['online_loans_count'] = $app->metadata['online_loans_count'] ?? null;
+        // Préstamos en línea solicitados, captado en el onboarding (metadata).
+        // Aceptamos la clave nueva y la legacy ('credit_history' = id del paso).
+        $data['online_loans_count'] = $app->metadata['online_loans_count']
+            ?? $app->metadata['credit_history']
+            ?? null;
 
         // =========================================================
         // APPLICANT - Person or Company with all related data

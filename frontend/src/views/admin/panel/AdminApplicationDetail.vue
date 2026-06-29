@@ -3035,7 +3035,7 @@ onUnmounted(() => {
                       </p>
                     </div>
                     <div class="col-span-2">
-                      <p class="text-xs text-gray-500">Créditos en línea (onboarding)</p>
+                      <p class="text-xs text-gray-500">Préstamos en línea solicitados (onboarding)</p>
                       <p class="font-medium text-gray-900">
                         {{ application.online_loans_count != null
                           ? (application.online_loans_count === 10 ? '10 o más' : application.online_loans_count)

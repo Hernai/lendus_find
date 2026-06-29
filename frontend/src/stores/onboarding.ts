@@ -788,12 +788,15 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           break
         }
         case 'number_select': {
-          // online_loans_count → se guarda en Application.metadata (no tiene modelo propio).
+          // Se guarda en Application.metadata (no tiene modelo propio). Usamos
+          // una clave ESTABLE por paso (no el id del step) para que el admin la
+          // lea siempre: credit_history → online_loans_count.
           const appId = applicationStore.currentApplication?.id
           if (appId && payload !== null && payload !== undefined) {
+            const metaKey = stepId === 'credit_history' ? 'online_loans_count' : stepId
             try {
               await applicationService.update(appId, {
-                metadata: { [stepId]: payload },
+                metadata: { [metaKey]: payload },
               } as never)
             } catch (e) {
               stepHadError = true
