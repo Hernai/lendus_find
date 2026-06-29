@@ -2042,6 +2042,35 @@ class ApplicationController extends Controller
             ];
         }
 
+        // Teléfono / email verificados por OTP. La verificación ocurre al
+        // registrarse (a veces ANTES de que exista la Person), por lo que no
+        // siempre queda un DataVerification ligado; la fuente autoritativa es el
+        // verified_at de la identidad. Si está verificada y no hay registro
+        // previo del campo, lo marcamos como verificado por OTP (bloqueado).
+        $account = $app->person?->account;
+        if ($account) {
+            $otpIdentities = [
+                'phone' => $account->phoneIdentity,
+                'email' => $account->emailIdentity,
+            ];
+            foreach ($otpIdentities as $field => $identity) {
+                if ($identity?->verified_at && empty($fieldVerifications[$field])) {
+                    $fieldVerifications[$field] = [
+                        'status' => 'VERIFIED',
+                        'verified' => true,
+                        'method' => 'OTP',
+                        'method_label' => 'Verificado por OTP',
+                        'rejection_reason' => null,
+                        'notes' => null,
+                        'verified_at' => $identity->verified_at?->toIso8601String(),
+                        'verified_by' => null,
+                        'is_locked' => true,
+                        'metadata' => null,
+                    ];
+                }
+            }
+        }
+
         return $fieldVerifications;
     }
 
