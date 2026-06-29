@@ -35,7 +35,7 @@ const config: TenantConfig = {
     // del admin.
   },
   auth: {
-    methods: ['phone', 'email'],
+    methods: ['phone'],
     defaultMethod: 'phone',
   },
 }

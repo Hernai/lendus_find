@@ -29,8 +29,8 @@ const config: TenantConfig = {
     landing: 'FinateaLanding',
   },
   auth: {
-    methods: ['phone', 'whatsapp'],
-    defaultMethod: 'whatsapp',
+    methods: ['phone', 'email'],
+    defaultMethod: 'phone',
   },
 }
 
