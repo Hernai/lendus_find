@@ -185,4 +185,18 @@ return [
         explode(',', (string) env('DEBUG_QUERIES_ALLOWED_IPS', ''))
     ))),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Exponer el código OTP en la respuesta (solo pruebas)
+    |--------------------------------------------------------------------------
+    |
+    | Si es true, la respuesta de "solicitar OTP" incluye el código en `data.code`
+    | cuando NOSOTROS generamos el código (sin proveedor, Twilio o SMTP). NO
+    | aplica a proveedores administrados (Nubarium genera y guarda el código en su
+    | lado; nunca llega a nuestro backend). ⚠ ANULA la seguridad del OTP: usar
+    | solo en sandbox/pruebas. En local/testing ya se expone sin este flag.
+    |
+    */
+    'otp_expose_code' => env('OTP_EXPOSE_CODE', false),
+
 ];

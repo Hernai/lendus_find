@@ -121,13 +121,18 @@ class ApplicantAuthService
             ];
         }
 
-        // En dev con proveedor NO administrado el código guardado es el que se
-        // envió, así que lo exponemos para facilitar pruebas. Con Nubarium
-        // (administrado) el código real lo tiene el proveedor → nunca se expone.
-        if ($isDevelopment && ! $managed) {
+        // Exponemos el código que NOSOTROS generamos (Twilio/SMTP) cuando: es
+        // entorno de desarrollo, o está activo el flag OTP_EXPOSE_CODE (pruebas
+        // en web/sandbox). Con Nubarium (administrado) el código lo tiene el
+        // proveedor → nunca se expone; avisamos por qué para que no parezca bug.
+        $exposeFlag = (bool) config('app.otp_expose_code', false);
+        if (($isDevelopment || $exposeFlag) && ! $managed) {
             $data['code'] = $otpRequest->code;
             $data['dev_mode'] = true;
-            $data['dev_reason'] = 'environment';
+            $data['dev_reason'] = $isDevelopment ? 'environment' : 'expose_flag';
+        } elseif ($exposeFlag && $managed) {
+            $data['code_unavailable'] = true;
+            $data['code_unavailable_reason'] = 'managed_provider'; // Nubarium genera el código
         }
 
         return [
