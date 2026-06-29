@@ -15,7 +15,7 @@ use Illuminate\Support\Str;
  * Seeder de tenant Finatea.
  *
  * Crea:
- *  - Tenant `finatea` con branding teal (#0D9488)
+ *  - Tenant `finatea` con branding rojo (#B91C1C)
  *  - TenantBranding con colores y PWA settings
  *  - Producto base de crédito personal con onboarding estándar
  *  - Staff accounts (super admin, admin, supervisor, analyst)
@@ -69,8 +69,8 @@ class FinateaSeeder extends Seeder
                 'legal_name' => 'Finatea S.A. de C.V. SOFOM E.N.R.',
                 'rfc' => 'FIN260101AAA',
                 'branding' => [
-                    'primary_color' => '#0D9488',
-                    'secondary_color' => '#0F766E',
+                    'primary_color' => '#B91C1C',
+                    'secondary_color' => '#991B1B',
                 ],
                 'settings' => [
                     'otp_provider' => 'twilio',
@@ -102,8 +102,8 @@ class FinateaSeeder extends Seeder
             ['tenant_id' => $tenant->id],
             [
                 'id' => TenantBranding::where('tenant_id', $tenant->id)->value('id') ?? Str::uuid(),
-                'primary_color' => '#0D9488',
-                'secondary_color' => '#0F766E',
+                'primary_color' => '#B91C1C',
+                'secondary_color' => '#991B1B',
                 'accent_color' => '#F59E0B',
                 'background_color' => '#FFFFFF',
                 'text_color' => '#1F2937',
@@ -112,7 +112,7 @@ class FinateaSeeder extends Seeder
                 'button_style' => 'rounded',
                 'pwa_name' => 'Finatea',
                 'pwa_short_name' => 'Finatea',
-                'pwa_theme_color' => '#0D9488',
+                'pwa_theme_color' => '#B91C1C',
                 'pwa_background_color' => '#FFFFFF',
             ],
         );

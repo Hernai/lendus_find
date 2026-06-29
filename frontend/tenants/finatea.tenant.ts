@@ -3,7 +3,7 @@ import type { TenantConfig } from './_types'
 /**
  * Tenant Finatea.
  *
- * Branding teal (#0D9488), bundle nativo `mx.finatea.app`.
+ * Branding rojo (#B91C1C), bundle nativo `mx.finatea.app`.
  * Assets actuales (icon.png, splash.png) son placeholders copiados de demo
  * — reemplázalos cuando Finatea provea su branding oficial.
  *
@@ -18,10 +18,10 @@ const config: TenantConfig = {
   assets: {
     icon: 'tenants/finatea/icon.png',
     splash: 'tenants/finatea/splash.png',
-    splashBackgroundColor: '#0D9488',
+    splashBackgroundColor: '#B91C1C',
   },
   nativeTheme: {
-    primary: '#0D9488',
+    primary: '#B91C1C',
     statusBar: 'light',
   },
   deepLinkHost: 'finatea.lendus.app',
