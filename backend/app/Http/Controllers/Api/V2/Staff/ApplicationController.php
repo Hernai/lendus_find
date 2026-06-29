@@ -2049,9 +2049,13 @@ class ApplicationController extends Controller
         // previo del campo, lo marcamos como verificado por OTP (bloqueado).
         $account = $app->person?->account;
         if ($account) {
+            // Reutilizamos la colección ya cargada (la usa el email del solicitante)
+            // en vez de las relaciones HasOne phoneIdentity/emailIdentity, que
+            // disparaban 2 queries extra por request.
+            $identities = $account->identities;
             $otpIdentities = [
-                'phone' => $account->phoneIdentity,
-                'email' => $account->emailIdentity,
+                'phone' => $identities->firstWhere('type', 'PHONE'),
+                'email' => $identities->firstWhere('type', 'EMAIL'),
             ];
             foreach ($otpIdentities as $field => $identity) {
                 if ($identity?->verified_at && empty($fieldVerifications[$field])) {
