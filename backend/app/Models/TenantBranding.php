@@ -96,6 +96,7 @@ class TenantBranding extends Model
     public function toApiArray(): array
     {
         return [
+            'is_locked' => (bool) $this->is_locked,
             'primary_color' => $this->primary_color,
             'secondary_color' => $this->secondary_color,
             'accent_color' => $this->accent_color,

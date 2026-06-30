@@ -5,6 +5,7 @@ import { logger } from '@/utils/logger'
 const log = logger.child('TenantBrandingEditor')
 
 export interface Branding {
+  is_locked?: boolean
   primary_color: string
   secondary_color: string
   accent_color: string
@@ -48,6 +49,11 @@ const branding = computed({
 // Update a specific field
 const updateField = (key: keyof Branding, value: string | null) => {
   emit('update:modelValue', { ...props.modelValue, [key]: value })
+}
+
+// Lock / unlock: branding definitivo (no se sobrescribe en deploys).
+const setLocked = (value: boolean) => {
+  emit('update:modelValue', { ...props.modelValue, is_locked: value })
 }
 
 // Type-safe color accessor for template bindings
@@ -231,6 +237,30 @@ const selectSuggestedIcon = (iconSvg: string, primaryColor: string) => {
 
     <!-- Left Panel: Controls -->
     <div class="w-[380px] flex-shrink-0 border-r border-gray-100 p-6 space-y-6 bg-white overflow-y-auto">
+
+      <!-- Lock: branding definitivo (no se sobrescribe en deploys) -->
+      <div
+        class="flex items-center justify-between gap-3 p-3 rounded-lg border"
+        :class="branding.is_locked ? 'border-primary-200 bg-primary-50/40' : 'border-gray-200 bg-gray-50'"
+      >
+        <div>
+          <p class="text-sm font-medium text-gray-800">Branding definitivo</p>
+          <p class="text-xs text-gray-500">
+            {{ branding.is_locked
+              ? 'Bloqueado: los deploys/seeders NO lo sobrescriben.'
+              : 'Desbloqueado: un deploy puede revertirlo a los valores de fábrica.' }}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="branding.is_locked ? 'true' : 'false'"
+          @click="setLocked(!(branding.is_locked ?? false))"
+          :class="['relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors', branding.is_locked ? 'bg-primary-600' : 'bg-gray-300']"
+        >
+          <span :class="['inline-block h-4 w-4 transform rounded-full bg-white transition-transform', branding.is_locked ? 'translate-x-6' : 'translate-x-1']"></span>
+        </button>
+      </div>
 
       <!-- Section: Logotipos -->
       <div>

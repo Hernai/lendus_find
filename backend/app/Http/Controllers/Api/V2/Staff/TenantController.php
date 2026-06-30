@@ -289,13 +289,16 @@ class TenantController extends Controller
             'border_radius' => 'nullable|string|max:20',
             'button_style' => 'nullable|in:rounded,pill,square',
             'custom_css' => 'nullable|string|max:10000',
+            'is_locked' => 'nullable|boolean',
         ]);
 
-        // Marcamos el branding como definitivo: los seeders dejan de
-        // sobreescribirlo en los deploys (ver TenantBranding::seedFor).
+        // is_locked = branding definitivo (los seeders no lo sobreescriben en los
+        // deploys, ver TenantBranding::seedFor). Default true al guardar; mandar
+        // false lo "reactiva" a fábrica en el próximo deploy/seed.
+        unset($validated['is_locked']);
         $branding = TenantBranding::updateOrCreate(
             ['tenant_id' => $tenant->id],
-            array_merge($validated, ['is_locked' => true])
+            array_merge($validated, ['is_locked' => $request->boolean('is_locked', true)])
         );
 
         return $this->success([

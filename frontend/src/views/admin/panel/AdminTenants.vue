@@ -31,6 +31,7 @@ interface Tenant {
   website: string | null
   is_active: boolean
   branding: {
+    is_locked?: boolean
     primary_color: string
     secondary_color?: string
     accent_color?: string
@@ -162,6 +163,7 @@ const form = ref({
   website: '',
   is_active: true,
   branding: {
+    is_locked: false,
     primary_color: '#6366f1',
     secondary_color: '#10b981',
     accent_color: '#f59e0b',
@@ -253,6 +255,7 @@ const openCreateModal = () => {
     website: '',
     is_active: true,
     branding: {
+      is_locked: false,
       primary_color: '#6366f1',
       secondary_color: '#10b981',
       accent_color: '#f59e0b',
@@ -293,6 +296,7 @@ const openEditModal = (tenant: Tenant) => {
     website: tenant.website || '',
     is_active: tenant.is_active,
     branding: {
+      is_locked: tenant.branding?.is_locked ?? false,
       primary_color: tenant.branding?.primary_color || '#6366f1',
       secondary_color: tenant.branding?.secondary_color || '#10b981',
       accent_color: tenant.branding?.accent_color || '#f59e0b',

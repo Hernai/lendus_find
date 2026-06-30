@@ -104,6 +104,7 @@ export interface V2TenantStats {
 }
 
 export interface V2TenantBranding {
+  is_locked?: boolean
   primary_color: string
   secondary_color: string
   accent_color: string
@@ -177,6 +178,7 @@ export interface V2TenantApiConfigPayload {
 }
 
 export interface V2TenantBrandingPayload {
+  is_locked?: boolean
   primary_color?: string
   secondary_color?: string
   accent_color?: string

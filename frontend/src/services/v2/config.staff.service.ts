@@ -28,6 +28,7 @@ export interface V2TenantInfo {
 }
 
 export interface V2Branding {
+  is_locked?: boolean
   primary_color: string | null
   secondary_color: string | null
   accent_color: string | null
