@@ -41,22 +41,22 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col bg-gradient-to-b from-teal-50 to-white">
+  <div class="min-h-screen flex flex-col bg-gradient-to-b from-primary-50 to-white">
     <AppHeader />
 
     <main class="flex-1">
       <!-- Hero -->
       <section class="px-6 py-16 max-w-5xl mx-auto text-center">
-        <h1 class="text-4xl md:text-5xl font-bold text-teal-900 mb-4">
+        <h1 class="text-4xl md:text-5xl font-bold text-primary-900 mb-4">
           Finatea — Crédito al instante
         </h1>
         <p class="text-lg md:text-xl text-gray-700 mb-8 max-w-2xl mx-auto">
-          Solicita por WhatsApp, recibe respuesta en minutos y firma 100%
+          Solicita en minutos, recibe respuesta al instante y firma 100%
           digital. Sin papeleo, sin filas.
         </p>
         <div class="flex flex-col sm:flex-row gap-4 justify-center">
           <AppButton variant="primary" size="lg" @click="goToAuth">
-            Solicitar por WhatsApp
+            Solicitar mi crédito
           </AppButton>
           <AppButton variant="secondary" size="lg" @click="goToSimulator">
             Simular mi crédito
@@ -68,9 +68,9 @@ onMounted(async () => {
       <section class="px-6 py-12 bg-white">
         <div class="max-w-5xl mx-auto grid md:grid-cols-3 gap-8">
           <div class="text-center">
-            <div class="text-5xl mb-3">💬</div>
-            <h3 class="text-xl font-semibold mb-2">Por WhatsApp</h3>
-            <p class="text-gray-600">Inicia tu solicitud en el chat que ya conoces.</p>
+            <div class="text-5xl mb-3">📱</div>
+            <h3 class="text-xl font-semibold mb-2">100% en línea</h3>
+            <p class="text-gray-600">Inicia tu solicitud desde tu celular, sin filas.</p>
           </div>
           <div class="text-center">
             <div class="text-5xl mb-3">⚡</div>
@@ -87,7 +87,7 @@ onMounted(async () => {
 
       <!-- CTA final -->
       <section class="px-6 py-16 text-center">
-        <h2 class="text-2xl md:text-3xl font-bold text-teal-900 mb-4">
+        <h2 class="text-2xl md:text-3xl font-bold text-primary-900 mb-4">
           Empieza ahora
         </h2>
         <p class="text-gray-700 mb-6">
