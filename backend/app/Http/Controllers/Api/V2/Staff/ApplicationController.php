@@ -1445,6 +1445,83 @@ class ApplicationController extends Controller
     }
 
     /**
+     * Edita el teléfono (ApplicantIdentity tipo PHONE) del solicitante dueño
+     * de la solicitud. Restringido a SUPER_ADMIN (ver middleware de la ruta).
+     *
+     * Caso de uso: PRUEBAS. El número es único por tenant y la identidad no se
+     * borra al eliminar la cuenta, así que un mismo celular no se puede volver
+     * a registrar. Cambiarlo aquí "libera" el original para registrarlo de cero.
+     *
+     * PUT /v2/staff/applications/{id}/applicant-phone
+     */
+    public function updateApplicantPhone(Request $request, string $id): JsonResponse
+    {
+        /** @var StaffAccount $staff */
+        $staff = $request->user();
+
+        $validated = $request->validate([
+            'phone' => 'required|string|max:20',
+        ]);
+
+        // Normaliza a número nacional de 10 dígitos (descarta lada/prefijo).
+        $national = substr(preg_replace('/\D/', '', $validated['phone']), -10);
+        if (strlen($national) !== 10) {
+            return $this->badRequest('INVALID_PHONE', 'El teléfono debe tener 10 dígitos.');
+        }
+
+        $application = Application::where('id', $id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
+            ->with('account.phoneIdentity')
+            ->first();
+
+        if (!$application || !$application->account) {
+            return $this->notFound('Solicitud o cuenta no encontrada.');
+        }
+
+        $identity = $application->account->phoneIdentity;
+        if (!$identity) {
+            return $this->notFound('Esta cuenta no tiene un teléfono registrado.');
+        }
+
+        // Respeta el formato del identifier actual (con/sin prefijo 52 / +52)
+        // para que coincida con lo que el front envía al volver a iniciar sesión.
+        $current = $identity->identifier;
+        $currentDigits = preg_replace('/\D/', '', $current);
+        if (str_starts_with($current, '+')) {
+            $newIdentifier = '+52' . $national;
+        } elseif (strlen($currentDigits) > 10 && str_starts_with($currentDigits, '52')) {
+            $newIdentifier = '52' . $national;
+        } else {
+            $newIdentifier = $national;
+        }
+
+        if ($newIdentifier === $current) {
+            return $this->success(['phone' => $newIdentifier], 'El teléfono no cambió.');
+        }
+
+        // Evita violar el índice unique (tenant_id, type, identifier).
+        $clash = ApplicantIdentity::findByIdentifier('PHONE', $newIdentifier, $application->tenant_id);
+        if ($clash && $clash->id !== $identity->id) {
+            return $this->badRequest('PHONE_IN_USE', 'Ese número ya está en uso por otra cuenta en este tenant.');
+        }
+
+        $identity->identifier = $newIdentifier;
+        $identity->save();
+
+        \App\Services\ActivityRecorder::recordApplicationEvent($application, 'DATA_UPDATED', [
+            'from_status' => 'APPLICANT_PHONE_EDIT',
+            'to_status' => 'APPLICANT_PHONE_EDIT',
+            'notes' => "Teléfono del solicitante actualizado (prueba): {$current} → {$newIdentifier}",
+            'entity' => $identity,
+            'old_values' => ['identifier' => $current],
+            'new_values' => ['identifier' => $newIdentifier],
+            'metadata' => ['kind' => 'applicant_phone_updated'],
+        ]);
+
+        return $this->success(['phone' => $newIdentifier], 'Teléfono actualizado.');
+    }
+
+    /**
      * Inicia la validación de la CLABE de una cuenta bancaria con Nubarium
      * (API Plus, asíncrono por webhook). Devuelve una validación `pending`; el
      * resultado se consulta con getNubariumValidation.

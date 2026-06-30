@@ -1678,6 +1678,40 @@ const confirmRejectData = async (data: { selectValue?: string; comment?: string 
   showRejectDataModal.value = false
 }
 
+// Editar teléfono del solicitante. Solo SUPER_ADMIN y de uso para PRUEBAS:
+// el número es único por tenant y no se "recicla", así que cambiarlo aquí
+// libera el número original para volver a registrarlo desde cero. Reutiliza
+// ConfirmModal (campo comment) para capturar el nuevo número.
+const showEditPhoneModal = ref(false)
+const isEditingPhone = ref(false)
+
+const openEditPhoneModal = () => {
+  showEditPhoneModal.value = true
+}
+
+const confirmEditPhone = async (data: { selectValue?: string; comment?: string }) => {
+  if (!application.value) return
+
+  const phone = (data.comment || '').replace(/\D/g, '').slice(-10)
+  if (phone.length !== 10) {
+    toast.error('Ingresa un teléfono de 10 dígitos')
+    return
+  }
+
+  isEditingPhone.value = true
+  try {
+    const res = await v2.staff.application.updateApplicantPhone(application.value.id, phone)
+    application.value.applicant.phone = res.data?.phone || phone
+    toast.success('Teléfono actualizado. El número anterior queda libre.')
+    showEditPhoneModal.value = false
+  } catch (e: unknown) {
+    const body = (e as { response?: { data?: { message?: string; error?: string } } })?.response?.data
+    toast.error(body?.message || body?.error || 'No se pudo actualizar el teléfono')
+  } finally {
+    isEditingPhone.value = false
+  }
+}
+
 // Open unverify modal
 const openUnverifyModal = (field: VerifiableField) => {
   unverifyField.value = field
@@ -2322,6 +2356,18 @@ onUnmounted(() => {
                       <svg v-if="isFieldLocked('phone')" class="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20" title="Verificado por OTP - No modificable">
                         <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
                       </svg>
+                      <!-- Editar teléfono (solo SUPER_ADMIN, uso de pruebas: libera el número) -->
+                      <button
+                        v-if="authStore.isSuperAdmin"
+                        class="p-0.5 rounded hover:bg-blue-100 text-gray-400 hover:text-blue-600"
+                        :disabled="isEditingPhone"
+                        title="Editar teléfono (pruebas: libera el número para volver a registrarlo)"
+                        @click="openEditPhoneModal"
+                      >
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
                       <div v-if="application.applicant.phone && !isFieldLocked('phone')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
                         <button
                           v-if="!isFieldVerified('phone') && !isFieldRejected('phone')"
@@ -3625,6 +3671,23 @@ onUnmounted(() => {
       confirm-color="blue"
       :loading="isVerifyingData"
       @confirm="confirmUnverify"
+    />
+
+    <!-- Editar Teléfono (PRUEBAS, solo super admin) -->
+    <ConfirmModal
+      v-model:show="showEditPhoneModal"
+      title="Editar teléfono"
+      subtitle="Uso de pruebas: libera el número anterior para volver a registrarlo"
+      icon="info"
+      icon-color="blue"
+      comment-label="Nuevo teléfono (10 dígitos)"
+      comment-placeholder="Ej. 5512345678"
+      comment-required
+      :comment-rows="1"
+      confirm-text="Guardar"
+      confirm-color="blue"
+      :loading="isEditingPhone"
+      @confirm="confirmEditPhone"
     />
 
     <!-- Reference Verification Modal -->

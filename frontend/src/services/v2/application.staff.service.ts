@@ -392,6 +392,21 @@ export async function updateBankAccount(
   return response.data
 }
 
+/**
+ * Edita el teléfono del solicitante (solo SUPER_ADMIN). Uso de PRUEBAS:
+ * libera el número original para volver a registrarlo desde cero.
+ */
+export async function updateApplicantPhone(
+  applicationId: string,
+  phone: string
+): Promise<V2ApiResponse<{ phone: string }>> {
+  const response = await api.put<V2ApiResponse<{ phone: string }>>(
+    `${BASE_PATH}/${applicationId}/applicant-phone`,
+    { phone }
+  )
+  return response.data
+}
+
 /** Validación asíncrona de Nubarium (CLABE) iniciada. */
 export interface NubariumValidationStart {
   validation_id: string
@@ -547,6 +562,7 @@ export default {
   verifyBankAccount,
   unverifyBankAccount,
   updateBankAccount,
+  updateApplicantPhone,
   validateBankAccountClabe,
   getNubariumValidation,
   getRisks,
