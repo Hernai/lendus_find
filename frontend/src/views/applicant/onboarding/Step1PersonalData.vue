@@ -270,6 +270,7 @@ const handleSubmit = async () => {
         product_id: string
         requested_amount: number
         term_months: number
+        requested_term_days?: number
         payment_frequency: PaymentFrequency
       }
 
@@ -305,6 +306,7 @@ const handleSubmit = async () => {
           product_id: params.product_id,
           amount: params.requested_amount,
           term_months: params.term_months,
+          term_days: params.requested_term_days,
           payment_frequency: params.payment_frequency
         })
 
@@ -313,6 +315,7 @@ const handleSubmit = async () => {
           product_id: params.product_id,
           requested_amount: params.requested_amount,
           term_months: params.term_months,
+          requested_term_days: params.requested_term_days,
           payment_frequency: params.payment_frequency
         })
 

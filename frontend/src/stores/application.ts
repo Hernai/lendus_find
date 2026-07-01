@@ -112,7 +112,8 @@ export const useApplicationStore = defineStore('application', () => {
       simulation.value = {
         requested_amount: data.requested_amount,
         term_months: data.term_months,
-        payment_frequency: data.payment_frequency as 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY',
+        term_days: data.term_days,
+        payment_frequency: data.payment_frequency as PaymentFrequency,
         total_periods: data.total_periods ?? data.term_months,
         annual_rate: data.annual_rate,
         periodic_rate: data.periodic_rate,

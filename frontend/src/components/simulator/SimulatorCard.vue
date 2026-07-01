@@ -228,7 +228,7 @@ const handleRequestCredit = async () => {
     product_id: activeProduct.value.id,
     requested_amount: amount.value,
     term_months: termMonths.value,
-    term_days: isSinglePayment.value ? selectedDays.value : undefined,
+    requested_term_days: isSinglePayment.value ? selectedDays.value : undefined,
     payment_frequency: paymentFrequency.value
   }
   console.log('💾 Saving pending_application:', pendingData)

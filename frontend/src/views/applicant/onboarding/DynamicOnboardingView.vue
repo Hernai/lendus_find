@@ -291,11 +291,13 @@ async function ensureApplication() {
       ?? prod.min_amount
       ?? 1000,
   )
-  // Plazo: si el producto se mide en días, mandamos `requested_term_days`
-  // (10 para MC). `term_months` se queda en 1 para pasar la validación del backend.
+  // Plazo: si el producto se mide en días, mandamos `requested_term_days`.
+  // Respetamos el plazo que el cliente eligió en el simulador (sim.term_days);
+  // si no hay simulación, caemos al default del producto. `term_months` se
+  // queda en 1 para pasar la validación del backend.
   const term = sim?.term_months ?? Number(prod.min_term_months ?? 1)
   const termDays = rules.term_in_days
-    ? Number(rules.default_term_days ?? rules.min_term_days ?? 10)
+    ? Number(sim?.term_days ?? rules.default_term_days ?? rules.min_term_days ?? 10)
     : undefined
   // Frecuencia real del producto (SINGLE para BULLET de MoneyCapital).
   const freq = sim?.payment_frequency

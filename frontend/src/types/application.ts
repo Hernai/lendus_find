@@ -46,6 +46,8 @@ export type ApplicationStatus =
 export interface SimulationResult {
   requested_amount: number
   term_months: number
+  /** Plazo real en días para pago único (SINGLE / BULLET). */
+  term_days?: number
   payment_frequency: PaymentFrequency
   total_periods: number
   annual_rate: number
