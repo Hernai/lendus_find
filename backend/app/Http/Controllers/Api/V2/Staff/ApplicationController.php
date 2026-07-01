@@ -1472,14 +1472,14 @@ class ApplicationController extends Controller
 
         $application = Application::where('id', $id)
             ->where('tenant_id', $this->scopedTenantId($staff))
-            ->with('account.phoneIdentity')
+            ->with('submittedByAccount.phoneIdentity')
             ->first();
 
-        if (!$application || !$application->account) {
+        if (!$application || !$application->submittedByAccount) {
             return $this->notFound('Solicitud o cuenta no encontrada.');
         }
 
-        $identity = $application->account->phoneIdentity;
+        $identity = $application->submittedByAccount->phoneIdentity;
         if (!$identity) {
             return $this->notFound('Esta cuenta no tiene un teléfono registrado.');
         }
@@ -1500,24 +1500,41 @@ class ApplicationController extends Controller
             return $this->success(['phone' => $newIdentifier], 'El teléfono no cambió.');
         }
 
-        // Evita violar el índice unique (tenant_id, type, identifier).
-        $clash = ApplicantIdentity::findByIdentifier('PHONE', $newIdentifier, $application->tenant_id);
-        if ($clash && $clash->id !== $identity->id) {
+        // Evita violar el índice unique (tenant_id, type, identifier). Consulta
+        // directa sobre la columna tenant_id de la identidad (no vía whereHas
+        // account, que ignora cuentas soft-deleted y dejaría pasar el choque).
+        $clash = ApplicantIdentity::query()
+            ->where('tenant_id', $application->tenant_id)
+            ->where('type', 'PHONE')
+            ->where('identifier', $newIdentifier)
+            ->where('id', '!=', $identity->id)
+            ->first();
+        if ($clash) {
             return $this->badRequest('PHONE_IN_USE', 'Ese número ya está en uso por otra cuenta en este tenant.');
         }
 
-        $identity->identifier = $newIdentifier;
-        $identity->save();
+        try {
+            $identity->identifier = $newIdentifier;
+            $identity->save();
 
-        \App\Services\ActivityRecorder::recordApplicationEvent($application, 'DATA_UPDATED', [
-            'from_status' => 'APPLICANT_PHONE_EDIT',
-            'to_status' => 'APPLICANT_PHONE_EDIT',
-            'notes' => "Teléfono del solicitante actualizado (prueba): {$current} → {$newIdentifier}",
-            'entity' => $identity,
-            'old_values' => ['identifier' => $current],
-            'new_values' => ['identifier' => $newIdentifier],
-            'metadata' => ['kind' => 'applicant_phone_updated'],
-        ]);
+            \App\Services\ActivityRecorder::recordApplicationEvent($application, 'DATA_UPDATED', [
+                'from_status' => 'APPLICANT_PHONE_EDIT',
+                'to_status' => 'APPLICANT_PHONE_EDIT',
+                'notes' => "Teléfono del solicitante actualizado (prueba): {$current} → {$newIdentifier}",
+                'entity' => $identity,
+                'old_values' => ['identifier' => $current],
+                'new_values' => ['identifier' => $newIdentifier],
+                'metadata' => ['kind' => 'applicant_phone_updated'],
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('updateApplicantPhone failed', [
+                'application_id' => $id,
+                'identity_id' => $identity->id,
+                'new_identifier' => $newIdentifier,
+                'error' => $e->getMessage(),
+            ]);
+            return $this->badRequest('PHONE_UPDATE_FAILED', 'No se pudo actualizar el teléfono: ' . $e->getMessage());
+        }
 
         return $this->success(['phone' => $newIdentifier], 'Teléfono actualizado.');
     }
