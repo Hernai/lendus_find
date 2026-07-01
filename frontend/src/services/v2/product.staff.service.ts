@@ -38,6 +38,8 @@ export interface V2Product {
   // rules: configuración declarativa del producto (term_in_days, amortization_type, etc.).
   rules?: Record<string, unknown> | null
   is_active: boolean
+  /** Producto predeterminado del tenant (flujo login-first). */
+  is_default: boolean
   display_order: number
   applications_count: number
   created_at: string
@@ -64,6 +66,7 @@ export interface V2ProductCreatePayload {
   // rules: payload de configuración declarativa (term_in_days, amortization_type, etc.).
   rules?: Record<string, unknown>
   is_active?: boolean
+  is_default?: boolean
 }
 
 export interface V2ProductUpdatePayload {
@@ -86,6 +89,7 @@ export interface V2ProductUpdatePayload {
   // rules: payload de configuración declarativa (term_in_days, amortization_type, etc.).
   rules?: Record<string, unknown>
   is_active?: boolean
+  is_default?: boolean
 }
 
 export interface V2ProductFilters {

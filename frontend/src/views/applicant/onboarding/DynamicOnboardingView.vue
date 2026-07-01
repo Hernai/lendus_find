@@ -267,11 +267,14 @@ const compactCopy = computed(() => {
 async function ensureApplication() {
   if (applicationStore.currentApplication?.id) return applicationStore.currentApplication
   // Flujo desde "Iniciar sesión" (sin pasar por el simulador): no hay producto
-  // elegido. Caemos al producto del tenant (MoneyCapital tiene uno solo) y lo
-  // fijamos en el store para el resto del onboarding. El monto/plazo quedan en
-  // el default del producto; el admin los ajusta después según el riesgo.
+  // elegido. Caemos al producto PREDETERMINADO del tenant (is_default); si no hay
+  // ninguno marcado, al primero activo. Lo fijamos en el store para el resto del
+  // onboarding. El monto/plazo quedan en el default del producto; el admin los
+  // ajusta después según el riesgo.
   if (!applicationStore.selectedProduct && tenantStore.activeProducts.length > 0) {
-    applicationStore.setSelectedProduct(tenantStore.activeProducts[0]!)
+    const products = tenantStore.activeProducts as Array<{ is_default?: boolean }>
+    const fallback = (products.find(p => p.is_default) ?? products[0])
+    applicationStore.setSelectedProduct(fallback as never)
   }
   const prod = applicationStore.selectedProduct as unknown as {
     id: string

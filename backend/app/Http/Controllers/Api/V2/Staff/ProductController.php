@@ -111,6 +111,7 @@ class ProductController extends Controller
             'rules' => 'nullable|array',
             'eligibility_rules' => 'nullable|array',
             'is_active' => 'boolean',
+            'is_default' => 'boolean',
         ]);
 
         if ($validator->fails()) {
@@ -162,6 +163,7 @@ class ProductController extends Controller
         $data['display_order'] = $maxOrder + 1;
 
         $product = Product::create($data);
+        $this->enforceSingleDefault($product);
         $product->loadCount('applications');
 
         return $this->created([
@@ -222,6 +224,7 @@ class ProductController extends Controller
             'rules' => 'nullable|array',
             'eligibility_rules' => 'nullable|array',
             'is_active' => 'boolean',
+            'is_default' => 'boolean',
         ]);
 
         if ($validator->fails()) {
@@ -259,11 +262,28 @@ class ProductController extends Controller
         }
 
         $product->update($data);
+        $this->enforceSingleDefault($product);
         $product->loadCount('applications');
 
         return $this->success([
             'product' => $this->formatProduct($product),
         ]);
+    }
+
+    /**
+     * Garantiza que solo haya un producto predeterminado por tenant: al marcar
+     * uno como is_default, desmarca los demás.
+     */
+    private function enforceSingleDefault(Product $product): void
+    {
+        if (!$product->is_default) {
+            return;
+        }
+
+        Product::where('tenant_id', $product->tenant_id)
+            ->where('id', '!=', $product->id)
+            ->where('is_default', true)
+            ->update(['is_default' => false]);
     }
 
     /**
@@ -313,6 +333,7 @@ class ProductController extends Controller
             'required_documents' => $product->required_documents ?? [],
             'eligibility_rules' => $product->eligibility_rules ?? [],
             'is_active' => (bool) $product->is_active,
+            'is_default' => (bool) $product->is_default,
             'display_order' => $product->display_order,
             'applications_count' => $product->applications_count ?? 0,
             'created_at' => $product->created_at?->toIso8601String(),

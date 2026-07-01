@@ -244,6 +244,9 @@ class MoneyCapitalSeeder extends Seeder
                 ],
                 'onboarding_steps' => $this->onboardingSteps(),
                 'is_active' => true,
+                // Producto predeterminado: se usa cuando el cliente entra por
+                // "Iniciar sesión" sin simular (el admin ajusta monto/días).
+                'is_default' => true,
                 'display_order' => 1,
             ],
         );

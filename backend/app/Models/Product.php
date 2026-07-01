@@ -43,6 +43,7 @@ class Product extends Model
         'extra_fields',
         'onboarding_steps',
         'is_active',
+        'is_default',
         'display_order',
         'created_by',
         'updated_by',
@@ -64,6 +65,7 @@ class Product extends Model
         'extra_fields' => 'array',
         'onboarding_steps' => 'array',
         'is_active' => 'boolean',
+        'is_default' => 'boolean',
     ];
 
     /**

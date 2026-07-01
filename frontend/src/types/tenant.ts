@@ -94,6 +94,8 @@ export interface Product {
   /** Pipeline declarativo de onboarding (configurable por producto). */
   onboarding_steps?: Array<Record<string, unknown>> | null
   is_active: boolean
+  /** Producto predeterminado del tenant (usado en el flujo login-first). */
+  is_default?: boolean
   applications_count?: number
   created_at?: string
   updated_at?: string

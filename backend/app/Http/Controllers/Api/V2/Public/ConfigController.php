@@ -140,6 +140,7 @@ class ConfigController extends Controller
                 'late_fee_rate' => $p->late_fee_rate,
                 'display_order' => $p->display_order,
                 'is_active' => $p->is_active,
+                'is_default' => $p->is_default,
             ])->all(),
             'options' => $this->getEnumOptions(),
         ];

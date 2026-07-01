@@ -204,7 +204,8 @@ const form = ref({
     nationals: [] as string[],
     foreigners: [] as string[]
   },
-  is_active: true
+  is_active: true,
+  is_default: false
 })
 
 // Document applicant type selection
@@ -323,7 +324,8 @@ const openCreateModal = () => {
       nationals: ['INE_FRONT', 'INE_BACK', 'PROOF_OF_ADDRESS'],
       foreigners: ['PASSPORT', 'RESIDENCE_CARD', 'PROOF_OF_ADDRESS']
     },
-    is_active: true
+    is_active: true,
+    is_default: false
   }
   // Initialize newTermInput for all frequencies for proper reactivity
   newTermInput.value = {
@@ -382,7 +384,8 @@ const openEditModal = (product: Product) => {
     min_term_days: Number(product.rules?.min_term_days ?? 1),
     max_term_days: Number(product.rules?.max_term_days ?? 30),
     required_documents: normalizeRequiredDocuments(product.required_documents),
-    is_active: product.is_active
+    is_active: product.is_active,
+    is_default: product.is_default ?? false
   }
   // Initialize newTermInput for all frequencies for proper reactivity
   newTermInput.value = {
@@ -1032,6 +1035,31 @@ onMounted(fetchProducts)
                     />
                   </button>
                   <span class="text-sm text-gray-700">Producto activo</span>
+                </div>
+
+                <!-- Default -->
+                <div class="flex items-start gap-3">
+                  <button
+                    type="button"
+                    :class="[
+                      'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 mt-0.5',
+                      form.is_default ? 'bg-primary-600' : 'bg-gray-200'
+                    ]"
+                    @click="form.is_default = !form.is_default"
+                  >
+                    <span
+                      :class="[
+                        'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                        form.is_default ? 'translate-x-5' : 'translate-x-0'
+                      ]"
+                    />
+                  </button>
+                  <div>
+                    <span class="text-sm text-gray-700">Producto predeterminado</span>
+                    <p class="text-xs text-gray-500">
+                      Se usa cuando el cliente entra por "Iniciar sesión" sin simular. Solo uno por tenant.
+                    </p>
+                  </div>
                 </div>
               </div>
 
