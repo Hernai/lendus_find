@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V2\Staff;
 
 use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
+use App\Models\ApplicantIdentity;
 use App\Models\Application;
 use App\Models\DataVerification;
 use App\Models\Document;
