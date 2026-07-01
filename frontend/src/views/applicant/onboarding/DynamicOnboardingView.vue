@@ -266,6 +266,13 @@ const compactCopy = computed(() => {
 
 async function ensureApplication() {
   if (applicationStore.currentApplication?.id) return applicationStore.currentApplication
+  // Flujo desde "Iniciar sesión" (sin pasar por el simulador): no hay producto
+  // elegido. Caemos al producto del tenant (MoneyCapital tiene uno solo) y lo
+  // fijamos en el store para el resto del onboarding. El monto/plazo quedan en
+  // el default del producto; el admin los ajusta después según el riesgo.
+  if (!applicationStore.selectedProduct && tenantStore.activeProducts.length > 0) {
+    applicationStore.setSelectedProduct(tenantStore.activeProducts[0]!)
+  }
   const prod = applicationStore.selectedProduct as unknown as {
     id: string
     max_amount?: number | string
