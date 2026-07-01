@@ -108,6 +108,11 @@ export interface ProductRules {
   max_term?: number
   min_term_months?: number
   max_term_months?: number
+  /** Plazo en días para productos de pago único (SINGLE / BULLET). */
+  min_term_days?: number
+  max_term_days?: number
+  default_term_days?: number
+  term_in_days?: boolean
   annual_rate?: number
   interest_rate?: number
   opening_commission?: number

@@ -35,8 +35,12 @@ class SimulatorController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'product_id' => 'required|uuid|exists:products,id',
-            'amount' => 'required|numeric|min:1000',
+            // El mínimo real lo valida isAmountValid() contra las reglas del
+            // producto (hay productos desde $300, ej. "Sin Buró").
+            'amount' => 'required|numeric|min:1',
             'term_months' => 'required|integer|min:1',
+            // Plazo en días para productos de pago único (SINGLE / BULLET).
+            'term_days' => 'nullable|integer|min:1',
             'payment_frequency' => ['required', Rule::in(PaymentFrequency::values())],
         ]);
 
@@ -68,12 +72,25 @@ class SimulatorController extends Controller
             );
         }
 
+        // Pago único (SINGLE / BULLET): el plazo real va en días. Lo tomamos del
+        // request y lo acotamos al rango del producto (rules.min/max_term_days).
+        $isSingle = PaymentFrequency::normalize($request->payment_frequency)?->value === 'SINGLE';
+        $termDays = null;
+        if ($isSingle) {
+            $rules = $product->rules ?? [];
+            $minDays = (int) ($rules['min_term_days'] ?? 1);
+            $maxDays = (int) ($rules['max_term_days'] ?? 30);
+            $requested = (int) ($request->term_days ?? ($rules['default_term_days'] ?? $minDays));
+            $termDays = max($minDays, min($maxDays, $requested));
+        }
+
         $calculation = $this->loanCalculator->calculateSimulation(
             $request->amount,
             $request->term_months,
             $request->payment_frequency,
             $product->annual_rate,
-            $product->opening_commission_rate
+            $product->opening_commission_rate,
+            $termDays
         );
 
         return $this->success([

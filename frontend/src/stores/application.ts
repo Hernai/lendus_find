@@ -17,7 +17,7 @@ import { useAsyncAction } from '@/composables'
 const log = logger.child('ApplicationStore')
 
 // Simulator only supports these frequencies (not 'OTHER')
-type SimulatorPaymentFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'
+type SimulatorPaymentFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'SINGLE'
 
 // Convert V1 payment frequency format (Spanish) to V2 format (English)
 const toV2PaymentFrequency = (freq: PaymentFrequency): V2PaymentFrequency => {
@@ -33,10 +33,11 @@ const toV2PaymentFrequency = (freq: PaymentFrequency): V2PaymentFrequency => {
   return map[freq] || 'MONTHLY'
 }
 
-// Convert to simulator-specific frequency (excludes 'OTHER' y 'SINGLE')
+// Convert to simulator-specific frequency (excluye 'OTHER'; preserva 'SINGLE'
+// para que el backend calcule el pago único / BULLET correctamente)
 const toSimulatorFrequency = (freq: PaymentFrequency): SimulatorPaymentFrequency => {
   const result = toV2PaymentFrequency(freq)
-  if (result === 'OTHER' || result === 'SINGLE') return 'MONTHLY'
+  if (result === 'OTHER') return 'MONTHLY'
   return result
 }
 
@@ -95,6 +96,7 @@ export const useApplicationStore = defineStore('application', () => {
         product_id: params.product_id,
         amount: params.amount,
         term_months: params.term_months,
+        term_days: params.term_days,
         payment_frequency: toSimulatorFrequency(params.payment_frequency)
       })
 

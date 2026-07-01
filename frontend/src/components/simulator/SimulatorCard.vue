@@ -34,6 +34,18 @@ const maxAmount = computed(() => activeProduct.value?.rules?.max_amount ?? 50000
 const minTerm = computed(() => activeProduct.value?.rules?.min_term_months ?? 3)
 const maxTerm = computed(() => activeProduct.value?.rules?.max_term_months ?? 48)
 
+// Pago único (SINGLE / BULLET): el plazo se mide en DÍAS, no en número de
+// pagos. El cliente elige el plazo con un slider de días.
+const isSinglePayment = computed(() =>
+  availableFrequencies.value.length === 1 && availableFrequencies.value[0] === 'SINGLE'
+)
+const minDays = computed(() => activeProduct.value?.rules?.min_term_days ?? 1)
+const maxDays = computed(() => activeProduct.value?.rules?.max_term_days ?? 30)
+const defaultDays = computed(() =>
+  activeProduct.value?.rules?.default_term_days ?? Math.round((minDays.value + maxDays.value) / 2)
+)
+const formatDays = (v: number) => `${v} ${v === 1 ? 'día' : 'días'}`
+
 // Get term_config from product (could be in rules or directly on product)
 const termConfig = computed(() =>
   activeProduct.value?.term_config || activeProduct.value?.rules?.term_config || null
@@ -114,10 +126,14 @@ const paymentCountOptions = computed(() => {
 // Form state - initialize with middle values
 const amount = ref(50000)
 const selectedPayments = ref(12)
+const selectedDays = ref(10) // solo para pago único (SINGLE)
 const paymentFrequency = ref<PaymentFrequency>('MONTHLY')
 
 // Convert selected payments to months for API
 const termMonths = computed(() => {
+  // Pago único: el backend usa term_days; mandamos el plazo en meses del
+  // producto (1) para pasar la validación de rango, sin dividir por 0.
+  if (isSinglePayment.value) return activeProduct.value?.rules?.min_term_months ?? 1
   const multiplier = frequencyMultiplier[paymentFrequency.value]
   return Math.round(selectedPayments.value / multiplier)
 })
@@ -125,34 +141,49 @@ const termMonths = computed(() => {
 // Track if component is initialized
 const isInitialized = ref(false)
 
+// Corre la simulación con los valores actuales (compartido por onMounted y el
+// watch). Para pago único manda term_days; para multi-pago valida el rango de
+// meses antes de llamar a la API.
+const simulate = async () => {
+  if (!activeProduct.value) return
+
+  const term = termMonths.value
+  const minTermMonths = activeProduct.value.rules?.min_term_months ?? 3
+  const maxTermMonths = activeProduct.value.rules?.max_term_months ?? 48
+
+  if (term < minTermMonths || term > maxTermMonths) {
+    console.warn(`[Simulator] term_months ${term} out of range [${minTermMonths}, ${maxTermMonths}], skipping simulation`)
+    return
+  }
+
+  await applicationStore.runSimulation({
+    product_id: activeProduct.value.id,
+    amount: amount.value,
+    term_months: term,
+    term_days: isSinglePayment.value ? selectedDays.value : undefined,
+    payment_frequency: paymentFrequency.value
+  })
+}
+
 // Initialize values based on product
 onMounted(async () => {
   // Set initial amount to middle of range
   amount.value = Math.round((minAmount.value + maxAmount.value) / 2 / 1000) * 1000
   // Set initial frequency to first available
   paymentFrequency.value = (availableFrequencies.value[0] as PaymentFrequency) || 'MONTHLY'
-  // Set initial payment count to middle option
-  const options = paymentCountOptions.value
-  selectedPayments.value = options[Math.floor(options.length / 2)] || 12
+
+  if (isSinglePayment.value) {
+    // Pago único: plazo en días (clamp al rango del producto)
+    selectedDays.value = Math.min(maxDays.value, Math.max(minDays.value, defaultDays.value))
+  } else {
+    // Set initial payment count to middle option
+    const options = paymentCountOptions.value
+    selectedPayments.value = options[Math.floor(options.length / 2)] || 12
+  }
 
   // Mark as initialized and run initial simulation
   isInitialized.value = true
-
-  // Run initial simulation with valid values
-  if (activeProduct.value) {
-    const term = termMonths.value
-    const minTermMonths = activeProduct.value.rules?.min_term_months ?? 3
-    const maxTermMonths = activeProduct.value.rules?.max_term_months ?? 48
-
-    if (term >= minTermMonths && term <= maxTermMonths) {
-      await applicationStore.runSimulation({
-        product_id: activeProduct.value.id,
-        amount: amount.value,
-        term_months: term,
-        payment_frequency: paymentFrequency.value
-      })
-    }
-  }
+  await simulate()
 })
 
 // When frequency changes, adjust selected payments to closest valid option
@@ -172,28 +203,10 @@ const simulation = computed(() => applicationStore.simulation)
 const isLoading = computed(() => applicationStore.isLoading)
 
 // Auto-run simulation on changes (only after initialization)
-watch([amount, selectedPayments, paymentFrequency, activeProduct], async () => {
+watch([amount, selectedPayments, selectedDays, paymentFrequency, activeProduct], async () => {
   // Skip if not initialized yet (onMounted handles initial simulation)
   if (!isInitialized.value) return
-
-  if (activeProduct.value) {
-    // Validate term_months is within product range before calling API
-    const term = termMonths.value
-    const minTermMonths = activeProduct.value.rules?.min_term_months ?? 3
-    const maxTermMonths = activeProduct.value.rules?.max_term_months ?? 48
-
-    if (term < minTermMonths || term > maxTermMonths) {
-      console.warn(`[Simulator] term_months ${term} out of range [${minTermMonths}, ${maxTermMonths}], skipping simulation`)
-      return
-    }
-
-    await applicationStore.runSimulation({
-      product_id: activeProduct.value.id,
-      amount: amount.value,
-      term_months: term,
-      payment_frequency: paymentFrequency.value
-    })
-  }
+  await simulate()
 })
 
 
@@ -215,6 +228,7 @@ const handleRequestCredit = async () => {
     product_id: activeProduct.value.id,
     requested_amount: amount.value,
     term_months: termMonths.value,
+    term_days: isSinglePayment.value ? selectedDays.value : undefined,
     payment_frequency: paymentFrequency.value
   }
   console.log('💾 Saving pending_application:', pendingData)
@@ -256,6 +270,7 @@ const getFrequencyLabel = (freq: PaymentFrequency) => {
 
 const paymentLabel = computed(() => {
   const freq = paymentFrequency.value
+  if (freq === 'SINGLE') return 'único'
   if (freq === 'SEMANAL' || freq === 'WEEKLY') return 'semanal'
   if (freq === 'QUINCENAL' || freq === 'BIWEEKLY') return 'quincenal'
   return 'mensual'
@@ -302,25 +317,39 @@ const paymentLabel = computed(() => {
       </div>
     </div>
 
-    <!-- Payment count selection -->
+    <!-- Plazo: pago único = slider de días; multi-pago = número de pagos -->
     <div class="mb-6">
-      <label class="block text-sm font-medium text-tenant mb-2">
-        ¿En cuántos pagos?
-      </label>
-      <div class="flex flex-wrap gap-2">
-        <button
-          v-for="count in paymentCountOptions"
-          :key="count"
-          :class="[
-            'px-4 py-3 rounded-xl text-sm font-medium transition-colors',
-            selectedPayments === count
-              ? 'bg-primary-600 text-white'
-              : 'border border-gray-200 text-gray-600 hover:border-primary-300'
-          ]"
-          @click="selectedPayments = count"
-        >
-          {{ count }}
-        </button>
+      <!-- Pago único (SINGLE): slider de días -->
+      <div v-if="isSinglePayment">
+        <AppSlider
+          v-model="selectedDays"
+          :min="minDays"
+          :max="maxDays"
+          :step="1"
+          label="¿A qué plazo?"
+          :format-value="formatDays"
+        />
+      </div>
+      <!-- Multi-pago: selección del número de pagos -->
+      <div v-else>
+        <label class="block text-sm font-medium text-tenant mb-2">
+          ¿En cuántos pagos?
+        </label>
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="count in paymentCountOptions"
+            :key="count"
+            :class="[
+              'px-4 py-3 rounded-xl text-sm font-medium transition-colors',
+              selectedPayments === count
+                ? 'bg-primary-600 text-white'
+                : 'border border-gray-200 text-gray-600 hover:border-primary-300'
+            ]"
+            @click="selectedPayments = count"
+          >
+            {{ count }}
+          </button>
+        </div>
       </div>
     </div>
 

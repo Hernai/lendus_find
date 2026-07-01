@@ -31,7 +31,9 @@ export interface V2SimulationPayload {
   product_id: string
   amount: number
   term_months: number
-  payment_frequency: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'
+  /** Plazo en días para productos de pago único (SINGLE / BULLET). */
+  term_days?: number
+  payment_frequency: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'SINGLE'
 }
 
 export interface V2SimulationResult {

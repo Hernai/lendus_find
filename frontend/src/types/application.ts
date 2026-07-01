@@ -73,6 +73,8 @@ export interface SimulationParams {
   product_id: string
   amount: number
   term_months: number
+  /** Plazo real en días para productos de pago único (SINGLE / BULLET). */
+  term_days?: number
   payment_frequency: PaymentFrequency
 }
 
