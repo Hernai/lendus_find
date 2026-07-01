@@ -58,6 +58,10 @@ const pathForMethod = (method: AuthMethod): string | null => {
 }
 
 watchEffect(() => {
+  // Tenants con auth unificada (MoneyCapital) muestran UnifiedAuthView, que
+  // combina celular + OTP en una sola pantalla con su branding. NO auto-
+  // redirigir a la captura genérica aunque solo tengan 1 método.
+  if (useUnifiedAuth.value) return
   if (allowedMethods.value.length === 1) {
     const target = pathForMethod(allowedMethods.value[0]!)
     if (target) router.replace(target)
