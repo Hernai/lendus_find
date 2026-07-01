@@ -930,27 +930,51 @@ class ProfileController extends Controller
                 ]);
             }
 
-            // Check if CLABE already exists for this person
-            $existing = $person->bankAccounts()->where('clabe', $validated['clabe'])->first();
+            // La CLABE es única POR TENANT (índice parcial
+            // person_bank_accounts_tenant_id_clabe_unique sobre cuentas activas).
+            // Validamos a nivel tenant, no solo esta persona: si otra persona del
+            // tenant ya la tiene, el insert reventaría con SQLSTATE[23505] y, como
+            // el onboarding borra la cuenta previa antes de crear, dejaría al
+            // solicitante sin cuenta. Devolvemos un 400 claro en su lugar.
+            $existing = \App\Models\BankAccount::where('tenant_id', $account->tenant_id)
+                ->where('clabe', $validated['clabe'])
+                ->first();
             if ($existing) {
-                return $this->badRequest('DUPLICATE_CLABE', 'Ya tienes una cuenta con esta CLABE registrada.');
+                $ownedByThisPerson = $existing->entity_type === 'persons'
+                    && $existing->entity_id === $person->id;
+                return $this->badRequest(
+                    'DUPLICATE_CLABE',
+                    $ownedByThisPerson
+                        ? 'Ya tienes una cuenta con esta CLABE registrada.'
+                        : 'Esta CLABE ya está registrada por otro solicitante.'
+                );
             }
         }
 
         // Create bank account
         $isFirst = $person->bankAccounts()->count() === 0;
-        $bankAccount = $person->bankAccounts()->create([
-            'tenant_id' => $account->tenant_id,
-            'entity_type' => 'persons',
-            'bank_code' => $clabeValidation['bank_code'] ?? null,
-            'bank_name' => $clabeValidation['bank_name'] ?? $validated['bank_name'] ?? 'Sin especificar',
-            'clabe' => $validated['clabe'] ?? null,
-            'card_number_last4' => $isCard ? substr($validated['card_number'], -4) : null,
-            'holder_name' => strtoupper($holderName),
-            'account_type' => $accountType->value,
-            'is_primary' => $isFirst,
-            'status' => 'ACTIVE',
-        ]);
+        try {
+            $bankAccount = $person->bankAccounts()->create([
+                'tenant_id' => $account->tenant_id,
+                'entity_type' => 'persons',
+                'bank_code' => $clabeValidation['bank_code'] ?? null,
+                'bank_name' => $clabeValidation['bank_name'] ?? $validated['bank_name'] ?? 'Sin especificar',
+                'clabe' => $validated['clabe'] ?? null,
+                'card_number_last4' => $isCard ? substr($validated['card_number'], -4) : null,
+                'holder_name' => strtoupper($holderName),
+                'account_type' => $accountType->value,
+                'is_primary' => $isFirst,
+                'status' => 'ACTIVE',
+            ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Red de seguridad: si a pesar del chequeo previo el índice único
+            // (tenant_id, clabe) choca (p.ej. carrera), respondemos 400 claro en
+            // vez de un 500 opaco que dejaría al solicitante sin cuenta.
+            if ($e->getCode() === '23505') {
+                return $this->badRequest('DUPLICATE_CLABE', 'Esta CLABE ya está registrada.');
+            }
+            throw $e;
+        }
 
         // Si es tarjeta, persistir el PAN cifrado via setter (que valida y guarda)
         if ($isCard) {
