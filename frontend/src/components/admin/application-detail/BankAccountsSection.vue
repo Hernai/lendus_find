@@ -159,6 +159,38 @@ const openDetail = (cv: ClabeValidationSummary) => {
   showDetailModal.value = true
 }
 
+// "Ver respuesta": consulta la validación al backend (GET) para mostrar la
+// respuesta real y completa de Nubarium (incluida la cadena cruda), en vez del
+// resumen cacheado en el payload del detalle. Cae al resumen si no hay id o falla.
+const loadingResponseId = ref<string | null>(null)
+
+const viewResponse = async (account: BankAccount) => {
+  const vid = account.clabe_validation?.validation_id
+  if (!vid) {
+    if (account.clabe_validation) openDetail(account.clabe_validation)
+    return
+  }
+  loadingResponseId.value = account.id
+  nubariumError.value = ''
+  nubariumResult.value = null
+  try {
+    const res = await applicationService.getNubariumValidation(vid)
+    nubariumResult.value = res.data
+    autoVerified.value = account.verified_by_nubarium ?? false
+    showNubariumModal.value = true
+  } catch {
+    // Si el GET falla, mostramos el resumen persistido para no dejar al usuario sin nada.
+    if (account.clabe_validation) {
+      openDetail(account.clabe_validation)
+    } else {
+      nubariumError.value = 'No se pudo obtener la respuesta de Nubarium'
+      showNubariumModal.value = true
+    }
+  } finally {
+    loadingResponseId.value = null
+  }
+}
+
 const validateWithNubarium = async (account: BankAccount) => {
   validatingId.value = account.id
   nubariumError.value = ''
@@ -366,14 +398,19 @@ onUnmounted(() => { nubariumPollCancelled = true })
                final haya sido manual. -->
           <button
             v-if="account.clabe_validation"
-            class="flex-1 px-3 py-1.5 text-sm text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors font-medium inline-flex items-center justify-center gap-1.5"
-            @click="openDetail(account.clabe_validation)"
+            class="flex-1 px-3 py-1.5 text-sm text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
+            :disabled="loadingResponseId === account.id"
+            @click="viewResponse(account)"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg v-if="loadingResponseId === account.id" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
-            Ver respuesta
+            {{ loadingResponseId === account.id ? 'Cargando…' : 'Ver respuesta' }}
           </button>
           <!-- Validar la CLABE contra el banco con Nubarium (si aún no se ha
                validado nunca). -->
