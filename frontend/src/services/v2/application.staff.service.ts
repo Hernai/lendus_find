@@ -203,6 +203,25 @@ export async function createCounterOffer(
   return response.data
 }
 
+/** Resultado de re-verificar el INE desde el panel de staff. */
+export interface V2IneReverifyResult {
+  fields: { nombres: string; apellido_paterno: string; apellido_materno: string; curp: string }
+  ine_valid: boolean | null
+  curp_valid: boolean | null
+  renapo: { nombres: string; apellido_paterno: string; apellido_materno: string } | null
+  diffs: Record<string, { ocr: string; renapo: string }>
+}
+
+/**
+ * Re-ejecutar la verificación de INE de un solicitante usando las imágenes de
+ * INE que ya subió (por si Nubarium estaba caído durante el onboarding).
+ * Requires: canReviewDocuments permission. Rate limited: 20 requests per minute.
+ */
+export async function reverifyIne(id: string): Promise<V2ApiResponse<V2IneReverifyResult>> {
+  const response = await api.post<V2ApiResponse<V2IneReverifyResult>>(`${BASE_PATH}/${id}/kyc/verify-ine`)
+  return response.data
+}
+
 /**
  * Update verification checklist.
  * Requires: canVerifyReferences permission.
@@ -545,6 +564,7 @@ export default {
   approve,
   reject,
   createCounterOffer,
+  reverifyIne,
   updateVerification,
   setRiskAssessment,
   // Notes

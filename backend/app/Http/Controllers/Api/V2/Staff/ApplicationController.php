@@ -12,8 +12,12 @@ use App\Models\Person;
 use App\Models\StaffAccount;
 use App\Services\ApplicationEventService;
 use App\Services\ApplicationService;
+use App\Services\IneVerificationService;
+use App\Services\KycServiceFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Staff Application Controller (v2).
@@ -25,7 +29,9 @@ class ApplicationController extends Controller
 {
     use ApiResponses;
     public function __construct(
-        private ApplicationService $service
+        private ApplicationService $service,
+        private KycServiceFactory $kycFactory,
+        private IneVerificationService $ineVerificationService,
     ) {}
 
     /**
@@ -318,6 +324,104 @@ class ApplicationController extends Controller
         return $this->success([
             'application' => $this->formatApplication($application),
         ], 'Solicitud asignada exitosamente.');
+    }
+
+    /**
+     * Re-ejecuta la verificación de INE de un solicitante usando las imágenes de
+     * INE que YA subió. Útil cuando Nubarium estaba caído durante el onboarding
+     * y el cliente tuvo que capturar sus datos manualmente.
+     *
+     * Reutiliza exactamente la misma lógica de negocio que el onboarding
+     * (IneVerificationService): OCR + validación INE + RENAPO + persistencia.
+     *
+     * POST /v2/staff/applications/{id}/kyc/verify-ine
+     */
+    public function reverifyIne(Request $request, string $id): JsonResponse
+    {
+        /** @var StaffAccount $staff */
+        $staff = $request->user();
+
+        $application = Application::where('id', $id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
+            ->first();
+
+        if (!$application) {
+            return $this->notFound('Solicitud no encontrada.');
+        }
+
+        $person = $application->person;
+        if (!$person) {
+            return $this->notFound('La solicitud no tiene una persona asociada.');
+        }
+
+        // Imágenes de INE ya subidas por el cliente (base64 puro).
+        $front = $this->loadDocumentBase64($person, 'INE_FRONT');
+        if (!$front) {
+            return $this->error(
+                'INE_IMAGE_MISSING',
+                'No se encontró la imagen del frente del INE para re-verificar.',
+                422
+            );
+        }
+        $back = $this->loadDocumentBase64($person, 'INE_BACK');
+
+        // Servicio KYC del tenant (mismo que usa el onboarding).
+        $service = $this->kycFactory->forCurrentTenant();
+        if (!$service->isConfigured()) {
+            return $this->serviceUnavailable('El servicio de validación no está configurado para este tenant.');
+        }
+
+        $result = $this->ineVerificationService->verify(
+            $service,
+            $person,
+            $front,
+            $back,
+            true,
+            $staff->id,
+            $request,
+        );
+
+        if (!($result['success'] ?? false)) {
+            return $this->error(
+                'INE_VALIDATION_FAILED',
+                $result['error'] ?? 'No se pudo verificar el INE.',
+                $result['status'] ?? 400
+            );
+        }
+
+        return $this->success($result['data'], 'INE re-verificado correctamente.');
+    }
+
+    /**
+     * Carga el contenido de un documento de la persona como base64 puro
+     * (sin prefijo data-URI), para reenviarlo a Nubarium.
+     */
+    private function loadDocumentBase64(Person $person, string $type): ?string
+    {
+        $doc = Document::where('documentable_type', Person::class)
+            ->where('documentable_id', $person->id)
+            ->where('type', $type)
+            ->latest('created_at')
+            ->first();
+
+        if (!$doc) {
+            return null;
+        }
+
+        try {
+            $disk = Storage::disk($doc->storage_disk ?? 'local');
+            if ($disk->exists($doc->file_path)) {
+                return base64_encode($disk->get($doc->file_path));
+            }
+        } catch (\Exception $e) {
+            Log::warning('[Staff reverifyIne] No se pudo leer el documento INE', [
+                'person_id' => $person->id,
+                'type' => $type,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return null;
     }
 
     /**

@@ -90,6 +90,26 @@ const ineComparison = computed(() => {
 // un botón (evita saturar el resumen y deja el detalle solo cuando lo consulta).
 const showIneVerification = ref(false)
 
+// Re-verificar el INE con Nubarium usando las imágenes ya subidas. Sirve cuando
+// el servicio estaba caído durante el onboarding y quedó sin verificar.
+const reverifyingIne = ref(false)
+const reverifyIne = async () => {
+  const app = application.value
+  if (!app || reverifyingIne.value) return
+  reverifyingIne.value = true
+  try {
+    await v2.staff.application.reverifyIne(app.id)
+    toast.success('INE verificado con Nubarium')
+    showIneVerification.value = true
+    await fetchApplication()
+  } catch (e) {
+    const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+    toast.error(msg || 'No se pudo verificar el INE')
+  } finally {
+    reverifyingIne.value = false
+  }
+}
+
 // Allowed statuses from backend (based on user permissions)
 const allowedStatuses = ref<{ value: string; label: string }[]>([])
 
@@ -2181,6 +2201,24 @@ onUnmounted(() => {
         <div class="p-6">
           <!-- General Tab -->
           <div v-if="activeTab === 'general'" class="space-y-4">
+            <!-- Sin verificación previa: permitir dispararla (Nubarium caído en onboarding) -->
+            <button
+              v-if="!ineComparison && canReviewDocs"
+              type="button"
+              class="w-full border border-dashed border-gray-300 rounded-lg px-4 py-2.5 flex items-center justify-between gap-3 text-sm hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+              :disabled="reverifyingIne"
+              @click="reverifyIne"
+            >
+              <span class="font-medium text-gray-700">Verificación de INE</span>
+              <span class="inline-flex items-center gap-2 text-xs text-primary-600 font-medium">
+                <svg v-if="reverifyingIne" class="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z" />
+                </svg>
+                {{ reverifyingIne ? 'Verificando con Nubarium…' : 'Verificar con Nubarium' }}
+              </span>
+            </button>
+
             <!-- Botón para desplegar la verificación de INE (no se muestra al inicio) -->
             <button
               v-if="ineComparison && !showIneVerification"

@@ -451,6 +451,9 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
             ->middleware(['permission:canApproveRejectApplications', 'throttle:30,1']);
         Route::post('/applications/{id}/counter-offer', [StaffAppController::class, 'sendCounterOffer'])
             ->middleware(['permission:canApproveRejectApplications', 'throttle:30,1']);
+        // Re-ejecutar la verificación de INE (si Nubarium estaba caído en el onboarding)
+        Route::post('/applications/{id}/kyc/verify-ine', [StaffAppController::class, 'reverifyIne'])
+            ->middleware(['permission:canReviewDocuments', 'throttle:20,1']);
 
         // Application Notes
         Route::post('/applications/{id}/notes', [StaffAppController::class, 'addNote']);
