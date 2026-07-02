@@ -20,6 +20,7 @@ import { useTenantStore } from '@/stores/tenant'
 import { useAuthStore } from '@/stores/auth'
 import { logger } from '@/utils/logger'
 import { formatMoney, formatDate, formatDateTime, formatPhone } from '@/utils/formatters'
+import { getStateNameFromCurp } from '@/utils/validators'
 import { getStatusBadge } from '@/utils/admin-styles'
 import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent, DocumentDeletedEvent, DocumentUploadedEvent, ReferenceVerifiedEvent, BankAccountVerifiedEvent } from '@/types/realtime'
 
@@ -61,11 +62,16 @@ const ineComparison = computed(() => {
   const iv = a?.ine_verification
   if (!a || !iv) return null
   const norm = (s?: string | null) => (s ?? '').toUpperCase().trim()
+  // La entidad de nacimiento va codificada en la CURP (posiciones 12-13);
+  // la derivamos de cada fuente. RENAPO valida la CURP del OCR, así que su
+  // entidad es la de esa CURP cuando la validación fue exitosa.
+  const state = (curp?: string | null) => norm(getStateNameFromCurp(norm(curp)))
   const rows = [
     { label: 'Nombre', confirmed: norm(a.first_name), ocr: norm(iv.ocr?.nombres), renapo: norm(iv.renapo?.nombres) },
     { label: 'Apellido paterno', confirmed: norm(a.last_name_1), ocr: norm(iv.ocr?.apellido_paterno), renapo: norm(iv.renapo?.apellido_paterno) },
     { label: 'Apellido materno', confirmed: norm(a.last_name_2), ocr: norm(iv.ocr?.apellido_materno), renapo: norm(iv.renapo?.apellido_materno) },
     { label: 'CURP', confirmed: norm(a.curp), ocr: norm(iv.ocr?.curp), renapo: '' },
+    { label: 'Entidad de nacimiento', confirmed: state(a.curp), ocr: state(iv.ocr?.curp), renapo: iv.curp_valid ? state(iv.ocr?.curp) : '' },
   ].map(r => ({
     ...r,
     // diferencia si el confirmado no coincide con OCR o RENAPO (cuando existen)
@@ -79,6 +85,10 @@ const ineComparison = computed(() => {
     hasDiffs: rows.some(r => r.diff),
   }
 })
+
+// La verificación de INE no se muestra al inicio; el analista la despliega con
+// un botón (evita saturar el resumen y deja el detalle solo cuando lo consulta).
+const showIneVerification = ref(false)
 
 // Allowed statuses from backend (based on user permissions)
 const allowedStatuses = ref<{ value: string; label: string }[]>([])
@@ -2171,9 +2181,34 @@ onUnmounted(() => {
         <div class="p-6">
           <!-- General Tab -->
           <div v-if="activeTab === 'general'" class="space-y-4">
+            <!-- Botón para desplegar la verificación de INE (no se muestra al inicio) -->
+            <button
+              v-if="ineComparison && !showIneVerification"
+              type="button"
+              class="w-full border rounded-lg px-4 py-2.5 flex items-center justify-between gap-3 text-sm hover:bg-gray-50 transition-colors"
+              :class="ineComparison.hasDiffs ? 'border-amber-300 bg-amber-50/40' : 'border-gray-200'"
+              @click="showIneVerification = true"
+            >
+              <span class="font-medium text-gray-800 inline-flex items-center gap-2">
+                Verificación de INE
+                <span v-if="ineComparison.hasDiffs" class="text-xs font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                  Revisar diferencias
+                </span>
+              </span>
+              <span class="inline-flex items-center gap-3 text-xs">
+                <span :class="ineComparison.ineValid ? 'text-green-700' : 'text-gray-500'">
+                  INE {{ ineComparison.ineValid === true ? '✓' : ineComparison.ineValid === false ? '✕' : '—' }}
+                </span>
+                <span :class="ineComparison.curpValid ? 'text-green-700' : 'text-gray-500'">
+                  RENAPO {{ ineComparison.curpValid === true ? '✓' : ineComparison.curpValid === false ? '✕' : '—' }}
+                </span>
+                <span class="text-primary-600 font-medium">Ver detalle</span>
+              </span>
+            </button>
+
             <!-- Verificación de INE: confirmado (cliente) vs OCR vs RENAPO -->
             <div
-              v-if="ineComparison"
+              v-if="ineComparison && showIneVerification"
               class="border rounded-lg overflow-hidden"
               :class="ineComparison.hasDiffs ? 'border-amber-300' : 'border-gray-200'"
             >
@@ -2194,6 +2229,9 @@ onUnmounted(() => {
                   <span :class="ineComparison.curpValid ? 'text-green-700' : 'text-gray-500'">
                     RENAPO {{ ineComparison.curpValid === true ? '✓' : ineComparison.curpValid === false ? '✕' : '—' }}
                   </span>
+                  <button type="button" class="text-gray-400 hover:text-gray-600 ml-1" @click="showIneVerification = false">
+                    Ocultar
+                  </button>
                 </span>
               </div>
               <table class="w-full text-sm">
