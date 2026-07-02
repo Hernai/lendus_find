@@ -610,7 +610,7 @@ class KycController extends Controller
             $request->boolean('validate_list', true)
         );
 
-        $this->logKycAction($request, 'ine_verify', [
+        $this->logKycAction($request, 'ine_validation', [
             'success' => $ine['success'] ?? false,
             'is_valid' => $ine['is_valid'] ?? null,
         ]);
