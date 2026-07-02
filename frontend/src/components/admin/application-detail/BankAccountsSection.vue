@@ -317,55 +317,28 @@ onUnmounted(() => { nubariumPollCancelled = true })
           v-if="account.is_verified || account.clabe_validation"
           class="mt-3 pt-3 border-t border-gray-100"
         >
-          <!-- Con detalle de Nubarium: clickable -->
-          <button
-            v-if="account.clabe_validation"
-            type="button"
-            class="w-full flex items-center justify-between gap-3 text-left rounded-lg hover:bg-gray-50 -mx-1.5 px-1.5 py-1.5 transition-colors"
-            @click="openDetail(account.clabe_validation)"
-          >
-            <span class="flex items-center gap-2.5 min-w-0">
-              <span
-                :class="['w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0', account.is_verified ? 'bg-green-100' : 'bg-amber-100']"
-              >
-                <svg v-if="account.is_verified" class="w-4 h-4 text-green-700" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                </svg>
-                <svg v-else class="w-4 h-4 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                </svg>
-              </span>
-              <span class="min-w-0">
-                <span class="block text-sm font-medium text-gray-900">
-                  {{ account.is_verified
-                    ? (account.verified_by_nubarium ? 'Verificada automáticamente (Nubarium)' : 'Verificada manualmente')
-                    : 'Validada con Nubarium · sin coincidencia de nombre' }}
-                </span>
-                <span class="block text-xs text-gray-500">
-                  {{ formatDateTime(account.verified_at || account.clabe_validation.validated_at) }}
-                </span>
-              </span>
-            </span>
-            <span class="text-xs font-medium text-primary-600 inline-flex items-center gap-0.5 flex-shrink-0">
-              Ver detalle
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-              </svg>
-            </span>
-          </button>
-
-          <!-- Verificada sin detalle de Nubarium (manual o previa): estado + fecha -->
-          <div v-else class="flex items-center gap-2.5">
-            <span class="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-green-700" fill="currentColor" viewBox="0 0 24 24">
+          <!-- Estado informativo (no clickable). La respuesta de Nubarium se ve
+               con el botón "Ver respuesta" de abajo, para no duplicar la acción. -->
+          <div class="flex items-center gap-2.5">
+            <span
+              :class="['w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0', account.is_verified ? 'bg-green-100' : 'bg-amber-100']"
+            >
+              <svg v-if="account.is_verified" class="w-4 h-4 text-green-700" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
               </svg>
+              <svg v-else class="w-4 h-4 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
             </span>
-            <span>
+            <span class="min-w-0">
               <span class="block text-sm font-medium text-gray-900">
-                {{ account.verified_by_nubarium ? 'Verificada automáticamente (Nubarium)' : 'Verificada manualmente' }}
+                {{ account.is_verified
+                  ? (account.verified_by_nubarium ? 'Verificada automáticamente (Nubarium)' : 'Verificada manualmente')
+                  : 'Validada con Nubarium · sin coincidencia de nombre' }}
               </span>
-              <span class="block text-xs text-gray-500">{{ formatDateTime(account.verified_at) }}</span>
+              <span class="block text-xs text-gray-500">
+                {{ formatDateTime(account.verified_at || account.clabe_validation?.validated_at) }}
+              </span>
             </span>
           </div>
         </div>
