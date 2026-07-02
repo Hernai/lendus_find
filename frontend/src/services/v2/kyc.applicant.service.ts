@@ -365,6 +365,40 @@ export async function validateIne(
 }
 
 /**
+ * Verificación COMPLETA del INE en un solo llamado. Toda la lógica de negocio
+ * (OCR + validación INE + CURP RENAPO + persistencia + diferencias) vive en el
+ * backend; el front solo captura las fotos y muestra la confirmación.
+ */
+export interface IneVerifyData {
+  fields: {
+    nombres: string
+    apellido_paterno: string
+    apellido_materno: string
+    curp: string
+  }
+  ine_valid: boolean | null
+  curp_valid: boolean | null
+  renapo: { nombres: string; apellido_paterno: string; apellido_materno: string } | null
+  diffs: Record<string, { ocr: string; renapo: string }>
+  list_validation?: { valid: boolean; code: string; message: string } | null
+  validation_code?: string | null
+}
+export type IneVerifyResponse = V2Response<IneVerifyData>
+
+export async function verifyIne(
+  frontImage: string,
+  backImage?: string | null,
+  validateList: boolean = true
+): Promise<IneVerifyData> {
+  const response = await api.post<IneVerifyResponse>(`${BASE_PATH}/ine/verify`, {
+    front_image: frontImage,
+    back_image: backImage,
+    validate_list: validateList,
+  })
+  return response.data.data
+}
+
+/**
  * Get biometric token for face match/liveness.
  * Returns the unwrapped data from the V2 response.
  */
@@ -546,6 +580,7 @@ export default {
   testConnection,
   refreshToken,
   validateCurp,
+  verifyIne,
   getCurp,
   validateRfc,
   validateIne,

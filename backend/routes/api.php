@@ -259,6 +259,9 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'log.request'])
                 Route::post('/curp/get', [ApplicantKycController::class, 'getCurp']);
                 Route::post('/rfc/validate', [ApplicantKycController::class, 'validateRfc']);
                 Route::post('/ine/validate', [ApplicantKycController::class, 'validateIne']);
+                // Verificación completa del INE (OCR + validación + CURP RENAPO + diffs)
+                // en un solo llamado. Lógica de negocio en el backend, compartida.
+                Route::post('/ine/verify', [ApplicantKycController::class, 'verifyIne']);
                 Route::post('/ofac/check', [ApplicantKycController::class, 'checkOfac']);
                 Route::post('/pld/check', [ApplicantKycController::class, 'checkPldBlacklists']);
                 // Servicios México síncronos (Banxico / SEP)

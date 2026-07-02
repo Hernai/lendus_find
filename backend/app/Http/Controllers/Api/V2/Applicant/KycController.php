@@ -585,6 +585,140 @@ class KycController extends Controller
     }
 
     /**
+     * Verificación COMPLETA del INE en un solo llamado (lógica de negocio en el
+     * backend, compartida por todos los onboardings/tenants):
+     *   1) OCR + validación INE (lista nominal)
+     *   2) validación de la CURP extraída con RENAPO
+     *   3) persistencia (identificaciones, documento, verificaciones)
+     *   4) diferencias OCR vs RENAPO (para revisión del admin)
+     *
+     * El front solo captura las fotos y muestra la confirmación con `fields`.
+     *
+     * POST /v2/applicant/kyc/ine/verify
+     */
+    public function verifyIne(ValidateIneRequest $request): JsonResponse
+    {
+        $service = $this->getKycService($request);
+        if ($error = $this->ensureServiceConfigured($service)) {
+            return $error;
+        }
+
+        // 1) OCR + validación INE
+        $ine = $service->validateIne(
+            $request->front_image,
+            $request->back_image,
+            $request->boolean('validate_list', true)
+        );
+
+        $this->logKycAction($request, 'ine_verify', [
+            'success' => $ine['success'] ?? false,
+            'is_valid' => $ine['is_valid'] ?? null,
+        ]);
+
+        if (!($ine['success'] ?? false)) {
+            return $this->error(
+                'INE_VALIDATION_FAILED',
+                $ine['error'] ?? 'Error al validar INE',
+                $ine['status_code'] ?? 400
+            );
+        }
+
+        $ocr = $ine['ocr_data'] ?? [];
+        $ineValid = $ine['is_valid'] ?? null;
+        $applicant = $this->getApplicant($request);
+
+        // 2) Persistir el resultado del INE (identificaciones + documento).
+        if ($ineValid && $applicant) {
+            $this->verificationService->verifyIneDocument(
+                $applicant,
+                'front',
+                'ine_ocr_' . now()->timestamp,
+                [
+                    'curp' => $ocr['curp'] ?? null,
+                    'first_name' => $ocr['nombres'] ?? null,
+                    'last_name_1' => $ocr['apellido_paterno'] ?? null,
+                    'last_name_2' => $ocr['apellido_materno'] ?? null,
+                    'birth_date' => $ocr['fecha_nacimiento'] ?? null,
+                ]
+            );
+            $this->saveIdentificationsFromIne($applicant, $ocr);
+            $this->updateAndApproveIneDocuments($applicant, $ocr, $ine['list_validation'] ?? null);
+        }
+
+        // 3) Validación de la CURP extraída con RENAPO.
+        $curp = isset($ocr['curp']) ? preg_replace('/\s+/', '', strtoupper((string) $ocr['curp'])) : null;
+        $curpValid = null;
+        $renapo = null;
+        if ($curp) {
+            $curpRes = $service->validateCurp($curp);
+            if ($curpRes['success'] ?? false) {
+                $curpValid = $curpRes['valid'] ?? false;
+                $renapoData = $curpRes['data'] ?? [];
+
+                if ($curpValid && $applicant) {
+                    $this->verificationService->verify($applicant, 'curp', $curp, VerificationMethod::RENAPO, ['renapo_response' => $renapoData]);
+                    if (!empty($renapoData['nombres'])) {
+                        $this->verificationService->verify($applicant, 'first_name', $renapoData['nombres'], VerificationMethod::RENAPO);
+                    }
+                    if (!empty($renapoData['apellido_paterno'])) {
+                        $this->verificationService->verify($applicant, 'last_name_1', $renapoData['apellido_paterno'], VerificationMethod::RENAPO);
+                    }
+                    if (!empty($renapoData['apellido_materno'])) {
+                        $this->verificationService->verify($applicant, 'last_name_2', $renapoData['apellido_materno'], VerificationMethod::RENAPO);
+                    }
+                    if (!empty($renapoData['fecha_nacimiento'])) {
+                        $this->verificationService->verify($applicant, 'birth_date', $renapoData['fecha_nacimiento'], VerificationMethod::RENAPO);
+                    }
+                    $this->updateCurpIdentificationStatus($applicant, $curp, $renapoData);
+                }
+
+                if (!empty($renapoData)) {
+                    $renapo = [
+                        'nombres' => strtoupper(trim((string) ($renapoData['nombres'] ?? ''))),
+                        'apellido_paterno' => strtoupper(trim((string) ($renapoData['apellido_paterno'] ?? ''))),
+                        'apellido_materno' => strtoupper(trim((string) ($renapoData['apellido_materno'] ?? ''))),
+                    ];
+                }
+            }
+        }
+
+        // 4) Actualizar KYC status + evento en el timeline.
+        if ($ineValid && $applicant) {
+            $this->verificationService->updateKycStatus($applicant);
+            $application = $this->getCurrentApplication($applicant);
+            if ($application) {
+                $this->eventService->recordKycIneValidated($application, true, $request->user()?->id, $ocr, $request);
+            }
+        }
+
+        // 5) Campos extraídos (base de la confirmación) + diferencias OCR vs RENAPO.
+        $fields = [
+            'nombres' => strtoupper(trim((string) ($ocr['nombres'] ?? ''))),
+            'apellido_paterno' => strtoupper(trim((string) ($ocr['apellido_paterno'] ?? ''))),
+            'apellido_materno' => strtoupper(trim((string) ($ocr['apellido_materno'] ?? ''))),
+            'curp' => $curp ?? '',
+        ];
+        $diffs = [];
+        if ($renapo) {
+            foreach (['nombres', 'apellido_paterno', 'apellido_materno'] as $k) {
+                if (($renapo[$k] ?? '') !== ($fields[$k] ?? '')) {
+                    $diffs[$k] = ['ocr' => $fields[$k], 'renapo' => $renapo[$k]];
+                }
+            }
+        }
+
+        return $this->success([
+            'fields' => $fields,
+            'ine_valid' => $ineValid,
+            'curp_valid' => $curpValid,
+            'renapo' => $renapo,
+            'diffs' => $diffs,
+            'list_validation' => $ine['list_validation'] ?? null,
+            'validation_code' => $ine['validation_code'] ?? null,
+        ], 'INE verificado');
+    }
+
+    /**
      * Validate face match between selfie and INE photo.
      */
     public function validateFaceMatch(ValidateFaceMatchRequest $request): JsonResponse

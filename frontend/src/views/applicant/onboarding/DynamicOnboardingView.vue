@@ -439,7 +439,7 @@ function confirmBank() {
 // para que sea la misma en todos los onboardings. Aquí solo orquestamos la UI
 // (mostrar la confirmación editable) y persistir lo confirmado. No bloquea si
 // falla: se marca para revisión del admin. ---
-const { verify: verifyIne, computeDiffs: computeIneDiffs } = useIneVerification()
+const { verify: verifyIne } = useIneVerification()
 const showIneConfirm = ref(false)
 const ineValidating = ref(false)
 const ineForm = ref<IneVerifiedFields>({ nombres: '', apellido_paterno: '', apellido_materno: '', curp: '' })
@@ -447,6 +447,7 @@ const ineOcr = ref<IneVerifiedFields | null>(null)
 const ineValid = ref<boolean | null>(null)
 const ineCurpValid = ref<boolean | null>(null)
 const ineRenapo = ref<{ nombres: string; apellido_paterno: string; apellido_materno: string } | null>(null)
+const ineDiffs = ref<Record<string, { ocr: string; renapo: string }>>({})
 
 async function runIneOcr() {
   const v = currentValue.value as { front_image?: string; back_image?: string } | null
@@ -459,6 +460,7 @@ async function runIneOcr() {
     ineValid.value = res.ineValid
     ineCurpValid.value = res.curpValid
     ineRenapo.value = res.renapo
+    ineDiffs.value = res.diffs
     showIneConfirm.value = true
   } catch (e) {
     // OCR/validación falló: no bloqueamos. Marcamos para revisión del admin y avanzamos.
@@ -475,11 +477,17 @@ async function runIneOcr() {
 
 function confirmIne() {
   const base = (currentValue.value ?? {}) as Record<string, unknown>
-  // Referencia para las diferencias: RENAPO si validó (dato oficial), si no el OCR.
-  const reference: IneVerifiedFields | null = ineRenapo.value
-    ? { ...ineRenapo.value, curp: ineForm.value.curp }
-    : ineOcr.value
-  const diffs = computeIneDiffs(reference, ineForm.value)
+  // Diferencias entre lo EXTRAÍDO y lo que el cliente confirmó/editó (para el
+  // admin). Las diferencias OCR vs RENAPO ya las calculó el backend (ineDiffs).
+  const ocr = ineOcr.value
+  const editedDiffs: Record<string, { extracted: string; confirmed: string }> = {}
+  if (ocr) {
+    for (const k of ['nombres', 'apellido_paterno', 'apellido_materno', 'curp'] as const) {
+      if ((ocr[k] ?? '') !== (ineForm.value[k] ?? '')) {
+        editedDiffs[k] = { extracted: ocr[k] ?? '', confirmed: ineForm.value[k] ?? '' }
+      }
+    }
+  }
   onboardingStore.setDynamicField(currentStep.value!.id, {
     ...base,
     confirmed: { ...ineForm.value },
@@ -487,7 +495,8 @@ function confirmIne() {
     ine_valid: ineValid.value,
     curp_valid: ineCurpValid.value,
     renapo: ineRenapo.value,
-    ocr_diffs: Object.keys(diffs).length ? diffs : undefined,
+    ocr_renapo_diffs: Object.keys(ineDiffs.value).length ? ineDiffs.value : undefined,
+    edited_diffs: Object.keys(editedDiffs).length ? editedDiffs : undefined,
   })
   showIneConfirm.value = false
   next()
