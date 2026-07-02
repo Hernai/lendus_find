@@ -2211,49 +2211,6 @@ onUnmounted(() => {
         <div class="p-6">
           <!-- General Tab -->
           <div v-if="activeTab === 'general'" class="space-y-4">
-            <!-- Sin verificación previa: permitir dispararla (Nubarium caído en onboarding) -->
-            <button
-              v-if="!ineComparison && canReviewDocs"
-              type="button"
-              class="w-full border border-dashed border-gray-300 rounded-lg px-4 py-2.5 flex items-center justify-between gap-3 text-sm hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
-              :disabled="reverifyingIne"
-              @click="reverifyIne"
-            >
-              <span class="font-medium text-gray-700">Verificación de INE</span>
-              <span class="inline-flex items-center gap-2 text-xs text-primary-600 font-medium">
-                <svg v-if="reverifyingIne" class="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z" />
-                </svg>
-                {{ reverifyingIne ? 'Verificando con Nubarium…' : 'Verificar con Nubarium' }}
-              </span>
-            </button>
-
-            <!-- Botón para desplegar la verificación de INE (no se muestra al inicio) -->
-            <button
-              v-if="ineComparison && !showIneVerification"
-              type="button"
-              class="w-full border rounded-lg px-4 py-2.5 flex items-center justify-between gap-3 text-sm hover:bg-gray-50 transition-colors"
-              :class="ineComparison.hasDiffs ? 'border-amber-300 bg-amber-50/40' : 'border-gray-200'"
-              @click="showIneVerification = true"
-            >
-              <span class="font-medium text-gray-800 inline-flex items-center gap-2">
-                Verificación de INE
-                <span v-if="ineComparison.hasDiffs" class="text-xs font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
-                  Revisar diferencias
-                </span>
-              </span>
-              <span class="inline-flex items-center gap-3 text-xs">
-                <span :class="ineComparison.ineValid ? 'text-green-700' : 'text-gray-500'">
-                  INE {{ ineComparison.ineValid === true ? '✓' : ineComparison.ineValid === false ? '✕' : '—' }}
-                </span>
-                <span :class="ineComparison.curpValid ? 'text-green-700' : 'text-gray-500'">
-                  RENAPO {{ ineComparison.curpValid === true ? '✓' : ineComparison.curpValid === false ? '✕' : '—' }}
-                </span>
-                <span class="text-primary-600 font-medium">Ver detalle</span>
-              </span>
-            </button>
-
             <!-- Modal: Verificación de INE (confirmado cliente vs OCR vs RENAPO) -->
             <Teleport to="body">
               <div
@@ -2352,6 +2309,32 @@ onUnmounted(() => {
                   <span v-if="isForeigner" class="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded">
                     Extranjero
                   </span>
+                  <!-- Acceso a la verificación de INE (abre el modal) -->
+                  <button
+                    v-if="ineComparison"
+                    type="button"
+                    class="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded border transition-colors"
+                    :class="ineComparison.hasDiffs ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100' : 'border-gray-200 text-gray-600 hover:bg-gray-100'"
+                    @click="showIneVerification = true"
+                  >
+                    <span class="font-medium">INE</span>
+                    <span :class="ineComparison.ineValid ? 'text-green-600' : 'text-gray-400'">{{ ineComparison.ineValid === true ? '✓' : ineComparison.ineValid === false ? '✕' : '—' }}</span>
+                    <span>{{ ineComparison.hasDiffs ? 'Revisar diferencias' : 'Ver detalle' }}</span>
+                  </button>
+                  <!-- Sin verificación previa: dispararla (Nubarium caído en onboarding) -->
+                  <button
+                    v-else-if="canReviewDocs"
+                    type="button"
+                    class="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded border border-dashed border-gray-300 text-primary-600 hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                    :disabled="reverifyingIne"
+                    @click="reverifyIne"
+                  >
+                    <svg v-if="reverifyingIne" class="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z" />
+                    </svg>
+                    {{ reverifyingIne ? 'Verificando…' : 'Verificar INE' }}
+                  </button>
                 </div>
                 <div class="flex items-center gap-3 text-xs text-gray-500">
                   <span class="flex items-center gap-1">
