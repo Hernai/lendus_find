@@ -175,7 +175,7 @@ const viewResponse = async (account: BankAccount) => {
   nubariumResult.value = null
   try {
     const res = await applicationService.getNubariumValidation(vid)
-    nubariumResult.value = res.data
+    nubariumResult.value = res.data ?? null
     autoVerified.value = account.verified_by_nubarium ?? false
     showNubariumModal.value = true
   } catch {
