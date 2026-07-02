@@ -649,11 +649,13 @@ class KycController extends Controller
         $curp = isset($ocr['curp']) ? preg_replace('/\s+/', '', strtoupper((string) $ocr['curp'])) : null;
         $curpValid = null;
         $renapo = null;
+        $renapoFull = null;
         if ($curp) {
             $curpRes = $service->validateCurp($curp);
             if ($curpRes['success'] ?? false) {
                 $curpValid = $curpRes['valid'] ?? false;
                 $renapoData = $curpRes['data'] ?? [];
+                $renapoFull = !empty($renapoData) ? $renapoData : null;
 
                 if ($curpValid && $applicant) {
                     $this->verificationService->verify($applicant, 'curp', $curp, VerificationMethod::RENAPO, ['renapo_response' => $renapoData]);
@@ -726,9 +728,14 @@ class KycController extends Controller
 
         return $this->success([
             'fields' => $fields,
+            // OCR completo (fecha, sexo, clave de elector, dirección, etc.) para
+            // flujos que lo necesitan (legacy). El dinámico usa solo `fields`.
+            'ocr_data' => $ocr ?: null,
             'ine_valid' => $ineValid,
             'curp_valid' => $curpValid,
             'renapo' => $renapo,
+            // Datos oficiales completos de RENAPO (para sobrescribir el OCR).
+            'renapo_data' => $renapoFull ?? null,
             'diffs' => $diffs,
             'list_validation' => $ine['list_validation'] ?? null,
             'validation_code' => $ine['validation_code'] ?? null,

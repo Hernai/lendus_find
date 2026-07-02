@@ -146,6 +146,8 @@ export const useKycStore = defineStore('kyc', () => {
   const ineFrontImage = ref<string | null>(null)
   const ineBackImage = ref<string | null>(null)
   const selfieImage = ref<string | null>(null)
+  // CURP cuya validación RENAPO ya resolvió verifyIne (evita re-llamar en validateCurp).
+  const renapoDoneForCurp = ref<string | null>(null)
 
   // Locked data from INE OCR
   const lockedData = ref<KycLockedData>({
@@ -365,9 +367,13 @@ export const useKycStore = defineStore('kyc', () => {
 
     isValidating.value = true
     error.value = null
+    renapoDoneForCurp.value = null
 
     try {
-      const response = await kycService.validateIne(ineFrontImage.value, ineBackImage.value)
+      // Lógica unificada en el backend: OCR + validación INE + CURP RENAPO +
+      // persistencia. Antes el front orquestaba validateIne + validateCurp por
+      // separado; ahora es una sola fuente de verdad (verifyIne).
+      const response = await kycService.verifyIne(ineFrontImage.value, ineBackImage.value)
 
       // Store OCR data
       if (response.ocr_data) {
@@ -422,7 +428,22 @@ export const useKycStore = defineStore('kyc', () => {
         validations.value.ine_lista_nominal = response.list_validation
       }
 
-      return response.is_valid === true
+      // RENAPO: verifyIne ya validó la CURP. Poblamos el estado y sobrescribimos
+      // los nombres con el dato oficial (como hacía validateCurp por separado).
+      if (response.curp_valid !== null && response.curp_valid !== undefined) {
+        validations.value.curp_renapo = {
+          valid: response.curp_valid === true,
+          data: (response.renapo_data ?? undefined) as Record<string, unknown> | undefined,
+        }
+        if (response.curp_valid && response.renapo) {
+          if (response.renapo.nombres) lockedData.value.nombres = response.renapo.nombres
+          if (response.renapo.apellido_paterno) lockedData.value.apellido_paterno = response.renapo.apellido_paterno
+          if (response.renapo.apellido_materno) lockedData.value.apellido_materno = response.renapo.apellido_materno
+        }
+        renapoDoneForCurp.value = lockedData.value.curp
+      }
+
+      return response.ine_valid === true
     } catch (err: unknown) {
       kycLogger.error('Failed to validate INE', err)
       const errorResponse = err as { response?: { data?: { message?: string } } }
@@ -443,6 +464,17 @@ export const useKycStore = defineStore('kyc', () => {
     if (!curpToValidate) {
       error.value = 'Se requiere CURP para validar'
       return false
+    }
+
+    // Si verifyIne (en validateIne) ya validó esta CURP con RENAPO, reusamos el
+    // resultado en vez de re-llamar. Standalone (sin INE previo) sigue funcionando.
+    const cleanCurp = curpToValidate.replace(/\s+/g, '').toUpperCase()
+    if (
+      renapoDoneForCurp.value &&
+      renapoDoneForCurp.value.replace(/\s+/g, '').toUpperCase() === cleanCurp &&
+      validations.value.curp_renapo
+    ) {
+      return validations.value.curp_renapo.valid === true
     }
 
     isValidating.value = true

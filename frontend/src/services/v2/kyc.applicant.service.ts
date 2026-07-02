@@ -376,9 +376,13 @@ export interface IneVerifyData {
     apellido_materno: string
     curp: string
   }
+  /** OCR completo (fecha, sexo, clave de elector, dirección, etc.) para el legacy. */
+  ocr_data?: IneOcrData | null
   ine_valid: boolean | null
   curp_valid: boolean | null
   renapo: { nombres: string; apellido_paterno: string; apellido_materno: string } | null
+  /** Datos oficiales completos de RENAPO. */
+  renapo_data?: Record<string, unknown> | null
   diffs: Record<string, { ocr: string; renapo: string }>
   list_validation?: { valid: boolean; code: string; message: string } | null
   validation_code?: string | null

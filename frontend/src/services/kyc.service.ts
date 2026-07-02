@@ -168,6 +168,17 @@ export async function validateIne(
 }
 
 /**
+ * Verificación COMPLETA del INE (OCR + validación INE + CURP RENAPO +
+ * persistencia + diferencias) en un solo llamado; la lógica vive en el backend.
+ */
+export async function verifyIne(
+  frontImage: string,
+  backImage?: string | null
+) {
+  return await v2.applicant.kyc.verifyIne(frontImage, backImage, true)
+}
+
+/**
  * Validate CURP with RENAPO.
  */
 export async function validateCurp(curp: string): Promise<CurpValidationResponse> {
