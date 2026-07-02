@@ -10,7 +10,7 @@ import type { OnboardingStep } from '@/types/v2/onboardingStep'
 import { logger } from '@/utils/logger'
 import { formatCurrency } from '@/utils/formatters'
 import { bankName } from '@/utils/banks'
-import { validateIne } from '@/services/v2/kyc.applicant.service'
+import { useIneVerification, type IneVerifiedFields } from '@/composables/useIneVerification'
 
 /**
  * Vista de onboarding dinámica (white-label).
@@ -434,35 +434,35 @@ function confirmBank() {
   next()
 }
 
-// --- Confirmación de INE: OCR + validación con Nubarium; el cliente verifica
-// los datos extraídos (editables). No bloquea si falla: el admin lo revisa. ---
-type IneFields = { nombres: string; apellido_paterno: string; apellido_materno: string; curp: string }
+// --- Confirmación de INE. La LÓGICA de negocio (OCR + validación INE + CURP
+// RENAPO + diferencias) vive en el composable compartido useIneVerification,
+// para que sea la misma en todos los onboardings. Aquí solo orquestamos la UI
+// (mostrar la confirmación editable) y persistir lo confirmado. No bloquea si
+// falla: se marca para revisión del admin. ---
+const { verify: verifyIne, computeDiffs: computeIneDiffs } = useIneVerification()
 const showIneConfirm = ref(false)
 const ineValidating = ref(false)
-const ineForm = ref<IneFields>({ nombres: '', apellido_paterno: '', apellido_materno: '', curp: '' })
-const ineOcr = ref<IneFields | null>(null)
+const ineForm = ref<IneVerifiedFields>({ nombres: '', apellido_paterno: '', apellido_materno: '', curp: '' })
+const ineOcr = ref<IneVerifiedFields | null>(null)
 const ineValid = ref<boolean | null>(null)
+const ineCurpValid = ref<boolean | null>(null)
+const ineRenapo = ref<{ nombres: string; apellido_paterno: string; apellido_materno: string } | null>(null)
 
 async function runIneOcr() {
   const v = currentValue.value as { front_image?: string; back_image?: string } | null
   if (!v?.front_image || !v?.back_image) { next(); return }
   ineValidating.value = true
   try {
-    const res = await validateIne(v.front_image, v.back_image, true)
-    const ocr = res.ocr_data
-    const data: IneFields = {
-      nombres: (ocr?.nombres ?? '').toUpperCase(),
-      apellido_paterno: (ocr?.apellido_paterno ?? '').toUpperCase(),
-      apellido_materno: (ocr?.apellido_materno ?? '').toUpperCase(),
-      curp: (ocr?.curp ?? '').toUpperCase(),
-    }
-    ineOcr.value = { ...data }
-    ineForm.value = { ...data }
-    ineValid.value = res.is_valid ?? res.list_validation?.valid ?? null
+    const res = await verifyIne(v.front_image, v.back_image)
+    ineOcr.value = { ...res.fields }
+    ineForm.value = { ...res.fields }
+    ineValid.value = res.ineValid
+    ineCurpValid.value = res.curpValid
+    ineRenapo.value = res.renapo
     showIneConfirm.value = true
   } catch (e) {
     // OCR/validación falló: no bloqueamos. Marcamos para revisión del admin y avanzamos.
-    log.warn('OCR de INE falló', { error: e })
+    log.warn('verificación de INE falló', { error: e })
     onboardingStore.setDynamicField(currentStep.value!.id, {
       ...(currentValue.value as object),
       ine_ocr_failed: true,
@@ -475,21 +475,18 @@ async function runIneOcr() {
 
 function confirmIne() {
   const base = (currentValue.value ?? {}) as Record<string, unknown>
-  // Diferencias OCR vs lo confirmado (para que el admin las revise si son grandes).
-  const ocr = ineOcr.value
-  const diffs: Record<string, { ocr: string; confirmed: string }> = {}
-  if (ocr) {
-    for (const k of ['nombres', 'apellido_paterno', 'apellido_materno', 'curp'] as const) {
-      if ((ocr[k] ?? '') !== (ineForm.value[k] ?? '')) {
-        diffs[k] = { ocr: ocr[k] ?? '', confirmed: ineForm.value[k] ?? '' }
-      }
-    }
-  }
+  // Referencia para las diferencias: RENAPO si validó (dato oficial), si no el OCR.
+  const reference: IneVerifiedFields | null = ineRenapo.value
+    ? { ...ineRenapo.value, curp: ineForm.value.curp }
+    : ineOcr.value
+  const diffs = computeIneDiffs(reference, ineForm.value)
   onboardingStore.setDynamicField(currentStep.value!.id, {
     ...base,
     confirmed: { ...ineForm.value },
-    ocr_data: ocr,
+    ocr_data: ineOcr.value,
     ine_valid: ineValid.value,
+    curp_valid: ineCurpValid.value,
+    renapo: ineRenapo.value,
     ocr_diffs: Object.keys(diffs).length ? diffs : undefined,
   })
   showIneConfirm.value = false
