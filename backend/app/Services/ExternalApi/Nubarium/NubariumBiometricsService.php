@@ -283,8 +283,8 @@ class NubariumBiometricsService extends BaseNubariumService
 
         try {
             $payload = [
-                'id' => $ineImage,
-                'face' => $selfieImage,
+                'id' => $this->stripDataUri($ineImage),
+                'face' => $this->stripDataUri($selfieImage),
                 'media' => 'image',
                 'threshold' => (string) $threshold,
             ];
@@ -394,7 +394,7 @@ class NubariumBiometricsService extends BaseNubariumService
 
         try {
             $response = $this->apiCall('global', 'POST', '/global/biometrics/v1/liveness-face', [
-                'face' => $faceImage,
+                'face' => $this->stripDataUri($faceImage),
             ], 60);
 
             $this->logResponse($response, 'global/biometrics/v1/liveness-face');
