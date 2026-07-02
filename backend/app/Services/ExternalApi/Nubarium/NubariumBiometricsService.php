@@ -19,15 +19,27 @@ class NubariumBiometricsService extends BaseNubariumService
     /**
      * Extract data from INE/IFE using OCR.
      */
+    /**
+     * Nubarium espera base64 PURO; el front manda "data:<mime>;base64,...".
+     * Quita el prefijo data-URI si viene.
+     */
+    private function stripDataUri(string $image): string
+    {
+        $pos = strpos($image, 'base64,');
+        return $pos !== false ? substr($image, $pos + 7) : $image;
+    }
+
     public function extractIneData(string $frontImage, ?string $backImage = null): array
     {
         if (!$this->isConfigured()) {
             return ['success' => false, 'error' => 'Servicio no configurado'];
         }
 
-        $payload = ['id' => $frontImage];
+        // Nubarium espera base64 PURO; el front manda "data:image/jpeg;base64,...".
+        // Si no se quita el prefijo, Nubarium responde "No se identificó el documento".
+        $payload = ['id' => $this->stripDataUri($frontImage)];
         if ($backImage) {
-            $payload['idReverso'] = $backImage;
+            $payload['idReverso'] = $this->stripDataUri($backImage);
         }
 
         $this->logRequest('POST', 'ocr/v1/obtener_datos_id', ['has_front' => true, 'has_back' => !empty($backImage)]);
