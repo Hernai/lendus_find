@@ -9,6 +9,7 @@ import OnboardingStepRenderer from '@/components/onboarding/OnboardingStepRender
 import type { OnboardingStep } from '@/types/v2/onboardingStep'
 import { logger } from '@/utils/logger'
 import { formatCurrency } from '@/utils/formatters'
+import { bankName } from '@/utils/banks'
 
 /**
  * Vista de onboarding dinámica (white-label).
@@ -397,6 +398,36 @@ watch(currentValue, async (v, prev) => {
   }, 250)
 })
 
+// Confirmación del paso de cuenta bancaria: el cliente verifica banco + número
+// antes de guardar (una CLABE/tarjeta mal capturada es un error costoso).
+const showBankConfirm = ref(false)
+const bankConfirm = computed(() => {
+  const v = currentValue.value as { type?: string; bank_code?: string; account_number?: string } | null
+  if (!v || !v.account_number) return null
+  const num = v.account_number.replace(/\D/g, '')
+  const grouped = num.match(/.{1,4}/g)?.join(' ') ?? num
+  return {
+    isClabe: v.type !== 'CARD',
+    bankName: bankName(v.bank_code),
+    accountNumber: grouped,
+  }
+})
+
+// Handler del botón "Continuar": en el paso de banco muestra la confirmación
+// antes de avanzar; en el resto avanza directo.
+function handleContinue() {
+  if (currentStep.value?.type === 'bank_account') {
+    showBankConfirm.value = true
+    return
+  }
+  next()
+}
+
+function confirmBank() {
+  showBankConfirm.value = false
+  next()
+}
+
 async function next() {
   if (!canContinue.value || !currentStep.value) return
   const nextIdx = currentIndex.value + 1
@@ -544,11 +575,49 @@ onUnmounted(() => {
         type="button"
         class="btn-continue"
         :disabled="!canContinue"
-        @click="next"
+        @click="handleContinue"
       >
         Continuar
       </button>
     </footer>
+
+    <!-- Confirmación de cuenta bancaria: verificar banco + número antes de guardar -->
+    <Teleport to="body">
+      <div
+        v-if="showBankConfirm && bankConfirm"
+        class="bankc-overlay"
+        @click.self="showBankConfirm = false"
+      >
+        <div class="bankc">
+          <button type="button" class="bankc-close" aria-label="Cerrar" @click="showBankConfirm = false">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+          </button>
+          <h3 class="bankc-title">
+            Verifica cuidadosamente la información de tu cuenta de recepción antes de guardar
+          </h3>
+
+          <div class="bankc-field">
+            <span class="bankc-label">Banco receptor</span>
+            <p class="bankc-value">
+              {{ bankConfirm.bankName }}
+              <span class="bankc-tag">{{ bankConfirm.isClabe ? 'CLABE' : 'TARJETA' }}</span>
+            </p>
+          </div>
+
+          <div class="bankc-divider" />
+
+          <div class="bankc-field">
+            <span class="bankc-label">{{ bankConfirm.isClabe ? 'Número de cuenta' : 'Número de tarjeta' }}</span>
+            <p class="bankc-number">{{ bankConfirm.accountNumber }}</p>
+          </div>
+
+          <button type="button" class="bankc-ok" @click="confirmBank">Confirmar sin errores</button>
+          <button type="button" class="bankc-edit" @click="showBankConfirm = false">Modificar</button>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Bottom sheet para personal steps 2-5 -->
     <Teleport to="body">
@@ -922,4 +991,83 @@ onUnmounted(() => {
 
 .phase-fade-enter-active, .phase-fade-leave-active { transition: opacity 220ms ease; }
 .phase-fade-enter-from, .phase-fade-leave-to { opacity: 0; }
+
+/* Confirmación de cuenta bancaria */
+.bankc-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(17, 17, 27, 0.45);
+}
+.bankc {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  background: #fff;
+  border-radius: 20px;
+  padding: 28px 24px 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+.bankc-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 28px;
+  height: 28px;
+  color: #9ca3af;
+}
+.bankc-close svg { width: 20px; height: 20px; }
+.bankc-title {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #1f2937;
+  margin: 4px 0 20px;
+  padding-right: 24px;
+}
+.bankc-field { display: flex; flex-direction: column; gap: 4px; }
+.bankc-label { font-size: 13px; color: #6b7280; }
+.bankc-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bankc-tag {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--tenant-primary, #5B21B6);
+}
+.bankc-number {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: 0.02em;
+}
+.bankc-divider { height: 1px; background: #e5e7eb; margin: 16px 0; }
+.bankc-ok {
+  width: 100%;
+  margin-top: 22px;
+  padding: 15px;
+  border-radius: 14px;
+  background: var(--tenant-primary, #5B21B6);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+}
+.bankc-edit {
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px;
+  color: var(--tenant-primary, #5B21B6);
+  font-size: 15px;
+  font-weight: 600;
+}
 </style>
