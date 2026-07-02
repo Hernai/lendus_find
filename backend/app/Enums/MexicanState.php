@@ -88,4 +88,55 @@ enum MexicanState: string
     {
         return array_column(self::cases(), 'value');
     }
+
+    /**
+     * Deriva la entidad federativa desde la CURP.
+     *
+     * Las posiciones 12-13 de la CURP son la clave de entidad de nacimiento
+     * (estándar RENAPO, 2 letras). Devuelve null si es "NE" (nacido en el
+     * extranjero) o si la clave no se reconoce.
+     */
+    public static function fromCurp(?string $curp): ?self
+    {
+        $curp = strtoupper(trim((string) $curp));
+        if (strlen($curp) < 13) {
+            return null;
+        }
+
+        return match (substr($curp, 11, 2)) {
+            'AS' => self::AGUASCALIENTES,
+            'BC' => self::BAJA_CALIFORNIA,
+            'BS' => self::BAJA_CALIFORNIA_SUR,
+            'CC' => self::CAMPECHE,
+            'CS' => self::CHIAPAS,
+            'CH' => self::CHIHUAHUA,
+            'CL' => self::COAHUILA,
+            'CM' => self::COLIMA,
+            'DF' => self::CIUDAD_DE_MEXICO,
+            'DG' => self::DURANGO,
+            'GT' => self::GUANAJUATO,
+            'GR' => self::GUERRERO,
+            'HG' => self::HIDALGO,
+            'JC' => self::JALISCO,
+            'MC' => self::ESTADO_DE_MEXICO,
+            'MN' => self::MICHOACAN,
+            'MS' => self::MORELOS,
+            'NT' => self::NAYARIT,
+            'NL' => self::NUEVO_LEON,
+            'OC' => self::OAXACA,
+            'PL' => self::PUEBLA,
+            'QT' => self::QUERETARO,
+            'QR' => self::QUINTANA_ROO,
+            'SP' => self::SAN_LUIS_POTOSI,
+            'SL' => self::SINALOA,
+            'SR' => self::SONORA,
+            'TC' => self::TABASCO,
+            'TS' => self::TAMAULIPAS,
+            'TL' => self::TLAXCALA,
+            'VZ' => self::VERACRUZ,
+            'YN' => self::YUCATAN,
+            'ZS' => self::ZACATECAS,
+            default => null,
+        };
+    }
 }

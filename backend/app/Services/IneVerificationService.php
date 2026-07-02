@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\DocumentStatus;
+use App\Enums\MexicanState;
 use App\Enums\VerificationMethod;
 use App\Models\Application;
 use App\Models\Document;
@@ -107,6 +108,15 @@ class IneVerificationService
                     }
                     if (!empty($renapoData['fecha_nacimiento'])) {
                         $this->verificationService->verify($applicant, 'birth_date', $renapoData['fecha_nacimiento'], VerificationMethod::RENAPO);
+                    }
+                    // Entidad de nacimiento derivada de la CURP (validada por RENAPO).
+                    $birthState = MexicanState::fromCurp($curp);
+                    if ($birthState) {
+                        $this->verificationService->verify($applicant, 'birth_state', $birthState->value, VerificationMethod::RENAPO);
+                        if (empty($applicant->birth_state)) {
+                            $applicant->birth_state = $birthState->value;
+                            $applicant->save();
+                        }
                     }
                     $this->updateCurpIdentificationStatus($applicant, $curp, $renapoData);
                 }

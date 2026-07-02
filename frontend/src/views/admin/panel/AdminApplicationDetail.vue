@@ -70,7 +70,7 @@ const ineComparison = computed(() => {
     { label: 'Nombre', confirmed: norm(a.first_name), ocr: norm(iv.ocr?.nombres), renapo: norm(iv.renapo?.nombres) },
     { label: 'Apellido paterno', confirmed: norm(a.last_name_1), ocr: norm(iv.ocr?.apellido_paterno), renapo: norm(iv.renapo?.apellido_paterno) },
     { label: 'Apellido materno', confirmed: norm(a.last_name_2), ocr: norm(iv.ocr?.apellido_materno), renapo: norm(iv.renapo?.apellido_materno) },
-    { label: 'CURP', confirmed: norm(a.curp), ocr: norm(iv.ocr?.curp), renapo: '' },
+    { label: 'CURP', confirmed: norm(a.curp), ocr: norm(iv.ocr?.curp), renapo: iv.curp_valid ? norm(a.curp) : '' },
     { label: 'Entidad de nacimiento', confirmed: state(a.curp), ocr: state(iv.ocr?.curp), renapo: iv.curp_valid ? state(iv.ocr?.curp) : '' },
   ].map(r => ({
     ...r,
@@ -1246,6 +1246,16 @@ const getMexicanStateName = (stateCode: string | undefined): string => {
   return option?.label || stateCode
 }
 
+// Entidad de nacimiento: usa el campo guardado; si viene vacío (solicitudes
+// previas a la verificación de INE) lo derivamos de la CURP, que la codifica.
+const birthStateDisplay = computed(() => {
+  const a = application.value?.applicant
+  if (!a) return '—'
+  const fromField = getMexicanStateName(a.birth_state)
+  if (fromField && fromField !== '—') return fromField
+  return getStateNameFromCurp((a.curp ?? '').toUpperCase()) || '—'
+})
+
 // Nacionalidad mexicana: distintos flujos guardan el valor de formas diferentes
 // (MX / MEX / MEXICO / MEXICANA…). Normalizamos para no marcar como extranjero a
 // un mexicano. Sin dato => NO asumimos extranjero.
@@ -2244,58 +2254,72 @@ onUnmounted(() => {
               </span>
             </button>
 
-            <!-- Verificación de INE: confirmado (cliente) vs OCR vs RENAPO -->
-            <div
-              v-if="ineComparison && showIneVerification"
-              class="border rounded-lg overflow-hidden"
-              :class="ineComparison.hasDiffs ? 'border-amber-300' : 'border-gray-200'"
-            >
+            <!-- Modal: Verificación de INE (confirmado cliente vs OCR vs RENAPO) -->
+            <Teleport to="body">
               <div
-                class="px-4 py-2.5 flex items-center justify-between gap-3 text-sm"
-                :class="ineComparison.hasDiffs ? 'bg-amber-50' : 'bg-gray-50'"
+                v-if="ineComparison && showIneVerification"
+                class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+                @click.self="showIneVerification = false"
               >
-                <span class="font-medium text-gray-800 inline-flex items-center gap-2">
-                  Verificación de INE
-                  <span v-if="ineComparison.hasDiffs" class="text-xs font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
-                    Revisar diferencias
-                  </span>
-                </span>
-                <span class="flex items-center gap-2 text-xs">
-                  <span :class="ineComparison.ineValid ? 'text-green-700' : 'text-gray-500'">
-                    INE {{ ineComparison.ineValid === true ? '✓' : ineComparison.ineValid === false ? '✕' : '—' }}
-                  </span>
-                  <span :class="ineComparison.curpValid ? 'text-green-700' : 'text-gray-500'">
-                    RENAPO {{ ineComparison.curpValid === true ? '✓' : ineComparison.curpValid === false ? '✕' : '—' }}
-                  </span>
-                  <button type="button" class="text-gray-400 hover:text-gray-600 ml-1" @click="showIneVerification = false">
-                    Ocultar
-                  </button>
-                </span>
-              </div>
-              <table class="w-full text-sm">
-                <thead>
-                  <tr class="text-xs text-gray-500 border-b border-gray-100">
-                    <th class="text-left font-medium px-4 py-2">Campo</th>
-                    <th class="text-left font-medium px-3 py-2">Confirmado</th>
-                    <th class="text-left font-medium px-3 py-2">OCR (INE)</th>
-                    <th class="text-left font-medium px-3 py-2">RENAPO</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="row in ineComparison.rows"
-                    :key="row.label"
-                    class="border-b border-gray-50 last:border-0"
-                    :class="row.diff ? 'bg-amber-50/50' : ''"
+                <div
+                  class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col"
+                  :class="ineComparison.hasDiffs ? 'ring-1 ring-amber-300' : ''"
+                >
+                  <div
+                    class="px-5 py-3 flex items-center justify-between gap-3 border-b border-gray-100"
+                    :class="ineComparison.hasDiffs ? 'bg-amber-50' : 'bg-gray-50'"
                   >
-                    <td class="px-4 py-2 text-gray-500">{{ row.label }}</td>
-                    <td class="px-3 py-2 font-medium" :class="row.diff ? 'text-amber-800' : 'text-gray-900'">{{ row.confirmed || '—' }}</td>
-                    <td class="px-3 py-2 text-gray-700">{{ row.ocr || '—' }}</td>
-                    <td class="px-3 py-2 text-gray-700">{{ row.renapo || '—' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+                    <span class="font-semibold text-gray-800 inline-flex items-center gap-2">
+                      Verificación de INE
+                      <span v-if="ineComparison.hasDiffs" class="text-xs font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                        Revisar diferencias
+                      </span>
+                    </span>
+                    <div class="flex items-center gap-3 text-xs">
+                      <span :class="ineComparison.ineValid ? 'text-green-700' : 'text-gray-500'">
+                        INE {{ ineComparison.ineValid === true ? '✓' : ineComparison.ineValid === false ? '✕' : '—' }}
+                      </span>
+                      <span :class="ineComparison.curpValid ? 'text-green-700' : 'text-gray-500'">
+                        RENAPO {{ ineComparison.curpValid === true ? '✓' : ineComparison.curpValid === false ? '✕' : '—' }}
+                      </span>
+                      <button
+                        type="button"
+                        class="text-gray-400 hover:text-gray-600 text-lg leading-none"
+                        aria-label="Cerrar"
+                        @click="showIneVerification = false"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                  <div class="overflow-auto">
+                    <table class="w-full text-sm">
+                      <thead>
+                        <tr class="text-xs text-gray-500 border-b border-gray-100">
+                          <th class="text-left font-medium px-5 py-2">Campo</th>
+                          <th class="text-left font-medium px-3 py-2">Confirmado</th>
+                          <th class="text-left font-medium px-3 py-2">OCR (INE)</th>
+                          <th class="text-left font-medium px-3 py-2">RENAPO</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          v-for="row in ineComparison.rows"
+                          :key="row.label"
+                          class="border-b border-gray-50 last:border-0"
+                          :class="row.diff ? 'bg-amber-50/50' : ''"
+                        >
+                          <td class="px-5 py-2 text-gray-500">{{ row.label }}</td>
+                          <td class="px-3 py-2 font-medium" :class="row.diff ? 'text-amber-800' : 'text-gray-900'">{{ row.confirmed || '—' }}</td>
+                          <td class="px-3 py-2 text-gray-700">{{ row.ocr || '—' }}</td>
+                          <td class="px-3 py-2 text-gray-700">{{ row.renapo || '—' }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </Teleport>
 
             <!-- Summary Cards -->
             <div class="grid grid-cols-4 gap-3">
@@ -2440,7 +2464,7 @@ onUnmounted(() => {
                     <p class="font-medium text-gray-900 flex items-center gap-1.5">
                       <span v-if="isForeigner" class="text-xl">{{ application.applicant.nationality_info?.flag || '🌍' }}</span>
                       <span v-if="isForeigner">{{ application.applicant.nationality_info?.name || application.applicant.nationality || '—' }}</span>
-                      <span v-else>{{ getMexicanStateName(application.applicant.birth_state) }}</span>
+                      <span v-else>{{ birthStateDisplay }}</span>
                       <span v-if="isForeigner" class="text-xs font-medium bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
                         Extranjero
                       </span>
