@@ -306,7 +306,7 @@ onUnmounted(() => { nubariumPollCancelled = true })
               <span class="min-w-0">
                 <span class="block text-sm font-medium text-gray-900">
                   {{ account.is_verified
-                    ? (account.verified_by_nubarium ? 'Verificada con Nubarium' : 'Verificada manualmente')
+                    ? (account.verified_by_nubarium ? 'Verificada automáticamente (Nubarium)' : 'Verificada manualmente')
                     : 'Validada con Nubarium · sin coincidencia de nombre' }}
                 </span>
                 <span class="block text-xs text-gray-500">
@@ -331,7 +331,7 @@ onUnmounted(() => { nubariumPollCancelled = true })
             </span>
             <span>
               <span class="block text-sm font-medium text-gray-900">
-                {{ account.verified_by_nubarium ? 'Verificada con Nubarium' : 'Verificada manualmente' }}
+                {{ account.verified_by_nubarium ? 'Verificada automáticamente (Nubarium)' : 'Verificada manualmente' }}
               </span>
               <span class="block text-xs text-gray-500">{{ formatDateTime(account.verified_at) }}</span>
             </span>
@@ -361,9 +361,23 @@ onUnmounted(() => { nubariumPollCancelled = true })
           >
             Validada por Nubarium · solo un super admin puede quitarla
           </span>
-          <!-- Validar la CLABE contra el banco con Nubarium -->
+          <!-- Ya verificada automáticamente por Nubarium: ver la última respuesta
+               en vez de volver a validar. -->
           <button
-            v-if="canVerify"
+            v-if="account.verified_by_nubarium && account.clabe_validation"
+            class="flex-1 px-3 py-1.5 text-sm text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors font-medium inline-flex items-center justify-center gap-1.5"
+            @click="openDetail(account.clabe_validation)"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            Ver respuesta
+          </button>
+          <!-- Validar la CLABE contra el banco con Nubarium (si aún no está
+               verificada automáticamente). -->
+          <button
+            v-else-if="canVerify"
             class="flex-1 px-3 py-1.5 text-sm text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
             :disabled="validatingId === account.id"
             @click="validateWithNubarium(account)"
