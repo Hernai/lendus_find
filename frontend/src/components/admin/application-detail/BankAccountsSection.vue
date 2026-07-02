@@ -361,10 +361,11 @@ onUnmounted(() => { nubariumPollCancelled = true })
           >
             Validada por Nubarium · solo un super admin puede quitarla
           </span>
-          <!-- Ya verificada automáticamente por Nubarium: ver la última respuesta
-               en vez de volver a validar. -->
+          <!-- Ya validada con Nubarium (hay respuesta persistida): ver la última
+               respuesta en vez de volver a validar. Aplica aunque la verificación
+               final haya sido manual. -->
           <button
-            v-if="account.verified_by_nubarium && account.clabe_validation"
+            v-if="account.clabe_validation"
             class="flex-1 px-3 py-1.5 text-sm text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors font-medium inline-flex items-center justify-center gap-1.5"
             @click="openDetail(account.clabe_validation)"
           >
@@ -374,8 +375,8 @@ onUnmounted(() => { nubariumPollCancelled = true })
             </svg>
             Ver respuesta
           </button>
-          <!-- Validar la CLABE contra el banco con Nubarium (si aún no está
-               verificada automáticamente). -->
+          <!-- Validar la CLABE contra el banco con Nubarium (si aún no se ha
+               validado nunca). -->
           <button
             v-else-if="canVerify"
             class="flex-1 px-3 py-1.5 text-sm text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
