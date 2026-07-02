@@ -707,6 +707,23 @@ class KycController extends Controller
             }
         }
 
+        // Persistir la verificación en la persona para que el admin la revise:
+        // OCR + RENAPO + validez. El panel del admin compara esto contra los
+        // datos confirmados por el cliente y resalta las diferencias.
+        if ($applicant) {
+            $kyc = $applicant->kyc_data ?? [];
+            $kyc['ine_verification'] = [
+                'ocr' => $fields,
+                'renapo' => $renapo,
+                'ine_valid' => $ineValid,
+                'curp_valid' => $curpValid,
+                'diffs' => $diffs,
+                'verified_at' => now()->toIso8601String(),
+            ];
+            $applicant->kyc_data = $kyc;
+            $applicant->save();
+        }
+
         return $this->success([
             'fields' => $fields,
             'ine_valid' => $ineValid,

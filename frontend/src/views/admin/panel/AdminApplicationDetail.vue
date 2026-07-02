@@ -54,6 +54,32 @@ const canApproveReject = computed(() => authStore.permissions?.canApproveRejectA
 const canReviewDocs = computed(() => authStore.permissions?.canReviewDocuments ?? false)
 const canVerifyRefs = computed(() => authStore.permissions?.canVerifyReferences ?? false)
 
+// Comparación de la verificación de INE: datos confirmados (persona) vs OCR vs
+// RENAPO, para que el analista revise diferencias.
+const ineComparison = computed(() => {
+  const a = application.value?.applicant
+  const iv = a?.ine_verification
+  if (!a || !iv) return null
+  const norm = (s?: string | null) => (s ?? '').toUpperCase().trim()
+  const rows = [
+    { label: 'Nombre', confirmed: norm(a.first_name), ocr: norm(iv.ocr?.nombres), renapo: norm(iv.renapo?.nombres) },
+    { label: 'Apellido paterno', confirmed: norm(a.last_name_1), ocr: norm(iv.ocr?.apellido_paterno), renapo: norm(iv.renapo?.apellido_paterno) },
+    { label: 'Apellido materno', confirmed: norm(a.last_name_2), ocr: norm(iv.ocr?.apellido_materno), renapo: norm(iv.renapo?.apellido_materno) },
+    { label: 'CURP', confirmed: norm(a.curp), ocr: norm(iv.ocr?.curp), renapo: '' },
+  ].map(r => ({
+    ...r,
+    // diferencia si el confirmado no coincide con OCR o RENAPO (cuando existen)
+    diff: (!!r.ocr && r.confirmed !== r.ocr) || (!!r.renapo && r.confirmed !== r.renapo),
+  }))
+  return {
+    rows,
+    ineValid: iv.ine_valid ?? null,
+    curpValid: iv.curp_valid ?? null,
+    verifiedAt: iv.verified_at ?? null,
+    hasDiffs: rows.some(r => r.diff),
+  }
+})
+
 // Allowed statuses from backend (based on user permissions)
 const allowedStatuses = ref<{ value: string; label: string }[]>([])
 
@@ -141,6 +167,13 @@ interface Application {
     ine_clave?: string
     ine_ocr?: string
     ine_folio?: string
+    ine_verification?: {
+      ocr?: { nombres?: string; apellido_paterno?: string; apellido_materno?: string; curp?: string } | null
+      renapo?: { nombres?: string; apellido_paterno?: string; apellido_materno?: string } | null
+      ine_valid?: boolean | null
+      curp_valid?: boolean | null
+      verified_at?: string | null
+    } | null
     birth_date: string
     birth_state?: string
     nationality: string
@@ -573,6 +606,13 @@ const fetchApplication = async () => {
         ine_clave: person.identifications.ine_clave || '',
         ine_ocr: person.identifications.ine_ocr || '',
         ine_folio: person.identifications.ine_folio || '',
+        ine_verification: (person as { ine_verification?: {
+          ocr?: { nombres?: string; apellido_paterno?: string; apellido_materno?: string; curp?: string } | null
+          renapo?: { nombres?: string; apellido_paterno?: string; apellido_materno?: string } | null
+          ine_valid?: boolean | null
+          curp_valid?: boolean | null
+          verified_at?: string | null
+        } | null }).ine_verification ?? null,
         birth_date: person.personal_data.birth_date || '',
         birth_state: person.personal_data.birth_state || '',
         nationality: person.personal_data.nationality || '',
@@ -2131,6 +2171,56 @@ onUnmounted(() => {
         <div class="p-6">
           <!-- General Tab -->
           <div v-if="activeTab === 'general'" class="space-y-4">
+            <!-- Verificación de INE: confirmado (cliente) vs OCR vs RENAPO -->
+            <div
+              v-if="ineComparison"
+              class="border rounded-lg overflow-hidden"
+              :class="ineComparison.hasDiffs ? 'border-amber-300' : 'border-gray-200'"
+            >
+              <div
+                class="px-4 py-2.5 flex items-center justify-between gap-3 text-sm"
+                :class="ineComparison.hasDiffs ? 'bg-amber-50' : 'bg-gray-50'"
+              >
+                <span class="font-medium text-gray-800 inline-flex items-center gap-2">
+                  Verificación de INE
+                  <span v-if="ineComparison.hasDiffs" class="text-xs font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                    Revisar diferencias
+                  </span>
+                </span>
+                <span class="flex items-center gap-2 text-xs">
+                  <span :class="ineComparison.ineValid ? 'text-green-700' : 'text-gray-500'">
+                    INE {{ ineComparison.ineValid === true ? '✓' : ineComparison.ineValid === false ? '✕' : '—' }}
+                  </span>
+                  <span :class="ineComparison.curpValid ? 'text-green-700' : 'text-gray-500'">
+                    RENAPO {{ ineComparison.curpValid === true ? '✓' : ineComparison.curpValid === false ? '✕' : '—' }}
+                  </span>
+                </span>
+              </div>
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-xs text-gray-500 border-b border-gray-100">
+                    <th class="text-left font-medium px-4 py-2">Campo</th>
+                    <th class="text-left font-medium px-3 py-2">Confirmado</th>
+                    <th class="text-left font-medium px-3 py-2">OCR (INE)</th>
+                    <th class="text-left font-medium px-3 py-2">RENAPO</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="row in ineComparison.rows"
+                    :key="row.label"
+                    class="border-b border-gray-50 last:border-0"
+                    :class="row.diff ? 'bg-amber-50/50' : ''"
+                  >
+                    <td class="px-4 py-2 text-gray-500">{{ row.label }}</td>
+                    <td class="px-3 py-2 font-medium" :class="row.diff ? 'text-amber-800' : 'text-gray-900'">{{ row.confirmed || '—' }}</td>
+                    <td class="px-3 py-2 text-gray-700">{{ row.ocr || '—' }}</td>
+                    <td class="px-3 py-2 text-gray-700">{{ row.renapo || '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
             <!-- Summary Cards -->
             <div class="grid grid-cols-4 gap-3">
               <div class="bg-gray-50 rounded px-3 py-2">

@@ -790,6 +790,9 @@ class ApplicationController extends Controller
                     'bank_accounts' => $person->bankAccounts?->map(fn($ba) => $this->formatBankAccount($ba))->values()->toArray() ?? [],
                     'kyc_status' => $person->kyc_status,
                     'kyc_verified_at' => $person->kyc_verified_at?->toIso8601String(),
+                    // Verificación de INE (OCR + RENAPO) para que el admin compare
+                    // contra los datos confirmados y revise diferencias.
+                    'ine_verification' => $person->kyc_data['ine_verification'] ?? null,
                     'profile_completeness' => $person->profile_completeness,
                 ],
             ];
