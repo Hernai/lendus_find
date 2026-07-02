@@ -583,6 +583,7 @@ class ActivityFeedService
             'REJECTED'        => 'Solicitud rechazada',
             'CANCELLED'       => 'Solicitud cancelada',
             'SYNCED'          => 'Sincronizada con sistema externo',
+            'BANK_VALIDATION_NUBARIUM' => 'Validación bancaria (Nubarium)',
         ];
         if (isset($map[$action])) {
             return $map[$action];

@@ -102,6 +102,44 @@ class NubariumWebhookController extends Controller
         }
 
         $account->save();
+
+        // Registrar el resultado en el historial de Actividad de la solicitud.
+        // El webhook es del sistema (sin actor staff); si algo falla, no debe
+        // romper el procesamiento del webhook (la cuenta ya quedó persistida).
+        try {
+            if ($account->entity_type === 'persons' && $account->entity_id) {
+                $application = \App\Models\Application::withoutGlobalScopes()
+                    ->where('person_id', $account->entity_id)
+                    ->latest()
+                    ->first();
+
+                if ($application) {
+                    $ok = $validation->status === NubariumAsyncValidation::STATUS_COMPLETED;
+                    \App\Services\ActivityRecorder::recordApplicationEvent($application, 'BANK_VALIDATION_NUBARIUM', [
+                        'from_status' => 'BANK_VALIDATION',
+                        'to_status' => 'BANK_VALIDATION',
+                        'notes' => $ok
+                            ? "Cuenta bancaria '{$account->bank_name}' validada con Nubarium: el titular coincide."
+                            : "Validación de CLABE con Nubarium sin coincidencia de titular ('{$account->bank_name}').",
+                        'entity' => $account,
+                        'metadata' => [
+                            'kind' => 'bank_account_nubarium_validation',
+                            'bank_name' => $account->bank_name,
+                            'nubarium_status' => $validation->status,
+                            'auto_verified' => $ok && $account->verification_method === 'nubarium_clabe',
+                            'similarity' => $summary['similarity'] ?? null,
+                            'holder_name_real' => $summary['holder_name_real'] ?? null,
+                            'validation_code' => $summary['validation_code'] ?? null,
+                        ],
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('No se pudo registrar la actividad de validación CLABE con Nubarium', [
+                'bank_account_id' => $account->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
