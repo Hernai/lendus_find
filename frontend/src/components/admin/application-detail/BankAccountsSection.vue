@@ -5,7 +5,7 @@ import applicationService, { type NubariumValidationData } from '@/services/v2/a
 // Resultado persistido de la validación de CLABE con Nubarium (lo guarda el
 // webhook en verification_data['nubarium_clabe']). Queda visible aunque se
 // cierre el modal.
-interface ClabeValidationSummary {
+export interface ClabeValidationSummary {
   status: 'completed' | 'failed' | 'pending'
   message_code: number | null
   message: string | null

@@ -625,9 +625,26 @@ export interface V2ApplicationBankAccount {
   account_number: string | null
   account_type: string | null
   holder_name: string | null
+  holder_rfc?: string | null
   is_primary: boolean
+  is_own_account?: boolean
   is_verified: boolean
   verified_at: string | null
+  /** Método de verificación: 'nubarium_clabe' (automática) | 'MANUAL' | otro. */
+  verification_method?: string | null
+  verified_by_nubarium?: boolean
+  /** Resultado persistido de la validación de CLABE con Nubarium. */
+  clabe_validation?: {
+    status: 'completed' | 'failed' | 'pending'
+    message_code: number | null
+    message: string | null
+    similarity: number | null
+    holder_name_real: string | null
+    bank: string | null
+    validation_code: string | null
+    validation_id: string | null
+    validated_at: string | null
+  } | null
   created_at: string | null
 }
 

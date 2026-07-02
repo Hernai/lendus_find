@@ -12,6 +12,7 @@ import {
   ApplicantDataSection,
   RisksSection,
 } from '@/components/admin/application-detail'
+import type { ClabeValidationSummary } from '@/components/admin/application-detail/BankAccountsSection.vue'
 import { v2 } from '@/services/v2'
 import { platform } from '@/platform'
 import { useWebSocket, useToast, useDocumentTypes } from '@/composables'
@@ -101,6 +102,10 @@ interface BankAccount {
   is_primary: boolean
   is_own_account: boolean
   is_verified: boolean
+  verified_at?: string | null
+  verification_method?: string | null
+  verified_by_nubarium?: boolean
+  clabe_validation?: ClabeValidationSummary | null
   created_at?: string
 }
 
@@ -703,10 +708,16 @@ const fetchApplication = async () => {
         account_type: ba.account_type || '',
         account_type_label: ba.account_type || '',
         holder_name: ba.holder_name || '',
-        holder_rfc: undefined,
+        holder_rfc: ba.holder_rfc || undefined,
         is_primary: ba.is_primary,
-        is_own_account: true,
+        is_own_account: ba.is_own_account ?? true,
         is_verified: ba.is_verified,
+        // Método/estado de verificación: sin esto el detalle no distinguía
+        // "automática (Nubarium)" de "manual" ni mostraba "Ver respuesta".
+        verified_at: ba.verified_at || undefined,
+        verification_method: ba.verification_method ?? null,
+        verified_by_nubarium: ba.verified_by_nubarium ?? false,
+        clabe_validation: ba.clabe_validation ?? null,
         created_at: ba.created_at || undefined
       })),
       notes: (workflow?.notes || []).map(n => ({
