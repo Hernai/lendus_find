@@ -448,11 +448,15 @@ const ineValid = ref<boolean | null>(null)
 const ineCurpValid = ref<boolean | null>(null)
 const ineRenapo = ref<{ nombres: string; apellido_paterno: string; apellido_materno: string } | null>(null)
 const ineDiffs = ref<Record<string, { ocr: string; renapo: string }>>({})
+// Nubarium falló (caído/timeout): el cliente captura los datos a mano y se marca
+// para revisión del admin. El onboarding no se bloquea por la plataforma externa.
+const ineManualFallback = ref(false)
 
 async function runIneOcr() {
   const v = currentValue.value as { front_image?: string; back_image?: string } | null
   if (!v?.front_image || !v?.back_image) { next(); return }
   ineValidating.value = true
+  ineManualFallback.value = false
   try {
     const res = await verifyIne(v.front_image, v.back_image)
     ineOcr.value = { ...res.fields }
@@ -463,13 +467,18 @@ async function runIneOcr() {
     ineDiffs.value = res.diffs
     showIneConfirm.value = true
   } catch (e) {
-    // OCR/validación falló: no bloqueamos. Marcamos para revisión del admin y avanzamos.
-    log.warn('verificación de INE falló', { error: e })
-    onboardingStore.setDynamicField(currentStep.value!.id, {
-      ...(currentValue.value as object),
-      ine_ocr_failed: true,
-    })
-    next()
+    // Nubarium falló (caído, timeout, error): NO bloqueamos. Mostramos la misma
+    // pantalla pero para captura MANUAL (campos vacíos, editables). Al confirmar
+    // se marca ine_ocr_failed para que el admin lo revise.
+    log.warn('verificación de INE falló; captura manual', { error: e })
+    ineOcr.value = null
+    ineForm.value = { nombres: '', apellido_paterno: '', apellido_materno: '', curp: '' }
+    ineValid.value = null
+    ineCurpValid.value = null
+    ineRenapo.value = null
+    ineDiffs.value = {}
+    ineManualFallback.value = true
+    showIneConfirm.value = true
   } finally {
     ineValidating.value = false
   }
@@ -497,6 +506,8 @@ function confirmIne() {
     renapo: ineRenapo.value,
     ocr_renapo_diffs: Object.keys(ineDiffs.value).length ? ineDiffs.value : undefined,
     edited_diffs: Object.keys(editedDiffs).length ? editedDiffs : undefined,
+    // Nubarium no pudo leer/validar: capturado a mano, el admin lo revisa.
+    ine_ocr_failed: ineManualFallback.value || undefined,
   })
   showIneConfirm.value = false
   next()
@@ -712,8 +723,14 @@ onUnmounted(() => {
           </div>
 
           <p class="inec-text">
-            Por favor, confirma que eres titular de la INE y que la información es auténtica y válida;
-            de lo contrario, el préstamo podría verse afectado.
+            <template v-if="ineManualFallback">
+              No pudimos leer tu INE automáticamente. Captura tus datos tal como aparecen en tu INE;
+              se revisarán manualmente.
+            </template>
+            <template v-else>
+              Por favor, confirma que eres titular de la INE y que la información es auténtica y válida;
+              de lo contrario, el préstamo podría verse afectado.
+            </template>
           </p>
 
           <div class="inec-fields">
