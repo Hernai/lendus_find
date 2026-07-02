@@ -878,20 +878,46 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           break
         }
         case 'kyc_ine': {
-          const k = payload as { front_image?: string; back_image?: string; personal?: Record<string, unknown> } | null
-          const p = k?.personal ?? {}
-          // Solo IDENTIFICADORES del INE (CURP + clave de elector + OCR + folio),
-          // los mismos campos que Nubarium extrae por OCR. Nombre/fecha/etc. se
-          // guardan en el step `personal_data`.
-          const ineIds: Record<string, unknown> = {}
-          if (p.curp) ineIds.curp = String(p.curp).toUpperCase()
-          if (p.clave_elector) ineIds.ine_clave = String(p.clave_elector).toUpperCase()
-          if (p.numero_ocr) ineIds.ine_ocr = String(p.numero_ocr)
-          if (p.folio_ine) ineIds.ine_folio = String(p.folio_ine)
-          if (Object.keys(ineIds).length > 0) {
-            await profileStore.updateIdentifications(ineIds as never)
+          const k = payload as {
+            front_image?: string; back_image?: string;
+            personal?: Record<string, unknown>;
+            confirmed?: { nombres?: string; apellido_paterno?: string; apellido_materno?: string; curp?: string };
+          } | null
+
+          const c = k?.confirmed
+          if (c) {
+            // Flujo con Nubarium: el OCR extrajo los datos y el cliente los
+            // confirmó/editó. Persistimos el nombre y la CURP confirmados
+            // (permanece lo que el cliente dejó). El OCR/validación ya lo hizo
+            // el endpoint validateIne; las diferencias van en dynamicData para
+            // que el admin las revise.
+            const namePayload: Record<string, unknown> = {}
+            if (c.nombres) namePayload.first_name = c.nombres
+            if (c.apellido_paterno) namePayload.last_name_1 = c.apellido_paterno
+            if (c.apellido_materno) namePayload.last_name_2 = c.apellido_materno
+            if (Object.keys(namePayload).length > 0) {
+              try { await profileStore.updatePersonalData(namePayload as never) }
+              catch (e) { stepHadError = true; onboardingLogger.warn('updatePersonalData INE failed', { error: e }) }
+            }
+            if (c.curp) {
+              try { await profileStore.updateIdentifications({ curp: String(c.curp).toUpperCase() } as never) }
+              catch (e) { stepHadError = true; onboardingLogger.warn('updateIdentifications INE curp failed', { error: e }) }
+            }
+          } else {
+            // Flujo sin Nubarium: solo IDENTIFICADORES capturados manualmente
+            // (CURP + clave de elector + OCR + folio).
+            const p = k?.personal ?? {}
+            const ineIds: Record<string, unknown> = {}
+            if (p.curp) ineIds.curp = String(p.curp).toUpperCase()
+            if (p.clave_elector) ineIds.ine_clave = String(p.clave_elector).toUpperCase()
+            if (p.numero_ocr) ineIds.ine_ocr = String(p.numero_ocr)
+            if (p.folio_ine) ineIds.ine_folio = String(p.folio_ine)
+            if (Object.keys(ineIds).length > 0) {
+              await profileStore.updateIdentifications(ineIds as never)
+            }
           }
-          // Subir imágenes del INE (base64 desde la cámara).
+
+          // Subir imágenes del INE (base64 desde la cámara), en ambos flujos.
           if (k?.front_image?.startsWith('data:')) {
             try { await documentService.uploadBase64(k.front_image, 'INE_FRONT', { file_name: 'ine_front.jpg' }) }
             catch (e) { stepHadError = true; onboardingLogger.warn('upload INE_FRONT failed', { error: e }) }

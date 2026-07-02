@@ -10,6 +10,7 @@ import type { OnboardingStep } from '@/types/v2/onboardingStep'
 import { logger } from '@/utils/logger'
 import { formatCurrency } from '@/utils/formatters'
 import { bankName } from '@/utils/banks'
+import { validateIne } from '@/services/v2/kyc.applicant.service'
 
 /**
  * Vista de onboarding dinámica (white-label).
@@ -413,11 +414,16 @@ const bankConfirm = computed(() => {
   }
 })
 
-// Handler del botón "Continuar": en el paso de banco muestra la confirmación
-// antes de avanzar; en el resto avanza directo.
+// Handler del botón "Continuar": en banco e INE muestra confirmación antes de
+// avanzar; en el resto avanza directo.
 function handleContinue() {
-  if (currentStep.value?.type === 'bank_account') {
+  const t = currentStep.value?.type
+  if (t === 'bank_account') {
     showBankConfirm.value = true
+    return
+  }
+  if (t === 'kyc_ine' && tenantStore.hasKycProvider) {
+    runIneOcr()
     return
   }
   next()
@@ -425,6 +431,68 @@ function handleContinue() {
 
 function confirmBank() {
   showBankConfirm.value = false
+  next()
+}
+
+// --- Confirmación de INE: OCR + validación con Nubarium; el cliente verifica
+// los datos extraídos (editables). No bloquea si falla: el admin lo revisa. ---
+type IneFields = { nombres: string; apellido_paterno: string; apellido_materno: string; curp: string }
+const showIneConfirm = ref(false)
+const ineValidating = ref(false)
+const ineForm = ref<IneFields>({ nombres: '', apellido_paterno: '', apellido_materno: '', curp: '' })
+const ineOcr = ref<IneFields | null>(null)
+const ineValid = ref<boolean | null>(null)
+
+async function runIneOcr() {
+  const v = currentValue.value as { front_image?: string; back_image?: string } | null
+  if (!v?.front_image || !v?.back_image) { next(); return }
+  ineValidating.value = true
+  try {
+    const res = await validateIne(v.front_image, v.back_image, true)
+    const ocr = res.ocr_data
+    const data: IneFields = {
+      nombres: (ocr?.nombres ?? '').toUpperCase(),
+      apellido_paterno: (ocr?.apellido_paterno ?? '').toUpperCase(),
+      apellido_materno: (ocr?.apellido_materno ?? '').toUpperCase(),
+      curp: (ocr?.curp ?? '').toUpperCase(),
+    }
+    ineOcr.value = { ...data }
+    ineForm.value = { ...data }
+    ineValid.value = res.is_valid ?? res.list_validation?.valid ?? null
+    showIneConfirm.value = true
+  } catch (e) {
+    // OCR/validación falló: no bloqueamos. Marcamos para revisión del admin y avanzamos.
+    log.warn('OCR de INE falló', { error: e })
+    onboardingStore.setDynamicField(currentStep.value!.id, {
+      ...(currentValue.value as object),
+      ine_ocr_failed: true,
+    })
+    next()
+  } finally {
+    ineValidating.value = false
+  }
+}
+
+function confirmIne() {
+  const base = (currentValue.value ?? {}) as Record<string, unknown>
+  // Diferencias OCR vs lo confirmado (para que el admin las revise si son grandes).
+  const ocr = ineOcr.value
+  const diffs: Record<string, { ocr: string; confirmed: string }> = {}
+  if (ocr) {
+    for (const k of ['nombres', 'apellido_paterno', 'apellido_materno', 'curp'] as const) {
+      if ((ocr[k] ?? '') !== (ineForm.value[k] ?? '')) {
+        diffs[k] = { ocr: ocr[k] ?? '', confirmed: ineForm.value[k] ?? '' }
+      }
+    }
+  }
+  onboardingStore.setDynamicField(currentStep.value!.id, {
+    ...base,
+    confirmed: { ...ineForm.value },
+    ocr_data: ocr,
+    ine_valid: ineValid.value,
+    ocr_diffs: Object.keys(diffs).length ? diffs : undefined,
+  })
+  showIneConfirm.value = false
   next()
 }
 
@@ -574,10 +642,10 @@ onUnmounted(() => {
       <button
         type="button"
         class="btn-continue"
-        :disabled="!canContinue"
+        :disabled="!canContinue || ineValidating"
         @click="handleContinue"
       >
-        Continuar
+        {{ ineValidating ? 'Validando tu INE…' : 'Continuar' }}
       </button>
     </footer>
 
@@ -615,6 +683,54 @@ onUnmounted(() => {
 
           <button type="button" class="bankc-ok" @click="confirmBank">Confirmar sin errores</button>
           <button type="button" class="bankc-edit" @click="showBankConfirm = false">Modificar</button>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Confirmación de INE: verificar datos extraídos por OCR antes de continuar -->
+    <Teleport to="body">
+      <div v-if="showIneConfirm" class="bankc-overlay" @click.self="showIneConfirm = false">
+        <div class="bankc">
+          <button type="button" class="bankc-close" aria-label="Cerrar" @click="showIneConfirm = false">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+          </button>
+
+          <div class="inec-shield">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M12 3l7 3v5c0 4.4-3 8.5-7 9.5-4-1-7-5.1-7-9.5V6l7-3z" fill="currentColor" opacity="0.15" />
+              <path d="M12 3l7 3v5c0 4.4-3 8.5-7 9.5-4-1-7-5.1-7-9.5V6l7-3z" stroke="currentColor" stroke-width="1.6" />
+              <path d="M9.4 12l1.9 1.9L15 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+
+          <p class="inec-text">
+            Por favor, confirma que eres titular de la INE y que la información es auténtica y válida;
+            de lo contrario, el préstamo podría verse afectado.
+          </p>
+
+          <div class="inec-fields">
+            <label class="inec-row">
+              <span class="bankc-label">Nombre</span>
+              <input v-model="ineForm.nombres" class="inec-input" type="text" autocapitalize="characters" />
+            </label>
+            <label class="inec-row">
+              <span class="bankc-label">Apellido paterno</span>
+              <input v-model="ineForm.apellido_paterno" class="inec-input" type="text" autocapitalize="characters" />
+            </label>
+            <label class="inec-row">
+              <span class="bankc-label">Apellido materno</span>
+              <input v-model="ineForm.apellido_materno" class="inec-input" type="text" autocapitalize="characters" />
+            </label>
+            <label class="inec-row">
+              <span class="bankc-label">CURP</span>
+              <input v-model="ineForm.curp" class="inec-input inec-input--mono" type="text" autocapitalize="characters" />
+            </label>
+          </div>
+
+          <button type="button" class="bankc-ok" @click="confirmIne">Confirmar sin errores</button>
+          <button type="button" class="bankc-edit" @click="showIneConfirm = false">Modificar</button>
         </div>
       </div>
     </Teleport>
@@ -1070,4 +1186,47 @@ onUnmounted(() => {
   font-size: 15px;
   font-weight: 600;
 }
+
+/* Confirmación de INE */
+.inec-shield {
+  width: 56px;
+  height: 56px;
+  margin: 4px auto 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tenant-primary, #5B21B6) 12%, #fff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tenant-primary, #5B21B6);
+}
+.inec-shield svg { width: 30px; height: 30px; }
+.inec-text {
+  font-size: 15px;
+  line-height: 1.45;
+  color: #374151;
+  text-align: center;
+  margin: 0 0 18px;
+}
+.inec-fields { display: flex; flex-direction: column; }
+.inec-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 0;
+  border-top: 1px solid #f0f0f3;
+}
+.inec-row:first-child { border-top: none; }
+.inec-input {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+.inec-input--mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; letter-spacing: 0.02em; }
 </style>
