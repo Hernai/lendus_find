@@ -38,22 +38,25 @@ directo, sin cola ni templates). Ya lleva el **origen** (nombre de la SOFOM) tra
 
 ## 3. Fases (priorizadas por valor/esfuerzo)
 
-### Fase 0 — Robustez del envío (rápido, alto impacto)
-- **Gating por capacidad del tenant** en `NotificationService::send()`: filtrar los canales por
-  `TenantApiConfig` activo (`sms`/`email`/`whatsapp`) + In-App siempre disponible. Evita fallos
-  preventivos y reintentos inútiles.
-- **Fallback de canal**: si el canal recomendado no está disponible, degradar
-  (WhatsApp → SMS → Email → In-App) en vez de descartar la notificación.
-- Log claro cuando se omite un canal por falta de integración (no como error).
+### Fase 0 — Robustez del envío ✅ HECHO
+- **Gating por capacidad del tenant** en `NotificationService::send()`: filtra los canales por lo
+  que el tenant realmente puede enviar (Twilio en settings, SMS/email por integración, In-App/Push
+  siempre). Evita fallos preventivos y los 3 reintentos del job. Fallback a In-App.
+- **SMS vía Nubarium** en `SendNotificationJob::sendSms` (misma credencial del OTP), para que las
+  notificaciones SMS lleguen en tenants que usan Nubarium y no Twilio.
+- Bonus: fix del bug `{{user.*}}` vs `applicant.*` (el nombre salía vacío en TODAS las
+  notificaciones de solicitud).
 
-### Fase 1 — Eventos del solicitante (mayor valor percibido)
-Patrón: llamar `notificationService->send(evento, cuenta, variables, null, tenant)` en el punto de negocio.
-- `DOCUMENT_APPROVED` / `DOCUMENT_REJECTED` — al revisar cada documento (staff). El cliente sabe el resultado.
-- `DOCUMENTS_COMPLETE` — cuando se completan todos los requeridos (template ya sembrado).
-- `APPLICATION_COUNTER_OFFERED` + `COUNTER_OFFER_ACCEPTED` / `COUNTER_OFFER_REJECTED`.
-- `APPLICATION_CANCELLED`.
-- `KYC_COMPLETED` / `KYC_FAILED` (enganchar en `VerificationService::updateKycStatus` /
-  `IneVerificationService`).
+### Fase 1 — Eventos del solicitante ✅ HECHO (falta KYC_FAILED)
+- ✅ `DOCUMENT_APPROVED` / `DOCUMENT_REJECTED` — al revisar cada documento (staff).
+- ✅ `DOCUMENTS_COMPLETE` — al aprobar el último documento pendiente (único punto que lo notifica,
+  porque el auto-avance de status no pasa por changeStatus).
+- ✅ `APPLICATION_COUNTER_OFFERED` — con datos de la oferta (monto/plazo/pago).
+- ✅ `APPLICATION_CANCELLED` — solo si no la canceló el propio solicitante.
+- ✅ `KYC_COMPLETED` — en `VerificationService::updateKycStatus` (best-effort).
+- ⏳ `KYC_FAILED` — pendiente: **no hay un punto claro de "KYC falló definitivo"** en el código
+  (el KYC se reintenta, no tiene estado FAILED terminal). Requiere definir el disparador.
+- ⏳ `COUNTER_OFFER_ACCEPTED` / `COUNTER_OFFER_REJECTED` — van a **staff**, se mueven a Fase 2.
 
 ### Fase 2 — Eventos de staff / operativos
 - `ANALYST_ASSIGNED` — notificar al analista asignado (template ya sembrado). En `ApplicationService::assign`.
