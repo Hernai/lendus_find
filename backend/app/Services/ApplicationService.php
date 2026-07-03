@@ -358,6 +358,16 @@ class ApplicationService
 
         $application->sendCounterOffer($staff->id, $offer, $reason);
 
+        $this->sendNotification(NotificationEvent::APPLICATION_COUNTER_OFFERED->value, $application, [
+            'counter_offer' => [
+                'amount' => '$' . number_format($offer['amount'], 2),
+                'term_months' => $offer['term_months'],
+                'monthly_payment' => '$' . number_format($offer['monthly_payment'] ?? 0, 2),
+                'total_amount' => '$' . number_format($offer['total_amount'] ?? 0, 2),
+                'reason' => $reason ?? '',
+            ],
+        ]);
+
         return $application->fresh();
     }
 
@@ -396,6 +406,14 @@ class ApplicationService
         }
 
         $application->cancel($cancelledById, $cancelledByType, $reason);
+
+        // Sólo notificamos al solicitante cuando la cancelación NO la hizo él mismo
+        // (evita avisarle de su propia acción). Ej: cancelación por el staff.
+        if (strtoupper($cancelledByType) !== 'APPLICANT') {
+            $this->sendNotification(NotificationEvent::APPLICATION_CANCELLED->value, $application, [
+                'cancellation' => ['reason' => $reason ?? ''],
+            ]);
+        }
 
         return $application->fresh();
     }
@@ -448,7 +466,7 @@ class ApplicationService
     /**
      * Send a notification for an application lifecycle event.
      */
-    protected function sendNotification(string $event, Application $application): void
+    protected function sendNotification(string $event, Application $application, array $extra = []): void
     {
         try {
             $applicant = $application->submittedByAccount;
@@ -458,14 +476,18 @@ class ApplicationService
 
             $person = $applicant->person ?? $applicant->getPersonOrFind();
 
-            $variables = [
-                'applicant' => [
-                    'first_name' => $person?->first_name ?? '',
-                    'last_name' => $person?->last_name_1 ?? '',
-                    'full_name' => $person?->full_name ?? '',
-                    'email' => $applicant->primary_email ?? '',
-                    'phone' => $applicant->primary_phone ?? '',
-                ],
+            // Los templates usan {{user.*}}; mantenemos `applicant` como alias.
+            $who = [
+                'first_name' => $person?->first_name ?? '',
+                'last_name' => $person?->last_name_1 ?? '',
+                'full_name' => $person?->full_name ?? '',
+                'email' => $applicant->primary_email ?? '',
+                'phone' => $applicant->primary_phone ?? '',
+            ];
+
+            $variables = array_merge([
+                'user' => $who,
+                'applicant' => $who,
                 'application' => [
                     'id' => $application->id,
                     'folio' => $application->folio,
@@ -481,7 +503,7 @@ class ApplicationService
                     'email' => $application->tenant?->email ?? '',
                     'website' => $application->tenant?->website ?? '',
                 ],
-            ];
+            ], $extra);
 
             $this->notificationService->send($event, $applicant, $variables);
         } catch (\Throwable $e) {
@@ -491,6 +513,26 @@ class ApplicationService
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Notifica al solicitante un evento de documento (aprobado/rechazado),
+     * reutilizando el patrón de variables + los datos del documento.
+     */
+    public function notifyDocumentEvent(string $event, Application $application, \App\Models\Document $document): void
+    {
+        $typeLabel = (string) $document->type;
+        if ($enum = \App\Enums\DocumentType::tryFrom($typeLabel)) {
+            $typeLabel = $enum->label();
+        }
+
+        $this->sendNotification($event, $application, [
+            'document' => [
+                'type' => $document->type,
+                'type_label' => $typeLabel,
+                'rejection_reason' => $document->rejection_reason ?? '',
+            ],
+        ]);
     }
 
     // =====================================================

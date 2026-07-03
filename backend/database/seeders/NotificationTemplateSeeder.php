@@ -650,6 +650,112 @@ Por favor ingresa a tu cuenta y completa tu información para poder solicitar un
 Saludos,
 {{tenant.name}}',
             ],
+
+            // ==========================================
+            // CONTRAOFERTA
+            // ==========================================
+            [
+                'name' => 'Contraoferta - WhatsApp',
+                'event' => NotificationEvent::APPLICATION_COUNTER_OFFERED,
+                'channel' => NotificationChannel::WHATSAPP,
+                'priority' => 2,
+                'subject' => null,
+                'body' => '💬 *Nueva propuesta - {{tenant.name}}*
+
+Hola *{{user.first_name}}*,
+
+Tenemos una propuesta para tu solicitud *{{application.folio}}*:
+
+💰 Monto: *{{counter_offer.amount}}*
+📅 Plazo: *{{counter_offer.term_months}} meses*
+💵 Pago mensual: *{{counter_offer.monthly_payment}}*
+
+Ingresa a tu cuenta para aceptarla o rechazarla.
+
+{{tenant.name}}',
+            ],
+            [
+                'name' => 'Contraoferta - Email',
+                'event' => NotificationEvent::APPLICATION_COUNTER_OFFERED,
+                'channel' => NotificationChannel::EMAIL,
+                'priority' => 2,
+                'subject' => 'Tenemos una propuesta para ti - {{tenant.name}}',
+                'body' => 'Hola {{user.first_name}},
+
+Revisamos tu solicitud {{application.folio}} y tenemos una propuesta:
+
+- Monto: {{counter_offer.amount}}
+- Plazo: {{counter_offer.term_months}} meses
+- Pago mensual: {{counter_offer.monthly_payment}}
+
+Ingresa a tu cuenta para aceptar o rechazar la propuesta.
+
+Saludos,
+{{tenant.name}}',
+            ],
+            [
+                'name' => 'Contraoferta - In-App',
+                'event' => NotificationEvent::APPLICATION_COUNTER_OFFERED,
+                'channel' => NotificationChannel::IN_APP,
+                'priority' => 2,
+                'subject' => 'Tienes una nueva propuesta',
+                'body' => 'Tenemos una propuesta para tu solicitud {{application.folio}}: {{counter_offer.amount}} a {{counter_offer.term_months}} meses ({{counter_offer.monthly_payment}}/mes). Ingresa para responder.',
+            ],
+
+            // ==========================================
+            // SOLICITUD CANCELADA
+            // ==========================================
+            [
+                'name' => 'Solicitud Cancelada - WhatsApp',
+                'event' => NotificationEvent::APPLICATION_CANCELLED,
+                'channel' => NotificationChannel::WHATSAPP,
+                'priority' => 3,
+                'subject' => null,
+                'body' => '⚠️ *Solicitud cancelada - {{tenant.name}}*
+
+Hola *{{user.first_name}}*,
+
+Tu solicitud *{{application.folio}}* fue cancelada.
+
+Si tienes dudas, contáctanos.
+
+{{tenant.name}}',
+            ],
+            [
+                'name' => 'Solicitud Cancelada - Email',
+                'event' => NotificationEvent::APPLICATION_CANCELLED,
+                'channel' => NotificationChannel::EMAIL,
+                'priority' => 3,
+                'subject' => 'Tu solicitud {{application.folio}} fue cancelada - {{tenant.name}}',
+                'body' => 'Hola {{user.first_name}},
+
+Tu solicitud {{application.folio}} fue cancelada.
+
+Si consideras que esto es un error o tienes dudas, contáctanos.
+
+Saludos,
+{{tenant.name}}',
+            ],
+            [
+                'name' => 'Solicitud Cancelada - In-App',
+                'event' => NotificationEvent::APPLICATION_CANCELLED,
+                'channel' => NotificationChannel::IN_APP,
+                'priority' => 3,
+                'subject' => 'Solicitud cancelada',
+                'body' => 'Tu solicitud {{application.folio}} fue cancelada. Si tienes dudas, contáctanos.',
+            ],
+
+            // ==========================================
+            // DOCUMENTO APROBADO
+            // ==========================================
+            [
+                'name' => 'Documento Aprobado - In-App',
+                'event' => NotificationEvent::DOCUMENT_APPROVED,
+                'channel' => NotificationChannel::IN_APP,
+                'priority' => 4,
+                'subject' => 'Documento aprobado',
+                'body' => 'Tu documento "{{document.type_label}}" fue aprobado.',
+            ],
         ];
 
         foreach ($templates as $templateData) {

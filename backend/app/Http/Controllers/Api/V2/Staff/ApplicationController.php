@@ -1176,6 +1176,8 @@ class ApplicationController extends Controller
             ],
         ]);
 
+        $this->service->notifyDocumentEvent('document.approved', $application, $document);
+
         // Check if all verifications are complete to auto-advance status
         $statusChanged = $this->checkAndAdvanceStatus($application, $staff);
 
@@ -1262,6 +1264,8 @@ class ApplicationController extends Controller
                 ],
             ]);
         }
+
+        $this->service->notifyDocumentEvent('document.rejected', $application, $document);
 
         return $this->success([
             'application_status_changed' => $statusChanged,
