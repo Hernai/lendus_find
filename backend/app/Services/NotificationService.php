@@ -11,6 +11,7 @@ use App\Models\NotificationPreference;
 use App\Models\NotificationTemplate;
 use App\Models\StaffAccount;
 use App\Models\Tenant;
+use App\Models\TenantApiConfig;
 
 /**
  * Notification service for sending multi-channel notifications.
@@ -51,6 +52,26 @@ class NotificationService
         // Determine channels to use
         if ($channels === null) {
             $channels = $event->getRecommendedChannels();
+        }
+
+        // Normalizar a enums.
+        $channels = array_map(
+            fn ($c) => $c instanceof NotificationChannel ? $c : NotificationChannel::from($c),
+            $channels
+        );
+
+        // Gating por capacidad del tenant: no intentar canales sin integración
+        // configurada (evita el fallo preventivo y los 3 reintentos del job).
+        // In-App/Push no requieren integración externa del tenant.
+        $channels = array_values(array_filter(
+            $channels,
+            fn (NotificationChannel $channel) => $this->tenantSupportsChannel($channel, $tenant)
+        ));
+
+        // Fallback: si el tenant no tiene ningún canal recomendado configurado,
+        // cae a In-App para no perder la notificación (queda en la campana/log).
+        if (empty($channels)) {
+            $channels = [NotificationChannel::IN_APP];
         }
 
         // Get account preferences if recipient is an account
@@ -138,6 +159,68 @@ class NotificationService
         }
 
         return $logIds;
+    }
+
+    /**
+     * ¿El tenant puede enviar por este canal? Refleja lo que SendNotificationJob
+     * necesita para no intentar (y reintentar 3×) canales sin credenciales:
+     *   - SMS/WhatsApp → Twilio en tenant->settings.
+     *   - Email → integración SMTP (TenantApiConfig) o SendGrid/Mailgun en
+     *     settings o el mailer default de Laravel.
+     *   - In-App/Push → no requieren integración del tenant.
+     */
+    protected function tenantSupportsChannel(NotificationChannel $channel, Tenant $tenant): bool
+    {
+        $settings = $tenant->settings ?? [];
+
+        return match ($channel) {
+            NotificationChannel::SMS => $this->tenantSupportsSms($tenant),
+            NotificationChannel::WHATSAPP => !empty($settings['twilio_sid'])
+                && !empty($settings['twilio_token'])
+                && !empty($settings['twilio_whatsapp_phone']),
+            NotificationChannel::EMAIL => $this->tenantSupportsEmail($tenant),
+            default => true, // In-App / Push / desconocidos: sin integración externa.
+        };
+    }
+
+    /**
+     * ¿El tenant puede mandar SMS? Twilio en settings o SMS por integración
+     * (Nubarium/Twilio en TenantApiConfig) — el job soporta ambos.
+     */
+    protected function tenantSupportsSms(Tenant $tenant): bool
+    {
+        $settings = $tenant->settings ?? [];
+        if (!empty($settings['twilio_sid']) && !empty($settings['twilio_token']) && !empty($settings['twilio_phone'])) {
+            return true;
+        }
+
+        return TenantApiConfig::where('tenant_id', $tenant->id)
+            ->where('service_type', 'sms')
+            ->where('is_active', true)
+            ->exists();
+    }
+
+    /**
+     * ¿Hay algún mecanismo de email para el tenant? Integración SMTP propia,
+     * SendGrid/Mailgun en settings, o el mailer default de Laravel.
+     */
+    protected function tenantSupportsEmail(Tenant $tenant): bool
+    {
+        $hasIntegration = TenantApiConfig::where('tenant_id', $tenant->id)
+            ->where('service_type', 'email')
+            ->where('is_active', true)
+            ->exists();
+        if ($hasIntegration) {
+            return true;
+        }
+
+        $settings = $tenant->settings ?? [];
+        if (!empty($settings['sendgrid_api_key']) || !empty($settings['mailgun_api_key'])) {
+            return true;
+        }
+
+        // Mailer default de Laravel (distinto de log/array = sí manda de verdad).
+        return !in_array(config('mail.default'), [null, '', 'log', 'array'], true);
     }
 
     /**

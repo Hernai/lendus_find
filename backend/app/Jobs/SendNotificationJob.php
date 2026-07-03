@@ -95,35 +95,49 @@ class SendNotificationJob implements ShouldQueue
      */
     protected function sendSms(): array
     {
-        try {
-            $tenant = $this->log->tenant;
-            $settings = $tenant->settings ?? [];
+        $tenant = $this->log->tenant;
+        $settings = $tenant->settings ?? [];
 
-            // Check if Twilio is configured
-            if (! isset($settings['twilio_sid']) || ! isset($settings['twilio_token'])) {
-                return ['success' => false, 'error' => 'Twilio not configured'];
+        // 1) Twilio (tenant->settings).
+        if (! empty($settings['twilio_sid']) && ! empty($settings['twilio_token']) && ! empty($settings['twilio_phone'])) {
+            try {
+                $twilio = new TwilioClient($settings['twilio_sid'], $settings['twilio_token']);
+                $message = $twilio->messages->create(
+                    $this->log->recipient,
+                    [
+                        'from' => $settings['twilio_phone'],
+                        'body' => $this->log->body,
+                    ]
+                );
+
+                return ['success' => true, 'external_id' => $message->sid];
+            } catch (\Exception $e) {
+                return ['success' => false, 'error' => $e->getMessage()];
             }
-
-            $twilio = new TwilioClient(
-                $settings['twilio_sid'],
-                $settings['twilio_token']
-            );
-
-            $message = $twilio->messages->create(
-                $this->log->recipient,
-                [
-                    'from' => $settings['twilio_phone'],
-                    'body' => $this->log->body,
-                ]
-            );
-
-            return [
-                'success' => true,
-                'external_id' => $message->sid,
-            ];
-        } catch (\Exception $e) {
-            return ['success' => false, 'error' => $e->getMessage()];
         }
+
+        // 2) Nubarium SMS plano (misma credencial que el OTP). Así las
+        //    notificaciones SMS llegan en tenants que usan Nubarium, no Twilio.
+        $smsConfig = TenantApiConfig::where('tenant_id', $tenant->id)
+            ->where('service_type', 'sms')
+            ->where('provider', 'nubarium')
+            ->where('is_active', true)
+            ->first();
+
+        if ($smsConfig) {
+            try {
+                $res = (new \App\Services\ExternalApi\Nubarium\NubariumOtpService($tenant, 'sms'))
+                    ->sendSms($this->log->recipient, $this->log->body);
+
+                return ($res['success'] ?? false)
+                    ? ['success' => true, 'external_id' => $res['message_id'] ?? null]
+                    : ['success' => false, 'error' => $res['error'] ?? 'Nubarium SMS failed'];
+            } catch (\Exception $e) {
+                return ['success' => false, 'error' => $e->getMessage()];
+            }
+        }
+
+        return ['success' => false, 'error' => 'SMS no configurado (ni Twilio ni Nubarium)'];
     }
 
     /**
