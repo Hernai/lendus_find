@@ -756,6 +756,32 @@ Saludos,
                 'subject' => 'Documento aprobado',
                 'body' => 'Tu documento "{{document.type_label}}" fue aprobado.',
             ],
+
+            // ==========================================
+            // KYC COMPLETADO (identidad verificada)
+            // ==========================================
+            [
+                'name' => 'Identidad Verificada - In-App',
+                'event' => NotificationEvent::KYC_COMPLETED,
+                'channel' => NotificationChannel::IN_APP,
+                'priority' => 3,
+                'subject' => 'Identidad verificada',
+                'body' => 'Tu identidad fue verificada correctamente. ¡Ya puedes continuar con tu solicitud!',
+            ],
+            [
+                'name' => 'Identidad Verificada - WhatsApp',
+                'event' => NotificationEvent::KYC_COMPLETED,
+                'channel' => NotificationChannel::WHATSAPP,
+                'priority' => 3,
+                'subject' => null,
+                'body' => '✅ *Identidad verificada - {{tenant.name}}*
+
+Hola *{{user.first_name}}*,
+
+Tu identidad fue verificada correctamente. Ya puedes continuar con tu solicitud.
+
+{{tenant.name}}',
+            ],
         ];
 
         foreach ($templates as $templateData) {

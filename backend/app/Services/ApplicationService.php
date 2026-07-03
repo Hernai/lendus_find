@@ -516,6 +516,15 @@ class ApplicationService
     }
 
     /**
+     * Dispara una notificación de lifecycle para la solicitud (wrapper público
+     * de sendNotification, para eventos disparados desde controllers).
+     */
+    public function notifyApplicationEvent(string $event, Application $application, array $extra = []): void
+    {
+        $this->sendNotification($event, $application, $extra);
+    }
+
+    /**
      * Notifica al solicitante un evento de documento (aprobado/rechazado),
      * reutilizando el patrón de variables + los datos del documento.
      */

@@ -257,10 +257,58 @@ class VerificationService
             $person->kyc_verified_at = now();
             $person->kyc_status = \App\Enums\KycStatus::VERIFIED;
             $person->save();
+
+            // Transición a verificado por primera vez: avisar al solicitante.
+            $this->notifyKycCompleted($entity, $person);
+
             return true;
         }
 
         return false;
+    }
+
+    /**
+     * Avisa al solicitante que su validación de identidad (KYC) quedó completa.
+     * Best-effort: nunca debe afectar el flujo de verificación.
+     */
+    private function notifyKycCompleted(ApplicantAccount|Person $entity, Person $person): void
+    {
+        try {
+            $account = $entity instanceof ApplicantAccount ? $entity : $person->account;
+            if (!$account) {
+                return;
+            }
+
+            $tenant = $person->tenant;
+            $application = \App\Models\Application::where('person_id', $person->id)
+                ->active()
+                ->orderByDesc('created_at')
+                ->first();
+
+            $who = [
+                'first_name' => $person->first_name ?? '',
+                'last_name' => $person->last_name_1 ?? '',
+                'full_name' => $person->full_name ?? '',
+            ];
+
+            app(\App\Services\NotificationService::class)->send(
+                \App\Enums\NotificationEvent::KYC_COMPLETED->value,
+                $account,
+                [
+                    'user' => $who,
+                    'applicant' => $who,
+                    'application' => $application ? ['folio' => $application->folio] : [],
+                    'tenant' => ['name' => $tenant?->name ?? ''],
+                ],
+                null,
+                $tenant,
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('No se pudo notificar KYC completado', [
+                'person_id' => $person->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     // =========================================================================

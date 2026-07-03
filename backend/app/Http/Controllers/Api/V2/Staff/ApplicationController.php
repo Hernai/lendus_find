@@ -2489,6 +2489,11 @@ class ApplicationController extends Controller
         // Note: We allow pending fields (fields that haven't been manually verified yet)
         // because not all fields are required to be manually verified
         if (!$hasRejectedDocs && !$hasPendingDocs) {
+            // Todos los documentos quedaron aprobados: avisar al solicitante.
+            // (El auto-avance de status no pasa por changeStatus, así que este
+            // es el único punto que notifica la completitud de documentos.)
+            $this->service->notifyApplicationEvent('documents.complete', $app);
+
             $oldStatus = $app->status;
 
             // Move to IN_REVIEW
