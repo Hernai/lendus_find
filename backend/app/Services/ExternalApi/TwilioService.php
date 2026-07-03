@@ -432,7 +432,11 @@ class TwilioService implements SmsServiceInterface
      */
     public function sendOtp(string $to, string $code, string $channel = 'sms'): array
     {
-        $body = "Tu código de verificación es: {$code}\n\nEste código expirará en 10 minutos.";
+        // Origen (nombre de la SOFOM) para que el usuario sepa quién envía el código.
+        $origin = $this->tenantId
+            ? \App\Models\Tenant::withoutGlobalScopes()->find($this->tenantId)?->name
+            : null;
+        $body = \App\Helpers\OtpMessage::sms($origin, $code);
 
         if ($channel === 'whatsapp') {
             return $this->sendWhatsApp($to, $body);

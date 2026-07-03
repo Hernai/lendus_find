@@ -206,11 +206,13 @@ class ApplicantAuthService
             }
 
             if ($ch === 'EMAIL') {
-                // SMTP u otro proveedor de email: enviamos nuestro código.
+                // SMTP u otro proveedor de email: enviamos nuestro código, con el
+                // origen (nombre de la SOFOM) en asunto y cuerpo.
+                $origin = Tenant::withoutGlobalScopes()->find($tenantId)?->name;
                 $r = SmtpService::createFromConfig($config)->sendEmail(
                     $identifier,
-                    'Tu código de verificación',
-                    "Tu código de verificación es: {$otpRequest->code}\n\nExpira en 10 minutos."
+                    \App\Helpers\OtpMessage::emailSubject($origin),
+                    \App\Helpers\OtpMessage::emailBody($origin, $otpRequest->code)
                 );
                 return ['success' => (bool) ($r['success'] ?? false), 'message' => $r['message'] ?? null];
             }

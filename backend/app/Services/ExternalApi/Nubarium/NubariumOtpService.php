@@ -185,11 +185,14 @@ class NubariumOtpService extends BaseNubariumService implements SmsServiceInterf
      */
     private function buildOtpMessage(?string $message): string
     {
-        $msg = $message && str_contains($message, self::CODE_PLACEHOLDER)
-            ? $message
-            : 'Tu codigo de verificacion es: ' . self::CODE_PLACEHOLDER;
+        // Si el caller ya trae un template con el placeholder, se respeta.
+        if ($message && str_contains($message, self::CODE_PLACEHOLDER)) {
+            return mb_substr($message, 0, 160);
+        }
 
-        return mb_substr($msg, 0, 160);
+        // Por defecto, mensaje con el origen (nombre de la SOFOM) para que el
+        // usuario sepa quién le envía el código. Nubarium sustituye #code#.
+        return \App\Helpers\OtpMessage::sms($this->tenant->name ?? null, self::CODE_PLACEHOLDER);
     }
 
     /**
