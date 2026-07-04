@@ -149,11 +149,6 @@ Route::middleware(['tenant', 'metadata', 'log.request'])->prefix('v2/applicant/a
 });
 
 // =============================================
-// V2: PERSON MANAGEMENT ROUTES
-// =============================================
-require __DIR__ . '/api/person.php';
-
-// =============================================
 // V2: APPLICANT APPLICATIONS, DOCUMENTS & PROFILE
 // =============================================
 Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'log.request'])

@@ -12,10 +12,6 @@
  *
  * // Staff auth
  * await v2.staff.auth.login({ email: 'admin@example.com', password: 'secret' })
- *
- * // Person management
- * await v2.person.create({ first_name: 'Juan', last_name_1: 'Perez' })
- * await v2.person.addresses.create(personId, { type: 'HOME', ... })
  */
 
 // =====================================================
@@ -39,7 +35,6 @@ import staffApiLog from './apilog.staff.service'
 import staffTenant from './tenant.staff.service'
 import staffIntegration from './integration.staff.service'
 import staffActivity from './activity.staff.service'
-import person from './person.service'
 import simulator from './simulator.service'
 import publicConfig from './config.public.service'
 import applicantLoan from './loan.applicant.service'
@@ -55,7 +50,6 @@ import staffLoan from './loan.staff.service'
  * Organized by domain and role for clear separation:
  * - applicant: Services for applicant-facing operations
  * - staff: Services for staff/admin operations
- * - person: Person entity management (identifications, addresses, etc.)
  */
 export const v2 = {
   /**
@@ -88,11 +82,6 @@ export const v2 = {
     activity: staffActivity,
     loan: staffLoan,
   },
-
-  /**
-   * Person entity services (with nested resources)
-   */
-  person,
 
   /**
    * Public simulator services
@@ -128,7 +117,6 @@ export {
   staffApiLog,
   staffTenant,
   staffIntegration,
-  person,
   simulator,
   publicConfig,
 }
