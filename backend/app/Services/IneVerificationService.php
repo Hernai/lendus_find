@@ -67,6 +67,9 @@ class IneVerificationService
 
         // 2) Persistir el resultado del INE (identificaciones + documento).
         if ($ineValid && $applicant) {
+            // Pasamos también los identificadores del INE (ocr/cic/clave) para que
+            // verifyIneDocument los marque como verificados (si no, ine_ocr/ine_folio
+            // quedan como "completado" azul en vez de "verificado" verde).
             $this->verificationService->verifyIneDocument(
                 $applicant,
                 'front',
@@ -77,8 +80,17 @@ class IneVerificationService
                     'last_name_1' => $ocr['apellido_paterno'] ?? null,
                     'last_name_2' => $ocr['apellido_materno'] ?? null,
                     'birth_date' => $ocr['fecha_nacimiento'] ?? null,
+                    'clave_elector' => $ocr['clave_elector'] ?? null,
+                    'ocr' => $ocr['ocr'] ?? null,
+                    'cic' => $ocr['cic'] ?? null,
+                    'identificador_ciudadano' => $ocr['identificador_ciudadano'] ?? null,
                 ]
             );
+            // El sexo lo trae el OCR del INE; lo marcamos verificado (KYC_INE_OCR).
+            if (!empty($ocr['sexo'])) {
+                $gender = strtoupper((string) $ocr['sexo']) === 'H' ? 'M' : 'F';
+                $this->verificationService->verify($applicant, 'gender', $gender, VerificationMethod::KYC_INE_OCR);
+            }
             $this->saveIdentificationsFromIne($applicant, $ocr);
             $this->updateAndApproveIneDocuments($applicant, $ocr, $ine['list_validation'] ?? null);
         }
