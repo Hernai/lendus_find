@@ -199,6 +199,40 @@ const tenantSlug = extractTenantFromUrl()
 // Redirige: /admin → /:tenant/admin
 ```
 
+## Mantenimiento por tenant: config-driven vs hardcoded
+
+Cada SOFOM suele tener su propio flujo. **Regla de oro: los cambios globales
+deben respetar lo per-tenant.** Antes de refactorizar algo compartido, verificar
+si un tenant depende de ese comportamiento.
+
+**Config-driven (seguro de tocar globalmente):**
+- **Integraciones**: `TenantApiConfig` (kyc, sms, email, bank_validation, phone_risk,
+  email_risk, sdk) — activar/desactivar por tenant sin código.
+- **Features**: `tenant.features` (`TenantFeatures` en `types/tenant.ts`):
+  `unified_auth_screen`, `unified_consent_screen`, `loan_portfolio`. Index signature
+  abierto → agregar flags no requiere cambios de tipo.
+- **Branding**: `TenantBranding` + `primary-*` CSS vars.
+- **Contenido/seeders**: `DemoDataSeeder`, `MoneyCapitalSeeder`, `FinateaSeeder`
+  (idempotentes, `updateOrCreate` por slug).
+- **App móvil**: `frontend/tenants/<slug>.tenant.ts` (ver `frontend/tenants/README.md`).
+
+**Divergencia de flujo per-tenant (tocar con cuidado, probar los 3 tenants):**
+- **Onboarding**: legacy `Step0-8` (Finatea/Demo) vs `DynamicOnboardingView`
+  (MoneyCapital, pasos configurables). Un cambio en el legacy afecta a **todos** los
+  tenants legacy.
+- **Canales OTP**: matriz por tenant (Finatea SMS+email, MoneyCapital solo SMS).
+- **Landings**: `TenantLandingDispatcher` dinámico vs vistas `*Landing`.
+
+**Frágil (hardcodeado, mejorar con prueba multi-tenant):**
+- Fallbacks `|| 'demo'` en `router/index.ts` (últimos recursos de detección de tenant).
+
+### Checklist para agregar un tenant
+1. Seeder backend (`<Slug>Seeder`, idempotente por slug) + correr en deploy.
+2. `frontend/tenants/<slug>.tenant.ts` (móvil) + assets (ver su README).
+3. `TenantApiConfig` por tenant (integraciones activas) — desde Integraciones en el admin.
+4. Features/branding vía `tenant.features` + `TenantBranding` (no hardcodear).
+5. Confirmar el flujo de onboarding que usa (legacy vs dinámico) y probarlo.
+
 ## Errores comunes a evitar
 
 1. **Olvidar `HasTenant`** en un nuevo modelo — Los datos se mostrarán de todos los tenants
@@ -206,3 +240,5 @@ const tenantSlug = extractTenantFromUrl()
 3. **Acceder a `app('tenant.id')` sin verificar `bound()`** — Falla en CLI/seeders
 4. **Hardcodear colores** — Usar `primary-*` classes (mapeadas a CSS vars del tenant)
 5. **Olvidar `tenant_id` en foreign keys** — Todas las tablas tenant-scoped necesitan `foreignUuid('tenant_id')`
+6. **Refactorizar el onboarding legacy sin probar los 3 tenants** — Finatea/Demo comparten `Step0-8`
+7. **Agregar slugs hardcodeados** — Preferir `tenant.features`/config; no `if (slug === 'x')`
