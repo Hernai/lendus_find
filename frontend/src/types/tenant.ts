@@ -41,6 +41,22 @@ export interface TenantContact {
   whatsapp: string | null
 }
 
+/**
+ * Feature flags por SOFOM (config-driven). Las conocidas están tipadas; el
+ * index signature mantiene el sistema abierto a flags nuevas sin tocar el tipo
+ * (agregar un tenant/feature no debe requerir cambios de tipos).
+ */
+export interface TenantFeatures {
+  /** Pantalla de auth unificada (registro/login) — ej. MoneyCapital. */
+  unified_auth_screen?: boolean
+  /** Pantalla de consentimiento unificado antes del auth. */
+  unified_consent_screen?: boolean
+  /** Módulo de cartera de crédito (opt-in) — ej. MoneyCapital. */
+  loan_portfolio?: boolean
+  /** Otros flags configurables por tenant. */
+  [key: string]: boolean | undefined
+}
+
 export interface Tenant {
   id: string
   name: string
@@ -48,14 +64,7 @@ export interface Tenant {
   branding: Branding
   webhook_config: WebhookConfig
   settings: TenantSettings
-  /**
-   * Feature flags por SOFOM. Reconocidas:
-   *  - loan_portfolio
-   *  - unified_consent_screen
-   *  - phone_score_enabled
-   *  - auto_disbursement
-   */
-  features?: Record<string, boolean>
+  features?: TenantFeatures
   contact?: TenantContact
   is_active: boolean
   created_at: string
