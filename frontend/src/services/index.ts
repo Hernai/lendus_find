@@ -18,7 +18,6 @@ export {
   staffApplication as v2StaffApplication,
   applicantDocument as v2ApplicantDocument,
   staffDocument as v2StaffDocument,
-  person as v2Person,
 } from './v2'
 
 // =====================================================
