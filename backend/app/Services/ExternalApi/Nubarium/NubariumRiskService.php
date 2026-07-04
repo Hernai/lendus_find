@@ -35,21 +35,26 @@ class NubariumRiskService extends BaseNubariumService
         try {
             $response = $this->apiCall('plus', 'POST', '/risk/v1/phone/query', $payload, 30);
             $this->logResponse($response, '/risk/v1/phone/query', 'plus');
-            $data = $response->successful() ? ($response->json() ?? []) : [];
 
-            if (strtoupper((string) ($data['status'] ?? '')) === 'ERROR') {
-                return ['success' => false, 'error' => $data['message'] ?? 'Error en phone risk', 'raw' => $data];
+            $data = $response->json() ?? [];
+
+            if (!$response->successful()) {
+                return ['success' => false, 'error' => $this->extractError($data, 'Phone risk HTTP ' . $response->status()), 'raw' => $data ?: null];
             }
 
-            $risk = $data['risk'] ?? [];
+            if (strtoupper($this->asString($data['status'] ?? '') ?? '') === 'ERROR') {
+                return ['success' => false, 'error' => $this->extractError($data, 'Error en phone risk'), 'raw' => $data];
+            }
+
+            $risk = is_array($data['risk'] ?? null) ? $data['risk'] : [];
 
             return [
                 'success' => true,
-                'score' => $risk['score'] ?? null,
-                'level' => $risk['level'] ?? null,                 // very-low / low / moderate / high
-                'recommendation' => $risk['recommendation'] ?? null, // allow / review / deny
-                'phone_type' => $data['phone_type']['description'] ?? null,
-                'carrier' => $data['carrier']['name'] ?? null,
+                'score' => $this->asScalar($risk['score'] ?? null),
+                'level' => $this->asString($risk['level'] ?? null),                 // very-low / low / moderate / high
+                'recommendation' => $this->asString($risk['recommendation'] ?? null), // allow / review / deny
+                'phone_type' => $this->asString($data['phone_type']['description'] ?? null),
+                'carrier' => $this->asString($data['carrier']['name'] ?? null),
                 'raw' => $data,
             ];
         } catch (\Exception $e) {
@@ -76,20 +81,26 @@ class NubariumRiskService extends BaseNubariumService
         try {
             $response = $this->apiCall('plus', 'POST', '/risk/v1/email/query', $payload, 30);
             $this->logResponse($response, '/risk/v1/email/query', 'plus');
-            $data = $response->successful() ? ($response->json() ?? []) : [];
 
-            if (strtoupper((string) ($data['status'] ?? '')) === 'ERROR') {
-                return ['success' => false, 'error' => $data['message'] ?? 'Error en email risk', 'raw' => $data];
+            $data = $response->json() ?? [];
+
+            if (!$response->successful()) {
+                return ['success' => false, 'error' => $this->extractError($data, 'Email risk HTTP ' . $response->status()), 'raw' => $data ?: null];
+            }
+
+            if (strtoupper($this->asString($data['status'] ?? '') ?? '') === 'ERROR') {
+                return ['success' => false, 'error' => $this->extractError($data, 'Error en email risk'), 'raw' => $data];
             }
 
             $result = $data['query']['results'][0] ?? [];
+            $result = is_array($result) ? $result : [];
 
             return [
                 'success' => true,
-                'score' => isset($result['EAScore']) ? (int) $result['EAScore'] : null,
-                'level' => $result['fraudRisk'] ?? null,           // "051 Very Low"
-                'deliverability' => $result['status'] ?? null,     // "Verified"
-                'country' => $result['country'] ?? null,
+                'score' => isset($result['EAScore']) && is_scalar($result['EAScore']) ? (int) $result['EAScore'] : null,
+                'level' => $this->asString($result['fraudRisk'] ?? null),           // "051 Very Low"
+                'deliverability' => $this->asString($result['status'] ?? null),     // "Verified"
+                'country' => $this->asString($result['country'] ?? null),
                 'raw' => $data,
             ];
         } catch (\Exception $e) {
@@ -103,5 +114,31 @@ class NubariumRiskService extends BaseNubariumService
         $digits = preg_replace('/\D/', '', $phone) ?? '';
 
         return strlen($digits) === 10 ? '52' . $digits : $digits;
+    }
+
+    /**
+     * Extrae un mensaje de error legible del body de Nubarium. El campo puede
+     * venir como string o como objeto/array; nunca devolvemos un array (evita
+     * "Array to string conversion" al persistir en risk_assessments).
+     */
+    private function extractError(array $data, string $default): string
+    {
+        return $this->asString($data['message'] ?? $data['mensaje'] ?? $data['error'] ?? null) ?? $default;
+    }
+
+    /** Devuelve un string (o null); si el valor es array/objeto, null. */
+    private function asString(mixed $v): ?string
+    {
+        if ($v === null || is_string($v)) {
+            return $v;
+        }
+
+        return is_scalar($v) ? (string) $v : null;
+    }
+
+    /** Devuelve un escalar (número/string/bool) o null si es array/objeto. */
+    private function asScalar(mixed $v): mixed
+    {
+        return is_scalar($v) ? $v : null;
     }
 }
