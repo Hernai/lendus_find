@@ -138,6 +138,7 @@ function fieldScore(f: RiskFieldVerification): number | null {
             >
               {{ runLabel(phone, 'phone') }}
             </button>
+            <p v-else class="mt-2 text-xs text-gray-400">Servicio no habilitado para este tenant.</p>
           </div>
 
           <!-- Email -->
@@ -166,6 +167,7 @@ function fieldScore(f: RiskFieldVerification): number | null {
             >
               {{ runLabel(email, 'email') }}
             </button>
+            <p v-else class="mt-2 text-xs text-gray-400">Servicio no habilitado para este tenant.</p>
           </div>
         </div>
       </div>
