@@ -130,7 +130,7 @@ function fieldScore(f: RiskFieldVerification): number | null {
             <p v-else-if="phone" class="text-sm text-red-600">Falló: {{ phone.error || '—' }}</p>
             <p v-else class="text-sm text-gray-400">Sin evaluación.</p>
             <button
-              v-if="risks.contact_risk.phone_enabled"
+              v-if="risks.contact_risk.phone_enabled !== false"
               type="button"
               class="mt-2 text-xs font-medium text-primary-600 hover:text-primary-700 disabled:opacity-60 disabled:cursor-not-allowed"
               :disabled="running === 'phone'"
@@ -158,7 +158,7 @@ function fieldScore(f: RiskFieldVerification): number | null {
             <p v-else-if="email" class="text-sm text-red-600">Falló: {{ email.error || '—' }}</p>
             <p v-else class="text-sm text-gray-400">No aplica / sin evaluación.</p>
             <button
-              v-if="risks.contact_risk.email_enabled"
+              v-if="risks.contact_risk.email_enabled !== false"
               type="button"
               class="mt-2 text-xs font-medium text-primary-600 hover:text-primary-700 disabled:opacity-60 disabled:cursor-not-allowed"
               :disabled="running === 'email'"
