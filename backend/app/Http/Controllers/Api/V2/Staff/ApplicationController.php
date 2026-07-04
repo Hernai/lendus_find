@@ -1774,15 +1774,23 @@ class ApplicationController extends Controller
             ->filter(fn ($b) => $b['clabe_validation'] !== null)
             ->values();
 
+        // Servicios de riesgo activos del tenant en UNA sola query (en vez de un
+        // exists() por tipo). Si el servicio está activo, el admin puede consultar.
+        $activeRiskServices = \App\Models\TenantApiConfig::where('tenant_id', $app->tenant_id)
+            ->where('provider', 'nubarium')
+            ->whereIn('service_type', ['phone_risk', 'email_risk'])
+            ->where('is_active', true)
+            ->pluck('service_type')
+            ->all();
+
         return $this->success([
             'kyc_status' => $person?->kyc_status,
             'kyc_verified_at' => $person?->kyc_verified_at?->toIso8601String(),
             'contact_risk' => [
                 'phone' => $contact['phone_risk'] ?? null,
                 'email' => $contact['email_risk'] ?? null,
-                // Si el servicio está activo, el admin puede consultar/reintentar.
-                'phone_enabled' => $this->tenantHasRiskService($app->tenant_id, 'phone_risk'),
-                'email_enabled' => $this->tenantHasRiskService($app->tenant_id, 'email_risk'),
+                'phone_enabled' => in_array('phone_risk', $activeRiskServices, true),
+                'email_enabled' => in_array('email_risk', $activeRiskServices, true),
                 // Sólo tiene sentido consultar si hay identificador que evaluar.
                 'has_phone' => !empty($account?->primary_phone),
                 'has_email' => !empty($account?->primary_email),
