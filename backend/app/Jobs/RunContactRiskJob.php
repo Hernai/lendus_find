@@ -75,7 +75,7 @@ class RunContactRiskJob implements ShouldQueue
                 ? $svc->emailRisk($identifier)
                 : $svc->phoneRisk($identifier);
 
-            RiskAssessment::create([
+            $assessment = RiskAssessment::create([
                 'tenant_id' => $account->tenant_id,
                 'account_id' => $account->id,
                 'person_id' => $account->person?->id,
@@ -91,10 +91,55 @@ class RunContactRiskJob implements ShouldQueue
                 'result' => $res['raw'] ?? null,
                 'error' => ($res['success'] ?? false) ? null : ($res['error'] ?? 'unknown'),
             ]);
+
+            $this->recordActivity($account, $serviceType, $res, $assessment);
         } catch (\Throwable $e) {
             Log::warning('RunContactRiskJob falló', [
                 'account_id' => $this->accountId,
                 'channel' => $channel,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Registra la consulta de riesgo en la Actividad de la solicitud (si hay una).
+     * Best-effort: nunca debe romper el job.
+     */
+    private function recordActivity(ApplicantAccount $account, string $type, array $res, RiskAssessment $assessment): void
+    {
+        try {
+            $person = $account->person;
+            if (!$person) {
+                return;
+            }
+            $application = \App\Models\Application::where('person_id', $person->id)
+                ->orderByDesc('created_at')
+                ->first();
+            if (!$application) {
+                return;
+            }
+
+            $ok = $res['success'] ?? false;
+            $canal = $type === RiskAssessment::TYPE_EMAIL_RISK ? 'de correo' : 'telefónico';
+            $detalle = $ok
+                ? 'nivel ' . ($res['level'] ?? 'N/D') . ', score ' . ($res['score'] ?? 'N/D')
+                : 'falló: ' . ($res['error'] ?? 'error');
+
+            \App\Services\ActivityRecorder::recordApplicationEvent($application, 'RISK_QUERY_NUBARIUM', [
+                'notes' => "Consulta de riesgo {$canal} (Nubarium): {$detalle}",
+                'entity' => $assessment,
+                'metadata' => [
+                    'kind' => 'risk_assessment',
+                    'risk_type' => $type,
+                    'success' => $ok,
+                    'level' => $res['level'] ?? null,
+                    'score' => $res['score'] ?? null,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('RunContactRiskJob: no se pudo registrar la actividad', [
+                'account_id' => $this->accountId,
                 'error' => $e->getMessage(),
             ]);
         }

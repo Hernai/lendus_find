@@ -584,6 +584,7 @@ class ActivityFeedService
             'CANCELLED'       => 'Solicitud cancelada',
             'SYNCED'          => 'Sincronizada con sistema externo',
             'BANK_VALIDATION_NUBARIUM' => 'Validación bancaria (Nubarium)',
+            'RISK_QUERY_NUBARIUM' => 'Consulta de riesgo (Nubarium)',
         ];
         if (isset($map[$action])) {
             return $map[$action];
@@ -684,6 +685,9 @@ class ActivityFeedService
         }
         if (str_contains($action, 'KYC')) {
             return 'fingerprint';
+        }
+        if (str_contains($action, 'RISK') || str_contains($action, 'NUBARIUM')) {
+            return 'shield';
         }
         if (str_contains($action, 'APPLICATION')) {
             return 'file';
