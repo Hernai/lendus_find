@@ -1972,12 +1972,17 @@ class ApplicationController extends Controller
             return null;
         }
 
+        // Los tipos sin empleador (estudiante, desempleado, etc.) no muestran
+        // empresa aunque el registro traiga un valor viejo (evita "Empresa: L").
+        $type = \App\Enums\EmploymentType::normalize((string) $employment->employment_type);
+        $hasEmployer = $type?->hasEmployer() ?? true;
+
         return [
             'id' => $employment->id,
             'employment_type' => $employment->employment_type,
-            'employer_name' => $employment->employer_name,
-            'employer_rfc' => $employment->employer_rfc,
-            'employer_phone' => $employment->employer_phone,
+            'employer_name' => $hasEmployer ? $employment->employer_name : null,
+            'employer_rfc' => $hasEmployer ? $employment->employer_rfc : null,
+            'employer_phone' => $hasEmployer ? $employment->employer_phone : null,
             'job_title' => $employment->job_title,
             'department' => $employment->department,
             'monthly_income' => $employment->monthly_income,

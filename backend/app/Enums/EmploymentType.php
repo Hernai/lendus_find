@@ -49,6 +49,19 @@ enum EmploymentType: string
         ]);
     }
 
+    /**
+     * ¿El tipo de empleo tiene empresa/empleador? Estudiante, desempleado,
+     * jubilado, hogar y otro NO — no debe guardarse/mostrarse empresa para ellos.
+     */
+    public function hasEmployer(): bool
+    {
+        return in_array($this, [
+            self::EMPLOYEE,
+            self::SELF_EMPLOYED,
+            self::BUSINESS_OWNER,
+        ]);
+    }
+
     public static function values(): array
     {
         return array_column(self::cases(), 'value');

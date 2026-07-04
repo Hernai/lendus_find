@@ -2,6 +2,7 @@
 
 namespace App\Services\Person;
 
+use App\Enums\EmploymentType;
 use App\Models\Person;
 use App\Models\PersonEmployment;
 use Illuminate\Database\Eloquent\Collection;
@@ -30,6 +31,7 @@ class PersonEmploymentService
             $data['tenant_id'] = $person->tenant_id;
             $data['person_id'] = $person->id;
             $data['status'] = $data['status'] ?? PersonEmployment::STATUS_PENDING;
+            $data = $this->sanitizeEmployerFields($data);
 
             Log::info('PersonEmploymentService::create data', [
                 'years_employed' => $data['years_employed'] ?? 'NOT_SET',
@@ -69,6 +71,7 @@ class PersonEmploymentService
      */
     public function update(PersonEmployment $employment, array $data): PersonEmployment
     {
+        $data = $this->sanitizeEmployerFields($data, $employment->employment_type);
         $employment->update($data);
 
         // Recalculate duration if dates changed
@@ -77,6 +80,26 @@ class PersonEmploymentService
         }
 
         return $employment->fresh();
+    }
+
+    /**
+     * Para tipos de empleo sin empleador (estudiante, desempleado, jubilado,
+     * hogar, otro) no persistimos datos de empresa aunque el front los mande
+     * (evita basura como "Empresa: L" para un estudiante). Usa employment_type
+     * de $data o el fallback del registro existente.
+     */
+    private function sanitizeEmployerFields(array $data, ?string $fallbackType = null): array
+    {
+        $rawType = $data['employment_type'] ?? $fallbackType;
+        $type = $rawType ? EmploymentType::normalize((string) $rawType) : null;
+
+        if ($type && !$type->hasEmployer()) {
+            $data['employer_name'] = null;
+            $data['employer_rfc'] = null;
+            $data['employer_phone'] = null;
+        }
+
+        return $data;
     }
 
     /**
