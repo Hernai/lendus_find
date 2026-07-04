@@ -1245,14 +1245,17 @@ const getMexicanStateName = (stateCode: string | undefined): string => {
   return option?.label || stateCode
 }
 
-// Entidad de nacimiento: usa el campo guardado; si viene vacío (solicitudes
-// previas a la verificación de INE) lo derivamos de la CURP, que la codifica.
+// Entidad de nacimiento: la CURP es la fuente canónica (codifica la entidad en
+// las posiciones 12-13, ej. "CS" -> Chiapas). La preferimos porque el campo
+// birth_state puede traer la clave CURP de 2 letras ("CS") que el catálogo de
+// estados (códigos de 3 letras, "CHP") no resuelve. Fallback al campo guardado.
 const birthStateDisplay = computed(() => {
   const a = application.value?.applicant
   if (!a) return '—'
+  const fromCurp = getStateNameFromCurp((a.curp ?? '').toUpperCase())
+  if (fromCurp) return fromCurp
   const fromField = getMexicanStateName(a.birth_state)
-  if (fromField && fromField !== '—') return fromField
-  return getStateNameFromCurp((a.curp ?? '').toUpperCase()) || '—'
+  return fromField && fromField !== '—' ? fromField : '—'
 })
 
 // Nacionalidad mexicana: distintos flujos guardan el valor de formas diferentes
@@ -1792,7 +1795,7 @@ const confirmEditPhone = async (data: { selectValue?: string; comment?: string }
   try {
     const res = await v2.staff.application.updateApplicantPhone(application.value.id, phone)
     application.value.applicant.phone = res.data?.phone || phone
-    toast.success('Teléfono actualizado. El número anterior queda libre.')
+    toast.success(res.message || 'Teléfono actualizado.')
     showEditPhoneModal.value = false
   } catch (e: unknown) {
     const body = (e as { response?: { data?: { message?: string; error?: string } } })?.response?.data

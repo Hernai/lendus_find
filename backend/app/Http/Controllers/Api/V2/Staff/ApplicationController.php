@@ -1590,9 +1590,41 @@ class ApplicationController extends Controller
             return $this->notFound('Solicitud o cuenta no encontrada.');
         }
 
-        $identity = $application->submittedByAccount->phoneIdentity;
+        $account = $application->submittedByAccount;
+        $identity = $account->phoneIdentity;
+
+        // Si la cuenta NO tiene teléfono, el admin puede capturarlo/agregarlo.
         if (!$identity) {
-            return $this->notFound('Esta cuenta no tiene un teléfono registrado.');
+            $clash = ApplicantIdentity::query()
+                ->where('tenant_id', $application->tenant_id)
+                ->where('type', 'PHONE')
+                ->where('identifier', $national)
+                ->first();
+            if ($clash) {
+                return $this->badRequest('PHONE_IN_USE', 'Ese número ya está en uso por otra cuenta en este tenant.');
+            }
+
+            $identity = ApplicantIdentity::create([
+                'tenant_id' => $application->tenant_id,
+                'account_id' => $account->id,
+                'type' => 'PHONE',
+                'identifier' => $national, // formato nacional de 10 dígitos, igual que el login
+                'verified_at' => now(),
+                'is_primary' => true,
+                'last_used_at' => now(),
+            ]);
+
+            \App\Services\ActivityRecorder::recordApplicationEvent($application, 'DATA_UPDATED', [
+                'from_status' => 'APPLICANT_PHONE_ADD',
+                'to_status' => 'APPLICANT_PHONE_ADD',
+                'notes' => "Teléfono del solicitante agregado desde el admin: {$national}",
+                'entity' => $identity,
+                'old_values' => ['identifier' => null],
+                'new_values' => ['identifier' => $national],
+                'metadata' => ['kind' => 'applicant_phone_added'],
+            ]);
+
+            return $this->success(['phone' => $national], 'Teléfono agregado.');
         }
 
         // Respeta el formato del identifier actual (con/sin prefijo 52 / +52)
