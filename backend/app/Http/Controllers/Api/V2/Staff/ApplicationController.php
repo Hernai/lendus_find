@@ -1783,6 +1783,9 @@ class ApplicationController extends Controller
                 // Si el servicio está activo, el admin puede consultar/reintentar.
                 'phone_enabled' => $this->tenantHasRiskService($app->tenant_id, 'phone_risk'),
                 'email_enabled' => $this->tenantHasRiskService($app->tenant_id, 'email_risk'),
+                // Sólo tiene sentido consultar si hay identificador que evaluar.
+                'has_phone' => !empty($account?->primary_phone),
+                'has_email' => !empty($account?->primary_email),
             ],
             'identity' => $identity,
             'biometrics' => $biometrics, // resultados del SDK biométrico

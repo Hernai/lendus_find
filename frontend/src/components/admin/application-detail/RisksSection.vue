@@ -76,6 +76,10 @@ function raw(item: RiskContactItem | null, path: string): unknown {
 const phone = computed(() => risks.value?.contact_risk?.phone ?? null)
 const email = computed(() => risks.value?.contact_risk?.email ?? null)
 
+// ¿El solicitante tiene identificador que evaluar? Si no, no ofrecemos la consulta.
+const hasPhone = computed(() => risks.value?.contact_risk?.has_phone !== false)
+const hasEmail = computed(() => risks.value?.contact_risk?.has_email !== false)
+
 const identityFields = computed(() => Object.entries(risks.value?.identity ?? {}))
 const biometricFields = computed(() => Object.entries(risks.value?.biometrics ?? {}))
 
@@ -128,17 +132,21 @@ function fieldScore(f: RiskFieldVerification): number | null {
               <p class="text-[11px] text-gray-400 mt-1">{{ phone.identifier }} · {{ fmtDate(phone.created_at) }}</p>
             </template>
             <p v-else-if="phone" class="text-sm text-red-600">Falló: {{ phone.error || '—' }}</p>
+            <p v-else-if="!hasPhone" class="text-sm text-gray-400">Sin teléfono registrado.</p>
             <p v-else class="text-sm text-gray-400">Sin evaluación.</p>
-            <button
-              v-if="risks.contact_risk.phone_enabled !== false"
-              type="button"
-              class="mt-2 text-xs font-medium text-primary-600 hover:text-primary-700 disabled:opacity-60 disabled:cursor-not-allowed"
-              :disabled="running === 'phone'"
-              @click="runRisk('phone')"
-            >
-              {{ runLabel(phone, 'phone') }}
-            </button>
-            <p v-else class="mt-2 text-xs text-gray-400">Servicio no habilitado para este tenant.</p>
+            <!-- Sólo ofrecemos la consulta si hay teléfono que evaluar. -->
+            <template v-if="hasPhone">
+              <button
+                v-if="risks.contact_risk.phone_enabled !== false"
+                type="button"
+                class="mt-2 text-xs font-medium text-primary-600 hover:text-primary-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                :disabled="running === 'phone'"
+                @click="runRisk('phone')"
+              >
+                {{ runLabel(phone, 'phone') }}
+              </button>
+              <p v-else class="mt-2 text-xs text-gray-400">Servicio no habilitado para este tenant.</p>
+            </template>
           </div>
 
           <!-- Email -->
@@ -157,17 +165,21 @@ function fieldScore(f: RiskFieldVerification): number | null {
               <p class="text-[11px] text-gray-400 mt-1">{{ email.identifier }} · {{ fmtDate(email.created_at) }}</p>
             </template>
             <p v-else-if="email" class="text-sm text-red-600">Falló: {{ email.error || '—' }}</p>
-            <p v-else class="text-sm text-gray-400">No aplica / sin evaluación.</p>
-            <button
-              v-if="risks.contact_risk.email_enabled !== false"
-              type="button"
-              class="mt-2 text-xs font-medium text-primary-600 hover:text-primary-700 disabled:opacity-60 disabled:cursor-not-allowed"
-              :disabled="running === 'email'"
-              @click="runRisk('email')"
-            >
-              {{ runLabel(email, 'email') }}
-            </button>
-            <p v-else class="mt-2 text-xs text-gray-400">Servicio no habilitado para este tenant.</p>
+            <p v-else-if="!hasEmail" class="text-sm text-gray-400">Sin correo registrado.</p>
+            <p v-else class="text-sm text-gray-400">Sin evaluación.</p>
+            <!-- Sólo ofrecemos la consulta si hay correo que evaluar. -->
+            <template v-if="hasEmail">
+              <button
+                v-if="risks.contact_risk.email_enabled !== false"
+                type="button"
+                class="mt-2 text-xs font-medium text-primary-600 hover:text-primary-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                :disabled="running === 'email'"
+                @click="runRisk('email')"
+              >
+                {{ runLabel(email, 'email') }}
+              </button>
+              <p v-else class="mt-2 text-xs text-gray-400">Servicio no habilitado para este tenant.</p>
+            </template>
           </div>
         </div>
       </div>

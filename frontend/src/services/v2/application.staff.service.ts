@@ -503,6 +503,8 @@ export interface ApplicationRisks {
     email: RiskContactItem | null
     phone_enabled?: boolean
     email_enabled?: boolean
+    has_phone?: boolean
+    has_email?: boolean
   }
   identity: Record<string, RiskFieldVerification>
   biometrics: Record<string, RiskFieldVerification>
