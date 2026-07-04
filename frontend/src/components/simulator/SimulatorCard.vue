@@ -210,20 +210,16 @@ watch([amount, selectedPayments, selectedDays, paymentFrequency, activeProduct],
 })
 
 
-// Request credit
+// Solicitar crédito
 const handleRequestCredit = async () => {
-  console.log('🚀 handleRequestCredit called')
-  console.log('📦 activeProduct:', activeProduct.value?.id || 'NULL')
-
   if (!activeProduct.value) {
-    console.error('❌ No active product!')
     return
   }
 
-  // Store the selected product for use after authentication
+  // Guardamos el producto seleccionado para usarlo después de autenticarse.
   applicationStore.setSelectedProduct(activeProduct.value)
 
-  // Save simulation params to localStorage for use after auth
+  // Persistimos los parámetros de simulación para retomarlos tras el login.
   const pendingData = {
     product_id: activeProduct.value.id,
     requested_amount: amount.value,
@@ -231,32 +227,19 @@ const handleRequestCredit = async () => {
     requested_term_days: isSinglePayment.value ? selectedDays.value : undefined,
     payment_frequency: paymentFrequency.value
   }
-  console.log('💾 Saving pending_application:', pendingData)
   localStorage.setItem('pending_application', JSON.stringify(pendingData))
 
-  // Verify it was saved
-  const saved = localStorage.getItem('pending_application')
-  console.log('✅ Verified saved:', saved ? 'YES' : 'NO')
-
-  // If we're in onboarding mode, emit event to parent instead of navigating
+  // En modo onboarding emitimos el evento al padre en vez de navegar.
   if (props.inOnboarding) {
-    console.log('➡️ In onboarding mode - emitting continue event')
     emit('continue')
     return
   }
 
-  // Check if user is already authenticated
-  console.log('🔐 isAuthenticated:', authStore.isAuthenticated)
-
   if (authStore.isAuthenticated) {
-    // User is already authenticated and has product selected
-    // Skip simulator and go directly to verification (KYC)
-    console.log('✅ User authenticated with product selected - skipping simulator')
-    console.log('➡️ Navigating to /solicitud/verificacion')
+    // Ya autenticado y con producto elegido: directo a la verificación (KYC).
     router.push('/solicitud/verificacion')
   } else {
-    // Redirect to auth - application will be created after successful login
-    console.log('➡️ Navigating to /auth')
+    // Sin sesión: a auth; la solicitud se crea tras el login exitoso.
     router.push('/auth')
   }
 }

@@ -477,7 +477,6 @@ const handleSubmit = async () => {
 
   if (!isValid) {
     log.warn('Validation failed', { errors })
-    console.log('Validation errors:', errors)
     return
   }
 

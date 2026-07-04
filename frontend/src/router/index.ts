@@ -684,39 +684,23 @@ router.beforeEach(async (to, from, next) => {
     return next({ name: 'admin-dashboard' })
   }
 
-  // If authenticated regular user trying to access guest-only page (like login)
-  console.log('🔍 [Router Guard] Checking guest-only redirect', {
-    isGuestOnly,
-    isAdminGuest,
-    isAuthenticated: authStore.isAuthenticated,
-    toPath: to.path
-  })
-
+  // Usuario autenticado que intenta entrar a una página guest-only (ej. login)
   if (isGuestOnly && !isAdminGuest && authStore.isAuthenticated) {
-    console.log('🚫 [Router] Authenticated user trying to access guest page')
     const tenantSlug = to.params.tenant as string || tenantStore.slug
 
-    // Check if user has product/simulation from landing page
-    // If so, redirect to onboarding verification instead of dashboard
+    // Si trae producto/simulación de la landing, lo mandamos a la verificación
+    // del onboarding en vez del dashboard.
     const savedProduct = storage.get(STORAGE_KEYS.SELECTED_PRODUCT)
     const savedSimulation = storage.get(STORAGE_KEYS.SIMULATION)
 
-    console.log('📦 [Router] Checking saved data', {
-      hasSavedProduct: !!savedProduct,
-      hasSavedSimulation: !!savedSimulation,
-      productName: savedProduct ? (savedProduct as any).name : null
-    })
-
     if (savedProduct || savedSimulation) {
-      console.log('🔀 [Router] Authenticated user with saved product/simulation - redirecting to verification')
       if (tenantSlug) {
         return next({ path: `/${tenantSlug}/solicitud/verificacion` })
       }
       return next({ path: '/solicitud/verificacion' })
     }
 
-    // No saved product - go to dashboard as normal
-    console.log('🏠 [Router] No saved product - redirecting to dashboard')
+    // Sin producto guardado: al dashboard como siempre.
     if (tenantSlug) {
       return next({ name: 'tenant-dashboard', params: { tenant: tenantSlug } })
     }
