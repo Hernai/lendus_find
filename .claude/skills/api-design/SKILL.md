@@ -88,15 +88,17 @@ tenant → metadata → auth:sanctum → staff → permission:methodName
 | `/api/v2/staff/api-logs/*` | `canManageProducts` |
 | `/api/v2/staff/tenants/*` | `canConfigureTenant` |
 
-### Person Management (auth required)
-| Prefix | Description |
-|--------|-------------|
-| `/api/v2/persons/*` | CRUD personas, búsqueda por CURP/RFC |
-| `/api/v2/persons/{id}/identifications/*` | Documentos de identidad |
-| `/api/v2/persons/{id}/addresses/*` | Direcciones con verificación |
-| `/api/v2/persons/{id}/employments/*` | Registros de empleo |
-| `/api/v2/persons/{id}/references/*` | Referencias |
-| `/api/v2/persons/{id}/bank-accounts/*` | Cuentas bancarias con validación CLABE |
+> El stack V1 `/api/v2/persons/*` (controllers `Api\Person\*`) fue **eliminado**
+> por código muerto (sin consumidores). La gestión de personas va por V2
+> (`/applicant/*`, `/staff/*`).
+
+### KYC & Riesgos (endpoints clave)
+| Endpoint | Descripción |
+|----------|-------------|
+| `POST /api/v2/applicant/kyc/ine/verify` | Verificación unificada de INE (OCR + validación + RENAPO + persistencia + diffs). Lógica compartida en `IneVerificationService` |
+| `POST /api/v2/staff/applications/{id}/kyc/verify-ine` | Re-ejecuta la verificación de INE desde el panel usando las imágenes ya subidas (`canReviewDocuments`) |
+| `GET /api/v2/staff/applications/{id}/risks` | Consolidado de riesgos: phone/email risk (Nubarium), identidad, biometría, CLABE. Incluye `phone_enabled`/`email_enabled`/`has_phone`/`has_email` |
+| `POST /api/v2/staff/applications/{id}/risks/run` | Ejecuta/reintenta phone o email risk a demanda (`{type: "phone"\|"email"}`, `canReviewDocuments`) |
 
 ## Frontend Service Pattern
 

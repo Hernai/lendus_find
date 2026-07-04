@@ -63,13 +63,6 @@ Componentes específicos para el flujo del usuario/solicitante. NO se usan en ad
 | **AddBankAccountModal** | Modal agregar cuenta con validación CLABE | — | `close`, `saved` |
 | **BankAccountCard** | Tarjeta de cuenta con acciones | `account: V2ProfileBankAccount` | `set-primary`, `delete` |
 
-### Documentos (`@/components/`)
-
-| Componente | Descripción | Props clave | Emits |
-|------------|-------------|-------------|-------|
-| **DocumentPreview** | Vista previa con lazy load | `document`, `showStatus?`, `canReplace?` | `replace` |
-| **ImageViewer** | Modal fullscreen de imagen | `src`, `isVerified?`, `canChange?` | `close`, `change` |
-
 ### KYC (`@/components/kyc/`)
 
 | Componente | Descripción | Props clave | Emits |
@@ -112,20 +105,17 @@ Importar desde barrel: `import { AdminDataTable, ConfirmModal } from '@/componen
 
 ### Detalle de solicitud (`@/components/admin/application-detail/`)
 
-9 subcomponentes para la vista de detalle:
+Subcomponentes activos (barrel `index.ts`) de la vista de detalle. La mayor
+parte del layout vive inline en `AdminApplicationDetail.vue`; estos son los
+extraídos:
 
 | Componente | Descripción |
 |------------|-------------|
-| **ApplicationHeader** | Header con folio, status, acciones |
-| **LoanSummaryCards** | Tarjetas resumen del crédito |
-| **ApplicantDataSection** | Datos personales del solicitante |
 | **BankAccountsSection** | Cuentas bancarias registradas |
 | **ReferencesSection** | Referencias personales |
-| **CompletenessIndicator** | Indicador de completitud |
-| **TimelineSection** | Línea de tiempo de eventos |
 | **NotesSection** | Notas/comentarios del analista |
-| **ApiLogsSection** | Logs de llamadas API |
-| **TabNavigation** | Navegación por pestañas |
+| **ActivityTimeline** | Feed unificado de actividad (`/applications/{id}/activity`) — reemplazó a TimelineSection + AuditLogList + ApiLogsSection |
+| **RisksSection** | Tab "Riesgos": phone/email risk (Nubarium), identidad, biometría, CLABE |
 | **VerifiableField** | Campo con badge de verificación |
 
 ### Notificaciones (`@/components/admin/notification-templates/`)
