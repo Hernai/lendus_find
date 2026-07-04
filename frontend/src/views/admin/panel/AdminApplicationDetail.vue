@@ -9,7 +9,6 @@ import {
   ReferencesSection,
   BankAccountsSection,
   NotesSection,
-  ApplicantDataSection,
   RisksSection,
 } from '@/components/admin/application-detail'
 import type { ClabeValidationSummary } from '@/components/admin/application-detail/BankAccountsSection.vue'
