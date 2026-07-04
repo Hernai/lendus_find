@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { onMounted, computed, watch } from 'vue'
 import { useOnboardingStore, useTenantStore } from '@/stores'
 import { useStepForm, rules } from '@/composables'
 import { AppButton, AppInput, AppSelect } from '@/components/common'
@@ -92,6 +92,19 @@ const showCompanyDetails = computed(() => form.employment_type === 'EMPLOYEE')
 const showBusinessDetails = computed(() =>
   ['SELF_EMPLOYED', 'BUSINESS_OWNER'].includes(form.employment_type)
 )
+
+// Al cambiar a un tipo sin empresa (estudiante, desempleado, etc.) limpiamos los
+// campos de empresa para no arrastrar datos viejos (ej. una "L" de un EMPLOYEE
+// previo) hasta el review o el submit.
+watch(() => form.employment_type, (type) => {
+  const hasCompany = ['EMPLOYEE', 'SELF_EMPLOYED', 'BUSINESS_OWNER'].includes(type)
+  if (!hasCompany) {
+    form.company_name = ''
+    form.job_title = ''
+    form.work_phone = ''
+    form.company_address = ''
+  }
+})
 
 // Handle phone input (format as user types)
 const handlePhoneInput = (event: Event) => {
