@@ -885,7 +885,9 @@ class ApplicationController extends Controller
                         'passport_verified' => $passportData?->status === 'VERIFIED',
                     ],
                     'contact' => [
-                        'email' => $person->account?->identities?->where('type', 'email')->first()?->identifier,
+                        // Usa el accesor primary_email (las identidades se guardan
+                        // con type EN MAYÚSCULA; el where('type','email') no las hallaba).
+                        'email' => $person->account?->primary_email,
                         'phone' => $person->account?->primary_phone,
                     ],
                     'address' => $this->formatAddress($person->addresses?->where('is_current', true)->first()),
