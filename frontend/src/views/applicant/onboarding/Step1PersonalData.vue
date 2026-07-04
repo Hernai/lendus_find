@@ -53,8 +53,23 @@ const errors = reactive({
 
 const submitError = ref('')
 
+// Fusión con la confirmación de identidad: si el INE ya verificó al usuario, no
+// re-presentamos los datos personales (nombre, CURP, fecha, sexo y entidad ya vienen
+// de INE+CURP). No queda nada por capturar, así que saltamos este paso de forma
+// transparente y avanzamos al siguiente. Solo si el CURP no trae entidad de
+// nacimiento pedimos ese único dato.
+const autoSubmitting = ref(false)
+const autoSubmitted = ref(false)
+const needsBirthState = computed(() => isKycVerified.value && !form.birth_state)
+const canAutoSkip = computed(() => isKycVerified.value && !needsBirthState.value)
+
 // Sync form from store on mount
 onMounted(async () => {
+  // Si el INE ya verificó en esta sesión, encendemos el spinner de inmediato para
+  // que el salto sea transparente (sin parpadear el resumen durante los awaits de
+  // init/loadVerifications). Si al final no aplica auto-skip, se apaga abajo.
+  if (isKycVerified.value) autoSubmitting.value = true
+
   await onboardingStore.init()
 
   // Load KYC verifications if profile exists (to restore KYC state)
@@ -80,6 +95,10 @@ onMounted(async () => {
   })
 
   if (isKycVerified.value) {
+    // Optimista: si el INE ya verificó, casi seguro saltamos este paso. Encendemos
+    // el spinner desde ya (misma tick, sin await intermedio) para no parpadear el
+    // resumen/formulario antes de decidir el auto-skip.
+    autoSubmitting.value = true
     log.debug('Using KYC locked data for form')
     form.first_name = kycStore.lockedData.nombres || step1.first_name
     form.last_name = kycStore.lockedData.apellido_paterno || step1.last_name
@@ -114,6 +133,35 @@ onMounted(async () => {
     } else {
       form.is_mexican = 'NO'
     }
+  }
+
+  // Si el INE ya verificó al usuario y no falta ningún dato, saltamos este paso de
+  // forma transparente: creamos perfil + solicitud y avanzamos, sin mostrar el
+  // formulario redundante ("¿Cómo te llamas?").
+  if (canAutoSkip.value && !autoSubmitted.value) {
+    autoSubmitted.value = true
+    autoSubmitting.value = true
+    // Persistimos step1 (incl. birth_state) antes de crear perfil/solicitud, sin
+    // depender del watch asíncrono.
+    onboardingStore.updateStepData('step1', {
+      first_name: form.first_name,
+      last_name: form.last_name,
+      second_last_name: form.second_last_name,
+      birth_date: form.birth_date,
+      birth_state: form.birth_state,
+      gender: form.gender,
+      nationality: form.is_mexican === 'SI' ? 'MX' : form.nationality,
+      marital_status: onboardingStore.data.step1.marital_status || ''
+    })
+    await handleSubmit()
+    // En éxito, handleSubmit navega a /solicitud/paso-2 y este componente se
+    // desmonta: NO apagamos el spinner (evita el parpadeo del resumen justo antes
+    // de navegar). Solo lo apagamos si falló (submitError) para el fallback manual.
+    if (submitError.value) autoSubmitting.value = false
+  } else {
+    // Sin auto-skip (no hay KYC, o falta la entidad de nacimiento): apagamos el
+    // spinner optimista para mostrar el formulario/campo correspondiente.
+    autoSubmitting.value = false
   }
 })
 
@@ -346,7 +394,7 @@ const handleSubmit = async () => {
 <template>
   <div class="px-4 py-6">
     <div class="max-w-md mx-auto">
-      <h1 class="text-2xl font-bold text-gray-900 mb-6">¿Cómo te llamas?</h1>
+      <h1 v-if="!autoSubmitting" class="text-2xl font-bold text-gray-900 mb-6">¿Cómo te llamas?</h1>
 
       <!-- Loading state -->
       <div v-if="onboardingStore.isLoading" class="flex justify-center py-8">
@@ -354,91 +402,32 @@ const handleSubmit = async () => {
       </div>
 
       <form v-else class="space-y-4" @submit.prevent="handleSubmit">
-        <!-- KYC Verified: Show locked fields -->
+        <!-- KYC verificado: fusión con la confirmación de identidad. No re-mostramos
+             los datos ya confirmados; si no falta nada, saltamos de forma transparente. -->
         <template v-if="isKycVerified">
-          <!-- Verified badge -->
-          <div class="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3 mb-2">
-            <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <svg class="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-              </svg>
-            </div>
-            <div>
-              <p class="text-sm font-medium text-green-800">Identidad verificada</p>
-              <p class="text-xs text-green-600">Tus datos fueron extraídos de tu INE</p>
-            </div>
+          <!-- Preparando: creando perfil + solicitud antes de avanzar -->
+          <div v-if="autoSubmitting" class="flex flex-col items-center justify-center py-16">
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mb-4"></div>
+            <p class="text-gray-600 text-sm">Preparando tu solicitud...</p>
           </div>
 
-          <!-- Locked personal data fields -->
-          <div class="space-y-3">
-            <LockedField
-              label="Nombre(s)"
-              :value="form.first_name"
-              format="uppercase"
-              :verification="getVerification('first_name')"
-            />
-            <div class="grid grid-cols-2 gap-3">
-              <LockedField
-                label="Primer Apellido"
-                :value="form.last_name"
-                format="uppercase"
-                :verification="getVerification('last_name_1')"
-                :show-method="false"
-              />
-              <LockedField
-                label="Segundo Apellido"
-                :value="form.second_last_name"
-                format="uppercase"
-                :verification="getVerification('last_name_2')"
-                :show-method="false"
-              />
-            </div>
-            <LockedField
-              label="Fecha de nacimiento"
-              :value="form.birth_date"
-              format="date"
-              :verification="getVerification('birth_date')"
-            />
-            <LockedField
-              label="Género"
-              :value="form.gender === 'M' ? 'Masculino' : form.gender === 'F' ? 'Femenino' : '-'"
-              :verification="getVerification('gender')"
-            />
-            <LockedField
-              label="CURP"
-              :value="kycStore.lockedData.curp"
-              format="curp"
-              :verification="getVerification('curp')"
-            />
-          </div>
-
-          <!-- Entidad de nacimiento: locked if from CURP, editable otherwise -->
-          <LockedField
-            v-if="kycStore.lockedData.entidad_nacimiento"
-            label="Entidad de nacimiento"
-            :value="mexicanStates.find(s => s.value === form.birth_state)?.label || form.birth_state"
-            format="uppercase"
-            :verified="true"
-            :verification="getVerification('birth_state')"
-            hint="Extraído de tu CURP"
-          />
           <template v-else>
-            <!-- If birth_state is locked/verified, show as LockedField -->
-            <LockedField
-              v-if="isBirthStateLocked && form.birth_state"
-              label="Entidad de nacimiento"
-              :value="mexicanStates.find(s => s.value === form.birth_state)?.label || form.birth_state"
-              format="uppercase"
-              :verified="true"
-              :verification="getVerification('birth_state')"
-            />
-            <template v-else>
-              <!-- Divider -->
-              <div class="border-t border-gray-200 my-6 pt-4">
-                <p class="text-sm text-gray-500 mb-4">Completa la siguiente información:</p>
+            <!-- Identidad verificada: resumen mínimo, sin re-captura -->
+            <div class="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+              <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
               </div>
+              <div>
+                <p class="text-sm font-medium text-green-800">Identidad verificada</p>
+                <p class="text-xs text-green-600">{{ form.first_name }} {{ form.last_name }} {{ form.second_last_name }}</p>
+              </div>
+            </div>
 
-              <!-- Editable: Birth state (not in INE OCR usually) -->
+            <!-- Solo pedimos lo que realmente falta (entidad si el CURP no la trae) -->
+            <div v-if="needsBirthState" class="space-y-4 pt-2">
+              <p class="text-sm text-gray-500">Solo falta un dato para continuar:</p>
               <AppSelect
                 v-model="form.birth_state"
                 :options="mexicanStates"
@@ -447,7 +436,7 @@ const handleSubmit = async () => {
                 :error="errors.birth_state"
                 required
               />
-            </template>
+            </div>
           </template>
         </template>
 
@@ -567,7 +556,7 @@ const handleSubmit = async () => {
         </div>
 
         <!-- Auto-save indicator -->
-        <div v-if="onboardingStore.isSaving || onboardingStore.lastSavedAt" class="text-xs text-right">
+        <div v-if="!autoSubmitting && (onboardingStore.isSaving || onboardingStore.lastSavedAt)" class="text-xs text-right">
           <span v-if="onboardingStore.isSaving" class="text-primary-600 flex items-center justify-end gap-1">
             <svg class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -581,7 +570,7 @@ const handleSubmit = async () => {
         </div>
 
         <!-- Sticky Footer -->
-        <div class="fixed bottom-0 left-0 right-0 p-3 bg-white border-t">
+        <div v-if="!autoSubmitting" class="fixed bottom-0 left-0 right-0 p-3 bg-white border-t">
           <div class="max-w-md mx-auto">
             <AppButton
               type="submit"
