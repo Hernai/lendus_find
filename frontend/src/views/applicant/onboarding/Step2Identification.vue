@@ -6,7 +6,7 @@ import { AppButton, AppInput, AppRadioGroup } from '@/components/common'
 import LockedField from '@/components/common/LockedField.vue'
 import { generarRFCDesdeKyc } from '@/services/rfc.service'
 import { logger } from '@/utils/logger'
-import { isValidRfc, isValidCurp } from '@/utils/validators'
+import { isValidRfc, isValidCurp, isValidClaveElector, isValidIneOcr } from '@/utils/validators'
 
 const log = logger.child('Step2Identification')
 
@@ -172,15 +172,9 @@ watch(() => form.rfc, (newRfc) => {
   }
 })
 
-// Validate Voter ID (Clave de Elector): 18 alphanumeric characters
-const validateClaveElector = (clave: string): boolean => {
-  return /^[A-Z0-9]{18}$/.test(clave.toUpperCase())
-}
-
-// Validate OCR: 13 digits
-const validateOcr = (ocr: string): boolean => {
-  return /^\d{13}$/.test(ocr)
-}
+// Reutilizamos los validadores centralizados de utils/validators.ts.
+const validateClaveElector = (clave: string): boolean => isValidClaveElector(clave)
+const validateOcr = (ocr: string): boolean => isValidIneOcr(ocr)
 
 // Validate INE Folio: Between 9 and 20 digits
 const validateFolioIne = (folio: string): boolean => {
