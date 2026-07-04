@@ -2443,7 +2443,10 @@ onUnmounted(() => {
                   <!-- Nacionalidad / Entidad de Nacimiento -->
                   <div class="group relative">
                     <div class="flex items-center gap-1.5 mb-0.5">
-                      <span class="w-2 h-2 rounded-full flex-shrink-0 bg-blue-500"></span>
+                      <span
+                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
+                        :class="isForeigner ? 'bg-blue-500' : isFieldRejected('birth_state') ? 'bg-red-500' : isFieldVerified('birth_state') ? 'bg-green-500' : isFieldPending('birth_state') ? 'bg-yellow-500' : birthStateDisplay ? 'bg-blue-500' : 'bg-gray-300'"
+                      ></span>
                       <span class="text-xs text-gray-500">{{ isForeigner ? 'Nacionalidad' : 'Entidad de Nacimiento' }}</span>
                     </div>
                     <p class="font-medium text-gray-900 flex items-center gap-1.5">
@@ -3022,7 +3025,10 @@ onUnmounted(() => {
                   <!-- OCR del INE (capturado en onboarding sin proveedor KYC) -->
                   <div v-if="application.applicant.ine_ocr" class="group relative">
                     <div class="flex items-center gap-1.5 mb-0.5">
-                      <span class="w-2 h-2 rounded-full flex-shrink-0 bg-blue-500"></span>
+                      <span
+                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
+                        :class="isFieldRejected('ine_ocr') ? 'bg-red-500' : isFieldVerified('ine_ocr') ? 'bg-green-500' : isFieldPending('ine_ocr') ? 'bg-yellow-500' : 'bg-blue-500'"
+                      ></span>
                       <span class="text-xs text-gray-500">OCR (INE)</span>
                     </div>
                     <p class="font-mono text-sm text-gray-900">{{ application.applicant.ine_ocr }}</p>
@@ -3033,7 +3039,10 @@ onUnmounted(() => {
                     class="group relative"
                   >
                     <div class="flex items-center gap-1.5 mb-0.5">
-                      <span class="w-2 h-2 rounded-full flex-shrink-0 bg-blue-500"></span>
+                      <span
+                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
+                        :class="isFieldRejected('ine_folio') ? 'bg-red-500' : isFieldVerified('ine_folio') ? 'bg-green-500' : isFieldPending('ine_folio') ? 'bg-yellow-500' : 'bg-blue-500'"
+                      ></span>
                       <span class="text-xs text-gray-500">Folio (INE)</span>
                     </div>
                     <p class="font-mono text-sm text-gray-900">{{ application.applicant.ine_folio }}</p>
@@ -3112,7 +3121,7 @@ onUnmounted(() => {
                   <!-- Género (capturado en el onboarding) -->
                   <div class="group relative">
                     <div class="flex items-center gap-1.5 mb-0.5">
-                      <span class="w-2 h-2 rounded-full flex-shrink-0" :class="application.applicant.gender ? 'bg-blue-500' : 'bg-gray-300'"></span>
+                      <span class="w-2 h-2 rounded-full flex-shrink-0 transition-colors" :class="isFieldRejected('gender') ? 'bg-red-500' : isFieldVerified('gender') ? 'bg-green-500' : isFieldPending('gender') ? 'bg-yellow-500' : application.applicant.gender ? 'bg-blue-500' : 'bg-gray-300'"></span>
                       <span class="text-xs text-gray-500">Género</span>
                     </div>
                     <p class="font-medium text-gray-900">
