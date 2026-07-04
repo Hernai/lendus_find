@@ -498,7 +498,12 @@ export interface RiskFieldVerification {
 export interface ApplicationRisks {
   kyc_status: string | null
   kyc_verified_at: string | null
-  contact_risk: { phone: RiskContactItem | null; email: RiskContactItem | null }
+  contact_risk: {
+    phone: RiskContactItem | null
+    email: RiskContactItem | null
+    phone_enabled?: boolean
+    email_enabled?: boolean
+  }
   identity: Record<string, RiskFieldVerification>
   biometrics: Record<string, RiskFieldVerification>
   bank: Array<{
@@ -518,6 +523,21 @@ export async function getRisks(
 ): Promise<V2ApiResponse<ApplicationRisks>> {
   const response = await api.get<V2ApiResponse<ApplicationRisks>>(
     `${BASE_PATH}/${applicationId}/risks`
+  )
+  return response.data
+}
+
+/**
+ * Ejecuta (o reintenta) el riesgo de contacto a demanda desde el panel.
+ * Requiere que el servicio (phone_risk/email_risk) esté activo en el tenant.
+ */
+export async function runContactRisk(
+  applicationId: string,
+  type: 'phone' | 'email'
+): Promise<V2ApiResponse<unknown>> {
+  const response = await api.post<V2ApiResponse<unknown>>(
+    `${BASE_PATH}/${applicationId}/risks/run`,
+    { type }
   )
   return response.data
 }
@@ -586,6 +606,7 @@ export default {
   validateBankAccountClabe,
   getNubariumValidation,
   getRisks,
+  runContactRisk,
   // Data verification
   verifyData,
 }

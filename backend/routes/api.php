@@ -433,6 +433,8 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
         Route::get('/applications/{id}', [StaffAppController::class, 'show']);
         // Vista consolidada de riesgos/validaciones Nubarium (tab "Riesgos").
         Route::get('/applications/{id}/risks', [StaffAppController::class, 'risks']);
+        Route::post('/applications/{id}/risks/run', [StaffAppController::class, 'runRisk'])
+            ->middleware(['permission:canReviewDocuments', 'throttle:20,1']);
         // Audit logs por applicant/application eliminados: el feed unificado
         // los expone via /applications/{id}/activity?kind=audit.
 

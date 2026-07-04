@@ -1780,6 +1780,9 @@ class ApplicationController extends Controller
             'contact_risk' => [
                 'phone' => $contact['phone_risk'] ?? null,
                 'email' => $contact['email_risk'] ?? null,
+                // Si el servicio está activo, el admin puede consultar/reintentar.
+                'phone_enabled' => $this->tenantHasRiskService($app->tenant_id, 'phone_risk'),
+                'email_enabled' => $this->tenantHasRiskService($app->tenant_id, 'email_risk'),
             ],
             'identity' => $identity,
             'biometrics' => $biometrics, // resultados del SDK biométrico
@@ -1789,6 +1792,59 @@ class ApplicationController extends Controller
             'credit_bureau' => null,
             'circulo' => null,
         ]);
+    }
+
+    /**
+     * ¿El tenant tiene activo un servicio de riesgo de Nubarium?
+     */
+    private function tenantHasRiskService(string $tenantId, string $serviceType): bool
+    {
+        return \App\Models\TenantApiConfig::where('tenant_id', $tenantId)
+            ->where('provider', 'nubarium')
+            ->where('service_type', $serviceType)
+            ->where('is_active', true)
+            ->exists();
+    }
+
+    /**
+     * Ejecuta (o reintenta) el riesgo de contacto (phone/email) a demanda desde
+     * el panel. Reutiliza RunContactRiskJob de forma síncrona y persiste el
+     * resultado en risk_assessments.
+     *
+     * POST /v2/staff/applications/{id}/risks/run  { type: "phone"|"email" }
+     */
+    public function runRisk(Request $request, string $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'type' => 'required|string|in:phone,email',
+        ]);
+
+        /** @var StaffAccount $staff */
+        $staff = $request->user();
+
+        $app = Application::where('id', $id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
+            ->with('person.account')
+            ->first();
+
+        if (!$app) {
+            return $this->notFound('Solicitud no encontrada.');
+        }
+
+        $account = $app->person?->account;
+        if (!$account) {
+            return $this->error('NO_ACCOUNT', 'La solicitud no tiene una cuenta asociada.', 422);
+        }
+
+        $serviceType = $validated['type'] === 'email' ? 'email_risk' : 'phone_risk';
+        if (!$this->tenantHasRiskService($app->tenant_id, $serviceType)) {
+            return $this->error('RISK_NOT_ENABLED', 'El servicio de riesgo no está activo para este tenant.', 422);
+        }
+
+        $channel = $validated['type'] === 'email' ? 'EMAIL' : 'PHONE';
+        \App\Jobs\RunContactRiskJob::dispatchSync($account->id, $channel);
+
+        return $this->success([], 'Consulta de riesgo ejecutada.');
     }
 
     /**

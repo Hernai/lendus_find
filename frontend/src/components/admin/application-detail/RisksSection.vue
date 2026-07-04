@@ -12,7 +12,9 @@ const loading = ref(true)
 const error = ref('')
 const risks = ref<ApplicationRisks | null>(null)
 
-onMounted(async () => {
+async function load() {
+  loading.value = true
+  error.value = ''
   try {
     const res = await applicationService.getRisks(props.applicationId)
     risks.value = res.data ?? null
@@ -21,7 +23,30 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
+}
+onMounted(load)
+
+// Ejecutar / reintentar el riesgo de contacto a demanda (si el servicio está activo).
+const running = ref<'phone' | 'email' | null>(null)
+async function runRisk(type: 'phone' | 'email') {
+  if (running.value) return
+  running.value = type
+  try {
+    await applicationService.runContactRisk(props.applicationId, type)
+    await load()
+  } catch {
+    error.value = 'No se pudo ejecutar la consulta de riesgo.'
+  } finally {
+    running.value = null
+  }
+}
+
+// Texto del botón según el estado actual de la evaluación.
+function runLabel(item: RiskContactItem | null, type: 'phone' | 'email'): string {
+  if (running.value === type) return 'Consultando…'
+  if (!item) return 'Consultar riesgo'
+  return item.status === 'completed' ? 'Actualizar' : 'Reintentar'
+}
 
 // Color del nivel de riesgo (acepta very-low/low/moderate/high y LOW/MEDIUM/HIGH,
 // y bandas tipo "051 Very Low").
@@ -104,6 +129,15 @@ function fieldScore(f: RiskFieldVerification): number | null {
             </template>
             <p v-else-if="phone" class="text-sm text-red-600">Falló: {{ phone.error || '—' }}</p>
             <p v-else class="text-sm text-gray-400">Sin evaluación.</p>
+            <button
+              v-if="risks.contact_risk.phone_enabled"
+              type="button"
+              class="mt-2 text-xs font-medium text-primary-600 hover:text-primary-700 disabled:opacity-60 disabled:cursor-not-allowed"
+              :disabled="running === 'phone'"
+              @click="runRisk('phone')"
+            >
+              {{ runLabel(phone, 'phone') }}
+            </button>
           </div>
 
           <!-- Email -->
@@ -123,6 +157,15 @@ function fieldScore(f: RiskFieldVerification): number | null {
             </template>
             <p v-else-if="email" class="text-sm text-red-600">Falló: {{ email.error || '—' }}</p>
             <p v-else class="text-sm text-gray-400">No aplica / sin evaluación.</p>
+            <button
+              v-if="risks.contact_risk.email_enabled"
+              type="button"
+              class="mt-2 text-xs font-medium text-primary-600 hover:text-primary-700 disabled:opacity-60 disabled:cursor-not-allowed"
+              :disabled="running === 'email'"
+              @click="runRisk('email')"
+            >
+              {{ runLabel(email, 'email') }}
+            </button>
           </div>
         </div>
       </div>
