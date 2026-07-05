@@ -136,20 +136,46 @@ class ApplicationController extends Controller
             return $this->error('INVALID_TERM', "El plazo debe estar entre {$product->min_term_months} y {$product->max_term_months} meses.", 422);
         }
 
-        $application = $this->service->createForPerson(
-            $tenant,
-            $person,
-            $product,
-            [
-                'amount' => $validated['amount'],
-                'term_months' => $validated['term_months'],
-                'term_days' => $validated['requested_term_days'] ?? null,
-                'purpose' => $validated['purpose'],
-                'purpose_description' => $validated['purpose_description'] ?? null,
-                'frequency' => $validated['frequency'] ?? 'MONTHLY',
-            ],
-            $account
-        );
+        // Serializamos la creación con un lock sobre la persona para cerrar la carrera
+        // TOCTOU: dos requests concurrentes (doble tap / reintento de red) podrían
+        // pasar AMBOS el pre-check de arriba y crear DOS solicitudes activas. Dentro
+        // del lock re-verificamos; el segundo pierde la carrera y recibe 409.
+        $application = \Illuminate\Support\Facades\DB::transaction(function () use (
+            $person, $account, $terminalStatuses, $tenant, $product, $validated
+        ) {
+            \App\Models\Person::whereKey($person->id)->lockForUpdate()->first();
+
+            $raceActive = Application::where('person_id', $person->id)
+                ->where('tenant_id', $account->tenant_id)
+                ->whereNotIn('status', $terminalStatuses)
+                ->first();
+            if ($raceActive) {
+                return null;
+            }
+
+            return $this->service->createForPerson(
+                $tenant,
+                $person,
+                $product,
+                [
+                    'amount' => $validated['amount'],
+                    'term_months' => $validated['term_months'],
+                    'term_days' => $validated['requested_term_days'] ?? null,
+                    'purpose' => $validated['purpose'],
+                    'purpose_description' => $validated['purpose_description'] ?? null,
+                    'frequency' => $validated['frequency'] ?? 'MONTHLY',
+                ],
+                $account
+            );
+        });
+
+        if (!$application) {
+            return $this->error(
+                'APPLICATION_EXISTS',
+                'Ya tienes una solicitud activa. No puedes crear otra hasta que finalice.',
+                409
+            );
+        }
 
         // Record event for timeline
         $this->eventService->recordApplicationCreated(

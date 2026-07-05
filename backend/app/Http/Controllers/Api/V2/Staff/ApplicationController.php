@@ -2669,11 +2669,14 @@ class ApplicationController extends Controller
             'SELFIE' => ['selfie', 'face_match', 'liveness'],
         ];
 
-        // Get all KYC-verified fields for this person
+        // Get all KYC-verified fields for this person.
+        // VerificationService persiste con applicant_id (= person->id), NO con
+        // entity_type/entity_id; antes esta query nunca hacía match y el bloque
+        // KYC-lock por verificación quedaba inerte (solo lo salvaba el fallback de
+        // metadata). Alineado con getFieldVerifications().
         $kycVerifiedFields = [];
         if ($app->person) {
-            $verifications = DataVerification::where('entity_type', Person::class)
-                ->where('entity_id', $app->person->id)
+            $verifications = DataVerification::where('applicant_id', $app->person->id)
                 ->where('is_verified', true)
                 ->whereIn('method', $kycMethods)
                 ->pluck('field_name')

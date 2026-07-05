@@ -126,22 +126,14 @@ class DocumentService
             }
 
             try {
-                // If replacing, mark old as superseded
-                $versionNumber = 1;
-                $previousVersionId = null;
-                if ($existingDoc) {
-                    $previousVersionId = $existingDoc->id;
-                    $versionNumber = $existingDoc->version_number + 1;
+                $versionNumber = $existingDoc ? $existingDoc->version_number + 1 : 1;
 
-                    $reason = $existingDoc->isRejected()
-                        ? Document::REASON_REJECTED
-                        : Document::REASON_UPDATED;
-
-                    $existingDoc->supersede($existingDoc->id, $reason);
-                }
-
-                // Create document record
-                return Document::create([
+                // Crear PRIMERO el nuevo documento; así podemos enlazar la cadena de
+                // versionado con el objeto real. Antes se llamaba
+                // $existingDoc->supersede($existingDoc->id) — pasaba el id del doc
+                // VIEJO, que supersede() resolvía al MISMO doc y lo reemplazaba por sí
+                // mismo (superseded_by_id apuntando a sí, is_active inconsistente).
+                $newDocument = Document::create([
                     'tenant_id' => $tenant->id,
                     'documentable_type' => get_class($documentable),
                     'documentable_id' => $documentable->id,
@@ -156,12 +148,25 @@ class DocumentService
                     'status' => $options['status'] ?? Document::STATUS_PENDING,
                     'is_sensitive' => $isSensitive,
                     'is_encrypted' => $options['encrypt'] ?? false,
-                    'previous_version_id' => $previousVersionId,
+                    'previous_version_id' => $existingDoc?->id,
                     'version_number' => $versionNumber,
                     'valid_until' => $options['valid_until'] ?? null,
                     'metadata' => $options['metadata'] ?? null,
                     'created_by' => $options['created_by'] ?? null,
                 ]);
+
+                // Supersede la versión anterior con el documento NUEVO real: enlaza
+                // superseded_by_id, marca SUPERSEDED y activa el nuevo (Active Document
+                // Pattern). Corre dentro de la transacción actual (savepoint anidado).
+                if ($existingDoc) {
+                    $reason = $existingDoc->isRejected()
+                        ? Document::REASON_REJECTED
+                        : Document::REASON_UPDATED;
+
+                    $existingDoc->supersedeWith($newDocument, $reason);
+                }
+
+                return $newDocument;
             } catch (\Exception $e) {
                 // Clean up uploaded file if DB operation fails
                 Storage::disk($disk)->delete($path);

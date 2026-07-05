@@ -327,9 +327,13 @@ class IneVerificationService
         $documentTypes = ['INE_FRONT', 'INE_BACK'];
 
         foreach ($documentTypes as $docType) {
+            // Solo la versión vigente: si el usuario re-subió el INE, no aprobar una
+            // versión superseded/inactiva. Tomamos la activa más reciente.
             $ineDoc = Document::where('documentable_type', Person::class)
                 ->where('documentable_id', $person->id)
                 ->where('type', $docType)
+                ->where('is_active', true)
+                ->orderByDesc('created_at')
                 ->first();
 
             if (!$ineDoc) {
@@ -357,7 +361,9 @@ class IneVerificationService
             }
 
             $ineDoc->metadata = $newMetadata;
-            $ineDoc->status = DocumentStatus::APPROVED;
+            // La columna `status` es string (Document no castea a enum, y le faltan
+            // EXPIRED/SUPERSEDED); usamos el value para no dejar un enum en memoria.
+            $ineDoc->status = DocumentStatus::APPROVED->value;
             $ineDoc->reviewed_at = now();
             $ineDoc->notes = ($ineDoc->notes ? $ineDoc->notes . "\n" : '') . 'Auto-aprobado por validación KYC de INE.';
             $ineDoc->save();

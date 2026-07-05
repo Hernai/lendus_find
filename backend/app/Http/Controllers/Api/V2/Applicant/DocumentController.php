@@ -771,7 +771,6 @@ class DocumentController extends Controller
             return null;
         }
         file_put_contents($tmpPath, $binary);
-        $this->tempFilesToCleanup[] = $tmpPath;
 
         // MIME real desde el contenido (no confiar en el prefijo del cliente).
         $realMime = function_exists('finfo_open')
@@ -779,8 +778,12 @@ class DocumentController extends Controller
             : (mime_content_type($tmpPath) ?: 'application/octet-stream');
 
         if (!in_array($realMime, self::ALLOWED_DOC_MIMES, true)) {
+            @unlink($tmpPath); // no dejar el temp huérfano si el MIME no pasa
             return null;
         }
+
+        // Registrar para limpieza SOLO cuando el archivo es válido y se devolverá.
+        $this->tempFilesToCleanup[] = $tmpPath;
 
         $ext = match ($realMime) {
             'image/png' => 'png',
