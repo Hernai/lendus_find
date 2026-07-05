@@ -4,11 +4,11 @@ import { v2 } from '@/services/v2'
 import type {
   V2TenantConfig,
   V2TenantFilters,
-} from '@/services/v2/tenant.staff.service'
+} from '@/modules/admin/services/tenant.staff.service'
 import { AppConfirmModal } from '@/components/common'
 import TenantBrandingEditor from '@/modules/admin/components/TenantBrandingEditor.vue'
 import IntegrationsManager from '@/modules/admin/components/IntegrationsManager.vue'
-import { tenantIntegrationsAdapter } from '@/services/v2/integrationsAdapters'
+import { tenantIntegrationsAdapter } from '@/modules/admin/services/integrationsAdapters'
 import { formatPhoneValue, stripPhoneFormatting, PHONE_INPUT_CONFIG } from '@/composables'
 import { logger } from '@/utils/logger'
 // Registry de configs per-tenant en build-time. Sirve para mostrar al

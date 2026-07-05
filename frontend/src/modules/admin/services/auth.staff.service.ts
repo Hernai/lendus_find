@@ -5,7 +5,7 @@
  * All endpoints are under /api/v2/staff/auth
  */
 
-import { api } from '../api'
+import { api } from '@/services/api'
 import type {
   V2ApiResponse,
   V2StaffLoginPayload,

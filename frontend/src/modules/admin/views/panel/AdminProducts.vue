@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeMount, onBeforeUnmount, watch } from 'vue'
 import { v2 } from '@/services/v2'
-import type { V2Product, V2TermConfig } from '@/services/v2/product.staff.service'
+import type { V2Product, V2TermConfig } from '@/modules/admin/services/product.staff.service'
 import { AppButton } from '@/components/common'
 import { useToast } from '@/composables'
 import { useAuthStore, useTenantStore } from '@/stores'

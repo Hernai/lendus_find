@@ -5,7 +5,7 @@
  * All endpoints are under /api/v2/staff/integrations
  */
 
-import { api } from '../api'
+import { api } from '@/services/api'
 import type { V2ApiResponse } from '@/types/v2'
 
 const BASE_PATH = '/v2/staff/integrations'

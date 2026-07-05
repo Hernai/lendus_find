@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onUnmounted } from 'vue'
-import applicationService, { type NubariumValidationData } from '@/services/v2/application.staff.service'
+import applicationService, { type NubariumValidationData } from '@/modules/admin/services/application.staff.service'
 
 // Resultado persistido de la validación de CLABE con Nubarium (lo guarda el
 // webhook en verification_data['nubarium_clabe']). Queda visible aunque se

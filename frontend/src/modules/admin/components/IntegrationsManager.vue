@@ -845,8 +845,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import type { V2Integration, V2IntegrationPayload, V2ProviderOption, ProviderStatus } from '@/services/v2/integration.staff.service'
-import type { IntegrationsAdapter } from '@/services/v2/integrationsAdapters'
+import type { V2Integration, V2IntegrationPayload, V2ProviderOption, ProviderStatus } from '@/modules/admin/services/integration.staff.service'
+import type { IntegrationsAdapter } from '@/modules/admin/services/integrationsAdapters'
 import { getErrorMessage } from '@/types/api'
 import { AppConfirmModal } from '@/components/common'
 import { useToast } from '@/composables'

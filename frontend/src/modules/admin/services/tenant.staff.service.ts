@@ -5,7 +5,7 @@
  * All endpoints are under /api/v2/staff/tenants
  */
 
-import { api } from '../api'
+import { api } from '@/services/api'
 import type { V2ApiResponse } from '@/types/v2'
 import type { V2ProviderOption } from './integration.staff.service'
 

@@ -6,5 +6,5 @@
 
 <script setup lang="ts">
 import IntegrationsManager from '@/modules/admin/components/IntegrationsManager.vue'
-import { selfIntegrationsAdapter } from '@/services/v2/integrationsAdapters'
+import { selfIntegrationsAdapter } from '@/modules/admin/services/integrationsAdapters'
 </script>

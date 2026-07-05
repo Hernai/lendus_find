@@ -3,7 +3,7 @@
  * Endpoints bajo /api/v2/staff/loans
  */
 
-import { api } from '../api'
+import { api } from '@/services/api'
 import type { V2ApiResponse } from '@/types/v2'
 import type { V2Loan, V2LoanExtension, V2LoanPayment } from '@/types/v2/loan'
 

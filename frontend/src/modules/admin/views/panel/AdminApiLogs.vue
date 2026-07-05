@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
 import { v2 } from '@/services/v2'
-import type { V2ApiLog, V2ApiLogStats } from '@/services/v2/apilog.staff.service'
+import type { V2ApiLog, V2ApiLogStats } from '@/modules/admin/services/apilog.staff.service'
 import { logger } from '@/utils/logger'
 import { formatDateTime } from '@/utils/formatters'
 

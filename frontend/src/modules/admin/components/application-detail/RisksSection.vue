@@ -4,7 +4,7 @@ import applicationService, {
   type ApplicationRisks,
   type RiskContactItem,
   type RiskFieldVerification,
-} from '@/services/v2/application.staff.service'
+} from '@/modules/admin/services/application.staff.service'
 
 const props = defineProps<{ applicationId: string }>()
 

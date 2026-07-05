@@ -9,7 +9,7 @@
  * api-logs por application del application.staff.service.
  */
 
-import { api } from '../api'
+import { api } from '@/services/api'
 import type { V2ApiResponse } from '@/types/v2'
 
 export type ActivityKind = 'event' | 'audit' | 'api'

@@ -12,7 +12,7 @@ import type {
   V2IntegrationPayload,
   V2IntegrationTestPayload,
   V2ProviderOption,
-} from '@/services/v2/integration.staff.service'
+} from '@/modules/admin/services/integration.staff.service'
 
 export interface IntegrationsAdapter {
   getOptions(): Promise<{

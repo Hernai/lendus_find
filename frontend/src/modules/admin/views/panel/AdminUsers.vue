@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { v2 } from '@/services/v2'
-import type { V2StaffUser } from '@/services/v2/user.staff.service'
+import type { V2StaffUser } from '@/modules/admin/services/user.staff.service'
 import { AppButton } from '@/components/common'
 import { useToast } from '@/composables'
 import { useTenantStore } from '@/stores'

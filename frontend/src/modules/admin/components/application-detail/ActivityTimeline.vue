@@ -6,7 +6,7 @@ import type {
   ActivityKind,
   ActivitySeverity,
   ActivityActorType,
-} from '@/services/v2/activity.staff.service'
+} from '@/modules/admin/services/activity.staff.service'
 import { logger } from '@/utils/logger'
 
 /**

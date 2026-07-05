@@ -688,7 +688,7 @@ export interface V2ApplicationWorkflow {
   } | null
   // status_history removido: el historial unificado ahora vive en el feed
   // `/v2/staff/applications/{id}/activity` (ver ActivityItem en
-  // services/v2/activity.staff.service.ts).
+  // modules/admin/services/activity.staff.service.ts).
   notes: V2ApplicationNote[]
 }
 
@@ -810,7 +810,7 @@ export interface V2CounterOffer {
 }
 
 // V2StatusHistoryEntry removido: el feed unificado expone `ActivityItem`
-// (ver `services/v2/activity.staff.service.ts`). Mantengo el comentario
+// (ver `modules/admin/services/activity.staff.service.ts`). Mantengo el comentario
 // como pista para futuras búsquedas si alguien busca el tipo viejo.
 
 export interface V2ApplicationCreatePayload {

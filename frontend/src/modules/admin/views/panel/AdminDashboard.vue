@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { v2 } from '@/services/v2'
-import type { V2BoardData, V2BoardItem, V2BoardColumn } from '@/services/v2/application.staff.service'
+import type { V2BoardData, V2BoardItem, V2BoardColumn } from '@/modules/admin/services/application.staff.service'
 import type { V2ApplicationStatistics } from '@/types/v2'
 import { logger } from '@/utils/logger'
 import { formatMoney, formatTimeAgo } from '@/utils/formatters'
