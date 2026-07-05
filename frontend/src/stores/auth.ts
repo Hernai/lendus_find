@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { v2 } from '@/services/v2'
-import { staff } from '@/modules/admin/services'
+import { staffAuth } from '@/services/staffAuthGateway'
 import type { User, OtpMethod, SendOtpResponse, VerifyOtpResponse } from '@/types'
 import { platform } from '@/platform'
 import { logger } from '@/utils/logger'
@@ -346,7 +346,7 @@ export const useAuthStore = defineStore('auth', () => {
         // los tokens staff fallan con 401 contra /v2/applicant/auth/logout
         // (no tienen la ability "applicant" y viceversa).
         if (isStaff.value) {
-          await staff.auth.logout()
+          await staffAuth().logout()
         } else {
           await v2.applicant.auth.logout()
         }
@@ -420,7 +420,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       if (userType === 'staff') {
         // Try staff endpoint
-        const response = await staff.auth.getMe()
+        const response = await staffAuth().getMe()
         if (!response.success || !response.data) {
           throw new Error('Failed to get staff user')
         }
@@ -705,7 +705,7 @@ export const useAuthStore = defineStore('auth', () => {
   const loginWithPassword = async (email: string, password: string, recaptchaToken?: string | null): Promise<{ success: boolean; error?: string; requiresTenantSelection?: boolean; availableTenants?: Array<{id: string; slug: string; name: string}> }> => {
     isLoading.value = true
     try {
-      const response = await staff.auth.login({ email, password, recaptcha_token: recaptchaToken ?? null })
+      const response = await staffAuth().login({ email, password, recaptcha_token: recaptchaToken ?? null })
 
       // V2 response wraps data in { success, data: { token, user } }
       if (response.success && response.data) {

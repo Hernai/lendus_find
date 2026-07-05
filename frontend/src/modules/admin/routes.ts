@@ -1,4 +1,16 @@
 import type { RouteRecordRaw } from 'vue-router'
+import { registerStaffAuth } from '@/services/staffAuthGateway'
+import { staff } from './services'
+
+// Registrar el auth de staff en el gateway compartido (dependency inversion): el
+// store compartido `stores/auth.ts` lo consume SIN importar este módulo. Este
+// archivo se importa de forma eager desde el router, así que el registro corre
+// al iniciar la app, antes de cualquier login de staff.
+registerStaffAuth({
+  login: (p) => staff.auth.login(p),
+  logout: () => staff.auth.logout(),
+  getMe: () => staff.auth.getMe(),
+})
 
 // ==============================================
 // ADMIN VIEWS (staff: agents, analysts, admins)
