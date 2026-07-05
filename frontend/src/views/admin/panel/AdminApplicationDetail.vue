@@ -3318,14 +3318,15 @@ onUnmounted(() => {
                       <p class="font-medium text-gray-900">{{ formatTenureFromMonths(application.employment.seniority_months) }}</p>
                     </div>
                     <div class="col-span-2">
-                      <p class="text-xs text-gray-500">
-                        Ingreso mensual<span v-if="application.employment.income_range_label"> (rango del onboarding)</span>
-                      </p>
-                      <p class="font-bold text-gray-900">
-                        {{ application.employment.income_range_label || formatMoney(application.employment.monthly_income) }}
-                        <span v-if="application.employment.income_range_label" class="text-xs font-normal text-gray-500">
-                          (≈ {{ formatMoney(application.employment.monthly_income) }}/mes)
-                        </span>
+                      <p class="text-xs text-gray-500">Ingreso mensual</p>
+                      <p class="font-bold text-gray-900 text-lg">
+                        <template v-if="application.employment.monthly_income">
+                          {{ formatMoney(application.employment.monthly_income) }}
+                          <span v-if="application.employment.income_range_label" class="text-xs font-normal text-gray-500">
+                            ({{ application.employment.income_range_label }})
+                          </span>
+                        </template>
+                        <template v-else>{{ application.employment.income_range_label || '—' }}</template>
                       </p>
                     </div>
                     <div class="col-span-2">
