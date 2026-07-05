@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { v2 } from '@/services/v2'
+import { staff } from '@/modules/admin/services'
 import { useToast } from '@/composables/useToast'
 import type { V2Loan } from '@/types/v2/loan'
 
@@ -24,7 +24,7 @@ const loanId = computed(() => String(route.params.id ?? ''))
 const fetch = async () => {
   loading.value = true
   try {
-    const res = await v2.staff.loan.get(loanId.value)
+    const res = await staff.loan.get(loanId.value)
     loan.value = res.data ?? null
     if (loan.value) newPayment.value.amount = loan.value.outstanding_balance
   } finally {
@@ -36,7 +36,7 @@ const recordPayment = async () => {
   if (!loan.value || newPayment.value.amount <= 0) return
   submitting.value = true
   try {
-    await v2.staff.loan.recordPayment(loan.value.id, {
+    await staff.loan.recordPayment(loan.value.id, {
       amount: newPayment.value.amount,
       channel: newPayment.value.channel,
       provider_reference: newPayment.value.provider_reference || undefined,
@@ -54,7 +54,7 @@ const recordPayment = async () => {
 const approveExtension = async (extensionId: string) => {
   if (!loan.value) return
   try {
-    await v2.staff.loan.approveExtension(loan.value.id, extensionId)
+    await staff.loan.approveExtension(loan.value.id, extensionId)
     toast.success('Prórroga aprobada')
     await fetch()
   } catch {

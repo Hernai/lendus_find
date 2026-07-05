@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
-import { v2 } from '@/services/v2'
+import { staff } from '@/modules/admin/services'
 import type {
   V2TenantConfig,
   V2TenantFilters,
@@ -221,7 +221,7 @@ const fetchTenants = async () => {
       filters.active = false
     }
 
-    const response = await v2.staff.tenant.list(filters)
+    const response = await staff.tenant.list(filters)
 
     tenants.value = (response.data?.tenants ?? []) as Tenant[]
     totalPages.value = response.data?.meta.last_page ?? 1
@@ -363,9 +363,9 @@ const saveTenant = async () => {
     }
 
     if (editingTenant.value) {
-      await v2.staff.tenant.update(editingTenant.value.id, payload)
+      await staff.tenant.update(editingTenant.value.id, payload)
     } else {
-      await v2.staff.tenant.create(payload)
+      await staff.tenant.create(payload)
     }
 
     showTenantModal.value = false
@@ -395,7 +395,7 @@ const deleteTenant = async () => {
 
   isDeleting.value = true
   try {
-    await v2.staff.tenant.destroy(tenantToDelete.value.id)
+    await staff.tenant.destroy(tenantToDelete.value.id)
     showDeleteModal.value = false
     tenantToDelete.value = null
     await fetchTenants()
@@ -441,7 +441,7 @@ const openTenantConfig = async (tenant: Tenant) => {
   isLoadingConfig.value = true
 
   try {
-    const response = await v2.staff.tenant.getConfig(tenant.id)
+    const response = await staff.tenant.getConfig(tenant.id)
     configData.value = response.data!
   } catch (e) {
     log.error('Error al cargar configuración del tenant', { error: e })
@@ -465,7 +465,7 @@ const saveTenantBranding = async () => {
       ...configData.value.branding,
       button_style: configData.value.branding.button_style as 'rounded' | 'pill' | 'square' | undefined
     }
-    await v2.staff.tenant.updateBranding(configTenant.value.id, brandingPayload)
+    await staff.tenant.updateBranding(configTenant.value.id, brandingPayload)
     configSaveMessage.value = 'Branding guardado'
     clearConfigMessageAfterDelay()
   } catch {

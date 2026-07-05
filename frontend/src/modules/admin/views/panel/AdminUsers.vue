@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { v2 } from '@/services/v2'
+import { staff } from '@/modules/admin/services'
 import type { V2StaffUser } from '@/modules/admin/services/user.staff.service'
 import { AppButton } from '@/components/common'
 import { useToast } from '@/composables'
@@ -170,7 +170,7 @@ const fetchUsers = async () => {
       filters.active = false
     }
 
-    const response = await v2.staff.user.list(filters)
+    const response = await staff.user.list(filters)
 
     users.value = response.data?.users ?? []
     totalItems.value = response.data?.meta.total ?? 0
@@ -356,7 +356,7 @@ const saveUser = async () => {
         updatePayload.password = form.value.password
       }
 
-      await v2.staff.user.update(editingUser.value.id, updatePayload)
+      await staff.user.update(editingUser.value.id, updatePayload)
     } else {
       // Create new user
       const nameParts = form.value.name.trim().split(' ')
@@ -369,7 +369,7 @@ const saveUser = async () => {
         password: form.value.password || undefined
       }
 
-      await v2.staff.user.create(createPayload)
+      await staff.user.create(createPayload)
     }
 
     showUserModal.value = false
@@ -439,7 +439,7 @@ const confirmDelete = async () => {
   isDeleting.value = true
 
   try {
-    await v2.staff.user.remove(userToDelete.value.id)
+    await staff.user.remove(userToDelete.value.id)
     showDeleteModal.value = false
     userToDelete.value = null
     await fetchUsers()
@@ -454,7 +454,7 @@ const confirmDelete = async () => {
 // Toggle active status
 const toggleActiveStatus = async (user: User) => {
   try {
-    await v2.staff.user.update(user.id, {
+    await staff.user.update(user.id, {
       is_active: !user.is_active
     })
     await fetchUsers()

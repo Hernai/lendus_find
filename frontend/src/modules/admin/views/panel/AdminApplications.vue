@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { v2 } from '@/services/v2'
+import { staff } from '@/modules/admin/services'
 import type { V2ApplicationFilters } from '@/types/v2'
 import { AppButton, AppConfirmModal } from '@/components/common'
 import { useAuthStore } from '@/stores/auth'
@@ -163,7 +163,7 @@ const fetchApplications = async () => {
       filters.stale = true
     }
 
-    const response = await v2.staff.application.list(filters)
+    const response = await staff.application.list(filters)
 
     // Map V2 response to local Application type
     // Backend formatApplication returns: applicant_name (string), assigned_to ({ id, name } | null)
@@ -259,7 +259,7 @@ const applyQuickFilter = (filterId: string) => {
 // Fetch products for filter dropdown
 const fetchProducts = async () => {
   try {
-    const response = await v2.staff.product.list({ active: true })
+    const response = await staff.product.list({ active: true })
     products.value = (response.data?.products ?? []).map((p) => ({
       id: p.id,
       name: p.name,
@@ -447,7 +447,7 @@ const openBulkAssignModal = async () => {
   isLoadingAnalysts.value = true
 
   try {
-    const response = await v2.staff.user.list({ active: true, role: 'ANALYST' })
+    const response = await staff.user.list({ active: true, role: 'ANALYST' })
     analysts.value = (response.data?.users ?? []).map((u) => ({
       id: u.id,
       name: u.name,
@@ -476,7 +476,7 @@ const confirmBulkAssign = async (): Promise<void> => {
     // Use Promise.allSettled to handle partial failures gracefully
     const results = await Promise.allSettled(
       Array.from(selectedIds.value).map(appId =>
-        v2.staff.application.assign(appId, { user_id: selectedAgentId.value })
+        staff.application.assign(appId, { user_id: selectedAgentId.value })
       )
     )
 
@@ -525,7 +525,7 @@ const confirmBulkReject = async (): Promise<void> => {
     // Use Promise.allSettled to handle partial failures gracefully
     const results = await Promise.allSettled(
       Array.from(selectedIds.value).map(appId =>
-        v2.staff.application.reject(appId, { reason: bulkRejectReason.value })
+        staff.application.reject(appId, { reason: bulkRejectReason.value })
       )
     )
 

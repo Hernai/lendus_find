@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { v2 } from '@/services/v2'
+import { staff } from '@/modules/admin/services'
 import type { V2TenantInfo } from '@/modules/admin/services/config.staff.service'
 import { AppInput } from '@/components/common'
 import TenantBrandingEditor, { type Branding, type TenantPreviewInfo } from '@/modules/admin/components/TenantBrandingEditor.vue'
@@ -52,7 +52,7 @@ const loadConfig = async () => {
   error.value = ''
 
   try {
-    const response = await v2.staff.config.getConfig()
+    const response = await staff.config.getConfig()
     const data = response.data!
 
     tenant.value = data.tenant
@@ -82,7 +82,7 @@ const saveTenant = async () => {
   saveError.value = ''
 
   try {
-    await v2.staff.config.updateTenant({
+    await staff.config.updateTenant({
       name: tenant.value.name,
       legal_name: tenant.value.legal_name || null,
       rfc: tenant.value.rfc || null,
@@ -108,7 +108,7 @@ const saveBranding = async () => {
   saveError.value = ''
 
   try {
-    await v2.staff.config.updateBranding(branding.value as Parameters<typeof v2.staff.config.updateBranding>[0])
+    await staff.config.updateBranding(branding.value as Parameters<typeof staff.config.updateBranding>[0])
     saveMessage.value = 'Branding guardado'
     clearMessageAfterDelay()
   } catch {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { v2 } from '@/services/v2'
+import { staff } from '@/modules/admin/services'
 import type {
   ActivityItem,
   ActivityKind,
@@ -165,7 +165,7 @@ async function loadFirstPage() {
   expandedIds.value = new Set()
 
   try {
-    const response = await v2.staff.activity.getActivity(props.applicationId, {
+    const response = await staff.activity.getActivity(props.applicationId, {
       kind: activeKind.value,
       q: searchTerm.value || null,
       include_http: includeHttp.value,
@@ -188,7 +188,7 @@ async function loadMore() {
   if (!hasMore.value || isLoadingMore.value || !cursor.value) return
   isLoadingMore.value = true
   try {
-    const response = await v2.staff.activity.getActivity(props.applicationId, {
+    const response = await staff.activity.getActivity(props.applicationId, {
       cursor: cursor.value,
       kind: activeKind.value,
       q: searchTerm.value || null,

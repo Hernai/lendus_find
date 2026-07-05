@@ -6,7 +6,8 @@
  * (super admin)" es el CRUD. Cada adapter expone la MISMA interfaz sobre un
  * endpoint distinto, para que la UI viva en un solo lugar.
  */
-import { v2 } from '@/services/v2'
+import integration from './integration.staff.service'
+import tenant from './tenant.staff.service'
 import type {
   V2Integration,
   V2IntegrationPayload,
@@ -30,7 +31,7 @@ export interface IntegrationsAdapter {
 /** Integraciones del tenant actual (auto-configuración, /staff/integrations). */
 export const selfIntegrationsAdapter: IntegrationsAdapter = {
   async getOptions() {
-    const res = await v2.staff.integration.getOptions()
+    const res = await integration.getOptions()
     return {
       providers: res.data?.providers ?? [],
       service_types: res.data?.service_types ?? {},
@@ -38,21 +39,21 @@ export const selfIntegrationsAdapter: IntegrationsAdapter = {
     }
   },
   async list() {
-    const res = await v2.staff.integration.list()
+    const res = await integration.list()
     return res.data?.integrations ?? []
   },
   async save(payload) {
-    await v2.staff.integration.save(payload)
+    await integration.save(payload)
   },
   async test(id, payload) {
-    const res = await v2.staff.integration.test(id, payload)
+    const res = await integration.test(id, payload)
     return { success: !!res.success, message: res.message ?? '' }
   },
-  async toggle(integration) {
-    await v2.staff.integration.toggle(integration.id)
+  async toggle(item) {
+    await integration.toggle(item.id)
   },
   async destroy(id) {
-    await v2.staff.integration.destroy(id)
+    await integration.destroy(id)
   },
 }
 
@@ -64,7 +65,7 @@ export const selfIntegrationsAdapter: IntegrationsAdapter = {
 export function tenantIntegrationsAdapter(tenantId: string): IntegrationsAdapter {
   return {
     async getOptions() {
-      const res = await v2.staff.tenant.getConfig(tenantId)
+      const res = await tenant.getConfig(tenantId)
       return {
         providers: res.data?.providers ?? [],
         service_types: res.data?.service_types ?? {},
@@ -72,27 +73,27 @@ export function tenantIntegrationsAdapter(tenantId: string): IntegrationsAdapter
       }
     },
     async list() {
-      const res = await v2.staff.tenant.getConfig(tenantId)
+      const res = await tenant.getConfig(tenantId)
       // api_configs viene de toApiArray() — mismo shape que V2Integration.
       return (res.data?.api_configs ?? []) as unknown as V2Integration[]
     },
     async save(payload) {
-      await v2.staff.tenant.saveApiConfig(tenantId, payload)
+      await tenant.saveApiConfig(tenantId, payload)
     },
     async test(id, payload) {
-      const res = await v2.staff.tenant.testApiConfig(tenantId, id, payload)
+      const res = await tenant.testApiConfig(tenantId, id, payload)
       return { success: !!res.success, message: res.message ?? '' }
     },
-    async toggle(integration) {
+    async toggle(item) {
       // El endpoint per-tenant no tiene "toggle"; reusamos save con is_active invertido.
-      await v2.staff.tenant.saveApiConfig(tenantId, {
-        provider: integration.provider,
-        service_type: integration.service_type,
-        is_active: !integration.is_active,
+      await tenant.saveApiConfig(tenantId, {
+        provider: item.provider,
+        service_type: item.service_type,
+        is_active: !item.is_active,
       })
     },
     async destroy(id) {
-      await v2.staff.tenant.deleteApiConfig(tenantId, id)
+      await tenant.deleteApiConfig(tenantId, id)
     },
   }
 }

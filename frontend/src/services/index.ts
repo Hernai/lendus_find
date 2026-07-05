@@ -10,14 +10,12 @@ export { default as api, api as apiInstance } from './api'
 
 export { v2, v2 as default } from './v2'
 
-// Re-export individual V2 services for granular imports
+// Re-export individual V2 services for granular imports.
+// Los servicios staff viven en @/modules/admin/services (facade `staff`).
 export {
   applicantAuth as v2ApplicantAuth,
-  staffAuth as v2StaffAuth,
   applicantApplication as v2ApplicantApplication,
-  staffApplication as v2StaffApplication,
   applicantDocument as v2ApplicantDocument,
-  staffDocument as v2StaffDocument,
 } from './v2'
 
 // =====================================================

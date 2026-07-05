@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
-import { v2 } from '@/services/v2'
+import { staff } from '@/modules/admin/services'
 import type { V2ApiLog, V2ApiLogStats } from '@/modules/admin/services/apilog.staff.service'
 import { logger } from '@/utils/logger'
 import { formatDateTime } from '@/utils/formatters'
@@ -48,7 +48,7 @@ const successRate = computed(() => {
 const loadLogs = async () => {
   isLoading.value = true
   try {
-    const response = await v2.staff.apiLog.list({
+    const response = await staff.apiLog.list({
       page: currentPage.value,
       per_page: perPage,
       provider: filters.value.provider !== 'all' ? filters.value.provider : undefined,
@@ -73,7 +73,7 @@ const loadLogs = async () => {
 const loadStats = async () => {
   isLoadingStats.value = true
   try {
-    const response = await v2.staff.apiLog.getStats()
+    const response = await staff.apiLog.getStats()
     stats.value = response.data ?? null
   } catch (e) {
     componentLog.error('Error al cargar estadísticas', { error: e })
@@ -85,7 +85,7 @@ const loadStats = async () => {
 // Load providers using V2 API
 const loadProviders = async () => {
   try {
-    const response = await v2.staff.apiLog.getProviders()
+    const response = await staff.apiLog.getProviders()
     providers.value = response.data?.providers ?? []
   } catch (e) {
     componentLog.error('Error al cargar proveedores', { error: e })
@@ -98,7 +98,7 @@ const loadLogDetail = async (apiLog: ApiLog) => {
   showDetailModal.value = true
   isLoadingDetail.value = true
   try {
-    const response = await v2.staff.apiLog.get(apiLog.id)
+    const response = await staff.apiLog.get(apiLog.id)
     selectedLog.value = response.data?.log ?? null
   } catch (e) {
     componentLog.error('Error al cargar detalle del log', { error: e })

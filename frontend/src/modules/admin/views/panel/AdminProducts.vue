@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeMount, onBeforeUnmount, watch } from 'vue'
-import { v2 } from '@/services/v2'
+import { staff } from '@/modules/admin/services'
 import type { V2Product, V2TermConfig } from '@/modules/admin/services/product.staff.service'
 import { AppButton } from '@/components/common'
 import { useToast } from '@/composables'
@@ -80,7 +80,7 @@ const foreignerDocumentOptions = computed(() => {
 // Load document types from backend
 const loadDocumentTypes = async () => {
   try {
-    const response = await v2.staff.document.getTypes()
+    const response = await staff.document.getTypes()
     if (response.success && response.data?.types) {
       // Backend returns types as Record<string, string> { TYPE: 'Label' }
       documentLabels.value = response.data.types as unknown as Record<string, string>
@@ -284,7 +284,7 @@ const fetchProducts = async () => {
       filters.active = false
     }
 
-    const response = await v2.staff.product.list(filters)
+    const response = await staff.product.list(filters)
     products.value = response.data?.products ?? []
   } catch (e: unknown) {
     error.value = 'Error al cargar los productos'
@@ -505,9 +505,9 @@ const submitForm = async () => {
     }
 
     if (editingProduct.value) {
-      await v2.staff.product.update(editingProduct.value.id, payload)
+      await staff.product.update(editingProduct.value.id, payload)
     } else {
-      await v2.staff.product.create(payload)
+      await staff.product.create(payload)
     }
 
     showProductModal.value = false
@@ -535,7 +535,7 @@ const toggleActive = async (product: Product): Promise<void> => {
   }
 
   try {
-    await v2.staff.product.update(product.id, {
+    await staff.product.update(product.id, {
       is_active: !product.is_active
     })
     product.is_active = !product.is_active
@@ -557,7 +557,7 @@ const deleteProduct = async () => {
 
   isDeleting.value = true
   try {
-    await v2.staff.product.remove(productToDelete.value.id)
+    await staff.product.remove(productToDelete.value.id)
     showDeleteModal.value = false
     await fetchProducts()
   } catch (e: unknown) {

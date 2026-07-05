@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { v2 } from '@/services/v2'
+import { staff } from '@/modules/admin/services'
 import type { V2BoardData, V2BoardItem, V2BoardColumn } from '@/modules/admin/services/application.staff.service'
 import type { V2ApplicationStatistics } from '@/types/v2'
 import { logger } from '@/utils/logger'
@@ -31,13 +31,13 @@ const fetchBoardData = async () => {
   try {
     // Fetch board data and statistics in parallel using optimized endpoints
     const [boardResponse, statsResponse] = await Promise.all([
-      v2.staff.application.getBoard({
+      staff.application.getBoard({
         columns: ['SUBMITTED', 'IN_REVIEW', 'DOCS_PENDING', 'APPROVED'],
         limit_per_column: 20,
         sort_by: 'created_at',
         sort_dir: 'desc'
       }),
-      v2.staff.application.getStatistics()
+      staff.application.getStatistics()
     ])
 
     boardData.value = boardResponse.data ?? null

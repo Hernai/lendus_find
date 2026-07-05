@@ -10,8 +10,9 @@
  * // Applicant auth
  * await v2.applicant.auth.requestOtp({ target_type: 'phone', target_value: '5512345678' })
  *
- * // Staff auth
- * await v2.staff.auth.login({ email: 'admin@example.com', password: 'secret' })
+ * // Los servicios de staff/admin viven en @/modules/admin/services (facade `staff`),
+ * // NO en este barrel: el layer compartido no depende del módulo admin.
+ * // import { staff } from '@/modules/admin/services'
  */
 
 // =====================================================
@@ -19,26 +20,15 @@
 // =====================================================
 
 import applicantAuth from './auth.applicant.service'
-import staffAuth from '@/modules/admin/services/auth.staff.service'
 import applicantApplication from './application.applicant.service'
-import staffApplication from '@/modules/admin/services/application.staff.service'
 import applicantCorrection from './correction.applicant.service'
 import applicantDocument from './document.applicant.service'
-import staffDocument from '@/modules/admin/services/document.staff.service'
 import applicantProfile from './profile.service'
 import applicantKyc from './kyc.applicant.service'
 import applicantNotification from './notification.applicant.service'
-import staffUser from '@/modules/admin/services/user.staff.service'
-import staffProduct from '@/modules/admin/services/product.staff.service'
-import staffConfig from '@/modules/admin/services/config.staff.service'
-import staffApiLog from '@/modules/admin/services/apilog.staff.service'
-import staffTenant from '@/modules/admin/services/tenant.staff.service'
-import staffIntegration from '@/modules/admin/services/integration.staff.service'
-import staffActivity from '@/modules/admin/services/activity.staff.service'
 import simulator from './simulator.service'
 import publicConfig from './config.public.service'
 import applicantLoan from './loan.applicant.service'
-import staffLoan from '@/modules/admin/services/loan.staff.service'
 
 // =====================================================
 // Organized V2 API Namespace
@@ -67,23 +57,6 @@ export const v2 = {
   },
 
   /**
-   * Staff/Admin services
-   */
-  staff: {
-    auth: staffAuth,
-    application: staffApplication,
-    document: staffDocument,
-    user: staffUser,
-    product: staffProduct,
-    config: staffConfig,
-    apiLog: staffApiLog,
-    tenant: staffTenant,
-    integration: staffIntegration,
-    activity: staffActivity,
-    loan: staffLoan,
-  },
-
-  /**
    * Public simulator services
    */
   simulator,
@@ -100,23 +73,13 @@ export const v2 = {
 
 export {
   applicantAuth,
-  staffAuth,
   applicantApplication,
-  staffApplication,
   applicantCorrection,
   applicantDocument,
-  staffDocument,
   applicantProfile,
   applicantKyc,
   applicantNotification,
   applicantLoan,
-  staffLoan,
-  staffUser,
-  staffProduct,
-  staffConfig,
-  staffApiLog,
-  staffTenant,
-  staffIntegration,
   simulator,
   publicConfig,
 }

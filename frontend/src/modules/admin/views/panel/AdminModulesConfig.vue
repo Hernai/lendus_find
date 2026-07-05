@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores'
-import { v2 } from '@/services/v2'
+import { staff } from '@/modules/admin/services'
 import {
   ADMIN_MODULE_CATEGORIES,
   OVERRIDABLE_MODULES,
@@ -45,7 +45,7 @@ const matrix = ref<Record<OverridableRole, Record<string, MatrixCell>>>({
 })
 
 const loadTenants = async () => {
-  const res = await v2.staff.tenant.list({ active: true, per_page: 50 })
+  const res = await staff.tenant.list({ active: true, per_page: 50 })
   tenants.value = (res.data?.tenants ?? []).map((t) => ({ id: t.id, slug: t.slug, name: t.name }))
   if (!selectedTenantId.value && tenants.value.length > 0) {
     selectedTenantId.value = tenants.value[0]!.id
@@ -57,7 +57,7 @@ const loadOverrides = async (tenantId: string) => {
   loading.value = true
   matrix.value = { ANALYST: {}, SUPERVISOR: {}, ADMIN: {} }
   try {
-    const res = await v2.staff.tenant.getModules(tenantId)
+    const res = await staff.tenant.getModules(tenantId)
     for (const o of res.data?.overrides ?? []) {
       const role = o.role as OverridableRole
       if (matrix.value[role]) {
@@ -113,7 +113,7 @@ const save = async () => {
   if (!selectedTenantId.value) return
   saving.value = true
   try {
-    await v2.staff.tenant.updateModules(selectedTenantId.value, overridesPayload.value)
+    await staff.tenant.updateModules(selectedTenantId.value, overridesPayload.value)
     toast.success('Configuración guardada')
     // Si el super admin estaba editando el tenant que tiene activo,
     // refrescar el sidebar.

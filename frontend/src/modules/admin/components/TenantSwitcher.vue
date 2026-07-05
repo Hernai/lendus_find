@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { v2 } from '@/services/v2'
+import { staff } from '@/modules/admin/services'
 import { useAuthStore, useTenantStore } from '@/stores'
 import { platform } from '@/platform'
 import { logger } from '@/utils/logger'
@@ -43,7 +43,7 @@ const loadTenants = async (): Promise<void> => {
   isLoading.value = true
   try {
     // Limit to reasonable number of tenants for dropdown
-    const response = await v2.staff.tenant.list({ active: true, per_page: 50 })
+    const response = await staff.tenant.list({ active: true, per_page: 50 })
     tenants.value = response.data?.tenants || []
   } catch (error) {
     log.error('Failed to load tenants', { error })

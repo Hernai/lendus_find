@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { v2 } from '@/services/v2'
+import { staff } from '@/modules/admin/services'
 import type { V2Loan } from '@/types/v2/loan'
 
 const router = useRouter()
@@ -15,7 +15,7 @@ const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('es-
 const fetchLoans = async () => {
   loading.value = true
   try {
-    const res = await v2.staff.loan.list(statusFilter.value ? { status: statusFilter.value } : undefined)
+    const res = await staff.loan.list(statusFilter.value ? { status: statusFilter.value } : undefined)
     loans.value = res.data?.loans ?? []
   } finally {
     loading.value = false

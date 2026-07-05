@@ -12,7 +12,7 @@ import {
   RisksSection,
 } from '@/modules/admin/components/application-detail'
 import type { ClabeValidationSummary } from '@/modules/admin/components/application-detail/BankAccountsSection.vue'
-import { v2 } from '@/services/v2'
+import { staff } from '@/modules/admin/services'
 import { platform } from '@/platform'
 import { useWebSocket, useToast, useDocumentTypes } from '@/composables'
 import { useTenantStore } from '@/stores/tenant'
@@ -97,7 +97,7 @@ const reverifyIne = async () => {
   if (!app || reverifyingIne.value) return
   reverifyingIne.value = true
   try {
-    await v2.staff.application.reverifyIne(app.id)
+    await staff.application.reverifyIne(app.id)
     toast.success('INE verificado con Nubarium')
     showIneVerification.value = true
     await fetchApplication()
@@ -562,7 +562,7 @@ const fetchApplication = async () => {
 
   try {
     const appId = route.params.id as string
-    const response = await v2.staff.application.get(appId)
+    const response = await staff.application.get(appId)
 
     // V2 response structure with new format
     const data = response.data!
@@ -949,7 +949,7 @@ const loadSelfie = async () => {
   isLoadingSelfie.value = true
 
   try {
-    const blob = await v2.staff.application.downloadDocument(application.value.id, selfieDoc.id)
+    const blob = await staff.application.downloadDocument(application.value.id, selfieDoc.id)
     const typedBlob = new Blob([blob], { type: selfieDoc.mime_type || 'image/jpeg' })
     selfieUrl.value = URL.createObjectURL(typedBlob)
   } catch (e) {
@@ -967,7 +967,7 @@ const approveSelfie = async () => {
   isApprovingSelfie.value = true
 
   try {
-    await v2.staff.application.approveDocument(application.value.id, selfieDocId.value)
+    await staff.application.approveDocument(application.value.id, selfieDocId.value)
     selfieStatus.value = 'APPROVED'
 
     const doc = application.value.documents.find(d => d.id === selfieDocId.value)
@@ -991,7 +991,7 @@ const rejectSelfie = async (data: { selectValue?: string; comment?: string }) =>
   isRejectingSelfie.value = true
 
   try {
-    await v2.staff.application.rejectDocument(application.value.id, selfieDocId.value, {
+    await staff.application.rejectDocument(application.value.id, selfieDocId.value, {
       reason: data.selectValue,
       comment: data.comment || undefined
     })
@@ -1023,7 +1023,7 @@ const unapproveSelfie = async () => {
   isUnapprovingSelfie.value = true
 
   try {
-    await v2.staff.application.unapproveDocument(application.value.id, selfieDocId.value)
+    await staff.application.unapproveDocument(application.value.id, selfieDocId.value)
     selfieStatus.value = 'PENDING'
 
     const doc = application.value.documents.find(d => d.id === selfieDocId.value)
@@ -1051,7 +1051,7 @@ const unrejectSelfie = async () => {
   isUnrejectingSelfie.value = true
 
   try {
-    await v2.staff.application.unapproveDocument(application.value.id, selfieDocId.value)
+    await staff.application.unapproveDocument(application.value.id, selfieDocId.value)
     selfieStatus.value = 'PENDING'
 
     const doc = application.value.documents.find(d => d.id === selfieDocId.value)
@@ -1091,7 +1091,7 @@ const verifyBankAccount = async () => {
   isVerifyingBankAccount.value = true
 
   try {
-    await v2.staff.application.verifyBankAccount(application.value.id, selectedBankAccount.value.id)
+    await staff.application.verifyBankAccount(application.value.id, selectedBankAccount.value.id)
 
     // Update in bank_accounts array
     const account = application.value.bank_accounts.find(ba => ba.id === selectedBankAccount.value?.id)
@@ -1118,7 +1118,7 @@ const unverifyBankAccount = async () => {
   isUnverifyingBankAccount.value = true
 
   try {
-    await v2.staff.application.unverifyBankAccount(application.value.id, selectedBankAccount.value.id)
+    await staff.application.unverifyBankAccount(application.value.id, selectedBankAccount.value.id)
 
     const account = application.value.bank_accounts.find(ba => ba.id === selectedBankAccount.value?.id)
     if (account) {
@@ -1430,7 +1430,7 @@ const updateStatus = async () => {
 
   try {
     // Make actual API call to update status
-    await v2.staff.application.changeStatus(application.value.id, {
+    await staff.application.changeStatus(application.value.id, {
       status: newStatus.value as import('@/types/v2').V2ApplicationStatus,
       notes: statusNote.value || undefined
     })
@@ -1454,7 +1454,7 @@ const openAssignModal = async () => {
   selectedUserId.value = ''
 
   try {
-    const response = await v2.staff.user.list({ active: true, role: 'ANALYST' })
+    const response = await staff.user.list({ active: true, role: 'ANALYST' })
     staffUsers.value = (response.data?.users ?? []).map(u => ({
       id: u.id,
       name: u.name,
@@ -1474,7 +1474,7 @@ const assignApplication = async () => {
   isAssigning.value = true
 
   try {
-    await v2.staff.application.assign(application.value.id, {
+    await staff.application.assign(application.value.id, {
       user_id: selectedUserId.value
     })
 
@@ -1503,7 +1503,7 @@ const viewDocument = async (doc: Document) => {
   docViewerName.value = doc.name
 
   try {
-    const response = await v2.staff.application.getDocumentUrl(application.value.id, doc.id)
+    const response = await staff.application.getDocumentUrl(application.value.id, doc.id)
     const data = response.data!
 
     docViewerUrl.value = data.url
@@ -1528,7 +1528,7 @@ const confirmApproveDocument = async (_data?: { selectValue?: string; comment?: 
   isApprovingDoc.value = true
 
   try {
-    await v2.staff.application.approveDocument(application.value.id, docToApprove.value.id)
+    await staff.application.approveDocument(application.value.id, docToApprove.value.id)
     docToApprove.value.status = 'APPROVED'
     await fetchApplication()
     showDocApproveModal.value = false
@@ -1554,7 +1554,7 @@ const confirmRejectDocument = async () => {
   isRejectingDoc.value = true
 
   try {
-    await v2.staff.application.rejectDocument(application.value.id, selectedDocument.value.id, {
+    await staff.application.rejectDocument(application.value.id, selectedDocument.value.id, {
       reason: docRejectReason.value,
       comment: docRejectComment.value || undefined
     })
@@ -1588,7 +1588,7 @@ const confirmVerifyReference = async () => {
   isVerifyingRef.value = true
 
   try {
-    await v2.staff.application.verifyReference(application.value.id, selectedReference.value.id, {
+    await staff.application.verifyReference(application.value.id, selectedReference.value.id, {
       result: refVerifyResult.value,
       notes: refVerifyNotes.value || undefined
     })
@@ -1676,7 +1676,7 @@ const verifyData = async (field: VerifiableField, action: 'verify' | 'reject' | 
   isVerifyingData.value = true
 
   try {
-    await v2.staff.application.verifyData(application.value.id, {
+    await staff.application.verifyData(application.value.id, {
       field,
       action,
       method: 'MANUAL',
@@ -1793,7 +1793,7 @@ const confirmEditPhone = async (data: { selectValue?: string; comment?: string }
 
   isEditingPhone.value = true
   try {
-    const res = await v2.staff.application.updateApplicantPhone(application.value.id, phone)
+    const res = await staff.application.updateApplicantPhone(application.value.id, phone)
     application.value.applicant.phone = res.data?.phone || phone
     toast.success(res.message || 'Teléfono actualizado.')
     showEditPhoneModal.value = false
@@ -1850,7 +1850,7 @@ const submitCounterOffer = async () => {
   isSubmittingCounterOffer.value = true
 
   try {
-    await v2.staff.application.createCounterOffer(application.value.id, {
+    await staff.application.createCounterOffer(application.value.id, {
       amount: counterOffer.value.amount,
       term_months: counterOffer.value.term_months,
       interest_rate: counterOffer.value.interest_rate,
@@ -1875,7 +1875,7 @@ const handleAddNote = async (text: string) => {
   isAddingNote.value = true
 
   try {
-    const response = await v2.staff.application.addNote(application.value.id, {
+    const response = await staff.application.addNote(application.value.id, {
       content: text.trim()
     })
 
