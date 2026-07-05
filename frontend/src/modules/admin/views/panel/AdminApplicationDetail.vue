@@ -2588,196 +2588,48 @@ onUnmounted(() => {
                     @unreject="openUnverifyModal('rfc')"
                   />
                   <!-- Número de Pasaporte (solo para extranjeros) -->
-                  <div v-if="isForeigner" class="group relative">
-                    <div class="flex items-center gap-1.5 mb-0.5">
-                      <span
-                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
-                        :class="isFieldRejected('passport_number') ? 'bg-red-500' : isFieldVerified('passport_number') ? 'bg-green-500' : isFieldPending('passport_number') ? 'bg-yellow-500' : application.applicant.passport_number ? 'bg-blue-500' : 'bg-gray-300'"
-                      ></span>
-                      <span class="text-xs text-gray-500">Número de Pasaporte</span>
-                      <svg v-if="isFieldLocked('passport_number')" class="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20" title="Verificado por KYC - No modificable">
-                        <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
-                      </svg>
-                      <div v-if="application.applicant.passport_number && !isFieldLocked('passport_number')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
-                        <button
-                          v-if="!isFieldVerified('passport_number') && !isFieldRejected('passport_number')"
-                          class="p-0.5 rounded hover:bg-green-100 text-gray-400 hover:text-green-600"
-                          :disabled="isVerifyingData"
-                          title="Verificar dato"
-                          @click="verifyData('passport_number', 'verify')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="isFieldVerified('passport_number')"
-                          class="p-0.5 rounded hover:bg-gray-100 text-green-600"
-                          :disabled="isVerifyingData"
-                          title="Quitar verificación"
-                          @click="verifyData('passport_number', 'unverify')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="!isFieldRejected('passport_number')"
-                          class="p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600"
-                          :disabled="isVerifyingData"
-                          title="Rechazar dato"
-                          @click="openRejectDataModal('passport_number')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="isFieldRejected('passport_number')"
-                          class="p-0.5 rounded hover:bg-gray-100 text-red-600"
-                          :disabled="isVerifyingData"
-                          title="Quitar rechazo"
-                          @click="openUnverifyModal('passport_number')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                          </svg>
-                        </button>
-                      </div>
-                      <div v-if="isFieldLocked('passport_number')" class="ml-auto">
-                        <span class="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                          {{ getFieldVerification('passport_number')?.method_label || 'KYC' }}
-                        </span>
-                      </div>
-                    </div>
-                    <p class="font-mono text-sm text-gray-900">{{ application.applicant.passport_number || '—' }}</p>
-                    <p v-if="isFieldRejected('passport_number')" class="text-xs text-red-600 mt-0.5">
-                      ⚠ {{ getFieldVerification('passport_number')?.rejection_reason }}
-                    </p>
-                    <p v-if="isFieldLocked('passport_number')" class="text-[10px] text-gray-500 mt-0.5">
-                      Verificado automáticamente - No modificable
-                    </p>
-                  </div>
+                  <VerifiableField
+                    v-if="isForeigner"
+                    label="Número de Pasaporte"
+                    :value="application.applicant.passport_number"
+                    field-key="passport_number"
+                    :verification="getFieldVerification('passport_number')"
+                    :is-locked="isFieldLocked('passport_number')"
+                    :is-verifying="isVerifyingData"
+                    :can-verify="true"
+                    mono
+                    @verify="(action) => verifyData('passport_number', action)"
+                    @reject="openRejectDataModal('passport_number')"
+                    @unreject="openUnverifyModal('passport_number')"
+                  />
                   <!-- Fecha de Emisión (solo para extranjeros) -->
-                  <div v-if="isForeigner" class="group relative">
-                    <div class="flex items-center gap-1.5 mb-0.5">
-                      <span
-                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
-                        :class="isFieldRejected('passport_issue_date') ? 'bg-red-500' : isFieldVerified('passport_issue_date') ? 'bg-green-500' : isFieldPending('passport_issue_date') ? 'bg-yellow-500' : application.applicant.passport_issue_date ? 'bg-blue-500' : 'bg-gray-300'"
-                      ></span>
-                      <span class="text-xs text-gray-500">Fecha de Emisión</span>
-                      <div v-if="application.applicant.passport_issue_date && !isFieldLocked('passport_issue_date')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
-                        <button
-                          v-if="!isFieldVerified('passport_issue_date') && !isFieldRejected('passport_issue_date')"
-                          class="p-0.5 rounded hover:bg-green-100 text-gray-400 hover:text-green-600"
-                          :disabled="isVerifyingData"
-                          title="Verificar dato"
-                          @click="verifyData('passport_issue_date', 'verify')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="isFieldVerified('passport_issue_date')"
-                          class="p-0.5 rounded hover:bg-gray-100 text-green-600"
-                          :disabled="isVerifyingData"
-                          title="Quitar verificación"
-                          @click="verifyData('passport_issue_date', 'unverify')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="!isFieldRejected('passport_issue_date')"
-                          class="p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600"
-                          :disabled="isVerifyingData"
-                          title="Rechazar dato"
-                          @click="openRejectDataModal('passport_issue_date')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="isFieldRejected('passport_issue_date')"
-                          class="p-0.5 rounded hover:bg-gray-100 text-red-600"
-                          :disabled="isVerifyingData"
-                          title="Quitar rechazo"
-                          @click="openUnverifyModal('passport_issue_date')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                    <p class="text-sm text-gray-900">{{ application.applicant.passport_issue_date ? formatDate(application.applicant.passport_issue_date) : '—' }}</p>
-                    <p v-if="isFieldRejected('passport_issue_date')" class="text-xs text-red-600 mt-0.5">
-                      ⚠ {{ getFieldVerification('passport_issue_date')?.rejection_reason }}
-                    </p>
-                  </div>
+                  <VerifiableField
+                    v-if="isForeigner"
+                    label="Fecha de Emisión"
+                    :value="application.applicant.passport_issue_date ? formatDate(application.applicant.passport_issue_date) : null"
+                    field-key="passport_issue_date"
+                    :verification="getFieldVerification('passport_issue_date')"
+                    :is-locked="isFieldLocked('passport_issue_date')"
+                    :is-verifying="isVerifyingData"
+                    :can-verify="true"
+                    @verify="(action) => verifyData('passport_issue_date', action)"
+                    @reject="openRejectDataModal('passport_issue_date')"
+                    @unreject="openUnverifyModal('passport_issue_date')"
+                  />
                   <!-- Fecha de Expiración (solo para extranjeros) -->
-                  <div v-if="isForeigner" class="group relative">
-                    <div class="flex items-center gap-1.5 mb-0.5">
-                      <span
-                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
-                        :class="isFieldRejected('passport_expiry_date') ? 'bg-red-500' : isFieldVerified('passport_expiry_date') ? 'bg-green-500' : isFieldPending('passport_expiry_date') ? 'bg-yellow-500' : application.applicant.passport_expiry_date ? 'bg-blue-500' : 'bg-gray-300'"
-                      ></span>
-                      <span class="text-xs text-gray-500">Fecha de Expiración</span>
-                      <div v-if="application.applicant.passport_expiry_date && !isFieldLocked('passport_expiry_date')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
-                        <button
-                          v-if="!isFieldVerified('passport_expiry_date') && !isFieldRejected('passport_expiry_date')"
-                          class="p-0.5 rounded hover:bg-green-100 text-gray-400 hover:text-green-600"
-                          :disabled="isVerifyingData"
-                          title="Verificar dato"
-                          @click="verifyData('passport_expiry_date', 'verify')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="isFieldVerified('passport_expiry_date')"
-                          class="p-0.5 rounded hover:bg-gray-100 text-green-600"
-                          :disabled="isVerifyingData"
-                          title="Quitar verificación"
-                          @click="verifyData('passport_expiry_date', 'unverify')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="!isFieldRejected('passport_expiry_date')"
-                          class="p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600"
-                          :disabled="isVerifyingData"
-                          title="Rechazar dato"
-                          @click="openRejectDataModal('passport_expiry_date')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="isFieldRejected('passport_expiry_date')"
-                          class="p-0.5 rounded hover:bg-gray-100 text-red-600"
-                          :disabled="isVerifyingData"
-                          title="Quitar rechazo"
-                          @click="openUnverifyModal('passport_expiry_date')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                    <p class="text-sm text-gray-900">{{ application.applicant.passport_expiry_date ? formatDate(application.applicant.passport_expiry_date) : '—' }}</p>
-                    <p v-if="isFieldRejected('passport_expiry_date')" class="text-xs text-red-600 mt-0.5">
-                      ⚠ {{ getFieldVerification('passport_expiry_date')?.rejection_reason }}
-                    </p>
-                  </div>
+                  <VerifiableField
+                    v-if="isForeigner"
+                    label="Fecha de Expiración"
+                    :value="application.applicant.passport_expiry_date ? formatDate(application.applicant.passport_expiry_date) : null"
+                    field-key="passport_expiry_date"
+                    :verification="getFieldVerification('passport_expiry_date')"
+                    :is-locked="isFieldLocked('passport_expiry_date')"
+                    :is-verifying="isVerifyingData"
+                    :can-verify="true"
+                    @verify="(action) => verifyData('passport_expiry_date', action)"
+                    @reject="openRejectDataModal('passport_expiry_date')"
+                    @unreject="openUnverifyModal('passport_expiry_date')"
+                  />
                   <!-- Clave INE (solo para nacionales) -->
                   <VerifiableField
                     v-if="!isForeigner"
