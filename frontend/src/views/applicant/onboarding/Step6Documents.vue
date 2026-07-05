@@ -323,6 +323,21 @@ const initDocuments = async () => {
 
 // Upload KYC images to backend as documents (if not already uploaded)
 const uploadKycDocuments = async () => {
+  // Asegurar la solicitud: si se perdió del store (recarga/navegación entre pasos),
+  // la recuperamos de localStorage. Sin esto, la subida abortaba por falta de
+  // applicationId y los INE/Selfie capturados en KYC se quedaban en "Adjuntar" en
+  // vez de "Verificado con KYC".
+  if (!applicationStore.currentApplication?.id) {
+    const savedId = localStorage.getItem('current_application_id')
+    if (savedId && savedId !== 'null' && savedId !== 'undefined') {
+      try {
+        await applicationStore.loadApplication(savedId)
+      } catch (e) {
+        log.warn('No se pudo recuperar la solicitud para subir documentos KYC', { error: e })
+      }
+    }
+  }
+
   const applicationId = applicationStore.currentApplication?.id
   if (!applicationId) {
     log.warn('No application ID for KYC document upload')
@@ -414,16 +429,24 @@ const uploadKycDocuments = async () => {
 
 // Sync from store on mount
 onMounted(async () => {
-  // Load document type labels first (must complete before initDocuments)
-  await loadDocumentTypes()
+  // La preparación es tolerante a fallos: si un paso previo truena, NO debe
+  // impedir que se suban los documentos capturados en KYC (INE/Selfie). Antes,
+  // un error temprano dejaba los docs en "Adjuntar".
+  try {
+    // Load document type labels first (must complete before initDocuments)
+    await loadDocumentTypes()
 
-  // Ensure tenant config is loaded (with fresh product data from API)
-  if (!tenantStore.isLoaded) {
-    await tenantStore.loadConfig()
+    // Ensure tenant config is loaded (with fresh product data from API)
+    if (!tenantStore.isLoaded) {
+      await tenantStore.loadConfig()
+    }
+    await onboardingStore.init()
+    await initDocuments()
+  } catch (e) {
+    log.error('Error preparando el paso de documentos', { error: e })
   }
-  await onboardingStore.init()
-  await initDocuments()
-  // Auto-upload KYC documents to backend
+
+  // Auto-subir SIEMPRE los documentos del KYC (aunque la preparación fallara).
   await uploadKycDocuments()
 })
 
