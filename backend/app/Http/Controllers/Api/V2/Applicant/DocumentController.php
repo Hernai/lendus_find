@@ -181,7 +181,9 @@ class DocumentController extends Controller
                 'created_by' => $account->id,
             ];
 
-            // Upload the document
+            // Upload the document. DocumentService::upload() ya deja el documento activo
+            // (Active Document Pattern): reemplaza al doc previo del mismo tipo vía
+            // supersedeWith(), o lo activa directo si es la primera versión.
             $document = $this->service->upload(
                 $account->tenant,
                 $documentable,
@@ -189,10 +191,6 @@ class DocumentController extends Controller
                 $uploadedFile,
                 $options
             );
-
-            // Activate the document (Active Document Pattern)
-            // This will deactivate any previous active document of the same type
-            $document->activate();
 
             // Auto-aprobar si ya existe validación KYC. Se aísla en su propio try
             // para que un fallo aquí NUNCA revierta un upload ya exitoso (antes, una

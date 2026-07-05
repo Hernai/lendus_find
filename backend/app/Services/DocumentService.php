@@ -163,7 +163,13 @@ class DocumentService
                         ? Document::REASON_REJECTED
                         : Document::REASON_UPDATED;
 
+                    // supersedeWith() ya activa el nuevo documento (Active Document Pattern).
                     $existingDoc->supersedeWith($newDocument, $reason);
+                } else {
+                    // Primera versión (sin doc previo que reemplazar): activamos aquí para
+                    // que upload() SIEMPRE deje el documento activo. Antes esto dependía de
+                    // que el controller llamara activate() después (fácil de olvidar).
+                    $newDocument->activate();
                 }
 
                 return $newDocument;

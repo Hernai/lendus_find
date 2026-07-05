@@ -536,29 +536,6 @@ class Document extends Model
     }
 
     /**
-     * Mark as superseded by a new version.
-     *
-     * @deprecated Use supersedeWith() instead for full Active Document Pattern support
-     */
-    public function supersede(string $newDocumentId, string $reason = self::REASON_UPDATED): void
-    {
-        $newDocument = Document::find($newDocumentId);
-        if ($newDocument) {
-            $this->supersedeWith($newDocument, $reason);
-        } else {
-            // Fallback to simple update if new document not found
-            $this->update([
-                'status' => self::STATUS_SUPERSEDED,
-                'replaced_at' => now(),
-                'replacement_reason' => $reason,
-                'superseded_by_id' => $newDocumentId,
-                'is_active' => false,
-                'valid_to' => now(),
-            ]);
-        }
-    }
-
-    /**
      * Update OCR data.
      */
     public function setOcrData(array $data, float $confidence): void
