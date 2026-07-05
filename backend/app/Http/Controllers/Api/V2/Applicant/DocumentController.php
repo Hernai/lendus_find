@@ -172,7 +172,14 @@ class DocumentController extends Controller
         }
 
         try {
-            $options = $validated['metadata'] ?? [];
+            // DocumentService::upload() consume las claves 'metadata'/'status'/
+            // 'created_by' del array $options. La metadata del frontend llega plana
+            // (p.ej. {kyc_validated:true,...}), así que la envolvemos en la clave
+            // 'metadata' — antes se pasaba plana y nunca se persistía.
+            $options = [
+                'metadata' => $validated['metadata'] ?? [],
+                'created_by' => $account->id,
+            ];
 
             // Upload the document
             $document = $this->service->upload(
@@ -187,8 +194,18 @@ class DocumentController extends Controller
             // This will deactivate any previous active document of the same type
             $document->activate();
 
-            // Check if document should be auto-approved based on existing KYC validations
-            $this->autoApproveIfKycValidated($document, $person, $validated['type']);
+            // Auto-aprobar si ya existe validación KYC. Se aísla en su propio try
+            // para que un fallo aquí NUNCA revierta un upload ya exitoso (antes, una
+            // excepción aquí devolvía 500 y el front marcaba el doc como "Adjuntar").
+            try {
+                $this->autoApproveIfKycValidated($document, $person, $validated['type']);
+            } catch (\Throwable $e) {
+                Log::warning('[DocumentController] auto-aprobación KYC falló (upload conservado)', [
+                    'document_id' => $document->id,
+                    'type' => $validated['type'],
+                    'error' => $e->getMessage(),
+                ]);
+            }
 
             // Record event if there's an active application (already fetched above)
             if ($application) {
@@ -591,7 +608,7 @@ class DocumentController extends Controller
             'person_id' => $person->id,
             'document_id' => $document->id,
             'document_type' => $type,
-            'verification_field' => $verificationField,
+            'verification_field' => $verification->field_name,
         ]);
     }
 
