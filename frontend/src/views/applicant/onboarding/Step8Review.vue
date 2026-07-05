@@ -7,6 +7,7 @@ import { v2 } from '@/services/v2'
 import { type AxiosErrorResponse } from '@/types/api'
 import { logger } from '@/utils/logger'
 import { formatMoney, formatFrequency } from '@/utils/formatters'
+import { bankName } from '@/utils/banks'
 
 const log = logger.child('Step8Review')
 
@@ -151,8 +152,11 @@ const sections = computed(() => {
   const step2 = data.step2
   const step3 = data.step3
   const step4 = data.step4
+  const step7 = data.step7
+  const bank = data.dynamic.bank_account as { type?: string; bank_code?: string; account_number?: string } | undefined
 
-  return [
+  // El resumen sigue la misma secuencia del onboarding.
+  const result: Array<{ title: string; items: Array<{ label: string; value: string }> }> = [
     {
       title: 'Datos personales',
       items: [
@@ -185,6 +189,33 @@ const sections = computed(() => {
       ]
     }
   ]
+
+  // Referencias (solo si se capturaron).
+  const refs = (step7?.references ?? []).filter(r => r.first_name || r.phone)
+  if (refs.length) {
+    result.push({
+      title: 'Referencias',
+      items: refs.map((r, i) => ({
+        label: `Referencia ${i + 1}`,
+        value: [`${r.first_name ?? ''} ${r.last_name_1 ?? ''}`.trim(), r.phone].filter(Boolean).join(' · ') || '-'
+      }))
+    })
+  }
+
+  // Cuenta bancaria (solo si se capturó).
+  if (bank?.bank_code && bank?.account_number) {
+    const digits = bank.account_number.replace(/\D/g, '')
+    const masked = digits.length > 4 ? `•••• ${digits.slice(-4)}` : digits
+    result.push({
+      title: 'Cuenta bancaria',
+      items: [
+        { label: 'Banco', value: bankName(bank.bank_code) },
+        { label: bank.type === 'CARD' ? 'Tarjeta' : 'CLABE', value: masked }
+      ]
+    })
+  }
+
+  return result
 })
 </script>
 

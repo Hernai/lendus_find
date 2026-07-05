@@ -40,6 +40,9 @@ const profile = computed(() => profileStore.profile)
 // Get bank accounts from profile (already loaded with profile, no separate API call needed)
 const bankAccounts = computed(() => profileStore.bankAccounts)
 
+// Referencias capturadas en el onboarding (según el flujo de cada tenant)
+const references = computed(() => profileStore.references)
+
 const userName = computed(() => {
   const pd = profile.value?.personal_data
   if (pd?.first_name) {
@@ -66,6 +69,22 @@ const getMaritalStatusLabel = (status: string | null | undefined) => {
   if (!status) return '-'
   const option = tenantStore.options.maritalStatus.find(o => o.value === status)
   return option?.label || formatMaritalStatus(status)
+}
+
+const getEducationLevelLabel = (level: string | null | undefined) => {
+  if (!level) return '-'
+  const option = tenantStore.options.educationLevel.find(o => o.value === level)
+  return option?.label || level
+}
+
+const getRelationshipLabel = (rel: string | null | undefined) => {
+  if (!rel) return ''
+  const all = [
+    ...tenantStore.options.relationship,
+    ...tenantStore.options.relationshipFamily,
+    ...tenantStore.options.relationshipNonFamily,
+  ]
+  return all.find(o => o.value === rel)?.label || rel
 }
 
 const getEmploymentTypeLabel = (type: string | null | undefined) => {
@@ -375,6 +394,10 @@ const handleLogout = async () => {
               <span class="text-gray-500">Estado civil</span>
               <span class="text-gray-900 font-medium">{{ profile?.personal_data?.marital_status_label || getMaritalStatusLabel(profile?.personal_data?.marital_status) }}</span>
             </div>
+            <div v-if="profile?.personal_data?.education_level || profile?.personal_data?.education_level_label" class="flex justify-between py-2 border-b border-gray-100">
+              <span class="text-gray-500">Nivel educativo</span>
+              <span class="text-gray-900 font-medium">{{ profile?.personal_data?.education_level_label || getEducationLevelLabel(profile?.personal_data?.education_level) }}</span>
+            </div>
             <div class="flex justify-between py-2">
               <span class="text-gray-500">Teléfono</span>
               <span class="text-gray-900 font-medium">{{ formatPhone(authStore.user?.phone) }}</span>
@@ -454,6 +477,32 @@ const handleLogout = async () => {
             </div>
           </div>
           <p v-else class="text-gray-500 text-sm">Sin información laboral registrada</p>
+        </div>
+
+        <!-- References Section (solo si el flujo del tenant las capturó) -->
+        <div v-if="references.length" class="bg-white rounded-2xl shadow-lg p-6 mb-4">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
+              <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-3-6.7" />
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900">Referencias</h3>
+          </div>
+          <div class="space-y-3 text-sm">
+            <div
+              v-for="(ref, i) in references"
+              :key="ref.id || i"
+              class="flex justify-between items-start"
+              :class="i > 0 ? 'pt-3 border-t border-gray-100' : ''"
+            >
+              <div>
+                <p class="text-gray-900 font-medium">{{ ref.full_name }}</p>
+                <p class="text-gray-500 text-xs mt-0.5">{{ getRelationshipLabel(ref.relationship) }}</p>
+              </div>
+              <span class="text-gray-700">{{ formatPhone(ref.phone) }}</span>
+            </div>
+          </div>
         </div>
 
         <!-- Bank Accounts Section -->
