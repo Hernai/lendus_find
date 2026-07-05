@@ -951,6 +951,9 @@ const loadSelfie = async () => {
   try {
     const blob = await staff.application.downloadDocument(application.value.id, selfieDoc.id)
     const typedBlob = new Blob([blob], { type: selfieDoc.mime_type || 'image/jpeg' })
+    // Revocar el objectURL previo antes de crear uno nuevo, por si loadSelfie se
+    // reejecuta en un refresco (evita fuga del blob anterior).
+    if (selfieUrl.value) URL.revokeObjectURL(selfieUrl.value)
     selfieUrl.value = URL.createObjectURL(typedBlob)
   } catch (e) {
     log.error('Error al cargar selfie', { error: e })

@@ -355,17 +355,17 @@ const uploadKycDocuments = async () => {
     { type: 'SELFIE', image: kycStore.selfieImage }
   ]
 
-  for (const { type, image } of kycImages) {
-    if (!image) continue
+  const uploadOne = async ({ type, image }: { type: string; image: string | null }) => {
+    if (!image) return
 
     // Find the document in our list (doc.id is already uppercase)
     const doc = documents.find(d => d.id === type)
-    if (!doc) continue
+    if (!doc) return
 
     // Only upload if it's a KYC document that hasn't been uploaded yet
     if (doc.status === 'uploaded') {
       log.debug('Skipping already uploaded document', { type })
-      continue
+      return
     }
 
     try {
@@ -425,6 +425,11 @@ const uploadKycDocuments = async () => {
       doc.fromKyc = false
     }
   }
+
+  // Subidas en PARALELO (independientes entre sí): el tiempo total es el de la más
+  // lenta, no la suma de las tres. allSettled para que el fallo de una no tumbe a
+  // las demás; el manejo de error por-doc ya marca solo la que falló como 'pending'.
+  await Promise.allSettled(kycImages.map(uploadOne))
 }
 
 // Sync from store on mount
@@ -460,8 +465,7 @@ watch(
     onboardingStore.updateStepData('step6', {
       documents_uploaded: uploadedIds
     })
-  },
-  { deep: true }
+  }
 )
 
 const allRequiredUploaded = computed(() => {
