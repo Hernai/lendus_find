@@ -244,26 +244,31 @@ const initDocuments = async () => {
   try {
     const response = await v2.applicant.document.list()
     if (response.success && response.data?.documents) {
-      // Filter only KYC-verified documents and store their IDs
+      // 1) Registrar (síncrono) los docs KYC y juntar las imágenes que necesitan preview.
+      const needPreview: { type: string; id: string }[] = []
       for (const doc of response.data.documents) {
         const isKycValidated = doc.metadata?.kyc_validated === true
         const isKycCaptured = kycIdentityVerified && kycDocTypes.includes(doc.type)
         if (isKycValidated || isKycCaptured) {
           uploadedKycDocs.set(doc.type, { id: doc.id })
-
-          // For image documents, try to get preview URL
           if (doc.mime_type?.startsWith('image/')) {
-            try {
-              const urlResponse = await v2.applicant.document.download(doc.id)
-              if (urlResponse.success && urlResponse.data?.url) {
-                uploadedKycDocs.set(doc.type, { id: doc.id, preview: urlResponse.data.url })
-              }
-            } catch (err) {
-              log.warn('Failed to get preview URL for document', { type: doc.type, error: err })
-            }
+            needPreview.push({ type: doc.type, id: doc.id })
           }
         }
       }
+
+      // 2) Descargar las signed URLs de preview en PARALELO (antes era un await en
+      //    serie por documento = 3 roundtrips encadenados a S3 en móvil).
+      await Promise.allSettled(needPreview.map(async ({ type, id }) => {
+        try {
+          const urlResponse = await v2.applicant.document.download(id)
+          if (urlResponse.success && urlResponse.data?.url) {
+            uploadedKycDocs.set(type, { id, preview: urlResponse.data.url })
+          }
+        } catch (err) {
+          log.warn('Failed to get preview URL for document', { type, error: err })
+        }
+      }))
 
       log.debug('Found KYC-verified documents', {
         total: response.data.documents.length,

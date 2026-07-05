@@ -254,6 +254,20 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     }
   }
 
+  // Persistencia local DEBOUNCED para el camino de alta frecuencia
+  // (updateStepData/setDynamicField se llaman en CADA tecla). Antes saveToStorage()
+  // hacía JSON.stringify de todo el draft en cada pulsación, en el hilo principal;
+  // en móvil de gama baja se notaba. Los guardados de checkpoint (completeStep,
+  // etc.) siguen llamando saveToStorage() inmediato.
+  let saveToStorageTimer: ReturnType<typeof setTimeout> | null = null
+  const saveToStorageSoon = () => {
+    if (saveToStorageTimer) clearTimeout(saveToStorageTimer)
+    saveToStorageTimer = setTimeout(() => {
+      saveToStorageTimer = null
+      saveToStorage()
+    }, 400)
+  }
+
   // Load existing data from backend using V2 API
   const loadFromBackend = async () => {
     isLoading.value = true
@@ -595,7 +609,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     stepData: Partial<OnboardingData[K]>
   ) => {
     data.value[stepKey] = { ...data.value[stepKey], ...stepData }
-    saveToStorage()
+    saveToStorageSoon()
 
     const stepNumber = parseInt(stepKey.replace('step', ''))
     if (!isNaN(stepNumber)) {
@@ -698,7 +712,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
   const setDynamicField = (key: string, value: unknown): void => {
     if (!data.value.dynamic) data.value.dynamic = {}
     data.value.dynamic[key] = value
-    saveToStorage()
+    saveToStorageSoon()
   }
 
   // Salary range → monthly_income midpoint (alineado con backend SalaryRange::midpoint())
