@@ -31,6 +31,7 @@ const Step5LoanDetails = () => import('@/views/applicant/onboarding/Step5LoanDet
 const Step6Documents = () => import('@/views/applicant/onboarding/Step6Documents.vue')
 const Step7References = () => import('@/views/applicant/onboarding/Step7References.vue')
 const Step8Review = () => import('@/views/applicant/onboarding/Step8Review.vue')
+const StepBankAccount = () => import('@/views/applicant/onboarding/StepBankAccount.vue')
 
 // Applicant Dashboard
 const DashboardView = () => import('@/views/applicant/dashboard/DashboardView.vue')
@@ -128,7 +129,8 @@ export const webRoutes: RouteRecordRaw[] = [
       { path: 'paso-5', name: 'tenant-onboarding-step-5', component: Step5LoanDetails, meta: { step: 6, title: 'Tu crédito' } },
       { path: 'paso-6', name: 'tenant-onboarding-step-6', component: Step6Documents, meta: { step: 7, title: 'Documentos' } },
       { path: 'paso-7', name: 'tenant-onboarding-step-7', component: Step7References, meta: { step: 8, title: 'Referencias' } },
-      { path: 'paso-8', name: 'tenant-onboarding-step-8', component: Step8Review, meta: { step: 9, title: 'Revisión y firma' } }
+      { path: 'cuenta-bancaria', name: 'tenant-onboarding-bank', component: StepBankAccount, meta: { step: 9, title: 'Cuenta bancaria' } },
+      { path: 'paso-8', name: 'tenant-onboarding-step-8', component: Step8Review, meta: { step: 10, title: 'Revisión y firma' } }
     ]
   },
   {
@@ -313,10 +315,16 @@ export const webRoutes: RouteRecordRaw[] = [
         meta: { step: 8, title: 'Referencias' }
       },
       {
+        path: 'cuenta-bancaria',
+        name: 'onboarding-bank',
+        component: StepBankAccount,
+        meta: { step: 9, title: 'Cuenta bancaria' }
+      },
+      {
         path: 'paso-8',
         name: 'onboarding-step-8',
         component: Step8Review,
-        meta: { step: 9, title: 'Revisión y firma' }
+        meta: { step: 10, title: 'Revisión y firma' }
       }
     ]
   },

@@ -143,7 +143,7 @@ const handleSubmit = async () => {
   }
 }
 
-const prevStep = () => router.push('/solicitud/paso-7')
+const prevStep = () => router.push('/solicitud/cuenta-bancaria')
 
 const sections = computed(() => {
   const data = onboardingStore.data

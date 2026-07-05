@@ -189,7 +189,7 @@ const handleSubmit = async () => {
       onboardingStore.completedSteps.push(7)
     }
 
-    router.push('/solicitud/paso-8')
+    router.push('/solicitud/cuenta-bancaria')
   } catch (e: unknown) {
     log.error('Failed to save step 7', { error: e })
     errors['general'] = getErrorMessage(e, 'Error al guardar las referencias')

@@ -55,7 +55,7 @@ export const useApplicationStore = defineStore('application', () => {
   const simulation = ref<SimulationResult | null>(null)
   const selectedProduct = ref<Product | null>(null)
   const currentStep = ref(1)
-  const totalSteps = ref(10) // Simulator + KYC + 8 data steps
+  const totalSteps = ref(11) // Simulator + KYC + 9 data steps (incl. cuenta bancaria)
 
   // Helper to convert unknown values to numbers (JSON may return strings)
   const toNum = (val: unknown): number => {
