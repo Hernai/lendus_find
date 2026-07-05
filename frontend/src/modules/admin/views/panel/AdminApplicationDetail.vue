@@ -2368,82 +2368,18 @@ onUnmounted(() => {
               <div class="p-3">
                 <div class="grid grid-cols-3 gap-x-4 gap-y-3 text-sm">
                   <!-- Nombre -->
-                  <div class="group relative">
-                    <div class="flex items-center gap-1.5 mb-0.5">
-                      <span
-                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
-                        :class="isFieldRejected('first_name') ? 'bg-red-500' : isFieldVerified('first_name') ? 'bg-green-500' : isFieldPending('first_name') ? 'bg-yellow-500' : application.applicant.full_name ? 'bg-blue-500' : 'bg-gray-300'"
-                      ></span>
-                      <span class="text-xs text-gray-500">Nombre</span>
-                      <!-- Lock icon for KYC-verified fields -->
-                      <svg v-if="isFieldLocked('first_name')" class="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20" title="Verificado por KYC - No modificable">
-                        <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
-                      </svg>
-                      <div v-if="application.applicant.full_name && !isFieldLocked('first_name')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
-                        <!-- Verificar: solo si NO está verificado -->
-                        <button
-                          v-if="!isFieldVerified('first_name') && !isFieldRejected('first_name')"
-                          class="p-0.5 rounded hover:bg-green-100 text-gray-400 hover:text-green-600"
-                          :disabled="isVerifyingData"
-                          title="Verificar dato"
-                          @click="verifyData('first_name', 'verify')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <!-- Verificado: solo si SÍ está verificado -->
-                        <button
-                          v-if="isFieldVerified('first_name')"
-                          class="p-0.5 rounded hover:bg-gray-100 text-green-600"
-                          :disabled="isVerifyingData"
-                          title="Quitar verificación"
-                          @click="verifyData('first_name', 'unverify')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                          </svg>
-                        </button>
-                        <!-- Rechazar: solo si NO está rechazado -->
-                        <button
-                          v-if="!isFieldRejected('first_name')"
-                          class="p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600"
-                          :disabled="isVerifyingData"
-                          title="Rechazar dato"
-                          @click="openRejectDataModal('first_name')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <!-- Rechazado: solo si SÍ está rechazado -->
-                        <button
-                          v-if="isFieldRejected('first_name')"
-                          class="p-0.5 rounded hover:bg-gray-100 text-red-600"
-                          :disabled="isVerifyingData"
-                          title="Quitar rechazo"
-                          @click="openUnverifyModal('first_name')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                          </svg>
-                        </button>
-                      </div>
-                      <!-- Message for locked fields -->
-                      <div v-if="isFieldLocked('first_name')" class="ml-auto">
-                        <span class="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                          {{ getFieldVerification('first_name')?.method_label || 'KYC' }}
-                        </span>
-                      </div>
-                    </div>
-                    <p class="font-medium text-gray-900 truncate">{{ application.applicant.full_name || '—' }}</p>
-                    <p v-if="isFieldRejected('first_name')" class="text-xs text-red-600 mt-0.5">
-                      ⚠ {{ getFieldVerification('first_name')?.rejection_reason }}
-                    </p>
-                    <p v-if="isFieldLocked('first_name')" class="text-[10px] text-gray-500 mt-0.5">
-                      Verificado automáticamente - No modificable
-                    </p>
-                  </div>
+                  <VerifiableField
+                    label="Nombre"
+                    :value="application.applicant.full_name"
+                    field-key="first_name"
+                    :verification="getFieldVerification('first_name')"
+                    :is-locked="isFieldLocked('first_name')"
+                    :is-verifying="isVerifyingData"
+                    :can-verify="true"
+                    @verify="(action) => verifyData('first_name', action)"
+                    @reject="openRejectDataModal('first_name')"
+                    @unreject="openUnverifyModal('first_name')"
+                  />
                   <!-- Nacionalidad / Entidad de Nacimiento -->
                   <div class="group relative">
                     <div class="flex items-center gap-1.5 mb-0.5">
@@ -2638,76 +2574,19 @@ onUnmounted(() => {
                     @unreject="openUnverifyModal('curp')"
                   />
                   <!-- RFC -->
-                  <div class="group relative">
-                    <div class="flex items-center gap-1.5 mb-0.5">
-                      <span
-                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
-                        :class="isFieldRejected('rfc') ? 'bg-red-500' : isFieldVerified('rfc') ? 'bg-green-500' : isFieldPending('rfc') ? 'bg-yellow-500' : application.applicant.rfc ? 'bg-blue-500' : 'bg-gray-300'"
-                      ></span>
-                      <span class="text-xs text-gray-500">RFC</span>
-                      <svg v-if="isFieldLocked('rfc')" class="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20" title="Verificado por KYC - No modificable">
-                        <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
-                      </svg>
-                      <div v-if="application.applicant.rfc && !isFieldLocked('rfc')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
-                        <button
-                          v-if="!isFieldVerified('rfc') && !isFieldRejected('rfc')"
-                          class="p-0.5 rounded hover:bg-green-100 text-gray-400 hover:text-green-600"
-                          :disabled="isVerifyingData"
-                          title="Verificar dato"
-                          @click="verifyData('rfc', 'verify')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="isFieldVerified('rfc')"
-                          class="p-0.5 rounded hover:bg-gray-100 text-green-600"
-                          :disabled="isVerifyingData"
-                          title="Quitar verificación"
-                          @click="verifyData('rfc', 'unverify')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="!isFieldRejected('rfc')"
-                          class="p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600"
-                          :disabled="isVerifyingData"
-                          title="Rechazar dato"
-                          @click="openRejectDataModal('rfc')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="isFieldRejected('rfc')"
-                          class="p-0.5 rounded hover:bg-gray-100 text-red-600"
-                          :disabled="isVerifyingData"
-                          title="Quitar rechazo"
-                          @click="openUnverifyModal('rfc')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                          </svg>
-                        </button>
-                      </div>
-                      <div v-if="isFieldLocked('rfc')" class="ml-auto">
-                        <span class="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                          {{ getFieldVerification('rfc')?.method_label || 'KYC' }}
-                        </span>
-                      </div>
-                    </div>
-                    <p class="font-mono text-sm text-gray-900">{{ application.applicant.rfc || '—' }}</p>
-                    <p v-if="isFieldRejected('rfc')" class="text-xs text-red-600 mt-0.5">
-                      ⚠ {{ getFieldVerification('rfc')?.rejection_reason }}
-                    </p>
-                    <p v-if="isFieldLocked('rfc')" class="text-[10px] text-gray-500 mt-0.5">
-                      Verificado automáticamente - No modificable
-                    </p>
-                  </div>
+                  <VerifiableField
+                    label="RFC"
+                    :value="application.applicant.rfc"
+                    field-key="rfc"
+                    :verification="getFieldVerification('rfc')"
+                    :is-locked="isFieldLocked('rfc')"
+                    :is-verifying="isVerifyingData"
+                    :can-verify="true"
+                    mono
+                    @verify="(action) => verifyData('rfc', action)"
+                    @reject="openRejectDataModal('rfc')"
+                    @unreject="openUnverifyModal('rfc')"
+                  />
                   <!-- Número de Pasaporte (solo para extranjeros) -->
                   <div v-if="isForeigner" class="group relative">
                     <div class="flex items-center gap-1.5 mb-0.5">
@@ -2900,76 +2779,20 @@ onUnmounted(() => {
                     </p>
                   </div>
                   <!-- Clave INE (solo para nacionales) -->
-                  <div v-if="!isForeigner" class="group relative">
-                    <div class="flex items-center gap-1.5 mb-0.5">
-                      <span
-                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
-                        :class="isFieldRejected('ine_clave') ? 'bg-red-500' : isFieldVerified('ine_clave') ? 'bg-green-500' : isFieldPending('ine_clave') ? 'bg-yellow-500' : application.applicant.ine_clave ? 'bg-blue-500' : 'bg-gray-300'"
-                      ></span>
-                      <span class="text-xs text-gray-500">Clave INE</span>
-                      <svg v-if="isFieldLocked('ine_clave')" class="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20" title="Verificado por KYC - No modificable">
-                        <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
-                      </svg>
-                      <div v-if="application.applicant.ine_clave && !isFieldLocked('ine_clave')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
-                        <button
-                          v-if="!isFieldVerified('ine_clave') && !isFieldRejected('ine_clave')"
-                          class="p-0.5 rounded hover:bg-green-100 text-gray-400 hover:text-green-600"
-                          :disabled="isVerifyingData"
-                          title="Verificar dato"
-                          @click="verifyData('ine_clave', 'verify')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="isFieldVerified('ine_clave')"
-                          class="p-0.5 rounded hover:bg-gray-100 text-green-600"
-                          :disabled="isVerifyingData"
-                          title="Quitar verificación"
-                          @click="verifyData('ine_clave', 'unverify')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="!isFieldRejected('ine_clave')"
-                          class="p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600"
-                          :disabled="isVerifyingData"
-                          title="Rechazar dato"
-                          @click="openRejectDataModal('ine_clave')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="isFieldRejected('ine_clave')"
-                          class="p-0.5 rounded hover:bg-gray-100 text-red-600"
-                          :disabled="isVerifyingData"
-                          title="Quitar rechazo"
-                          @click="openUnverifyModal('ine_clave')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                          </svg>
-                        </button>
-                      </div>
-                      <div v-if="isFieldLocked('ine_clave')" class="ml-auto">
-                        <span class="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                          {{ getFieldVerification('ine_clave')?.method_label || 'KYC' }}
-                        </span>
-                      </div>
-                    </div>
-                    <p class="font-mono text-sm text-gray-900">{{ application.applicant.ine_clave || '—' }}</p>
-                    <p v-if="isFieldRejected('ine_clave')" class="text-xs text-red-600 mt-0.5">
-                      ⚠ {{ getFieldVerification('ine_clave')?.rejection_reason }}
-                    </p>
-                    <p v-if="isFieldLocked('ine_clave')" class="text-[10px] text-gray-500 mt-0.5">
-                      Verificado automáticamente - No modificable
-                    </p>
-                  </div>
+                  <VerifiableField
+                    v-if="!isForeigner"
+                    label="Clave INE"
+                    :value="application.applicant.ine_clave"
+                    field-key="ine_clave"
+                    :verification="getFieldVerification('ine_clave')"
+                    :is-locked="isFieldLocked('ine_clave')"
+                    :is-verifying="isVerifyingData"
+                    :can-verify="true"
+                    mono
+                    @verify="(action) => verifyData('ine_clave', action)"
+                    @reject="openRejectDataModal('ine_clave')"
+                    @unreject="openUnverifyModal('ine_clave')"
+                  />
                   <!-- OCR del INE (capturado en onboarding sin proveedor KYC) -->
                   <div v-if="application.applicant.ine_ocr" class="group relative">
                     <div class="flex items-center gap-1.5 mb-0.5">
@@ -2996,76 +2819,18 @@ onUnmounted(() => {
                     <p class="font-mono text-sm text-gray-900">{{ application.applicant.ine_folio }}</p>
                   </div>
                   <!-- Fecha Nacimiento -->
-                  <div class="group relative">
-                    <div class="flex items-center gap-1.5 mb-0.5">
-                      <span
-                        class="w-2 h-2 rounded-full flex-shrink-0 transition-colors"
-                        :class="isFieldRejected('birth_date') ? 'bg-red-500' : isFieldVerified('birth_date') ? 'bg-green-500' : isFieldPending('birth_date') ? 'bg-yellow-500' : application.applicant.birth_date ? 'bg-blue-500' : 'bg-gray-300'"
-                      ></span>
-                      <span class="text-xs text-gray-500">Fecha Nacimiento</span>
-                      <svg v-if="isFieldLocked('birth_date')" class="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 20 20" title="Verificado por KYC - No modificable">
-                        <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
-                      </svg>
-                      <div v-if="application.applicant.birth_date && !isFieldLocked('birth_date')" class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex items-center gap-0.5">
-                        <button
-                          v-if="!isFieldVerified('birth_date') && !isFieldRejected('birth_date')"
-                          class="p-0.5 rounded hover:bg-green-100 text-gray-400 hover:text-green-600"
-                          :disabled="isVerifyingData"
-                          title="Verificar dato"
-                          @click="verifyData('birth_date', 'verify')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="isFieldVerified('birth_date')"
-                          class="p-0.5 rounded hover:bg-gray-100 text-green-600"
-                          :disabled="isVerifyingData"
-                          title="Quitar verificación"
-                          @click="verifyData('birth_date', 'unverify')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="!isFieldRejected('birth_date')"
-                          class="p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600"
-                          :disabled="isVerifyingData"
-                          title="Rechazar dato"
-                          @click="openRejectDataModal('birth_date')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <button
-                          v-if="isFieldRejected('birth_date')"
-                          class="p-0.5 rounded hover:bg-gray-100 text-red-600"
-                          :disabled="isVerifyingData"
-                          title="Quitar rechazo"
-                          @click="openUnverifyModal('birth_date')"
-                        >
-                          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                          </svg>
-                        </button>
-                      </div>
-                      <div v-if="isFieldLocked('birth_date')" class="ml-auto">
-                        <span class="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                          {{ getFieldVerification('birth_date')?.method_label || 'KYC' }}
-                        </span>
-                      </div>
-                    </div>
-                    <p class="font-medium text-gray-900">{{ application.applicant.birth_date ? formatDate(application.applicant.birth_date) : '—' }}</p>
-                    <p v-if="isFieldRejected('birth_date')" class="text-xs text-red-600 mt-0.5">
-                      ⚠ {{ getFieldVerification('birth_date')?.rejection_reason }}
-                    </p>
-                    <p v-if="isFieldLocked('birth_date')" class="text-[10px] text-gray-500 mt-0.5">
-                      Verificado automáticamente - No modificable
-                    </p>
-                  </div>
+                  <VerifiableField
+                    label="Fecha Nacimiento"
+                    :value="application.applicant.birth_date ? formatDate(application.applicant.birth_date) : null"
+                    field-key="birth_date"
+                    :verification="getFieldVerification('birth_date')"
+                    :is-locked="isFieldLocked('birth_date')"
+                    :is-verifying="isVerifyingData"
+                    :can-verify="true"
+                    @verify="(action) => verifyData('birth_date', action)"
+                    @reject="openRejectDataModal('birth_date')"
+                    @unreject="openUnverifyModal('birth_date')"
+                  />
                   <!-- Género (capturado en el onboarding) -->
                   <div class="group relative">
                     <div class="flex items-center gap-1.5 mb-0.5">
