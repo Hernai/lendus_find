@@ -274,6 +274,9 @@ class ApplicationController extends Controller
                 'person.bankAccounts',
                 'person.documents' => fn($q) => $q->whereNull('replaced_at')->orderByDesc('created_at'),
                 'person.account',
+                // identities: getFieldVerifications las usa para resolver phone/email
+                // verificados por OTP; sin esto se disparaba 1 query lazy por request.
+                'person.account.identities',
                 'company',
                 'assignedTo',
                 // 'statusHistory' removido del eager load: ahora se consulta
@@ -2555,8 +2558,9 @@ class ApplicationController extends Controller
             return false;
         }
 
-        // Check for rejected/pending documents (both from application and person)
-        $hasRejectedDocs = Document::where(function ($q) use ($app) {
+        // Conteo de documentos por status en UNA sola consulta agrupada (antes eran
+        // dos exists() casi idénticos = 2 roundtrips por cada aprobación de documento).
+        $docCounts = Document::where(function ($q) use ($app) {
                 $q->where(function ($q2) use ($app) {
                     $q2->where('documentable_type', Application::class)
                         ->where('documentable_id', $app->id);
@@ -2567,29 +2571,18 @@ class ApplicationController extends Controller
                     }
                 });
             })
-            ->where('status', \App\Enums\DocumentStatus::REJECTED)
             ->whereNull('replaced_at')
-            ->exists();
+            ->whereIn('status', [\App\Enums\DocumentStatus::REJECTED, \App\Enums\DocumentStatus::PENDING])
+            ->selectRaw('status, count(*) as c')
+            ->groupBy('status')
+            ->pluck('c', 'status');
+
+        $hasRejectedDocs = ($docCounts[\App\Enums\DocumentStatus::REJECTED->value] ?? 0) > 0;
+        $hasPendingDocs = ($docCounts[\App\Enums\DocumentStatus::PENDING->value] ?? 0) > 0;
 
         if ($hasRejectedDocs) {
             return false;
         }
-
-        // Check for pending documents (not approved yet)
-        $hasPendingDocs = Document::where(function ($q) use ($app) {
-                $q->where(function ($q2) use ($app) {
-                    $q2->where('documentable_type', Application::class)
-                        ->where('documentable_id', $app->id);
-                })->orWhere(function ($q2) use ($app) {
-                    if ($app->person_id) {
-                        $q2->where('documentable_type', Person::class)
-                            ->where('documentable_id', $app->person_id);
-                    }
-                });
-            })
-            ->where('status', \App\Enums\DocumentStatus::PENDING)
-            ->whereNull('replaced_at')
-            ->exists();
 
         // If there are no rejected items and no pending documents, advance the status
         // Note: We allow pending fields (fields that haven't been manually verified yet)
