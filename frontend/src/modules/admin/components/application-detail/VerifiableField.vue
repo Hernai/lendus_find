@@ -2,10 +2,13 @@
 import { computed } from 'vue'
 
 interface FieldVerification {
-  status: 'pending' | 'verified' | 'rejected'
-  method?: string
-  method_label?: string
-  rejection_reason?: string
+  // El backend devuelve el status en MAYÚSCULAS ('VERIFIED'/'REJECTED'/'PENDING');
+  // normalizamos abajo para aceptar ambos. Opcional + tipos laxos para aceptar el
+  // shape crudo de field_verifications sin fricción.
+  status?: string | null
+  method?: string | null
+  method_label?: string | null
+  rejection_reason?: string | null
 }
 
 const props = defineProps<{
@@ -16,6 +19,8 @@ const props = defineProps<{
   isLocked?: boolean
   isVerifying?: boolean
   canVerify?: boolean
+  /** Muestra el valor en fuente monoespaciada (CURP, RFC, clave INE, OCR…). */
+  mono?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -27,9 +32,10 @@ const emit = defineEmits<{
 const displayValue = computed(() => props.value ?? '—')
 const hasValue = computed(() => props.value !== null && props.value !== undefined && props.value !== '')
 
-const isVerified = computed(() => props.verification?.status === 'verified')
-const isRejected = computed(() => props.verification?.status === 'rejected')
-const isPending = computed(() => props.verification?.status === 'pending')
+const normalizedStatus = computed(() => (props.verification?.status ?? '').toLowerCase())
+const isVerified = computed(() => normalizedStatus.value === 'verified')
+const isRejected = computed(() => normalizedStatus.value === 'rejected')
+const isPending = computed(() => normalizedStatus.value === 'pending')
 
 const dotClass = computed(() => {
   if (isRejected.value) return 'bg-red-500'
@@ -126,7 +132,7 @@ const dotClass = computed(() => {
       </div>
     </div>
 
-    <p class="font-medium text-gray-900 truncate">{{ displayValue }}</p>
+    <p class="font-medium text-gray-900 truncate" :class="{ 'font-mono text-sm': mono }">{{ displayValue }}</p>
 
     <p v-if="isRejected && verification?.rejection_reason" class="text-xs text-red-600 mt-0.5">
       {{ verification.rejection_reason }}
