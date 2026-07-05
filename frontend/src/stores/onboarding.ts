@@ -561,6 +561,13 @@ export const useOnboardingStore = defineStore('onboarding', () => {
       clearTimeout(autoSaveTimer)
       autoSaveTimer = null
     }
+    // También el debounce de localStorage: si no, un saveToStorageSoon() agendado
+    // podría re-escribir el draft ~400ms después de reset()/completeStep (regresión
+    // detectada en la re-auditoría).
+    if (saveToStorageTimer) {
+      clearTimeout(saveToStorageTimer)
+      saveToStorageTimer = null
+    }
   }
 
   // Mark step as completed and save
@@ -670,6 +677,9 @@ export const useOnboardingStore = defineStore('onboarding', () => {
 
   // Reset all data
   const reset = () => {
+    // Cancelar saves pendientes (auto-save backend + debounce localStorage) ANTES
+    // de limpiar, si no un timer agendado re-escribiría el draft tras el removeItem.
+    cancelAutoSave()
     data.value = getDefaultData()
     completedSteps.value = []
     currentStep.value = 1
