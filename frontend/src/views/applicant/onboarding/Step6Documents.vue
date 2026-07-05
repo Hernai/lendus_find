@@ -235,12 +235,20 @@ const initDocuments = async () => {
 
   // Fetch existing documents from backend to check which are KYC-verified
   const uploadedKycDocs = new Map<string, { id: string; preview?: string }>()
+  // Tipos de documento capturados durante el KYC (INE + selfie). Si la identidad
+  // ya está verificada por KYC, un doc de estos que ya exista en backend ES el
+  // capturado en KYC — lo reconocemos como "Verificado con KYC" aunque el backend
+  // todavía no haya marcado `kyc_validated` (metadata previa vacía o timing).
+  const kycDocTypes = ['INE_FRONT', 'INE_BACK', 'SELFIE']
+  const kycIdentityVerified = kycStore.verified && !!kycStore.lockedData.curp
   try {
     const response = await v2.applicant.document.list()
     if (response.success && response.data?.documents) {
       // Filter only KYC-verified documents and store their IDs
       for (const doc of response.data.documents) {
-        if (doc.metadata?.kyc_validated === true) {
+        const isKycValidated = doc.metadata?.kyc_validated === true
+        const isKycCaptured = kycIdentityVerified && kycDocTypes.includes(doc.type)
+        if (isKycValidated || isKycCaptured) {
           uploadedKycDocs.set(doc.type, { id: doc.id })
 
           // For image documents, try to get preview URL
