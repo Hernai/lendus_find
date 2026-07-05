@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore, useTenantStore } from '@/stores'
-import TenantSwitcher from '@/components/admin/TenantSwitcher.vue'
+import TenantSwitcher from '@/modules/admin/components/TenantSwitcher.vue'
 import { ToastContainer } from '@/components/common'
 import { ADMIN_MODULES, isModuleVisible } from '@/constants/admin-modules'
 

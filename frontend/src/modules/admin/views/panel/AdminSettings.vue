@@ -3,7 +3,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { v2 } from '@/services/v2'
 import type { V2TenantInfo } from '@/services/v2/config.staff.service'
 import { AppInput } from '@/components/common'
-import TenantBrandingEditor, { type Branding, type TenantPreviewInfo } from '@/components/admin/TenantBrandingEditor.vue'
+import TenantBrandingEditor, { type Branding, type TenantPreviewInfo } from '@/modules/admin/components/TenantBrandingEditor.vue'
 import { logger } from '@/utils/logger'
 
 const log = logger.child('AdminSettings')

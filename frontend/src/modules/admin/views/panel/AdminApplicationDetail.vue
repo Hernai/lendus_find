@@ -2,16 +2,16 @@
 import { ref, computed, onMounted, onBeforeMount, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AppButton } from '@/components/common'
-import AdminDocumentGallery from '@/components/admin/AdminDocumentGallery.vue'
-import ConfirmModal from '@/components/admin/ConfirmModal.vue'
-import ActivityTimeline from '@/components/admin/application-detail/ActivityTimeline.vue'
+import AdminDocumentGallery from '@/modules/admin/components/AdminDocumentGallery.vue'
+import ConfirmModal from '@/modules/admin/components/ConfirmModal.vue'
+import ActivityTimeline from '@/modules/admin/components/application-detail/ActivityTimeline.vue'
 import {
   ReferencesSection,
   BankAccountsSection,
   NotesSection,
   RisksSection,
-} from '@/components/admin/application-detail'
-import type { ClabeValidationSummary } from '@/components/admin/application-detail/BankAccountsSection.vue'
+} from '@/modules/admin/components/application-detail'
+import type { ClabeValidationSummary } from '@/modules/admin/components/application-detail/BankAccountsSection.vue'
 import { v2 } from '@/services/v2'
 import { platform } from '@/platform'
 import { useWebSocket, useToast, useDocumentTypes } from '@/composables'

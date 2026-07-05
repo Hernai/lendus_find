@@ -5,6 +5,6 @@
 </template>
 
 <script setup lang="ts">
-import IntegrationsManager from '@/components/admin/IntegrationsManager.vue'
+import IntegrationsManager from '@/modules/admin/components/IntegrationsManager.vue'
 import { selfIntegrationsAdapter } from '@/services/v2/integrationsAdapters'
 </script>

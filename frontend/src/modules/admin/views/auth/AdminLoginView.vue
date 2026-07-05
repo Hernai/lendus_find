@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore, useTenantStore } from '@/stores'
 import { AppButton, AppInput } from '@/components/common'
-import TenantSelectorModal from '@/components/admin/TenantSelectorModal.vue'
+import TenantSelectorModal from '@/modules/admin/components/TenantSelectorModal.vue'
 import { useRecaptcha } from '@/composables/useRecaptcha'
 
 const router = useRouter()

@@ -5,7 +5,7 @@
  *
  * @example
  * ```typescript
- * import { AdminDataTable, AdminDocumentGallery, type TableColumn } from '@/components/admin'
+ * import { AdminDataTable, AdminDocumentGallery, type TableColumn } from '@/modules/admin/components'
  * ```
  */
 

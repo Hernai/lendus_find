@@ -7,9 +7,9 @@ import {
   type TemplateConfig,
   type CreateTemplateData,
 } from '@/services/notificationTemplates'
-import NotificationPreview from '@/components/admin/notification-templates/NotificationPreview.vue'
-import HtmlEditor from '@/components/admin/notification-templates/HtmlEditor.vue'
-import SendTestModal from '@/components/admin/notification-templates/SendTestModal.vue'
+import NotificationPreview from '@/modules/admin/components/notification-templates/NotificationPreview.vue'
+import HtmlEditor from '@/modules/admin/components/notification-templates/HtmlEditor.vue'
+import SendTestModal from '@/modules/admin/components/notification-templates/SendTestModal.vue'
 
 const route = useRoute()
 const router = useRouter()

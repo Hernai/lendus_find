@@ -6,8 +6,8 @@ import {
   type NotificationTemplate,
   type TemplateConfig,
 } from '@/services/notificationTemplates'
-import SendTestModal from '@/components/admin/notification-templates/SendTestModal.vue'
-import ConfirmModal from '@/components/admin/ConfirmModal.vue'
+import SendTestModal from '@/modules/admin/components/notification-templates/SendTestModal.vue'
+import ConfirmModal from '@/modules/admin/components/ConfirmModal.vue'
 import { useToast } from '@/composables/useToast'
 import { emailHtml, detailRows } from '@/utils/emailHtmlHelper'
 import { SearchableSelect } from '@/components/common'

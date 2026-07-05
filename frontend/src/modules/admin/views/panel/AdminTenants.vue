@@ -6,8 +6,8 @@ import type {
   V2TenantFilters,
 } from '@/services/v2/tenant.staff.service'
 import { AppConfirmModal } from '@/components/common'
-import TenantBrandingEditor from '@/components/admin/TenantBrandingEditor.vue'
-import IntegrationsManager from '@/components/admin/IntegrationsManager.vue'
+import TenantBrandingEditor from '@/modules/admin/components/TenantBrandingEditor.vue'
+import IntegrationsManager from '@/modules/admin/components/IntegrationsManager.vue'
 import { tenantIntegrationsAdapter } from '@/services/v2/integrationsAdapters'
 import { formatPhoneValue, stripPhoneFormatting, PHONE_INPUT_CONFIG } from '@/composables'
 import { logger } from '@/utils/logger'
