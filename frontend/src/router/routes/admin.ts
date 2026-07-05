@@ -3,20 +3,20 @@ import type { RouteRecordRaw } from 'vue-router'
 // ==============================================
 // ADMIN VIEWS (staff: agents, analysts, admins)
 // ==============================================
-const AdminLoginView = () => import('@/views/admin/auth/AdminLoginView.vue')
-const AdminLayout = () => import('@/views/admin/panel/AdminLayout.vue')
-const AdminDashboard = () => import('@/views/admin/panel/AdminDashboard.vue')
-const AdminApplications = () => import('@/views/admin/panel/AdminApplications.vue')
-const AdminApplicationDetail = () => import('@/views/admin/panel/AdminApplicationDetail.vue')
-const AdminUsers = () => import('@/views/admin/panel/AdminUsers.vue')
-const AdminProducts = () => import('@/views/admin/panel/AdminProducts.vue')
-const AdminTenants = () => import('@/views/admin/panel/AdminTenants.vue')
-const AdminSettings = () => import('@/views/admin/panel/AdminSettings.vue')
-const AdminIntegrations = () => import('@/views/admin/settings/AdminIntegrationsView.vue')
-const AdminApiLogs = () => import('@/views/admin/panel/AdminApiLogs.vue')
-const AdminUnderConstruction = () => import('@/views/admin/panel/AdminUnderConstruction.vue')
-const NotificationTemplates = () => import('@/views/admin/panel/NotificationTemplates.vue')
-const NotificationTemplateForm = () => import('@/views/admin/panel/NotificationTemplateForm.vue')
+const AdminLoginView = () => import('@/modules/admin/views/auth/AdminLoginView.vue')
+const AdminLayout = () => import('@/modules/admin/views/panel/AdminLayout.vue')
+const AdminDashboard = () => import('@/modules/admin/views/panel/AdminDashboard.vue')
+const AdminApplications = () => import('@/modules/admin/views/panel/AdminApplications.vue')
+const AdminApplicationDetail = () => import('@/modules/admin/views/panel/AdminApplicationDetail.vue')
+const AdminUsers = () => import('@/modules/admin/views/panel/AdminUsers.vue')
+const AdminProducts = () => import('@/modules/admin/views/panel/AdminProducts.vue')
+const AdminTenants = () => import('@/modules/admin/views/panel/AdminTenants.vue')
+const AdminSettings = () => import('@/modules/admin/views/panel/AdminSettings.vue')
+const AdminIntegrations = () => import('@/modules/admin/views/settings/AdminIntegrationsView.vue')
+const AdminApiLogs = () => import('@/modules/admin/views/panel/AdminApiLogs.vue')
+const AdminUnderConstruction = () => import('@/modules/admin/views/panel/AdminUnderConstruction.vue')
+const NotificationTemplates = () => import('@/modules/admin/views/panel/NotificationTemplates.vue')
+const NotificationTemplateForm = () => import('@/modules/admin/views/panel/NotificationTemplateForm.vue')
 
 /**
  * Rutas del panel de administración (staff), prefijo `/admin`.
@@ -92,17 +92,17 @@ export const adminRoutes: RouteRecordRaw[] = [
         // backend; aquí solo controlamos visibilidad del sidebar.
         path: 'configuracion/modulos',
         name: 'admin-modules-config',
-        component: () => import('@/views/admin/panel/AdminModulesConfig.vue'),
+        component: () => import('@/modules/admin/views/panel/AdminModulesConfig.vue'),
       },
       {
         path: 'prestamos',
         name: 'admin-loans',
-        component: () => import('@/views/admin/panel/AdminLoans.vue')
+        component: () => import('@/modules/admin/views/panel/AdminLoans.vue')
       },
       {
         path: 'prestamos/:id',
         name: 'admin-loan-detail',
-        component: () => import('@/views/admin/panel/AdminLoanDetail.vue')
+        component: () => import('@/modules/admin/views/panel/AdminLoanDetail.vue')
       },
       {
         path: 'notificaciones',
@@ -122,7 +122,7 @@ export const adminRoutes: RouteRecordRaw[] = [
       {
         path: 'mis-notificaciones',
         name: 'admin-notification-preferences',
-        component: () => import('@/views/admin/panel/NotificationPreferences.vue')
+        component: () => import('@/modules/admin/views/panel/NotificationPreferences.vue')
       }
     ]
   },
