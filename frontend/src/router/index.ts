@@ -6,7 +6,7 @@ import { detectTenantSlug } from '@/utils/tenant'
 import { storage, STORAGE_KEYS } from '@/utils/storage'
 import { platform } from '@/platform'
 import { mobileRoutes } from './routes/mobile'
-import { adminRoutes } from './routes/admin'
+import { adminRoutes } from '@/modules/admin/routes'
 import { webRoutes } from './routes/web'
 
 const routes: RouteRecordRaw[] = [
