@@ -510,11 +510,16 @@ class DocumentController extends Controller
      */
     private function autoApproveIfKycValidated(Document $document, Person $person, string $type): void
     {
-        // Map document types to their corresponding verification fields
+        // Un mismo documento puede estar respaldado por varios nombres de campo de
+        // verificación según el flujo KYC: la INE combinada (`ine_document`) o los
+        // campos derivados del OCR/lista nominal (`ine_ocr`/`ine_clave`). Basta con
+        // que CUALQUIERA esté verificado para auto-aprobar el documento. Antes solo
+        // se buscaba `ine_document_front`, que este flujo no crea → los docs INE
+        // quedaban Pendiente aunque el INE sí estuviera validado por KYC.
         $verificationFieldMap = [
-            Document::TYPE_INE_FRONT => 'ine_document_front',
-            Document::TYPE_INE_BACK => 'ine_document_front', // INE validation validates both sides
-            Document::TYPE_SELFIE => 'face_match',
+            Document::TYPE_INE_FRONT => ['ine_document', 'ine_document_front', 'ine_ocr', 'ine_clave'],
+            Document::TYPE_INE_BACK => ['ine_document', 'ine_document_front', 'ine_ocr', 'ine_clave'],
+            Document::TYPE_SELFIE => ['face_match', 'selfie'],
         ];
 
         // Only process document types that have KYC validation
@@ -522,28 +527,22 @@ class DocumentController extends Controller
             return;
         }
 
-        $verificationField = $verificationFieldMap[$type];
+        $candidateFields = $verificationFieldMap[$type];
 
-        // Check if there's a verified record for this field
-        $isVerified = DataVerification::where('applicant_id', $person->id)
-            ->where('field_name', $verificationField)
+        // Buscar el primer registro verificado entre los campos candidatos.
+        $verification = DataVerification::where('applicant_id', $person->id)
+            ->whereIn('field_name', $candidateFields)
             ->where('is_verified', true)
-            ->exists();
+            ->first();
 
-        if (!$isVerified) {
+        if (!$verification) {
             Log::debug('[DocumentController] No KYC verification found for document auto-approval', [
                 'person_id' => $person->id,
                 'document_type' => $type,
-                'verification_field' => $verificationField,
+                'candidate_fields' => $candidateFields,
             ]);
             return;
         }
-
-        // Get verification data for metadata
-        $verification = DataVerification::where('applicant_id', $person->id)
-            ->where('field_name', $verificationField)
-            ->where('is_verified', true)
-            ->first();
 
         // Build metadata for the auto-approval
         $kycMetadata = [
