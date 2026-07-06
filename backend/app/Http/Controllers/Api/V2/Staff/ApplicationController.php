@@ -2646,19 +2646,15 @@ class ApplicationController extends Controller
             }
         }
 
-        // Métodos KYC/oficiales que marcan un campo como verificado (para bloquear
-        // el documento asociado). Incluye las fuentes gubernamentales CURP/RENAPO y
-        // RFC/SAT: sin ellas, un campo validado SOLO por esas vías (p.ej. rfc vía SAT,
-        // que no viene en el OCR de la INE) no aparecía como KYC-verificado en el admin.
-        // Alineado con VerificationMethod::isAutomated() y el $isOfficialSource de
-        // VerificationService.
+        // Métodos que BLOQUEAN un documento (is_kyc_locked): solo la validación
+        // PROPIA del documento (OCR/lista de la INE, biometría de la selfie, Nubarium).
+        // Se EXCLUYEN a propósito las fuentes gubernamentales de dato (CURP/RENAPO,
+        // RFC/SAT): la INE se bloquea por su propia validación, no porque el CURP se
+        // haya validado por RENAPO. El dato CURP/RFC igual se muestra verificado en el
+        // detalle vía getFieldVerifications(), que no filtra por método.
         $kycMethods = [
             \App\Enums\VerificationMethod::KYC_INE_OCR->value,
             \App\Enums\VerificationMethod::KYC_INE_LIST->value,
-            \App\Enums\VerificationMethod::KYC_CURP_RENAPO->value,
-            \App\Enums\VerificationMethod::RENAPO->value,
-            \App\Enums\VerificationMethod::KYC_RFC_SAT->value,
-            \App\Enums\VerificationMethod::SAT->value,
             \App\Enums\VerificationMethod::KYC_FACE_MATCH->value,
             \App\Enums\VerificationMethod::KYC_LIVENESS->value,
             \App\Enums\VerificationMethod::NUBARIUM->value,
