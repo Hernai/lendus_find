@@ -13,19 +13,13 @@
 import { VerifiableField } from '@/modules/admin/components/application-detail'
 import { formatDate, formatPhone } from '@/utils/formatters'
 import { useFieldVerification } from '@/modules/admin/composables/useFieldVerification'
-import type { Application, VerifiableFieldKey } from '@/modules/admin/views/panel/applicationDetail.types'
+import type { Application, VerifiableFieldKey, IneComparison } from '@/modules/admin/views/panel/applicationDetail.types'
 
 const props = defineProps<{
   application: Application
   isForeigner: boolean
   birthStateDisplay: string
-  ineComparison: {
-    rows: Array<{ label: string; confirmed: string; ocr: string; renapo: string; diff: boolean }>
-    ineValid: boolean | null
-    curpValid: boolean | null
-    verifiedAt: string | null
-    hasDiffs: boolean
-  } | null
+  ineComparison: IneComparison | null
   isVerifyingData: boolean
   reverifyingIne: boolean
   isEditingPhone: boolean

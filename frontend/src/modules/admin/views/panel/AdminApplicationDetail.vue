@@ -20,9 +20,14 @@ import {
   EmploymentSection,
   TabsBar,
   ApplicantDataSection,
+  IneVerificationModal,
+  StatusChangeModal,
+  AssignAnalystModal,
+  DocumentRejectModal,
+  ReferenceVerifyModal,
 } from '@/modules/admin/components/application-detail'
 import { staff } from '@/modules/admin/services'
-import type { Application, Document, Reference, BankAccount, VerifiableFieldKey } from './applicationDetail.types'
+import type { Application, Document, Reference, BankAccount, VerifiableFieldKey, StaffUser } from './applicationDetail.types'
 import { mapApplicationDetail, isForeignNationality, requiredDocTypesFor } from './mapApplicationDetail'
 import { useFieldVerification } from '@/modules/admin/composables/useFieldVerification'
 import { platform } from '@/platform'
@@ -30,7 +35,7 @@ import { useWebSocket, useToast, useDocumentTypes } from '@/composables'
 import { useTenantStore } from '@/stores/tenant'
 import { useAuthStore } from '@/stores/auth'
 import { logger } from '@/utils/logger'
-import { formatMoney, formatDate, formatDateTime, formatPhone } from '@/utils/formatters'
+import { formatMoney, formatDate, formatDateTime } from '@/utils/formatters'
 import { getStateNameFromCurp } from '@/utils/validators'
 import { getStatusBadge } from '@/utils/admin-styles'
 import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent, DocumentDeletedEvent, DocumentUploadedEvent, ReferenceVerifiedEvent, BankAccountVerifiedEvent } from '@/types/realtime'
@@ -122,8 +127,7 @@ const application = ref<Application | null>(null)
 const loading = ref(true)
 const activeTab = ref('general')
 const showStatusModal = ref(false)
-const newStatus = ref('')
-const statusNote = ref('')
+// newStatus/statusNote se movieron a StatusChangeModal (estado de formulario local).
 const isUpdatingStatus = ref(false)
 
 // Counter-offer state
@@ -140,8 +144,7 @@ const counterOffer = ref({
 // Document rejection state
 const showDocRejectModal = ref(false)
 const selectedDocument = ref<Document | null>(null)
-const docRejectReason = ref('')
-const docRejectComment = ref('')
+// docRejectReason/docRejectComment se movieron a DocumentRejectModal (form local).
 const isRejectingDoc = ref(false)
 
 const docRejectReasons = [
@@ -158,8 +161,7 @@ const docRejectReasons = [
 // Reference verification state
 const showVerifyRefModal = ref(false)
 const selectedReference = ref<Reference | null>(null)
-const refVerifyResult = ref<'VERIFIED' | 'NOT_VERIFIED' | 'NO_ANSWER'>('VERIFIED')
-const refVerifyNotes = ref('')
+// refVerifyResult/refVerifyNotes se movieron a ReferenceVerifyModal (form local).
 const isVerifyingRef = ref(false)
 
 // Document approval state
@@ -202,12 +204,7 @@ const isVerifyingBankAccount = ref(false)
 const isUnverifyingBankAccount = ref(false)
 
 // Assignment state
-interface StaffUser {
-  id: string
-  name: string
-  email: string
-  role: string
-}
+// StaffUser se importa de applicationDetail.types (compartido con AssignAnalystModal).
 
 // Get role label from backend enum options
 const getRoleLabel = (role: string) => {
@@ -216,7 +213,7 @@ const getRoleLabel = (role: string) => {
 }
 const showAssignModal = ref(false)
 const staffUsers = ref<StaffUser[]>([])
-const selectedUserId = ref('')
+// selectedUserId se movió a AssignAnalystModal (estado de formulario local).
 const isAssigning = ref(false)
 const isLoadingUsers = ref(false)
 
@@ -888,22 +885,20 @@ const goBack = () => {
 
 const openStatusModal = () => {
   if (application.value) {
-    newStatus.value = application.value.status
-    statusNote.value = ''
     showStatusModal.value = true
   }
 }
 
-const updateStatus = async () => {
-  if (!application.value || !newStatus.value) return
+const updateStatus = async (payload: { status: string; notes?: string }) => {
+  if (!application.value || !payload.status) return
 
   isUpdatingStatus.value = true
 
   try {
     // Make actual API call to update status
     await staff.application.changeStatus(application.value.id, {
-      status: newStatus.value as import('@/types/v2').V2ApplicationStatus,
-      notes: statusNote.value || undefined
+      status: payload.status as import('@/types/v2').V2ApplicationStatus,
+      notes: payload.notes
     })
 
     await fetchApplication()
@@ -922,7 +917,6 @@ const updateStatus = async () => {
 const openAssignModal = async () => {
   showAssignModal.value = true
   isLoadingUsers.value = true
-  selectedUserId.value = ''
 
   try {
     const response = await staff.user.list({ active: true, role: 'ANALYST' })
@@ -939,14 +933,14 @@ const openAssignModal = async () => {
   }
 }
 
-const assignApplication = async () => {
-  if (!application.value || !selectedUserId.value) return
+const assignApplication = async (userId: string) => {
+  if (!application.value || !userId) return
 
   isAssigning.value = true
 
   try {
     await staff.application.assign(application.value.id, {
-      user_id: selectedUserId.value
+      user_id: userId
     })
 
     await fetchApplication()
@@ -1014,25 +1008,23 @@ const confirmApproveDocument = async (_data?: { selectValue?: string; comment?: 
 
 const openDocRejectModal = (doc: Document) => {
   selectedDocument.value = doc
-  docRejectReason.value = ''
-  docRejectComment.value = ''
   showDocRejectModal.value = true
 }
 
-const confirmRejectDocument = async () => {
-  if (!selectedDocument.value || !docRejectReason.value || !application.value) return
+const confirmRejectDocument = async (payload: { reason: string; comment: string }) => {
+  if (!selectedDocument.value || !payload.reason || !application.value) return
 
   isRejectingDoc.value = true
 
   try {
     await staff.application.rejectDocument(application.value.id, selectedDocument.value.id, {
-      reason: docRejectReason.value,
-      comment: docRejectComment.value || undefined
+      reason: payload.reason,
+      comment: payload.comment || undefined
     })
 
     selectedDocument.value.status = 'REJECTED'
-    selectedDocument.value.rejection_reason = docRejectReason.value
-    selectedDocument.value.rejection_comment = docRejectComment.value
+    selectedDocument.value.rejection_reason = payload.reason
+    selectedDocument.value.rejection_comment = payload.comment
 
     await fetchApplication()
     showDocRejectModal.value = false
@@ -1048,25 +1040,23 @@ const confirmRejectDocument = async () => {
 // Reference verification
 const openVerifyRefModal = (ref: Reference) => {
   selectedReference.value = ref
-  refVerifyResult.value = 'VERIFIED'
-  refVerifyNotes.value = ''
   showVerifyRefModal.value = true
 }
 
-const confirmVerifyReference = async () => {
+const confirmVerifyReference = async (payload: { result: 'VERIFIED' | 'NOT_VERIFIED' | 'NO_ANSWER'; notes: string }) => {
   if (!selectedReference.value || !application.value) return
 
   isVerifyingRef.value = true
 
   try {
     await staff.application.verifyReference(application.value.id, selectedReference.value.id, {
-      result: refVerifyResult.value,
-      notes: refVerifyNotes.value || undefined
+      result: payload.result,
+      notes: payload.notes || undefined
     })
 
-    selectedReference.value.verified = refVerifyResult.value === 'VERIFIED'
-    selectedReference.value.verification_result = refVerifyResult.value
-    selectedReference.value.verification_notes = refVerifyNotes.value
+    selectedReference.value.verified = payload.result === 'VERIFIED'
+    selectedReference.value.verification_result = payload.result
+    selectedReference.value.verification_notes = payload.notes
 
     await fetchApplication()
     showVerifyRefModal.value = false
@@ -1582,71 +1572,7 @@ onUnmounted(() => {
           <!-- General Tab -->
           <div v-if="activeTab === 'general'" class="space-y-4">
             <!-- Modal: Verificación de INE (confirmado cliente vs OCR vs RENAPO) -->
-            <Teleport to="body">
-              <div
-                v-if="ineComparison && showIneVerification"
-                class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-                @click.self="showIneVerification = false"
-              >
-                <div
-                  class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col"
-                  :class="ineComparison.hasDiffs ? 'ring-1 ring-amber-300' : ''"
-                >
-                  <div
-                    class="px-5 py-3 flex items-center justify-between gap-3 border-b border-gray-100"
-                    :class="ineComparison.hasDiffs ? 'bg-amber-50' : 'bg-gray-50'"
-                  >
-                    <span class="font-semibold text-gray-800 inline-flex items-center gap-2">
-                      Verificación de INE
-                      <span v-if="ineComparison.hasDiffs" class="text-xs font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
-                        Revisar diferencias
-                      </span>
-                    </span>
-                    <div class="flex items-center gap-3 text-xs">
-                      <span :class="ineComparison.ineValid ? 'text-green-700' : 'text-gray-500'">
-                        INE {{ ineComparison.ineValid === true ? '✓' : ineComparison.ineValid === false ? '✕' : '—' }}
-                      </span>
-                      <span :class="ineComparison.curpValid ? 'text-green-700' : 'text-gray-500'">
-                        RENAPO {{ ineComparison.curpValid === true ? '✓' : ineComparison.curpValid === false ? '✕' : '—' }}
-                      </span>
-                      <button
-                        type="button"
-                        class="text-gray-400 hover:text-gray-600 text-lg leading-none"
-                        aria-label="Cerrar"
-                        @click="showIneVerification = false"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                  <div class="overflow-auto">
-                    <table class="w-full text-sm">
-                      <thead>
-                        <tr class="text-xs text-gray-500 border-b border-gray-100">
-                          <th class="text-left font-medium px-5 py-2">Campo</th>
-                          <th class="text-left font-medium px-3 py-2">Confirmado</th>
-                          <th class="text-left font-medium px-3 py-2">OCR (INE)</th>
-                          <th class="text-left font-medium px-3 py-2">RENAPO</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr
-                          v-for="row in ineComparison.rows"
-                          :key="row.label"
-                          class="border-b border-gray-50 last:border-0"
-                          :class="row.diff ? 'bg-amber-50/50' : ''"
-                        >
-                          <td class="px-5 py-2 text-gray-500">{{ row.label }}</td>
-                          <td class="px-3 py-2 font-medium" :class="row.diff ? 'text-amber-800' : 'text-gray-900'">{{ row.confirmed || '—' }}</td>
-                          <td class="px-3 py-2 text-gray-700">{{ row.ocr || '—' }}</td>
-                          <td class="px-3 py-2 text-gray-700">{{ row.renapo || '—' }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </Teleport>
+            <IneVerificationModal v-model:show="showIneVerification" :comparison="ineComparison" />
 
             <!-- Summary Cards -->
             <LoanSummaryCards :loan="application.loan" />
@@ -1775,128 +1701,22 @@ onUnmounted(() => {
          cada item inline con su metadata JSON; no necesita modal aparte. -->
 
     <!-- Status Change Modal -->
-    <div
-      v-if="showStatusModal"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      @click.self="showStatusModal = false"
-    >
-      <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">Cambiar Estado</h3>
-
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">Nuevo Estado</label>
-            <select
-              v-model="newStatus"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            >
-              <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">
-                {{ opt.label }}
-              </option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">Nota (opcional)</label>
-            <textarea
-              v-model="statusNote"
-              rows="3"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="Agregar una nota sobre el cambio de estado..."
-            />
-          </div>
-        </div>
-
-        <div class="flex gap-3 mt-6">
-          <AppButton
-            variant="outline"
-            class="flex-1"
-            @click="showStatusModal = false"
-          >
-            Cancelar
-          </AppButton>
-          <AppButton
-            variant="primary"
-            class="flex-1"
-            :loading="isUpdatingStatus"
-            @click="updateStatus"
-          >
-            Guardar
-          </AppButton>
-        </div>
-      </div>
-    </div>
+    <StatusChangeModal
+      v-model:show="showStatusModal"
+      :status-options="statusOptions"
+      :current-status="application?.status ?? ''"
+      :loading="isUpdatingStatus"
+      @confirm="updateStatus"
+    />
 
     <!-- Assignment Modal -->
-    <div
-      v-if="showAssignModal"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      @click.self="showAssignModal = false"
-    >
-      <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">Asignar para Revisión</h3>
-        <p class="text-sm text-gray-500 mb-4">Selecciona un analista para revisar esta solicitud</p>
-
-        <div class="space-y-4">
-          <div v-if="isLoadingUsers" class="flex justify-center py-8">
-            <div class="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full" />
-          </div>
-
-          <div v-else-if="staffUsers.length === 0" class="text-center py-8">
-            <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            <p class="text-gray-500">No hay analistas disponibles</p>
-            <p class="text-sm text-gray-400 mt-1">Crea un usuario con rol Analista en la sección de Usuarios</p>
-          </div>
-
-          <template v-else>
-            <!-- Analysts list -->
-            <div class="space-y-2">
-              <div
-                v-for="user in staffUsers"
-                :key="user.id"
-                class="flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors"
-                :class="selectedUserId === user.id ? 'bg-primary-50 border border-primary-200' : 'bg-gray-50 hover:bg-gray-100'"
-                @click="selectedUserId = user.id"
-              >
-                <div class="flex items-center gap-3">
-                  <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-sm font-medium text-blue-700">
-                    {{ user.name.charAt(0).toUpperCase() }}
-                  </div>
-                  <div>
-                    <p class="font-medium text-gray-900 text-sm">{{ user.name }}</p>
-                    <p class="text-xs text-gray-500">{{ user.email }}</p>
-                  </div>
-                </div>
-                <svg v-if="selectedUserId === user.id" class="w-5 h-5 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                </svg>
-              </div>
-            </div>
-          </template>
-        </div>
-
-        <div class="flex gap-3 mt-6">
-          <AppButton
-            variant="outline"
-            class="flex-1"
-            @click="showAssignModal = false"
-          >
-            Cancelar
-          </AppButton>
-          <AppButton
-            variant="primary"
-            class="flex-1"
-            :loading="isAssigning"
-            :disabled="!selectedUserId"
-            @click="assignApplication"
-          >
-            Asignar
-          </AppButton>
-        </div>
-      </div>
-    </div>
+    <AssignAnalystModal
+      v-model:show="showAssignModal"
+      :staff-users="staffUsers"
+      :is-loading-users="isLoadingUsers"
+      :is-assigning="isAssigning"
+      @confirm="assignApplication"
+    />
 
     <!-- Counter-Offer Modal -->
     <div
@@ -2046,64 +1866,13 @@ onUnmounted(() => {
     </div>
 
     <!-- Document Reject Modal -->
-    <div
-      v-if="showDocRejectModal && selectedDocument"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      @click.self="showDocRejectModal = false"
-    >
-      <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">Rechazar Documento</h3>
-        <p class="text-sm text-gray-500 mb-4">{{ selectedDocument.name }}</p>
-
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              Motivo de rechazo <span class="text-red-500">*</span>
-            </label>
-            <select
-              v-model="docRejectReason"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-            >
-              <option value="">Seleccionar motivo...</option>
-              <option v-for="reason in docRejectReasons" :key="reason.value" :value="reason.value">
-                {{ reason.label }}
-              </option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              Comentario adicional
-            </label>
-            <textarea
-              v-model="docRejectComment"
-              rows="3"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-              placeholder="Detalle adicional para el solicitante..."
-            />
-          </div>
-        </div>
-
-        <div class="flex gap-3 mt-6">
-          <AppButton
-            variant="outline"
-            class="flex-1"
-            @click="showDocRejectModal = false"
-          >
-            Cancelar
-          </AppButton>
-          <AppButton
-            variant="primary"
-            class="flex-1 !bg-red-600 hover:!bg-red-700"
-            :loading="isRejectingDoc"
-            :disabled="!docRejectReason"
-            @click="confirmRejectDocument"
-          >
-            Rechazar
-          </AppButton>
-        </div>
-      </div>
-    </div>
+    <DocumentRejectModal
+      v-model:show="showDocRejectModal"
+      :document="selectedDocument"
+      :reasons="docRejectReasons"
+      :is-rejecting="isRejectingDoc"
+      @confirm="confirmRejectDocument"
+    />
 
     <!-- Data Rejection Modal -->
     <ConfirmModal
@@ -2157,103 +1926,12 @@ onUnmounted(() => {
     />
 
     <!-- Reference Verification Modal -->
-    <div
-      v-if="showVerifyRefModal && selectedReference"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      @click.self="showVerifyRefModal = false"
-    >
-      <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">Verificar Referencia</h3>
-        <div class="bg-gray-50 rounded-lg p-3 mb-4">
-          <p class="font-medium">{{ selectedReference.full_name }}</p>
-          <p class="text-sm text-gray-500">{{ selectedReference.relationship }} · {{ formatPhone(selectedReference.phone) }}</p>
-        </div>
-
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              Resultado de verificación
-            </label>
-            <div class="space-y-2">
-              <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50"
-                :class="{ 'border-green-500 bg-green-50': refVerifyResult === 'VERIFIED' }"
-              >
-                <input
-                  v-model="refVerifyResult"
-                  type="radio"
-                  value="VERIFIED"
-                  class="text-green-600 focus:ring-green-500"
-                />
-                <div>
-                  <p class="font-medium text-gray-900">Verificada</p>
-                  <p class="text-sm text-gray-500">La referencia confirmó conocer al solicitante</p>
-                </div>
-              </label>
-
-              <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50"
-                :class="{ 'border-red-500 bg-red-50': refVerifyResult === 'NOT_VERIFIED' }"
-              >
-                <input
-                  v-model="refVerifyResult"
-                  type="radio"
-                  value="NOT_VERIFIED"
-                  class="text-red-600 focus:ring-red-500"
-                />
-                <div>
-                  <p class="font-medium text-gray-900">No verificada</p>
-                  <p class="text-sm text-gray-500">Datos incorrectos o no conoce al solicitante</p>
-                </div>
-              </label>
-
-              <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50"
-                :class="{ 'border-yellow-500 bg-yellow-50': refVerifyResult === 'NO_ANSWER' }"
-              >
-                <input
-                  v-model="refVerifyResult"
-                  type="radio"
-                  value="NO_ANSWER"
-                  class="text-yellow-600 focus:ring-yellow-500"
-                />
-                <div>
-                  <p class="font-medium text-gray-900">Sin respuesta</p>
-                  <p class="text-sm text-gray-500">No contestaron o número fuera de servicio</p>
-                </div>
-              </label>
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              Notas de la llamada
-            </label>
-            <textarea
-              v-model="refVerifyNotes"
-              rows="3"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="Comentarios adicionales sobre la verificación..."
-            />
-          </div>
-        </div>
-
-        <div class="flex gap-3 mt-6">
-          <AppButton
-            variant="outline"
-            class="flex-1"
-            @click="showVerifyRefModal = false"
-          >
-            Cancelar
-          </AppButton>
-          <AppButton
-            variant="primary"
-            class="flex-1"
-            :loading="isVerifyingRef"
-            @click="confirmVerifyReference"
-          >
-            Guardar
-          </AppButton>
-        </div>
-      </div>
-    </div>
+    <ReferenceVerifyModal
+      v-model:show="showVerifyRefModal"
+      :reference="selectedReference"
+      :is-verifying="isVerifyingRef"
+      @confirm="confirmVerifyReference"
+    />
 
     <!-- Document Approval Confirmation Modal -->
     <ConfirmModal

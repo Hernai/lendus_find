@@ -21,6 +21,27 @@ export type VerifiableFieldKey =
   | 'birth_date' | 'phone' | 'email' | 'address' | 'employment'
   | 'passport_number' | 'passport_issue_date' | 'passport_expiry_date'
 
+/**
+ * Comparación de la verificación de INE (datos confirmados vs OCR vs RENAPO).
+ * Es el shape que retorna el computed ineComparison del padre; lo consumen
+ * ApplicantDataSection (botón/indicador) e IneVerificationModal (tabla de detalle).
+ */
+/** Analista/usuario staff (lista de asignación). Compartido padre ↔ AssignAnalystModal. */
+export interface StaffUser {
+  id: string
+  name: string
+  email: string
+  role: string
+}
+
+export interface IneComparison {
+  rows: Array<{ label: string; confirmed: string; ocr: string; renapo: string; diff: boolean }>
+  ineValid: boolean | null
+  curpValid: boolean | null
+  verifiedAt: string | null
+  hasDiffs: boolean
+}
+
 export interface Document {
   id: string
   type: string
