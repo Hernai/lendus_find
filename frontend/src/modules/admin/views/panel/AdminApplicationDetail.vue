@@ -19,6 +19,7 @@ import {
   DocumentViewerModal,
   AddressSection,
   EmploymentSection,
+  TabsBar,
 } from '@/modules/admin/components/application-detail'
 import { staff } from '@/modules/admin/services'
 import type { Application, Document, Reference, BankAccount } from './applicationDetail.types'
@@ -375,9 +376,8 @@ const fetchApplication = async () => {
 
 // Switch tab. El feed de actividad (`activity`) carga su propia data al
 // montarse el componente ActivityTimeline, no necesitamos prefetching aqui.
-const switchTab = (tabId: string) => {
-  activeTab.value = tabId
-}
+// switchTab eliminado: el nav se movió a TabsBar y activeTab se controla con
+// v-model:active-tab (Vue actualiza el ref directamente).
 
 // Load selfie (profile photo) for display throughout the form
 const loadSelfie = async () => {
@@ -1612,23 +1612,7 @@ onUnmounted(() => {
 
       <!-- Tabs -->
       <div class="bg-white rounded-xl shadow-sm mb-6">
-        <div class="border-b border-gray-100">
-          <nav class="flex -mb-px">
-            <button
-              v-for="tab in tabs"
-              :key="tab.id"
-              :class="[
-                'px-6 py-3 text-sm font-medium border-b transition-colors',
-                activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              ]"
-              @click="switchTab(tab.id)"
-            >
-              {{ tab.label }}
-            </button>
-          </nav>
-        </div>
+        <TabsBar :tabs="tabs" v-model:active-tab="activeTab" />
 
         <!-- Tab Content -->
         <div class="p-6">

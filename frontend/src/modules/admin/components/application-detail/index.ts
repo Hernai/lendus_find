@@ -21,3 +21,4 @@ export { default as ApplicationNotFoundState } from './ApplicationNotFoundState.
 export { default as DocumentViewerModal } from './DocumentViewerModal.vue'
 export { default as AddressSection } from './AddressSection.vue'
 export { default as EmploymentSection } from './EmploymentSection.vue'
+export { default as TabsBar } from './TabsBar.vue'
