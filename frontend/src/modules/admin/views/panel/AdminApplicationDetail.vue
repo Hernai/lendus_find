@@ -11,6 +11,7 @@ import {
   NotesSection,
   RisksSection,
   VerifiableField,
+  LoanDetailsSection,
 } from '@/modules/admin/components/application-detail'
 import { staff } from '@/modules/admin/services'
 import type { Application, Document, Reference, BankAccount } from './applicationDetail.types'
@@ -28,16 +29,6 @@ import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent, Documen
 const log = logger.child('AdminApplicationDetail')
 const toast = useToast()
 const { loadDocumentTypes, getDocumentTypeLabel } = useDocumentTypes()
-
-const paymentFrequencyLabel = (freq?: string | null): string => {
-  switch (freq) {
-    case 'WEEKLY': case 'SEMANAL': return 'Semanal'
-    case 'BIWEEKLY': case 'QUINCENAL': return 'Quincenal'
-    case 'MONTHLY': case 'MENSUAL': return 'Mensual'
-    case 'SINGLE': return 'Pago único'
-    default: return 'Mensual'
-  }
-}
 
 // Load document types from backend on mount
 onBeforeMount(async () => {
@@ -2415,50 +2406,7 @@ onUnmounted(() => {
             </div>
 
             <!-- Loan Details -->
-            <div class="border border-gray-200 rounded-lg">
-              <div class="bg-gray-50 px-3 py-2 border-b border-gray-200">
-                <h3 class="text-sm font-semibold text-gray-900">Detalles del Crédito</h3>
-              </div>
-              <div class="p-3">
-                <div class="grid grid-cols-4 gap-3 text-sm">
-                  <div>
-                    <p class="text-xs text-gray-500">Producto</p>
-                    <p class="font-medium text-gray-900">{{ application.loan.product_name || '—' }}</p>
-                  </div>
-                  <div>
-                    <p class="text-xs text-gray-500">Monto</p>
-                    <p class="font-bold text-gray-900">{{ formatMoney(application.loan.requested_amount) }}</p>
-                  </div>
-                  <div>
-                    <p class="text-xs text-gray-500">Plazo</p>
-                    <p class="font-medium text-gray-900">
-                      <template v-if="application.loan.term_in_days">{{ application.loan.requested_term_days }} días</template>
-                      <template v-else>{{ application.loan.term_months ?? application.loan.requested_term_months }} meses</template>
-                    </p>
-                  </div>
-                  <div>
-                    <p class="text-xs text-gray-500">Frecuencia</p>
-                    <p class="font-medium text-gray-900">{{ paymentFrequencyLabel(application.loan.payment_frequency) }}</p>
-                  </div>
-                  <div>
-                    <p class="text-xs text-gray-500">Tasa</p>
-                    <p class="font-medium text-gray-900">{{ application.loan.interest_rate }}% anual</p>
-                  </div>
-                  <div>
-                    <p class="text-xs text-gray-500">Pago</p>
-                    <p class="font-bold text-gray-900">{{ formatMoney(application.loan.monthly_payment) }}</p>
-                  </div>
-                  <div>
-                    <p class="text-xs text-gray-500">Total</p>
-                    <p class="font-medium text-gray-900">{{ formatMoney(application.loan.total_to_pay) }}</p>
-                  </div>
-                  <div>
-                    <p class="text-xs text-gray-500">Destino</p>
-                    <p class="font-medium text-gray-900">{{ application.loan.purpose_label || application.loan.purpose || '—' }}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <LoanDetailsSection :loan="application.loan" />
 
             <!-- Signature - only show if product requires it or if user already signed -->
             <div v-if="requiresSignature || application.signature?.has_signed" class="border border-gray-200 rounded-lg">
