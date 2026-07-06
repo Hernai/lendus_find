@@ -15,6 +15,8 @@ import {
   LoanSummaryCards,
   CompletenessCard,
   SignatureSection,
+  ApplicationNotFoundState,
+  DocumentViewerModal,
 } from '@/modules/admin/components/application-detail'
 import { staff } from '@/modules/admin/services'
 import type { Application, Document, Reference, BankAccount } from './applicationDetail.types'
@@ -2403,20 +2405,11 @@ onUnmounted(() => {
     </template>
 
     <!-- Empty State (no loading, no error, no application) -->
-    <div v-else class="flex flex-col items-center justify-center py-12 text-center">
-      <svg class="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
-      <h2 class="text-xl font-semibold text-gray-900 mb-2">Solicitud no encontrada</h2>
-      <p class="text-gray-600 mb-4">La solicitud que buscas no existe o no tienes acceso.</p>
-      <button
-        class="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors"
-        :style="{ backgroundColor: tenantStore.branding?.primary_color || '#7c3aed' }"
-        @click="goBack"
-      >
-        Volver al listado
-      </button>
-    </div>
+    <ApplicationNotFoundState
+      v-else
+      :primary-color="tenantStore.branding?.primary_color || '#7c3aed'"
+      @back="goBack"
+    />
 
     <!-- API Log Detail Modal -->
     <!-- API Log Detail Modal removido: la nueva ActivityTimeline expande
@@ -2946,76 +2939,12 @@ onUnmounted(() => {
     />
 
     <!-- Document Viewer Modal -->
-    <div
-      v-if="showDocViewerModal"
-      class="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
-      @click.self="showDocViewerModal = false"
-    >
-      <div class="relative w-full max-w-4xl mx-4 max-h-[90vh] bg-white rounded-xl overflow-hidden">
-        <!-- Header -->
-        <div class="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
-          <h3 class="text-lg font-semibold text-gray-900 truncate">{{ docViewerName }}</h3>
-          <div class="flex items-center gap-2">
-            <a
-              :href="docViewerUrl"
-              target="_blank"
-              class="p-2 text-gray-500 hover:text-gray-700 transition-colors"
-              title="Abrir en nueva pestaña"
-            >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-            </a>
-            <button
-              class="p-2 text-gray-500 hover:text-gray-700 transition-colors"
-              title="Cerrar"
-              @click="showDocViewerModal = false"
-            >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Content -->
-        <div class="p-4 overflow-auto" style="max-height: calc(90vh - 80px);">
-          <!-- Image viewer -->
-          <img
-            v-if="docViewerMimeType.startsWith('image/')"
-            :src="docViewerUrl"
-            :alt="docViewerName"
-            class="max-w-full h-auto mx-auto rounded-lg shadow-lg"
-          />
-
-          <!-- PDF viewer fallback (iframe) -->
-          <iframe
-            v-else-if="docViewerMimeType === 'application/pdf'"
-            :src="docViewerUrl"
-            class="w-full h-[70vh] rounded-lg"
-            frameborder="0"
-          />
-
-          <!-- Unknown type -->
-          <div v-else class="text-center py-12">
-            <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <p class="text-gray-500 mb-4">Este tipo de archivo no se puede previsualizar</p>
-            <a
-              :href="docViewerUrl"
-              target="_blank"
-              class="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              Descargar archivo
-            </a>
-          </div>
-        </div>
-      </div>
-    </div>
+    <DocumentViewerModal
+      v-model:show="showDocViewerModal"
+      :url="docViewerUrl"
+      :name="docViewerName"
+      :mime-type="docViewerMimeType"
+    />
 
     <!-- Selfie Viewer Modal -->
     <Teleport to="body">
