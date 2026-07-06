@@ -27,7 +27,25 @@ export interface OnboardingStepBase {
   // Los renderers deben defaultear a string vacío cuando lo lean.
   label?: string
   required?: boolean
+  // Filtra el paso según integraciones activas del tenant (antes se leía por cast).
+  condition?: 'if_kyc_provider' | 'unless_kyc_provider'
+  // Elige un DISEÑO alternativo del mismo tipo de paso en el registry (opcional).
+  // El registry resuelve type[/variant]; sin variant usa el diseño default.
+  variant?: string
+  // Config libre para pasos custom (p.ej. { min: 3000 }). Los pasos base la ignoran.
+  config?: Record<string, unknown>
 }
+
+/**
+ * CONTRATO DE RENDERER (todo `steps/*StepRenderer.vue` lo cumple):
+ *   props:  { step, modelValue, formData? }
+ *   emits:  'update:modelValue'  — el valor capturado por el paso
+ *           'update:valid'       — booleano: ¿este paso satisface SU propia validación?
+ *
+ * `update:valid` refleja SOLO la validez intrínseca del renderer; la combinación con
+ * `step.required` la hace el runner (DynamicOnboardingView). Emitir con
+ * `watch(isValid, ..., { immediate: true })` para reportar el estado inicial.
+ */
 
 export interface SelectStep extends OnboardingStepBase {
   type: 'select'

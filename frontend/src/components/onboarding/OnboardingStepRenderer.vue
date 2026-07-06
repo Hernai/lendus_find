@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue'
+import { computed } from 'vue'
 import type { OnboardingStep } from '@/types/v2/onboardingStep'
+import { useTenantStore } from '@/stores/tenant'
+import { resolveStepComponent } from '@/components/onboarding/stepRegistry'
 
 const props = defineProps<{
   step: OnboardingStep
@@ -11,44 +13,30 @@ const props = defineProps<{
 
 defineEmits<{
   (e: 'update:modelValue', v: unknown): void
+  // Validez intrínseca del paso (contrato de renderer). Ver onboardingStep.ts.
+  (e: 'update:valid', valid: boolean): void
 }>()
 
+const tenantStore = useTenantStore()
+
 /**
- * Despacha cada step al renderer correspondiente. Los renderers se
- * cargan async para code-splitting (el bundle de un onboarding pesado
- * con KYC no se baja si el paso es trivial).
+ * Resuelve el renderer del paso vía el registry (type[/variant], extensible por
+ * tenant). El registry maneja el fallback a PendingStepRenderer.
  */
-const PendingStepRenderer = defineAsyncComponent(
-  () => import('@/components/onboarding/steps/PendingStepRenderer.vue'),
+const resolved = computed(() =>
+  resolveStepComponent(props.step.type, props.step.variant, tenantStore.slug),
 )
-
-const renderers = {
-  select: defineAsyncComponent(() => import('@/components/onboarding/steps/SelectStepRenderer.vue')),
-  state_city: defineAsyncComponent(() => import('@/components/onboarding/steps/StateCityStepRenderer.vue')),
-  number_select: defineAsyncComponent(() => import('@/components/onboarding/steps/NumberSelectStepRenderer.vue')),
-  review: defineAsyncComponent(() => import('@/components/onboarding/steps/ReviewStepRenderer.vue')),
-  references: defineAsyncComponent(() => import('@/components/onboarding/steps/ReferencesStepRenderer.vue')),
-  bank_account: defineAsyncComponent(() => import('@/components/onboarding/steps/BankAccountStepRenderer.vue')),
-  kyc_ine: defineAsyncComponent(() => import('@/components/onboarding/steps/KycIneStepRenderer.vue')),
-  kyc_selfie: defineAsyncComponent(() => import('@/components/onboarding/steps/KycSelfieStepRenderer.vue')),
-  review_full: defineAsyncComponent(() => import('@/components/onboarding/steps/ReviewStepRenderer.vue')),
-  personal_data: defineAsyncComponent(() => import('@/components/onboarding/steps/PersonalDataStepRenderer.vue')),
-  address: defineAsyncComponent(() => import('@/components/onboarding/steps/AddressStepRenderer.vue')),
-} as const
-
-function rendererFor(type: OnboardingStep['type']) {
-  return renderers[type] ?? PendingStepRenderer
-}
 </script>
 
 <template>
   <!-- modelValue se declara como `unknown` aquí porque cada renderer interpreta su shape específico.
        El cast a `any` en el template es intencional: el contrato de cada renderer valida su payload. -->
   <component
-    :is="rendererFor(step.type)"
+    :is="resolved"
     :step="(step as any)"
     :model-value="(modelValue as any)"
     :form-data="formData"
     @update:model-value="$emit('update:modelValue', $event)"
+    @update:valid="$emit('update:valid', $event)"
   />
 </template>
