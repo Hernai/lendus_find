@@ -80,3 +80,43 @@ La cuenta Apple Developer/Play Console puede ser:
 - Por SOFOM (cuando lo pidan) — cada uno gestiona la suya
 
 La decisión de cuenta no afecta el código; solo cambia quién firma y sube.
+
+## Onboarding: variantes y pasos custom por tenant
+
+El flujo de onboarding es **config-driven**: la lista de pasos vive en
+`products.onboarding_steps` (JSONB en backend, sembrado por tenant) y la recorre
+`DynamicOnboardingView`. Cada paso tiene un `type` que el registry
+(`src/components/onboarding/stepRegistry.ts`) resuelve a un componente-renderer.
+Los pasos son **compartidos**: los tenants difieren por config/branding, no copiando
+pantallas. Hay tres niveles de personalización, todos aditivos y sin `if (tenant === …)`:
+
+**1. Reordenar / togglear pasos** — reordena o quita entradas del array
+`onboarding_steps` del producto. Sin código.
+
+**2. Variante de diseño de un paso existente** (p.ej. otra pantalla de `personal_data`):
+- Crea el componente en `src/components/onboarding/steps/<type>/<Variant>.vue` cumpliendo
+  el **contrato de renderer** (props `step`/`modelValue`/`formData?`; emite
+  `update:modelValue` y `update:valid`; ver `src/types/v2/onboardingStep.ts`).
+- Regístralo como variante del tipo en `stepRegistry.ts` (o vía el registro por tenant, abajo).
+- En el producto, marca el paso con `"variant": "<nombre>"`. El registry resuelve
+  variante → default.
+
+**3. Paso completamente custom de un tenant** (p.ej. `liquidity_check` de MoneyCapital):
+- Crea la pantalla en `tenants/<slug>/onboarding/<Screen>.vue` cumpliendo el mismo contrato.
+- Crea `tenants/<slug>/onboarding.register.ts`:
+  ```ts
+  import { registerTenantSteps } from '@/components/onboarding/stepRegistry'
+  registerTenantSteps('<slug>', {
+    liquidity_check: { default: () => import('./onboarding/LiquidityCheck.vue') },
+    // o una variante de un tipo base:
+    // personal_data: { default: ..., variants: { wizard: () => import('./onboarding/PersonalWizard.vue') } },
+  })
+  ```
+  `tenants/registerAll.ts` lo descubre e importa solo (glob eager) — no edites nada más.
+- En el producto, referencia el paso: `{ "id": "liquidity", "type": "liquidity_check", "config": { … } }`.
+
+**Validación:** cada renderer es dueño de la suya (emite `update:valid`). Un paso custom
+que no emita el contrato cae a un fallback (`stepValidation.ts`: exige un valor no vacío).
+
+El nombre del tenant aparece SOLO en la ruta del archivo + el 1er argumento de
+`registerTenantSteps`. El core (registry, runner) nunca conoce tenants.

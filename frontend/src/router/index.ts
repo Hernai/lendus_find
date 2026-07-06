@@ -8,6 +8,9 @@ import { platform } from '@/platform'
 import { mobileRoutes } from './routes/mobile'
 import { adminRoutes } from '@/modules/admin/routes'
 import { webRoutes } from './routes/web'
+// Side-effect: corre los registerTenantSteps de cada tenant (pasos/variantes custom
+// del onboarding) al boot. Auto-descubre tenants/<slug>/onboarding.register.ts.
+import '@tenants/registerAll'
 
 const routes: RouteRecordRaw[] = [
   // Rutas del entry-point móvil nativo (/m/*) — ver ./routes/mobile.ts
