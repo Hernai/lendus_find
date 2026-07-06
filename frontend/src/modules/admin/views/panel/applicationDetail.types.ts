@@ -9,6 +9,18 @@
 
 import type { ClabeValidationSummary } from '@/modules/admin/components/application-detail/BankAccountsSection.vue'
 
+/**
+ * Claves de campo verificables manualmente (verify/reject/unverify) en el detalle.
+ * Compartido entre el padre (verifyData/openRejectDataModal/openUnverifyModal) y
+ * ApplicantDataSection (tipa el payload de sus emits). Antes era un tipo local en
+ * AdminApplicationDetail.vue llamado `VerifiableField`, que colisionaba con el
+ * COMPONENTE homónimo; se renombró a VerifiableFieldKey al compartirlo.
+ */
+export type VerifiableFieldKey =
+  | 'first_name' | 'last_name_1' | 'last_name_2' | 'curp' | 'rfc' | 'ine_clave'
+  | 'birth_date' | 'phone' | 'email' | 'address' | 'employment'
+  | 'passport_number' | 'passport_issue_date' | 'passport_expiry_date'
+
 export interface Document {
   id: string
   type: string
