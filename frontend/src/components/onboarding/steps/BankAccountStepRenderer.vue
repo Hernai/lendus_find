@@ -29,6 +29,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: BankAccount]
+  'update:valid': [valid: boolean]
 }>()
 
 const type = ref<BankAccount['type']>(props.modelValue?.type ?? 'CLABE')
@@ -42,6 +43,15 @@ const bankLabel = computed(() => {
   if (!bankCode.value) return ''
   return BANKS.find((b) => b.code === bankCode.value)?.name ?? bankCode.value
 })
+
+// Validez del paso (contrato): banco + número con la longitud correcta
+// (CLABE 18 / CARD 16). Reproduce legacyCanContinue('bank_account'), congelado en
+// stepValidation.spec.ts.
+const isValid = computed(() =>
+  !!bankCode.value && !!accountNumber.value &&
+  accountNumber.value.replace(/\D/g, '').length === (type.value === 'CARD' ? 16 : 18),
+)
+watch(isValid, (v) => emit('update:valid', v), { immediate: true })
 
 const maxDigits = computed(() => (type.value === 'CLABE' ? 18 : 16))
 const digitCount = computed(() => accountNumber.value.replace(/\D/g, '').length)

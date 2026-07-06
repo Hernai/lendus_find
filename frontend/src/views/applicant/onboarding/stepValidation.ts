@@ -12,13 +12,16 @@ export interface StepValidationContext {
 }
 
 /**
- * Validación "legacy" por tipo de paso: la fuente de verdad ORIGINAL del gate
- * "Continuar" del onboarding dinámico. Se está migrando al contrato `update:valid`
- * de cada renderer (plan Fases 1-3); mientras un tipo no lo adopte, el runner
- * (DynamicOnboardingView) cae aquí.
+ * Validación por tipo de paso — spec canónica del gate "Continuar" del onboarding.
  *
- * Es PURA: no toca stores ni refs. Existe un test-oráculo (stepValidation.spec.ts)
- * que congela su comportamiento para detectar cualquier regresión durante la migración.
+ * Los 11 tipos base ya son dueños de su validación en el renderer (contrato
+ * `update:valid`), reproduciendo EXACTAMENTE la validez de aquí. Esta función queda
+ * como (a) FALLBACK del runner para tipos sin contrato (p.ej. un paso custom de
+ * tenant que no emita update:valid → cae a la rama default: un valor no vacío), y
+ * (b) spec ejecutable de las reglas de validación, congelada por stepValidation.spec.ts.
+ *
+ * Es PURA: no toca stores ni refs (el contexto se inyecta). Si cambias una regla aquí,
+ * actualiza el `isValid` del renderer correspondiente para que sigan en paridad.
  */
 export function legacyCanContinue(
   s: OnboardingStep,

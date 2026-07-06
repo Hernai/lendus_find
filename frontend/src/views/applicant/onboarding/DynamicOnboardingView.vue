@@ -90,13 +90,16 @@ const currentValue = computed({
 const rendererValid = ref(false)
 watch(currentStep, () => { rendererValid.value = false })
 
-// Tipos cuyo renderer YA es dueño de su validación (contrato update:valid). Crece
-// 1 por fase de migración; mientras un tipo no esté aquí, se usa legacyCanContinue.
+// Tipos cuyo renderer es dueño de su validación (contrato update:valid). Los 11
+// tipos base están migrados; un tipo fuera de este set (p.ej. un paso CUSTOM de
+// tenant que no implemente el contrato) cae a legacyCanContinue como fallback.
 const MIGRATED_TYPES = new Set<OnboardingStep['type']>([
-  // Fase 1 (triviales): validez movida al renderer vía contrato update:valid.
+  // Fase 1 (triviales).
   'select', 'number_select', 'state_city', 'kyc_selfie', 'review', 'review_full',
   // Fase 2 (formularios).
   'address', 'personal_data',
+  // Fase 3 (complejos con contexto: ownPhone / hasKycProvider).
+  'references', 'bank_account', 'kyc_ine',
 ])
 
 // legacyCanContinue (validación por tipo) vive en ./stepValidation: función PURA

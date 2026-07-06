@@ -36,6 +36,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: KycIneData]
+  'update:valid': [valid: boolean]
 }>()
 
 const tenantStore = useTenantStore()
@@ -65,6 +66,15 @@ const isCurpValid = computed(() => CURP_REGEX.test((personal.value.curp || '').t
 const isClaveValid = computed(() => CLAVE_REGEX.test((personal.value.clave_elector || '').toUpperCase()))
 const isOcrValid = computed(() => OCR_REGEX.test(personal.value.numero_ocr || ''))
 const isFolioValid = computed(() => FOLIO_REGEX.test(personal.value.folio_ine || ''))
+
+// Validez del paso (contrato): frente + reverso obligatorios; con proveedor KYC
+// basta con eso, sin proveedor exige CURP + clave de elector + OCR válidos.
+// Reproduce legacyCanContinue('kyc_ine'), congelado en stepValidation.spec.ts.
+const isValid = computed(() =>
+  !!front.value && !!back.value &&
+  (hasKycProvider.value || (isCurpValid.value && isClaveValid.value && isOcrValid.value)),
+)
+watch(isValid, (v) => emit('update:valid', v), { immediate: true })
 
 function onCurpInput(event: Event) {
   personal.value.curp = (event.target as HTMLInputElement).value.toUpperCase().replace(/\s/g, '')

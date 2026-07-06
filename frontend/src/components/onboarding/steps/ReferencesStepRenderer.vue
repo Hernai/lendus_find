@@ -28,6 +28,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: Reference[]]
+  'update:valid': [valid: boolean]
 }>()
 
 // Estructura inicial: 1 familiar + 1 personal
@@ -73,6 +74,16 @@ const dupError = computed(() => {
   if (phoneIsOwn.value) return 'El teléfono de una referencia es el tuyo. Usa el de otra persona.'
   return ''
 })
+
+// Validez del paso (contrato): ambas referencias con nombre+teléfono válidos y
+// distintas entre sí / del propio cliente (dupError). Reproduce legacyCanContinue
+// ('references'), congelado en stepValidation.spec.ts.
+const isValid = computed(() =>
+  validName(family.value.name) && validPhone(family.value.phone) &&
+  validName(personal.value.name) && validPhone(personal.value.phone) &&
+  !dupError.value,
+)
+watch(isValid, (v) => emit('update:valid', v), { immediate: true })
 
 function handlePhoneInput(ref: Reference, ev: Event) {
   const input = ev.target as HTMLInputElement
