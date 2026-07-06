@@ -12,6 +12,9 @@ import {
   RisksSection,
   VerifiableField,
   LoanDetailsSection,
+  LoanSummaryCards,
+  CompletenessCard,
+  SignatureSection,
 } from '@/modules/admin/components/application-detail'
 import { staff } from '@/modules/admin/services'
 import type { Application, Document, Reference, BankAccount } from './applicationDetail.types'
@@ -1635,61 +1638,12 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Completeness Card - Compact design -->
-      <div class="bg-white rounded-xl shadow-sm p-4 mb-5">
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Avance del Expediente</h3>
-          <div class="flex items-center gap-2">
-            <span :class="['text-lg font-bold', completenessColor.text]">{{ completenessPercent }}%</span>
-            <span
-              v-if="completenessPercent >= 100"
-              class="px-1.5 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded"
-            >
-              Completo
-            </span>
-          </div>
-        </div>
-
-        <!-- Progress Bar (thinner for cleaner look) -->
-        <div class="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden mb-3">
-          <div
-            :class="['h-full rounded-full transition-all duration-500', completenessColor.bg]"
-            :style="{ width: completenessPercent + '%' }"
-          />
-        </div>
-
-        <!-- Checklist - Compact design -->
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-          <div
-            v-for="item in completenessItems"
-            :key="item.label"
-            :class="[
-              'flex items-center gap-1.5 px-2 py-1.5 rounded text-xs',
-              item.complete ? 'bg-green-50 border border-green-200' : item.partial ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50 border border-gray-200'
-            ]"
-          >
-            <div
-              :class="[
-                'w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0',
-                item.complete ? 'bg-green-500' : item.partial ? 'bg-yellow-500' : 'bg-gray-300'
-              ]"
-            >
-              <svg v-if="item.complete" class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-              </svg>
-              <svg v-else-if="item.partial" class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
-              </svg>
-            </div>
-            <span :class="[
-              'font-medium truncate',
-              item.complete ? 'text-green-700' : item.partial ? 'text-yellow-700' : 'text-gray-500'
-            ]">
-              {{ item.label }}
-            </span>
-          </div>
-        </div>
-      </div>
+      <!-- Avance del Expediente -->
+      <CompletenessCard
+        :percent="completenessPercent"
+        :color="completenessColor"
+        :items="completenessItems"
+      />
 
       <!-- Tabs -->
       <div class="bg-white rounded-xl shadow-sm mb-6">
@@ -1783,27 +1737,7 @@ onUnmounted(() => {
             </Teleport>
 
             <!-- Summary Cards -->
-            <div class="grid grid-cols-4 gap-3">
-              <div class="bg-gray-50 rounded px-3 py-2">
-                <p class="text-xs text-gray-500">Monto</p>
-                <p class="text-lg font-bold text-gray-900">{{ formatMoney(application.loan.requested_amount) }}</p>
-              </div>
-              <div class="bg-gray-50 rounded px-3 py-2">
-                <p class="text-xs text-gray-500">Pago</p>
-                <p class="text-lg font-bold text-gray-900">{{ formatMoney(application.loan.monthly_payment) }}</p>
-              </div>
-              <div class="bg-gray-50 rounded px-3 py-2">
-                <p class="text-xs text-gray-500">Plazo</p>
-                <p class="text-lg font-bold text-gray-900">
-                  <template v-if="application.loan.term_in_days">{{ application.loan.requested_term_days }} días</template>
-                  <template v-else>{{ application.loan.term_months ?? application.loan.requested_term_months }} meses</template>
-                </p>
-              </div>
-              <div class="bg-gray-50 rounded px-3 py-2">
-                <p class="text-xs text-gray-500">Tasa</p>
-                <p class="text-lg font-bold text-gray-900">{{ application.loan.interest_rate }}%</p>
-              </div>
-            </div>
+            <LoanSummaryCards :loan="application.loan" />
 
             <!-- Applicant Info - Improved UI with completion/verification distinction -->
             <div class="border border-gray-200 rounded-lg">
@@ -2409,46 +2343,10 @@ onUnmounted(() => {
             <LoanDetailsSection :loan="application.loan" />
 
             <!-- Signature - only show if product requires it or if user already signed -->
-            <div v-if="requiresSignature || application.signature?.has_signed" class="border border-gray-200 rounded-lg">
-              <div class="bg-gray-50 px-3 py-2 border-b border-gray-200">
-                <h3 class="text-sm font-semibold text-gray-900">Firma Digital</h3>
-              </div>
-              <div class="p-3">
-                <div v-if="application.signature?.has_signed" class="flex items-start gap-4">
-                  <div class="flex-shrink-0">
-                    <img
-                      v-if="application.signature.signature_base64"
-                      :src="application.signature.signature_base64.startsWith('data:') ? application.signature.signature_base64 : `data:image/png;base64,${application.signature.signature_base64}`"
-                      alt="Firma del solicitante"
-                      class="w-48 h-24 object-contain border border-gray-200 rounded bg-white"
-                    >
-                    <div v-else class="w-48 h-24 flex items-center justify-center border border-gray-200 rounded bg-gray-50 text-gray-400 text-sm">
-                      Firma no disponible
-                    </div>
-                  </div>
-                  <div class="text-sm">
-                    <div class="flex items-center gap-2 text-green-600 mb-1">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span class="font-medium">Firmado digitalmente</span>
-                    </div>
-                    <p v-if="application.signature.signature_date" class="text-xs text-gray-500">
-                      Fecha: {{ formatDateTime(application.signature.signature_date) }}
-                    </p>
-                    <p v-if="application.signature.signature_ip" class="text-xs text-gray-500">
-                      IP: {{ application.signature.signature_ip }}
-                    </p>
-                  </div>
-                </div>
-                <div v-else class="flex items-center gap-2 text-amber-600">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <span class="text-sm">Pendiente de firma</span>
-                </div>
-              </div>
-            </div>
+            <SignatureSection
+              v-if="requiresSignature || application.signature?.has_signed"
+              :signature="application.signature"
+            />
 
             <!-- Notes -->
             <NotesSection
