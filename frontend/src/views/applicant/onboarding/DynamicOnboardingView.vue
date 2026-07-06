@@ -95,6 +95,8 @@ watch(currentStep, () => { rendererValid.value = false })
 const MIGRATED_TYPES = new Set<OnboardingStep['type']>([
   // Fase 1 (triviales): validez movida al renderer vía contrato update:valid.
   'select', 'number_select', 'state_city', 'kyc_selfie', 'review', 'review_full',
+  // Fase 2 (formularios).
+  'address', 'personal_data',
 ])
 
 // legacyCanContinue (validación por tipo) vive en ./stepValidation: función PURA

@@ -29,7 +29,25 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: PersonalExtra]
+  'update:valid': [valid: boolean]
 }>()
+
+// Validez del paso (contrato): nombre/apellido ≥2, fecha de 10 chars, género M/F,
+// mexicano SI/NO (+birth_state si SI) y RFC válido. Se computa del modelValue
+// comprometido para igualar legacyCanContinue, congelado en stepValidation.spec.ts.
+const isValid = computed(() => {
+  const pd = props.modelValue
+  if (!pd) return false
+  if (!pd.first_name || pd.first_name.trim().length < 2) return false
+  if (!pd.last_name || pd.last_name.trim().length < 2) return false
+  if (!pd.birth_date || pd.birth_date.length !== 10) return false
+  if (pd.gender !== 'M' && pd.gender !== 'F') return false
+  if (pd.is_mexican !== 'SI' && pd.is_mexican !== 'NO') return false
+  if (pd.is_mexican === 'SI' && !pd.birth_state) return false
+  if (!pd.rfc || !/^[A-ZÑ&]{4}\d{6}[A-Z0-9]{3}$/.test(pd.rfc.toUpperCase())) return false
+  return true
+})
+watch(isValid, (v) => emit('update:valid', v), { immediate: true })
 
 const tenantStore = useTenantStore()
 

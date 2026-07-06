@@ -34,7 +34,21 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: AddressData]
+  'update:valid': [valid: boolean]
 }>()
+
+// Validez del paso (contrato): domicilio completo con CP de 5 dígitos y antigüedad
+// > 0. Se computa del modelValue comprometido para igualar legacyCanContinue,
+// congelado en stepValidation.spec.ts.
+const isValid = computed(() => {
+  const ad = props.modelValue
+  return !!ad
+    && /^\d{5}$/.test(ad.postal_code || '')
+    && !!ad.state && !!ad.municipality && !!ad.neighborhood && !!ad.street && !!ad.ext_number
+    && !!ad.housing_type
+    && ((ad.years_at_address ?? 0) > 0 || (ad.months_at_address ?? 0) > 0)
+})
+watch(isValid, (v) => emit('update:valid', v), { immediate: true })
 
 const tenantStore = useTenantStore()
 
