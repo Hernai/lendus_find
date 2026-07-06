@@ -276,7 +276,10 @@ class MoneyCapitalSeeder extends Seeder
             // nacimiento, RFC. Solo si no hay proveedor KYC que los extraiga/derive.
             ['id' => 'personal_data', 'type' => 'personal_data', 'label' => 'Datos personales', 'required' => true, 'condition' => 'unless_kyc_provider'],
             // Domicilio queda en step separado porque tiene CP, estado, municipio, etc.
-            ['id' => 'address', 'type' => 'address', 'label' => 'Domicilio', 'required' => true, 'condition' => 'unless_kyc_provider'],
+            // SIEMPRE se captura: el INE/Nubarium NO aporta domicilio, así que no debe
+            // filtrarse por `unless_kyc_provider` (con proveedor KYC quedaba fuera del
+            // flujo y el domicilio llegaba vacío al admin).
+            ['id' => 'address', 'type' => 'address', 'label' => 'Domicilio', 'required' => true],
             ['id' => 'kyc_face', 'type' => 'kyc_selfie', 'label' => 'Validación facial', 'required' => true],
             ['id' => 'review_full', 'type' => 'review_full', 'label' => 'Revisión final'],
         ];

@@ -391,10 +391,14 @@ class ProfileController extends Controller
 
         $person->update($validated);
 
-        // Si se completó/cambió el nombre, actualiza el titular de las cuentas
-        // que quedaron con el placeholder y dispara su validación con Nubarium.
-        $nameChanged = (bool) array_intersect($changedFields, ['first_name', 'last_name_1', 'last_name_2']);
-        if ($nameChanged) {
+        // Reconciliar el titular de las cuentas que quedaron con el placeholder
+        // "TITULAR NO DEFINIDO" y disparar su validación con Nubarium. Se corre
+        // SIEMPRE que ya exista nombre (no solo cuando cambia en ESTE PATCH): en el
+        // flujo KYC el OCR (IneVerificationService::saveIdentificationsFromIne)
+        // escribe el nombre ANTES de este endpoint, así que `nameChanged` salía
+        // false y el placeholder nunca se reemplazaba. El backfill es idempotente:
+        // solo toca filas con el placeholder y re-encola StartClabeValidationJob.
+        if (trim((string) $person->full_name) !== '') {
             $this->backfillBankAccountHolders($person);
         }
 
