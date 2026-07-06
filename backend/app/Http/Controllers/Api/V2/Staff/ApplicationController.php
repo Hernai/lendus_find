@@ -2646,10 +2646,19 @@ class ApplicationController extends Controller
             }
         }
 
-        // Get KYC verification methods that should lock documents
+        // Métodos KYC/oficiales que marcan un campo como verificado (para bloquear
+        // el documento asociado). Incluye las fuentes gubernamentales CURP/RENAPO y
+        // RFC/SAT: sin ellas, un campo validado SOLO por esas vías (p.ej. rfc vía SAT,
+        // que no viene en el OCR de la INE) no aparecía como KYC-verificado en el admin.
+        // Alineado con VerificationMethod::isAutomated() y el $isOfficialSource de
+        // VerificationService.
         $kycMethods = [
             \App\Enums\VerificationMethod::KYC_INE_OCR->value,
             \App\Enums\VerificationMethod::KYC_INE_LIST->value,
+            \App\Enums\VerificationMethod::KYC_CURP_RENAPO->value,
+            \App\Enums\VerificationMethod::RENAPO->value,
+            \App\Enums\VerificationMethod::KYC_RFC_SAT->value,
+            \App\Enums\VerificationMethod::SAT->value,
             \App\Enums\VerificationMethod::KYC_FACE_MATCH->value,
             \App\Enums\VerificationMethod::KYC_LIVENESS->value,
             \App\Enums\VerificationMethod::NUBARIUM->value,
