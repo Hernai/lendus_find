@@ -191,6 +191,12 @@ export const useAuthStore = defineStore('auth', () => {
       if (response.success || response.data) {
         otpDestination.value = identifierValue
         otpMethod.value = method
+        // Persistir el flujo OTP (destino + método) con TTL de 15 min para que la
+        // verificación sobreviva a un re-init del store (relaunch/reload del app
+        // móvil). Sin esto el ref en memoria se pierde y el verify devuelve
+        // "El código expiró" al instante. Se limpia al verificar o en logout.
+        storage.set(STORAGE_KEYS.OTP_DESTINATION, identifierValue, 15 * 60 * 1000)
+        storage.set(STORAGE_KEYS.OTP_METHOD, method, 15 * 60 * 1000)
         otpExpiresAt.value = response.data?.expires_at
           ? new Date(response.data.expires_at)
           : new Date(Date.now() + 10 * 60 * 1000)
@@ -212,7 +218,21 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const verifyOtp = async (code: string): Promise<VerifyOtpResponse> => {
+    // Si el ref en memoria se perdió (re-init del store por relaunch/reload del app
+    // móvil mientras el usuario iba a leer el SMS), rehidratamos destino/método desde
+    // storage (persistidos en sendOtp con TTL). Solo si sigue sin destino asumimos que
+    // el flujo realmente caducó — evita el falso "El código expiró" inmediato.
     if (!otpDestination.value) {
+      const persistedDest = storage.get<string>(STORAGE_KEYS.OTP_DESTINATION)
+      if (persistedDest) {
+        otpDestination.value = persistedDest
+        otpMethod.value = storage.get<OtpMethod>(STORAGE_KEYS.OTP_METHOD) ?? otpMethod.value
+      }
+    }
+    if (!otpDestination.value) {
+      // Sin identificador (ni en memoria ni en storage) no hay a quién verificar
+      // contra el backend: se pide un código nuevo. Es el ÚNICO corte legítimo en
+      // cliente — la vigencia de un código existente siempre la decide el backend.
       return { success: false, error: 'OTP_EXPIRED' }
     }
 
@@ -276,10 +296,12 @@ export const useAuthStore = defineStore('auth', () => {
         hasPin.value = false // Will be updated on checkUser
         needsPinSetup.value = isPhoneAuth
 
-        // Clear OTP state
+        // Clear OTP state (memoria + storage persistido)
         otpDestination.value = null
         otpMethod.value = null
         otpExpiresAt.value = null
+        storage.remove(STORAGE_KEYS.OTP_DESTINATION)
+        storage.remove(STORAGE_KEYS.OTP_METHOD)
 
         // Initialize WebSocket
         connectRealtime(authData.token)
@@ -297,9 +319,30 @@ export const useAuthStore = defineStore('auth', () => {
     } catch (error: unknown) {
       authLogger.error('Failed to verify OTP', error)
 
-      // Handle 401 - invalid code
-      if ((error as { response?: { status?: number } })?.response?.status === 401) {
-        return { success: false, error: 'INVALID_CODE', attempts_remaining: 4 }
+      // La AUTORIDAD sobre la vigencia del OTP es el backend (OtpRequest.expires_at
+      // + validación Nubarium): traducimos su veredicto en vez de inventarlo en el
+      // cliente. El backend responde (ver AuthController::verify):
+      //  - OTP_NOT_FOUND (HTTP 400): la OTP expiró, ya se usó o superó intentos → "expiró"
+      //  - TOO_MANY_ATTEMPTS (HTTP 429): máximo de intentos alcanzado
+      //  - INVALID_CODE (HTTP 400/401) o cualquier otro: código incorrecto
+      const err = error as {
+        response?: { status?: number; data?: { error?: string; attempts_remaining?: number } }
+      }
+      const status = err?.response?.status
+      const backendCode = err?.response?.data?.error
+
+      if (status === 429 || backendCode === 'TOO_MANY_ATTEMPTS') {
+        return { success: false, error: 'MAX_ATTEMPTS_EXCEEDED' }
+      }
+      if (backendCode === 'OTP_NOT_FOUND') {
+        return { success: false, error: 'OTP_EXPIRED' }
+      }
+      if (status === 400 || status === 401 || backendCode === 'INVALID_CODE') {
+        return {
+          success: false,
+          error: 'INVALID_CODE',
+          attempts_remaining: err?.response?.data?.attempts_remaining,
+        }
       }
 
       throw error
@@ -372,6 +415,8 @@ export const useAuthStore = defineStore('auth', () => {
       otpDestination.value = null
       otpMethod.value = null
       otpExpiresAt.value = null
+      storage.remove(STORAGE_KEYS.OTP_DESTINATION)
+      storage.remove(STORAGE_KEYS.OTP_METHOD)
 
       // Desconectar WebSocket
       disconnectRealtime()

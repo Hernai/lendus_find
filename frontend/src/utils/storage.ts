@@ -230,6 +230,12 @@ export const storage = {
 export const STORAGE_KEYS = {
   AUTH_TOKEN: 'auth_token',
   REFRESH_TOKEN: 'refresh_token',
+  // Flujo OTP en curso (destino + método). Se persisten con TTL para que la
+  // verificación sobreviva a un re-init del store (relaunch/reload del app móvil):
+  // sin esto, `otpDestination` (ref en memoria) se pierde y el verify devuelve
+  // "El código expiró" al instante aunque el código siga vigente.
+  OTP_DESTINATION: 'otp_destination',
+  OTP_METHOD: 'otp_method',
   CURRENT_USER_ID: 'current_user_id',
   CURRENT_USER_TYPE: 'current_user_type', // 'staff' | 'applicant'
   CURRENT_TENANT_ID: 'current_tenant_id',

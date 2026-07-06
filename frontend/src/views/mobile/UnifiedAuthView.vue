@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore, useTenantStore, useApplicationStore } from '@/stores'
 import { logger } from '@/utils/logger'
 import { formatPhoneInput } from '@/utils/formatters'
+import { storage, STORAGE_KEYS } from '@/utils/storage'
 import type { OtpMethod } from '@/types'
 
 /**
@@ -219,6 +220,17 @@ async function handleSubmit() {
 onMounted(async () => {
   if (!tenantStore.isLoaded) await tenantStore.loadConfig()
   tenantStore.applyTheme()
+
+  // Si hay un flujo OTP por teléfono en curso persistido (el usuario salió a leer el
+  // SMS y el app se reinició), restauramos la pantalla de código en vez de volver a
+  // pedir el teléfono. La vigencia real la sigue decidiendo el backend al verificar.
+  const pendingDest = storage.get<string>(STORAGE_KEYS.OTP_DESTINATION)
+  if (pendingDest && /^\d{10}$/.test(pendingDest) && !codeSent.value) {
+    const pendingMethod = storage.get<OtpMethod>(STORAGE_KEYS.OTP_METHOD)
+    if (pendingMethod === 'sms' || pendingMethod === 'whatsapp') method.value = pendingMethod
+    phone.value = formatPhoneInput(pendingDest)
+    codeSent.value = true
+  }
 })
 
 watch(method, () => {
