@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTenantStore } from '@/stores/tenant'
 import type { ReviewStep, ReviewFullStep } from '@/types/v2/onboardingStep'
@@ -23,9 +23,14 @@ const props = defineProps<{
 
 const isFullReview = computed(() => props.step.type === 'review_full')
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'update:modelValue', v: true): void
+  (e: 'update:valid', valid: boolean): void
 }>()
+
+// El review es de solo lectura → siempre permite continuar (contrato update:valid).
+// Se re-emite al cambiar de step por si el componente se reutiliza (review/review_full).
+watch(() => props.step.id, () => emit('update:valid', true), { immediate: true })
 
 const router = useRouter()
 const tenantStore = useTenantStore()

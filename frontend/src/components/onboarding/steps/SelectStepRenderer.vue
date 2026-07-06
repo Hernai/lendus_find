@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useTenantStore } from '@/stores/tenant'
 import type { SelectStep } from '@/types/v2/onboardingStep'
 
@@ -22,9 +22,17 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
+  'update:valid': [valid: boolean]
 }>()
 
 const tenantStore = useTenantStore()
+
+// Validez del paso (contrato update:valid): un valor no vacío. Reproduce la rama
+// default de legacyCanContinue, congelada en stepValidation.spec.ts.
+const isValid = computed(() =>
+  props.modelValue !== null && props.modelValue !== '' && props.modelValue !== undefined,
+)
+watch(isValid, (v) => emit('update:valid', v), { immediate: true })
 
 interface Option { value: string | number; label: string }
 

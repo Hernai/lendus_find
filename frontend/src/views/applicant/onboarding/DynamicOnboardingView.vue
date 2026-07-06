@@ -92,7 +92,10 @@ watch(currentStep, () => { rendererValid.value = false })
 
 // Tipos cuyo renderer YA es dueño de su validación (contrato update:valid). Crece
 // 1 por fase de migración; mientras un tipo no esté aquí, se usa legacyCanContinue.
-const MIGRATED_TYPES = new Set<OnboardingStep['type']>([])
+const MIGRATED_TYPES = new Set<OnboardingStep['type']>([
+  // Fase 1 (triviales): validez movida al renderer vía contrato update:valid.
+  'select', 'number_select', 'state_city', 'kyc_selfie', 'review', 'review_full',
+])
 
 // legacyCanContinue (validación por tipo) vive en ./stepValidation: función PURA
 // con test-oráculo (stepValidation.spec.ts). El runner le inyecta el contexto de stores.

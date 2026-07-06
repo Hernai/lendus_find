@@ -21,6 +21,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: number]
+  'update:valid': [valid: boolean]
 }>()
 
 const sheetOpen = ref(true)
@@ -29,6 +30,13 @@ const localValue = ref<number | null>(props.modelValue)
 watch(() => props.modelValue, (v) => {
   localValue.value = v
 })
+
+// Validez del paso (contrato): un valor seleccionado (0 es válido). Reproduce la
+// rama default de legacyCanContinue, congelada en stepValidation.spec.ts.
+const isValid = computed(() =>
+  props.modelValue !== null && props.modelValue !== undefined,
+)
+watch(isValid, (v) => emit('update:valid', v), { immediate: true })
 
 onMounted(() => {
   // Auto-abrir sheet al montar

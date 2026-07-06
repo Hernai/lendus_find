@@ -22,7 +22,17 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: { state: string; city: string }]
+  'update:valid': [valid: boolean]
 }>()
+
+// Validez del paso (contrato): estado Y ciudad presentes en el valor emitido.
+// Se computa del modelValue (el valor comprometido) para igualar legacyCanContinue,
+// congelado en stepValidation.spec.ts (incluye el caso de ciudad custom).
+const isValid = computed(() => {
+  const sc = props.modelValue
+  return !!sc && !!sc.state && !!sc.city
+})
+watch(isValid, (v) => emit('update:valid', v), { immediate: true })
 
 const tenantStore = useTenantStore()
 

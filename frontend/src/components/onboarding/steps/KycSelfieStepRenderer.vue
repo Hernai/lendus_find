@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { KycSelfieStep } from '@/types/v2/onboardingStep'
 import { platform } from '@/platform'
 
@@ -17,7 +17,15 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
+  'update:valid': [valid: boolean]
 }>()
+
+// Validez del paso (contrato): un selfie capturado (string no vacío). Reproduce
+// legacyCanContinue('kyc_selfie'), congelado en stepValidation.spec.ts.
+const isValid = computed(() =>
+  typeof props.modelValue === 'string' && props.modelValue.length > 0,
+)
+watch(isValid, (v) => emit('update:valid', v), { immediate: true })
 
 const selfie = ref<string | null>(props.modelValue ?? null)
 const loading = ref(false)
