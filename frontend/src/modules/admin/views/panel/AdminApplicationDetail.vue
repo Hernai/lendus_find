@@ -17,6 +17,8 @@ import {
   SignatureSection,
   ApplicationNotFoundState,
   DocumentViewerModal,
+  AddressSection,
+  EmploymentSection,
 } from '@/modules/admin/components/application-detail'
 import { staff } from '@/modules/admin/services'
 import type { Application, Document, Reference, BankAccount } from './applicationDetail.types'
@@ -713,48 +715,9 @@ const parseChangeValue = (change: string, part: 'old' | 'new'): string => {
   return part === 'old' ? (parts[0] ?? '') : (parts[1] ?? '')
 }
 
-const getEmploymentType = (type: string) => {
-  const option = tenantStore.options.employmentType.find(o => o.value === type)
-  return option?.label || type
-}
-
-const getHousingType = (type: string) => {
-  const option = tenantStore.options.housingType.find(o => o.value === type)
-  return option?.label || type
-}
-
-const formatAddressTenure = (years?: number, months?: number) => {
-  if (years === undefined && months === undefined) return '—'
-  if (years === null && months === null) return '—'
-
-  const parts = []
-  if (years && years > 0) {
-    parts.push(`${years} ${years === 1 ? 'año' : 'años'}`)
-  }
-  if (months && months > 0) {
-    parts.push(`${months} ${months === 1 ? 'mes' : 'meses'}`)
-  }
-
-  return parts.length > 0 ? parts.join(', ') : 'Menos de 1 mes'
-}
-
-// Convert total months to "X años, Y meses" format
-const formatTenureFromMonths = (totalMonths?: number) => {
-  if (totalMonths === undefined || totalMonths === null) return '—'
-
-  const years = Math.floor(totalMonths / 12)
-  const months = totalMonths % 12
-
-  const parts = []
-  if (years > 0) {
-    parts.push(`${years} ${years === 1 ? 'año' : 'años'}`)
-  }
-  if (months > 0) {
-    parts.push(`${months} ${months === 1 ? 'mes' : 'meses'}`)
-  }
-
-  return parts.length > 0 ? parts.join(', ') : 'Menos de 1 mes'
-}
+// getEmploymentType/getHousingType (dependen de tenantStore) y formatAddressTenure/
+// formatTenureFromMonths (puras) se movieron a EmploymentSection/AddressSection,
+// sus únicos consumidores.
 
 const getPurpose = (purpose: string) => {
   const purposes: Record<string, string> = {
@@ -2134,211 +2097,31 @@ onUnmounted(() => {
             <!-- Address & Employment Row -->
             <div class="grid grid-cols-2 gap-4">
               <!-- Address -->
-              <div class="border border-gray-200 rounded-lg">
-                <div class="bg-gray-50 px-3 py-1.5 border-b border-gray-200 flex items-center justify-between">
-                  <div class="flex items-center gap-2">
-                    <span
-                      class="w-2 h-2 rounded-full flex-shrink-0"
-                      :class="isFieldRejected('address') ? 'bg-red-500' : isFieldVerified('address') ? 'bg-green-500' : isFieldPending('address') ? 'bg-yellow-500' : application.address.street ? 'bg-blue-500' : 'bg-gray-300'"
-                    ></span>
-                    <h3 class="text-sm font-semibold text-gray-900">Domicilio</h3>
-                  </div>
-                  <div class="flex items-center gap-0.5">
-                    <button
-                      v-if="!isFieldVerified('address') && !isFieldRejected('address')"
-                      class="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors text-gray-500 hover:bg-green-100 hover:text-green-700"
-                      :disabled="isVerifyingData"
-                      title="Verificar domicilio"
-                      @click="verifyData('address', 'verify')"
-                    >
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span>Verificar</span>
-                    </button>
-                    <button
-                      v-if="isFieldVerified('address')"
-                      class="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors bg-green-100 text-green-700 hover:bg-gray-100"
-                      :disabled="isVerifyingData"
-                      title="Quitar verificación"
-                      @click="verifyData('address', 'unverify')"
-                    >
-                      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                      </svg>
-                      <span>Verificado</span>
-                    </button>
-                    <button
-                      v-if="!isFieldVerified('address') && !isFieldRejected('address')"
-                      class="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors text-gray-500 hover:bg-red-100 hover:text-red-700"
-                      :disabled="isVerifyingData"
-                      title="Rechazar domicilio"
-                      @click="openRejectDataModal('address')"
-                    >
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span>Rechazar</span>
-                    </button>
-                    <button
-                      v-if="isFieldRejected('address')"
-                      class="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors bg-red-100 text-red-700 hover:bg-gray-100"
-                      :disabled="isVerifyingData"
-                      title="Quitar rechazo"
-                      @click="openUnverifyModal('address')"
-                    >
-                      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                      </svg>
-                      <span>Rechazado</span>
-                    </button>
-                  </div>
-                </div>
-                <div class="p-3">
-                  <div v-if="isFieldRejected('address')" class="mb-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
-                    <span class="font-semibold">⚠ Dato rechazado:</span> {{ getFieldVerification('address')?.rejection_reason }}
-                  </div>
-                  <div class="grid grid-cols-2 gap-2 text-sm">
-                    <div class="col-span-2">
-                      <p class="text-xs text-gray-500">Dirección</p>
-                      <p class="font-medium text-gray-900">
-                        {{ application.address.street || '—' }} {{ application.address.ext_number }}
-                        <span v-if="application.address.int_number">, Int. {{ application.address.int_number }}</span>
-                      </p>
-                    </div>
-                    <div>
-                      <p class="text-xs text-gray-500">Colonia</p>
-                      <p class="font-medium text-gray-900">{{ application.address.neighborhood || '—' }}</p>
-                    </div>
-                    <div>
-                      <p class="text-xs text-gray-500">C.P.</p>
-                      <p class="font-medium text-gray-900">{{ application.address.postal_code || '—' }}</p>
-                    </div>
-                    <div v-if="application.address.city && application.address.city !== application.address.municipality">
-                      <p class="text-xs text-gray-500">Ciudad</p>
-                      <p class="font-medium text-gray-900">{{ application.address.city }}</p>
-                    </div>
-                    <div>
-                      <p class="text-xs text-gray-500">Municipio/Estado</p>
-                      <p class="font-medium text-gray-900">{{ application.address.municipality || '—' }}, {{ application.address.state || '—' }}</p>
-                    </div>
-                    <div>
-                      <p class="text-xs text-gray-500">Vivienda</p>
-                      <p class="font-medium text-gray-900">{{ application.address.housing_type_label || getHousingType(application.address.housing_type) || '—' }}</p>
-                    </div>
-                    <div>
-                      <p class="text-xs text-gray-500">Antigüedad en domicilio</p>
-                      <p class="font-medium text-gray-900">{{ formatAddressTenure(application.address.years_at_address, application.address.months_at_address) }}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <AddressSection
+                :address="application.address"
+                :is-verified="isFieldVerified('address')"
+                :is-rejected="isFieldRejected('address')"
+                :is-pending="isFieldPending('address')"
+                :is-verifying="isVerifyingData"
+                :rejection-reason="getFieldVerification('address')?.rejection_reason"
+                @verify="(action) => verifyData('address', action)"
+                @reject="openRejectDataModal('address')"
+                @unreject="openUnverifyModal('address')"
+              />
 
               <!-- Employment -->
-              <div class="border border-gray-200 rounded-lg">
-                <div class="bg-gray-50 px-3 py-1.5 border-b border-gray-200 flex items-center justify-between">
-                  <div class="flex items-center gap-2">
-                    <span
-                      class="w-2 h-2 rounded-full flex-shrink-0"
-                      :class="isFieldRejected('employment') ? 'bg-red-500' : isFieldVerified('employment') ? 'bg-green-500' : isFieldPending('employment') ? 'bg-yellow-500' : application.employment.employment_type ? 'bg-blue-500' : 'bg-gray-300'"
-                    ></span>
-                    <h3 class="text-sm font-semibold text-gray-900">Información Laboral</h3>
-                  </div>
-                  <div class="flex items-center gap-0.5">
-                    <button
-                      v-if="!isFieldVerified('employment') && !isFieldRejected('employment')"
-                      class="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors text-gray-500 hover:bg-green-100 hover:text-green-700"
-                      :disabled="isVerifyingData"
-                      title="Verificar empleo"
-                      @click="verifyData('employment', 'verify')"
-                    >
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span>Verificar</span>
-                    </button>
-                    <button
-                      v-if="isFieldVerified('employment')"
-                      class="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors bg-green-100 text-green-700 hover:bg-gray-100"
-                      :disabled="isVerifyingData"
-                      title="Quitar verificación"
-                      @click="verifyData('employment', 'unverify')"
-                    >
-                      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                      </svg>
-                      <span>Verificado</span>
-                    </button>
-                    <button
-                      v-if="!isFieldVerified('employment') && !isFieldRejected('employment')"
-                      class="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors text-gray-500 hover:bg-red-100 hover:text-red-700"
-                      :disabled="isVerifyingData"
-                      title="Rechazar empleo"
-                      @click="openRejectDataModal('employment')"
-                    >
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span>Rechazar</span>
-                    </button>
-                    <button
-                      v-if="isFieldRejected('employment')"
-                      class="flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-colors bg-red-100 text-red-700 hover:bg-gray-100"
-                      :disabled="isVerifyingData"
-                      title="Quitar rechazo"
-                      @click="openUnverifyModal('employment')"
-                    >
-                      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                      </svg>
-                      <span>Rechazado</span>
-                    </button>
-                  </div>
-                </div>
-                <div class="p-3">
-                  <div v-if="isFieldRejected('employment')" class="mb-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
-                    <span class="font-semibold">⚠ Dato rechazado:</span> {{ getFieldVerification('employment')?.rejection_reason }}
-                  </div>
-                  <div class="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <p class="text-xs text-gray-500">Tipo</p>
-                      <p class="font-medium text-gray-900">{{ getEmploymentType(application.employment.employment_type || '') || '—' }}</p>
-                    </div>
-                    <div>
-                      <p class="text-xs text-gray-500">Empresa</p>
-                      <p class="font-medium text-gray-900">{{ application.employment.company_name || '—' }}</p>
-                    </div>
-                    <div>
-                      <p class="text-xs text-gray-500">Puesto</p>
-                      <p class="font-medium text-gray-900">{{ application.employment.position || '—' }}</p>
-                    </div>
-                    <div>
-                      <p class="text-xs text-gray-500">Antigüedad</p>
-                      <p class="font-medium text-gray-900">{{ formatTenureFromMonths(application.employment.seniority_months) }}</p>
-                    </div>
-                    <div class="col-span-2">
-                      <p class="text-xs text-gray-500">Ingreso mensual</p>
-                      <p class="font-bold text-gray-900 text-lg">
-                        <template v-if="application.employment.monthly_income">
-                          {{ formatMoney(application.employment.monthly_income) }}
-                          <span v-if="application.employment.income_range_label" class="text-xs font-normal text-gray-500">
-                            ({{ application.employment.income_range_label }})
-                          </span>
-                        </template>
-                        <template v-else>{{ application.employment.income_range_label || '—' }}</template>
-                      </p>
-                    </div>
-                    <div class="col-span-2">
-                      <p class="text-xs text-gray-500">Préstamos en línea solicitados (onboarding)</p>
-                      <p class="font-medium text-gray-900">
-                        {{ application.online_loans_count != null
-                          ? (application.online_loans_count === 10 ? '10 o más' : application.online_loans_count)
-                          : '—' }}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <EmploymentSection
+                :employment="application.employment"
+                :online-loans-count="application.online_loans_count ?? null"
+                :is-verified="isFieldVerified('employment')"
+                :is-rejected="isFieldRejected('employment')"
+                :is-pending="isFieldPending('employment')"
+                :is-verifying="isVerifyingData"
+                :rejection-reason="getFieldVerification('employment')?.rejection_reason"
+                @verify="(action) => verifyData('employment', action)"
+                @reject="openRejectDataModal('employment')"
+                @unreject="openUnverifyModal('employment')"
+              />
             </div>
 
             <!-- Loan Details -->
