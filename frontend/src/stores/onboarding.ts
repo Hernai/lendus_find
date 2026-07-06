@@ -829,6 +829,54 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           }
           break
         }
+        case 'asset_type': {
+          // Bien a arrendar (+ snapshot de modalidad) → applications.metadata.lease
+          const appId = applicationStore.currentApplication?.id
+          if (appId && payload != null) {
+            try {
+              await applicationService.update(appId, { metadata: { lease: payload } } as never)
+            } catch (e) {
+              stepHadError = true
+              onboardingLogger.warn('update lease metadata failed', { error: e, stepId })
+            }
+          }
+          break
+        }
+        case 'company_data': {
+          // Datos de la empresa (persona moral) → applications.metadata.company
+          const appId = applicationStore.currentApplication?.id
+          if (appId && payload != null) {
+            try {
+              await applicationService.update(appId, { metadata: { company: payload } } as never)
+            } catch (e) {
+              stepHadError = true
+              onboardingLogger.warn('update company metadata failed', { error: e, stepId })
+            }
+          }
+          break
+        }
+        case 'applicant_type_select': {
+          // Persona física / moral. Dirige la ramificación (formData) y se guarda
+          // como applicant_type de la solicitud + espejo en metadata.applicant_kind.
+          const appId = applicationStore.currentApplication?.id
+          const kind = payload === 'COMPANY' ? 'COMPANY' : 'INDIVIDUAL'
+          if (appId) {
+            try {
+              await applicationService.update(appId, {
+                applicant_type: kind,
+                metadata: { applicant_kind: kind },
+              } as never)
+            } catch (e) {
+              stepHadError = true
+              onboardingLogger.warn('update applicant_type failed', { error: e, stepId })
+            }
+          }
+          break
+        }
+        case 'company_docs':
+          // La carga real de documentos va en el módulo posterior; aquí solo se
+          // reconoce el requisito (nada que persistir a nivel de solicitud).
+          break
         case 'review':
           break
         case 'references': {

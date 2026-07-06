@@ -205,7 +205,10 @@ const form = ref({
     foreigners: [] as string[]
   },
   is_active: true,
-  is_default: false
+  is_default: false,
+  // Arrendamiento — solo aplica cuando type === 'ARRENDAMIENTO'. Se persiste en rules.lease.
+  lease_modality: '' as string,
+  asset_types: [] as string[]
 })
 
 // Document applicant type selection
@@ -257,6 +260,15 @@ const typeOptions = computed(() => tenantStore.options.productType)
 
 // Frequency options from backend enum
 const frequencyOptions = computed(() => tenantStore.options.paymentFrequency)
+
+// Arrendamiento: catálogos de modalidad y tipos de activo (backend enums).
+const leaseModalityOptions = computed(() => tenantStore.options.leaseModality ?? [])
+const assetTypeOptions = computed(() => tenantStore.options.assetType ?? [])
+const toggleAssetType = (value: string) => {
+  const i = form.value.asset_types.indexOf(value)
+  if (i >= 0) form.value.asset_types.splice(i, 1)
+  else form.value.asset_types.push(value)
+}
 
 const activeFilterOptions = [
   { value: '', label: 'Todos' },
@@ -325,7 +337,9 @@ const openCreateModal = () => {
       foreigners: ['PASSPORT', 'RESIDENCE_CARD', 'PROOF_OF_ADDRESS']
     },
     is_active: true,
-    is_default: false
+    is_default: false,
+    lease_modality: '',
+    asset_types: []
   }
   // Initialize newTermInput for all frequencies for proper reactivity
   newTermInput.value = {
@@ -366,6 +380,10 @@ const openEditModal = (product: Product) => {
     })
   }
 
+  // rules.lease (arrendamiento): modalidad + catálogo de activos del producto.
+  const lease = (product.rules as Record<string, unknown> | undefined)?.lease as
+    { modality?: string; asset_types?: string[] } | undefined
+
   form.value = {
     name: product.name,
     code: product.code || '',
@@ -385,7 +403,9 @@ const openEditModal = (product: Product) => {
     max_term_days: Number(product.rules?.max_term_days ?? 30),
     required_documents: normalizeRequiredDocuments(product.required_documents),
     is_active: product.is_active,
-    is_default: product.is_default ?? false
+    is_default: product.is_default ?? false,
+    lease_modality: lease?.modality ?? '',
+    asset_types: lease?.asset_types ?? []
   }
   // Initialize newTermInput for all frequencies for proper reactivity
   newTermInput.value = {
@@ -496,6 +516,15 @@ const submitForm = async () => {
     }
     if (form.value.payment_frequencies.includes('SINGLE')) {
       rules.amortization_type = 'BULLET'
+    }
+    // Arrendamiento: modalidad + catálogo de activos → rules.lease
+    // (preserva otras claves como purchase_option/residual_value_pct).
+    if (form.value.type === 'ARRENDAMIENTO') {
+      rules.lease = {
+        ...((existingRules.lease as Record<string, unknown>) ?? {}),
+        modality: form.value.lease_modality || null,
+        asset_types: form.value.asset_types,
+      }
     }
 
     const payload = {
@@ -1001,6 +1030,47 @@ onMounted(fetchProducts)
                         {{ opt.label }}
                       </option>
                     </select>
+                  </div>
+                </div>
+
+                <!-- Arrendamiento: modalidad + catálogo de activos (solo type ARRENDAMIENTO) -->
+                <div v-if="form.type === 'ARRENDAMIENTO'" class="p-4 rounded-lg border border-primary-100 bg-primary-50/40 space-y-4">
+                  <p class="text-sm font-semibold text-gray-700">Configuración de arrendamiento</p>
+
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Modalidad</label>
+                    <div class="flex flex-wrap gap-2">
+                      <label
+                        v-for="opt in leaseModalityOptions"
+                        :key="opt.value"
+                        :class="[
+                          'px-3 py-2 rounded-lg border cursor-pointer text-sm transition-colors',
+                          form.lease_modality === opt.value ? 'border-primary-500 bg-primary-100 text-primary-700' : 'border-gray-200 bg-white text-gray-600'
+                        ]"
+                      >
+                        <input v-model="form.lease_modality" type="radio" :value="opt.value" class="sr-only" />
+                        {{ opt.label }}
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Tipos de activo arrendables</label>
+                    <div class="flex flex-wrap gap-2">
+                      <button
+                        v-for="opt in assetTypeOptions"
+                        :key="opt.value"
+                        type="button"
+                        :class="[
+                          'px-3 py-2 rounded-lg border text-sm transition-colors',
+                          form.asset_types.includes(opt.value) ? 'border-primary-500 bg-primary-100 text-primary-700' : 'border-gray-200 bg-white text-gray-600'
+                        ]"
+                        @click="toggleAssetType(opt.value)"
+                      >
+                        {{ opt.label }}
+                      </button>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500">El aplicante elegirá uno de estos en el onboarding.</p>
                   </div>
                 </div>
 

@@ -38,6 +38,8 @@ interface EnumOptions {
   applicationStatus: Option[]
   // Product enums
   productType: Option[]
+  leaseModality: Option[]
+  assetType: Option[]
   // Admin enums
   userType: Option[]
   rejectionReason: Option[]
@@ -161,6 +163,8 @@ const defaultOptions: EnumOptions = {
   applicationStatus: [],
   // Product enums
   productType: [],
+  leaseModality: [],
+  assetType: [],
   // Admin enums
   userType: [],
   rejectionReason: [],
@@ -261,7 +265,7 @@ export const useTenantStore = defineStore('tenant', () => {
         // Garantizamos mexicanState (default vacío) ya que en V2ConfigOptions es opcional
         // pero el shape local EnumOptions lo requiere.
         options.value = response.data.options
-          ? { mexicanState: [], ...response.data.options }
+          ? { mexicanState: [], leaseModality: [], assetType: [], ...response.data.options }
           : defaultOptions
 
         // Initialize formatters with enum options from backend

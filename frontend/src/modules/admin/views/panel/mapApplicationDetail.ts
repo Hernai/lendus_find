@@ -96,6 +96,7 @@ export function mapApplicationDetail(
     updated_at: data.updated_at,
     assigned_to: workflow?.assigned_to?.name ?? undefined,
     online_loans_count: data.online_loans_count ?? null,
+    lease_info: (data as unknown as { lease_info?: Application['lease_info'] }).lease_info ?? null,
     required_documents: requiredDocTypesRaw,
     completeness: {
       personal_data: !!person,

@@ -835,6 +835,14 @@ class ApplicationController extends Controller
             ?? $app->metadata['credit_history']
             ?? null;
 
+        // Datos de ARRENDAMIENTO captados en el onboarding (metadata) para el panel.
+        // Solo tiene contenido en solicitudes de productos ARRENDAMIENTO.
+        $data['lease_info'] = [
+            'applicant_kind' => $app->metadata['applicant_kind'] ?? $app->applicant_type,
+            'lease' => $app->metadata['lease'] ?? null,
+            'company' => $app->metadata['company'] ?? null,
+        ];
+
         // =========================================================
         // APPLICANT - Person or Company with all related data
         // Structure mirrors profile API response

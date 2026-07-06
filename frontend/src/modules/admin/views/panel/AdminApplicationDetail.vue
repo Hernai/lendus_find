@@ -16,6 +16,7 @@ import {
   ApplicationNotFoundState,
   AddressSection,
   EmploymentSection,
+  LeaseInfoSection,
   TabsBar,
   ApplicantDataSection,
   IneVerificationModal,
@@ -1219,6 +1220,9 @@ onUnmounted(() => {
                 @reject="openRejectDataModal('employment')"
                 @unreject="openUnverifyModal('employment')"
               />
+
+              <!-- Arrendamiento (solo solicitudes de productos ARRENDAMIENTO) -->
+              <LeaseInfoSection :lease-info="application.lease_info" />
             </div>
 
             <!-- Loan Details -->

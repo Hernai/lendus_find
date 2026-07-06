@@ -126,6 +126,22 @@ export interface ApplicationCompleteness {
   signature: boolean
 }
 
+export interface LeaseInfo {
+  applicant_kind?: string | null
+  lease?: {
+    asset_type?: string | null
+    modality?: string | null
+    asset_description?: string | null
+    asset_estimated_value?: number | null
+  } | null
+  company?: {
+    legal_name?: string | null
+    rfc?: string | null
+    legal_entity_type?: string | null
+    incorporation_date?: string | null
+  } | null
+}
+
 export interface Application {
   id: string
   folio: string
@@ -134,6 +150,7 @@ export interface Application {
   updated_at: string
   assigned_to?: string
   online_loans_count?: number | null
+  lease_info?: LeaseInfo | null
   completeness: ApplicationCompleteness
   required_documents: string[] | { nationals: string[]; foreigners: string[] }
   applicant: {

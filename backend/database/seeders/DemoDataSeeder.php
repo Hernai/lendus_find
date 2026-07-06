@@ -135,11 +135,11 @@ class DemoDataSeeder extends Seeder
                 'display_order' => 2,
             ],
             [
-                'code' => 'ARRE-001',
-                'name' => 'Arrendamiento',
+                'code' => 'ARRE-PURO-001',
+                'name' => 'Arrendamiento Puro',
                 'type' => 'ARRENDAMIENTO',
-                'description' => 'Arrendamiento de vehículos y maquinaria',
-                'icon' => 'truck',
+                'description' => 'Arrendamiento puro de paneles solares, vehículos y maquinaria (sin opción de compra).',
+                'icon' => 'key',
                 'min_amount' => 50000,
                 'max_amount' => 1000000,
                 'min_term_months' => 12,
@@ -149,26 +149,69 @@ class DemoDataSeeder extends Seeder
                 'late_fee_rate' => 4.0,
                 'payment_frequencies' => ['MONTHLY'],
                 'display_order' => 3,
+                // Config de arrendamiento (va a rules.lease); el admin la edita.
+                'lease' => [
+                    'modality' => 'PURO',
+                    'asset_types' => ['SOLAR_PANELS', 'VEHICLE', 'MACHINERY'],
+                    'purchase_option' => false,
+                    'residual_value_pct' => null,
+                ],
+                'onboarding_steps' => $this->leaseOnboardingSteps(),
+            ],
+            [
+                'code' => 'ARRE-FIN-001',
+                'name' => 'Arrendamiento Financiero',
+                'type' => 'ARRENDAMIENTO',
+                'description' => 'Arrendamiento financiero con opción de compra al final del plazo.',
+                'icon' => 'key',
+                'min_amount' => 50000,
+                'max_amount' => 2000000,
+                'min_term_months' => 12,
+                'max_term_months' => 60,
+                'interest_rate' => 16.0,
+                'opening_commission' => 2.0,
+                'late_fee_rate' => 4.0,
+                'payment_frequencies' => ['MONTHLY'],
+                'display_order' => 4,
+                'lease' => [
+                    'modality' => 'FINANCIERO',
+                    'asset_types' => ['SOLAR_PANELS', 'VEHICLE', 'MACHINERY'],
+                    'purchase_option' => true,
+                    'residual_value_pct' => 15,
+                ],
+                'onboarding_steps' => $this->leaseOnboardingSteps(),
             ],
         ];
 
         foreach ($products as $p) {
+            // `lease` y `onboarding_steps` no son columnas planas: se extraen para
+            // no pasarlas como atributos sueltos al modelo. `lease` se anida en
+            // `rules.lease`; `onboarding_steps` es su propia columna JSONB.
+            $lease = $p['lease'] ?? null;
+            $steps = $p['onboarding_steps'] ?? null;
+            unset($p['lease'], $p['onboarding_steps']);
+
+            $rules = [
+                'min_amount' => $p['min_amount'],
+                'max_amount' => $p['max_amount'],
+                'min_term_months' => $p['min_term_months'],
+                'max_term_months' => $p['max_term_months'],
+                'default_term_months' => $p['min_term_months'],
+                'annual_rate' => $p['interest_rate'],
+                'opening_commission' => $p['opening_commission'],
+                'amortization_type' => 'FRENCH',
+                'payment_frequencies' => $p['payment_frequencies'],
+            ];
+            if ($lease !== null) {
+                $rules['lease'] = $lease;
+            }
+
             Product::updateOrCreate(
                 ['tenant_id' => $tenant->id, 'code' => $p['code']],
                 array_merge($p, [
                     'id' => Product::where('tenant_id', $tenant->id)->where('code', $p['code'])->value('id') ?? Str::uuid(),
                     'tenant_id' => $tenant->id,
-                    'rules' => [
-                        'min_amount' => $p['min_amount'],
-                        'max_amount' => $p['max_amount'],
-                        'min_term_months' => $p['min_term_months'],
-                        'max_term_months' => $p['max_term_months'],
-                        'default_term_months' => $p['min_term_months'],
-                        'annual_rate' => $p['interest_rate'],
-                        'opening_commission' => $p['opening_commission'],
-                        'amortization_type' => 'FRENCH',
-                        'payment_frequencies' => $p['payment_frequencies'],
-                    ],
+                    'rules' => $rules,
                     'required_documents' => [
                         'nationals' => [
                             ['type' => 'INE_FRONT', 'required' => true, 'description' => 'INE (Frente)'],
@@ -187,11 +230,46 @@ class DemoDataSeeder extends Seeder
                     ],
                     'extra_fields' => [],
                     'eligibility_rules' => ['min_age' => 18, 'max_age' => 75, 'requires_mexican_id' => true],
-                    'onboarding_steps' => null,
+                    'onboarding_steps' => $steps,
                     'is_active' => true,
                 ]),
             );
         }
+
+        // El viejo producto genérico 'ARRE-001' se reemplazó por Puro + Financiero.
+        // Si quedó sembrado de antes, lo desactivamos (no se borra por FK con solicitudes).
+        Product::where('tenant_id', $tenant->id)
+            ->where('code', 'ARRE-001')
+            ->update(['is_active' => false]);
+    }
+
+    /**
+     * Pipeline de onboarding para los productos de arrendamiento (demo).
+     * Ramifica persona física / empresa vía `condition` (if_individual / if_company).
+     * Los tipos custom (applicant_type_select, asset_type, company_data,
+     * company_docs) los renderiza el registro del tenant `demo`
+     * (frontend/tenants/demo/onboarding.register.ts); el resto son pasos base.
+     */
+    private function leaseOnboardingSteps(): array
+    {
+        return [
+            ['id' => 'applicant_type', 'type' => 'applicant_type_select', 'label' => 'Tipo de solicitante', 'required' => true],
+            ['id' => 'asset', 'type' => 'asset_type', 'label' => 'Bien a arrendar', 'required' => true],
+            // Rama EMPRESA (persona moral)
+            ['id' => 'company', 'type' => 'company_data', 'label' => 'Datos de la empresa', 'required' => true, 'condition' => 'if_company'],
+            ['id' => 'company_docs', 'type' => 'company_docs', 'label' => 'Documentos de la empresa', 'required' => true, 'condition' => 'if_company'],
+            // Rama PERSONA FÍSICA
+            ['id' => 'employment', 'type' => 'select', 'field' => 'employment_type', 'enum' => 'EmploymentType', 'label' => 'Ocupación', 'required' => true, 'condition' => 'if_individual'],
+            ['id' => 'salary_range', 'type' => 'select', 'field' => 'salary_range', 'enum' => 'SalaryRange', 'label' => 'Rango de ingresos', 'required' => true, 'condition' => 'if_individual'],
+            // Común a ambos
+            ['id' => 'location', 'type' => 'state_city', 'fields' => ['state', 'city'], 'label' => 'Estado y ciudad', 'required' => true],
+            ['id' => 'address', 'type' => 'address', 'label' => 'Domicilio', 'required' => true],
+            ['id' => 'references', 'type' => 'references', 'min' => 2, 'max' => 2, 'label' => 'Referencias', 'required' => true],
+            ['id' => 'bank_account', 'type' => 'bank_account', 'label' => 'Cuenta bancaria', 'required' => true],
+            ['id' => 'kyc_ine', 'type' => 'kyc_ine', 'label' => 'Validación de identidad', 'required' => true],
+            ['id' => 'kyc_face', 'type' => 'kyc_selfie', 'label' => 'Validación facial', 'required' => true],
+            ['id' => 'review', 'type' => 'review_full', 'label' => 'Revisión final'],
+        ];
     }
 
     private function createStaff(Tenant $tenant): void

@@ -176,6 +176,8 @@ class ConfigController extends Controller
             'applicationStatus' => ApplicationStatus::toOptions(),
             // Product enums
             'productType' => ProductType::toOptions(),
+            'leaseModality' => \App\Enums\LeaseModality::toOptions(),
+            'assetType' => \App\Enums\AssetType::toOptions(),
             // Admin enums
             'userType' => UserType::toOptions(),
             'rejectionReason' => RejectionReason::toOptions(),

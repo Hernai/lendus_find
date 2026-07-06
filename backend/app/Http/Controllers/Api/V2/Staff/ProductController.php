@@ -108,7 +108,24 @@ class ProductController extends Controller
                     $fail("$attribute tiene un tipo de documento inválido.");
                 }
             }],
-            'rules' => 'nullable|array',
+            // Config de arrendamiento (rules.lease): se valida con un closure sobre
+            // `rules` (NO reglas anidadas rules.lease.*, que harían que validated()
+            // recorte las demás claves de rules como min_amount/term_config).
+            'rules' => ['nullable', 'array', function ($attr, $value, $fail) {
+                $lease = is_array($value) ? ($value['lease'] ?? null) : null;
+                if (!is_array($lease)) {
+                    return;
+                }
+                if (!empty($lease['modality']) && !in_array($lease['modality'], \App\Enums\LeaseModality::values(), true)) {
+                    $fail('La modalidad de arrendamiento no es válida.');
+                }
+                foreach ((array) ($lease['asset_types'] ?? []) as $t) {
+                    if (!in_array($t, \App\Enums\AssetType::values(), true)) {
+                        $fail("Tipo de activo inválido: {$t}.");
+                    }
+                }
+            }],
+            'onboarding_steps' => 'sometimes|nullable|array',
             'eligibility_rules' => 'nullable|array',
             'is_active' => 'boolean',
             'is_default' => 'boolean',
@@ -221,7 +238,24 @@ class ProductController extends Controller
                     $fail("$attribute tiene un tipo de documento inválido.");
                 }
             }],
-            'rules' => 'nullable|array',
+            // Config de arrendamiento (rules.lease): se valida con un closure sobre
+            // `rules` (NO reglas anidadas rules.lease.*, que harían que validated()
+            // recorte las demás claves de rules como min_amount/term_config).
+            'rules' => ['nullable', 'array', function ($attr, $value, $fail) {
+                $lease = is_array($value) ? ($value['lease'] ?? null) : null;
+                if (!is_array($lease)) {
+                    return;
+                }
+                if (!empty($lease['modality']) && !in_array($lease['modality'], \App\Enums\LeaseModality::values(), true)) {
+                    $fail('La modalidad de arrendamiento no es válida.');
+                }
+                foreach ((array) ($lease['asset_types'] ?? []) as $t) {
+                    if (!in_array($t, \App\Enums\AssetType::values(), true)) {
+                        $fail("Tipo de activo inválido: {$t}.");
+                    }
+                }
+            }],
+            'onboarding_steps' => 'sometimes|nullable|array',
             'eligibility_rules' => 'nullable|array',
             'is_active' => 'boolean',
             'is_default' => 'boolean',
@@ -330,6 +364,7 @@ class ProductController extends Controller
             'payment_frequencies' => $product->payment_frequencies ?? [],
             'term_config' => $rules['term_config'] ?? null,
             'rules' => $rules,
+            'onboarding_steps' => $product->onboarding_steps,
             'required_documents' => $product->required_documents ?? [],
             'eligibility_rules' => $product->eligibility_rules ?? [],
             'is_active' => (bool) $product->is_active,

@@ -18,6 +18,11 @@ export type OnboardingStepType =
   | 'review_full'
   | 'personal_data'
   | 'address'
+  // Pasos custom del flujo de arrendamiento (registrados por el tenant demo).
+  | 'applicant_type_select'
+  | 'asset_type'
+  | 'company_data'
+  | 'company_docs'
 
 export interface OnboardingStepBase {
   id: string
@@ -27,8 +32,9 @@ export interface OnboardingStepBase {
   // Los renderers deben defaultear a string vacío cuando lo lean.
   label?: string
   required?: boolean
-  // Filtra el paso según integraciones activas del tenant (antes se leía por cast).
-  condition?: 'if_kyc_provider' | 'unless_kyc_provider'
+  // Filtra el paso según integraciones activas del tenant o la rama del flujo.
+  // if_company / if_individual: ramificación persona moral / física (arrendamiento).
+  condition?: 'if_kyc_provider' | 'unless_kyc_provider' | 'if_company' | 'if_individual'
   // Elige un DISEÑO alternativo del mismo tipo de paso en el registry (opcional).
   // El registry resuelve type[/variant]; sin variant usa el diseño default.
   variant?: string
@@ -102,6 +108,23 @@ export interface AddressStep extends OnboardingStepBase {
   type: 'address'
 }
 
+// --- Pasos custom del flujo de arrendamiento (tenant demo) ---
+export interface ApplicantTypeSelectStep extends OnboardingStepBase {
+  type: 'applicant_type_select'
+}
+
+export interface AssetTypeStep extends OnboardingStepBase {
+  type: 'asset_type'
+}
+
+export interface CompanyDataStep extends OnboardingStepBase {
+  type: 'company_data'
+}
+
+export interface CompanyDocsStep extends OnboardingStepBase {
+  type: 'company_docs'
+}
+
 export type OnboardingStep =
   | SelectStep
   | StateCityStep
@@ -114,3 +137,7 @@ export type OnboardingStep =
   | ReviewFullStep
   | PersonalDataStep
   | AddressStep
+  | ApplicantTypeSelectStep
+  | AssetTypeStep
+  | CompanyDataStep
+  | CompanyDocsStep

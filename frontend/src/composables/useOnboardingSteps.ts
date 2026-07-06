@@ -2,6 +2,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useApplicationStore } from '@/stores/application'
 import { useTenantStore } from '@/stores/tenant'
+import { useOnboardingStore } from '@/stores/onboarding'
 import type { OnboardingStep } from '@/types/v2/onboardingStep'
 
 /**
@@ -16,6 +17,7 @@ export function useOnboardingSteps() {
   const route = useRoute()
   const applicationStore = useApplicationStore()
   const tenantStore = useTenantStore()
+  const onboardingStore = useOnboardingStore()
 
   const steps = computed<OnboardingStep[]>(() => {
     const product = applicationStore.selectedProduct
@@ -24,11 +26,17 @@ export function useOnboardingSteps() {
     // `unless_kyc_provider`: el paso solo aplica si NO hay proveedor KYC activo
     // (porque típicamente Nubarium extrae estos datos del INE automáticamente).
     const hasKyc = tenantStore.hasKycProvider
+    // Rama persona física / moral (arrendamiento): la elige el paso
+    // `applicant_type_select` (id 'applicant_type') y vive en dynamicData.
+    // Hasta que el usuario elige, se asume INDIVIDUAL (muestra su rama).
+    const applicantKind = onboardingStore.dynamicData?.['applicant_type'] as string | undefined
     return raw.filter((s) => {
       const cond = (s as unknown as { condition?: string }).condition
       if (!cond) return true
       if (cond === 'unless_kyc_provider') return !hasKyc
       if (cond === 'if_kyc_provider') return hasKyc
+      if (cond === 'if_company') return applicantKind === 'COMPANY'
+      if (cond === 'if_individual') return applicantKind !== 'COMPANY'
       return true
     })
   })
