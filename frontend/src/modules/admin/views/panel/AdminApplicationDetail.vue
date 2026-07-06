@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeMount, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AppButton } from '@/components/common'
 import AdminDocumentGallery from '@/modules/admin/components/AdminDocumentGallery.vue'
 import ConfirmModal from '@/modules/admin/components/ConfirmModal.vue'
 import ActivityTimeline from '@/modules/admin/components/application-detail/ActivityTimeline.vue'
@@ -15,7 +14,6 @@ import {
   CompletenessCard,
   SignatureSection,
   ApplicationNotFoundState,
-  DocumentViewerModal,
   AddressSection,
   EmploymentSection,
   TabsBar,
@@ -23,24 +21,20 @@ import {
   IneVerificationModal,
   StatusChangeModal,
   AssignAnalystModal,
-  DocumentRejectModal,
   ReferenceVerifyModal,
   CounterOfferModal,
   ApplicationDetailHeader,
   SelfieViewerModal,
 } from '@/modules/admin/components/application-detail'
 import { staff } from '@/modules/admin/services'
-import type { Application, Document, Reference, BankAccount, VerifiableFieldKey, StaffUser } from './applicationDetail.types'
+import type { Application, Reference, BankAccount, VerifiableFieldKey, StaffUser } from './applicationDetail.types'
 import { mapApplicationDetail, isForeignNationality, requiredDocTypesFor } from './mapApplicationDetail'
 import { useFieldVerification } from '@/modules/admin/composables/useFieldVerification'
-import { platform } from '@/platform'
 import { useWebSocket, useToast, useDocumentTypes } from '@/composables'
 import { useTenantStore } from '@/stores/tenant'
 import { useAuthStore } from '@/stores/auth'
 import { logger } from '@/utils/logger'
-import { formatMoney, formatDate, formatDateTime } from '@/utils/formatters'
 import { getStateNameFromCurp } from '@/utils/validators'
-import { getStatusBadge } from '@/utils/admin-styles'
 import type { ApplicationStatusChangedEvent, DocumentStatusChangedEvent, DocumentDeletedEvent, DocumentUploadedEvent, ReferenceVerifiedEvent, BankAccountVerifiedEvent } from '@/types/realtime'
 
 const log = logger.child('AdminApplicationDetail')
@@ -138,12 +132,7 @@ const showCounterOfferModal = ref(false)
 const isSubmittingCounterOffer = ref(false)
 // counterOffer y counterOfferCalculation (form + amortización) se movieron a CounterOfferModal.
 
-// Document rejection state
-const showDocRejectModal = ref(false)
-const selectedDocument = ref<Document | null>(null)
-// docRejectReason/docRejectComment se movieron a DocumentRejectModal (form local).
-const isRejectingDoc = ref(false)
-
+// docRejectReasons se conserva: lo consume el modal de rechazo de SELFIE (más abajo).
 const docRejectReasons = [
   { value: 'ILLEGIBLE', label: 'Documento ilegible' },
   { value: 'EXPIRED', label: 'Documento vencido' },
@@ -160,18 +149,6 @@ const showVerifyRefModal = ref(false)
 const selectedReference = ref<Reference | null>(null)
 // refVerifyResult/refVerifyNotes se movieron a ReferenceVerifyModal (form local).
 const isVerifyingRef = ref(false)
-
-// Document approval state
-const showDocApproveModal = ref(false)
-const docToApprove = ref<Document | null>(null)
-const isApprovingDoc = ref(false)
-
-// Document viewer state
-const showDocViewerModal = ref(false)
-const docViewerUrl = ref('')
-const docViewerName = ref('')
-const docViewerMimeType = ref('')
-const isLoadingDocViewer = ref(false)
 
 // Selfie (profile photo) state - visible throughout the form
 const selfieUrl = ref<string | null>(null)
@@ -203,11 +180,6 @@ const isUnverifyingBankAccount = ref(false)
 // Assignment state
 // StaffUser se importa de applicationDetail.types (compartido con AssignAnalystModal).
 
-// Get role label from backend enum options
-const getRoleLabel = (role: string) => {
-  const option = tenantStore.options.userType.find(o => o.value === role)
-  return option?.label || role
-}
 const showAssignModal = ref(false)
 const staffUsers = ref<StaffUser[]>([])
 // selectedUserId se movió a AssignAnalystModal (estado de formulario local).
@@ -641,66 +613,14 @@ const unverifyBankAccount = async () => {
   }
 }
 
-// Get document type display name (from backend enum)
-const getDocTypeName = (type: string): string => {
-  return getDocumentTypeLabel(type)
-}
-
 onMounted(async () => {
   await fetchApplication()
   await loadSelfie()
 })
 
-// Parse user agent to friendly name
-const parseUserAgent = (ua: string): string => {
-  if (!ua) return 'Desconocido'
-
-  // Detect browser
-  let browser = 'Navegador desconocido'
-  if (ua.includes('Chrome') && !ua.includes('Edg')) browser = 'Chrome'
-  else if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari'
-  else if (ua.includes('Firefox')) browser = 'Firefox'
-  else if (ua.includes('Edg')) browser = 'Edge'
-  else if (ua.includes('Opera') || ua.includes('OPR')) browser = 'Opera'
-
-  // Detect OS
-  let os = ''
-  if (ua.includes('Windows')) os = 'Windows'
-  else if (ua.includes('Mac OS')) os = 'macOS'
-  else if (ua.includes('iPhone')) os = 'iPhone'
-  else if (ua.includes('iPad')) os = 'iPad'
-  else if (ua.includes('Android')) os = 'Android'
-  else if (ua.includes('Linux')) os = 'Linux'
-
-  return os ? `${browser} en ${os}` : browser
-}
-
-// Parse change value from "old → new" format
-const parseChangeValue = (change: string, part: 'old' | 'new'): string => {
-  if (!change) return ''
-  const parts = change.split(' → ')
-  if (parts.length !== 2) return change
-  return part === 'old' ? (parts[0] ?? '') : (parts[1] ?? '')
-}
-
 // getEmploymentType/getHousingType (dependen de tenantStore) y formatAddressTenure/
 // formatTenureFromMonths (puras) se movieron a EmploymentSection/AddressSection,
 // sus únicos consumidores.
-
-const getPurpose = (purpose: string) => {
-  const purposes: Record<string, string> = {
-    CONSOLIDACION_DEUDA: 'Consolidación de deuda',
-    GASTOS_MEDICOS: 'Gastos médicos',
-    MEJORAS_HOGAR: 'Mejoras del hogar',
-    EDUCACION: 'Educación',
-    VEHICULO: 'Vehículo',
-    NEGOCIO: 'Negocio',
-    VIAJE: 'Viaje',
-    EMERGENCIA: 'Emergencia',
-    OTRO: 'Otro'
-  }
-  return purposes[purpose] || purpose
-}
 
 // Get Mexican state name from code using tenant store options
 const getMexicanStateName = (stateCode: string | undefined): string => {
@@ -747,35 +667,6 @@ const normalizedRequiredDocuments = computed(() => {
   }
 
   return []
-})
-
-// Computed: all documents (uploaded + missing required)
-const allDocuments = computed(() => {
-  if (!application.value) return []
-
-  const uploadedDocs = application.value.documents
-  const uploadedTypes = new Set(uploadedDocs.map(d => d.type))
-  const requiredDocs = application.value.required_documents || []
-
-  const requiredDocsArray = requiredDocTypesFor(requiredDocs, isForeigner.value)
-
-  // Create list with uploaded docs first
-  const result: Array<Document & { missing?: boolean }> = [...uploadedDocs]
-
-  // Add missing required docs
-  for (const docType of requiredDocsArray) {
-    if (!uploadedTypes.has(docType)) {
-      result.push({
-        id: `missing-${docType}`,
-        type: docType,
-        name: getDocTypeName(docType),
-        status: 'PENDING' as const,
-        missing: true
-      })
-    }
-  }
-
-  return result
 })
 
 // Check if product requires signature
@@ -925,87 +816,9 @@ const assignApplication = async (userId: string) => {
   }
 }
 
-const openDocApproveModal = (doc: Document) => {
-  docToApprove.value = doc
-  showDocApproveModal.value = true
-}
-
-// View document
-const viewDocument = async (doc: Document) => {
-  if (!application.value) return
-
-  isLoadingDocViewer.value = true
-  docViewerName.value = doc.name
-
-  try {
-    const response = await staff.application.getDocumentUrl(application.value.id, doc.id)
-    const data = response.data!
-
-    docViewerUrl.value = data.url
-    docViewerMimeType.value = data.mime_type || doc.mime_type || ''
-
-    if (docViewerMimeType.value === 'application/pdf') {
-      platform.browser.open(docViewerUrl.value, { external: true })
-    } else {
-      showDocViewerModal.value = true
-    }
-  } catch (e) {
-    log.error('Error al obtener URL del documento', { error: e })
-    toast.error('Error al cargar el documento')
-  } finally {
-    isLoadingDocViewer.value = false
-  }
-}
-
-const confirmApproveDocument = async (_data?: { selectValue?: string; comment?: string }) => {
-  if (!docToApprove.value || !application.value) return
-
-  isApprovingDoc.value = true
-
-  try {
-    await staff.application.approveDocument(application.value.id, docToApprove.value.id)
-    docToApprove.value.status = 'APPROVED'
-    await fetchApplication()
-    showDocApproveModal.value = false
-    toast.success('Documento aprobado correctamente')
-  } catch (e) {
-    log.error('Error al aprobar documento', { error: e })
-    toast.error('Error al aprobar el documento')
-  } finally {
-    isApprovingDoc.value = false
-  }
-}
-
-const openDocRejectModal = (doc: Document) => {
-  selectedDocument.value = doc
-  showDocRejectModal.value = true
-}
-
-const confirmRejectDocument = async (payload: { reason: string; comment: string }) => {
-  if (!selectedDocument.value || !payload.reason || !application.value) return
-
-  isRejectingDoc.value = true
-
-  try {
-    await staff.application.rejectDocument(application.value.id, selectedDocument.value.id, {
-      reason: payload.reason,
-      comment: payload.comment || undefined
-    })
-
-    selectedDocument.value.status = 'REJECTED'
-    selectedDocument.value.rejection_reason = payload.reason
-    selectedDocument.value.rejection_comment = payload.comment
-
-    await fetchApplication()
-    showDocRejectModal.value = false
-    toast.success('Documento rechazado')
-  } catch (e) {
-    log.error('Error al rechazar documento', { error: e })
-    toast.error('Error al rechazar el documento')
-  } finally {
-    isRejectingDoc.value = false
-  }
-}
+// La aprobación/rechazo/visualización de documentos la maneja por completo
+// AdminDocumentGallery (visor, aprobar/rechazar/desaprobar + su propio estado);
+// el padre solo escucha @refresh. Se eliminó el flujo de docs duplicado/muerto.
 
 // Reference verification
 const openVerifyRefModal = (ref: Reference) => {
@@ -1059,7 +872,6 @@ const {
   isFieldRejected,
   isFieldPending,
   getFieldVerification,
-  isFieldLocked,
   getFieldLabel,
 } = useFieldVerification(() => application.value)
 
@@ -1510,15 +1322,6 @@ onUnmounted(() => {
       @submit="submitCounterOffer"
     />
 
-    <!-- Document Reject Modal -->
-    <DocumentRejectModal
-      v-model:show="showDocRejectModal"
-      :document="selectedDocument"
-      :reasons="docRejectReasons"
-      :is-rejecting="isRejectingDoc"
-      @confirm="confirmRejectDocument"
-    />
-
     <!-- Data Rejection Modal -->
     <ConfirmModal
       v-model:show="showRejectDataModal"
@@ -1578,20 +1381,6 @@ onUnmounted(() => {
       @confirm="confirmVerifyReference"
     />
 
-    <!-- Document Approval Confirmation Modal -->
-    <ConfirmModal
-      v-model:show="showDocApproveModal"
-      title="Aprobar Documento"
-      :subtitle="docToApprove?.name"
-      message="¿Confirmas que el documento es válido y cumple con los requisitos?"
-      icon="check"
-      icon-color="green"
-      confirm-text="Aprobar"
-      confirm-color="green"
-      :loading="isApprovingDoc"
-      @confirm="confirmApproveDocument"
-    />
-
     <!-- Bank Account Verify Modal -->
     <ConfirmModal
       v-model:show="showBankAccountVerifyModal"
@@ -1618,14 +1407,6 @@ onUnmounted(() => {
       confirm-color="yellow"
       :loading="isUnverifyingBankAccount"
       @confirm="unverifyBankAccount"
-    />
-
-    <!-- Document Viewer Modal -->
-    <DocumentViewerModal
-      v-model:show="showDocViewerModal"
-      :url="docViewerUrl"
-      :name="docViewerName"
-      :mime-type="docViewerMimeType"
     />
 
     <!-- Selfie Viewer Modal -->

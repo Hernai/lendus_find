@@ -10,7 +10,7 @@
  * mapea 1:1 a sus handlers (verifyData/openRejectDataModal/openUnverifyModal/...),
  * preservando el flujo optimista + fetchApplication(). El componente NO muta estado.
  */
-import { VerifiableField } from '@/modules/admin/components/application-detail'
+import VerifiableField from './VerifiableField.vue'
 import { formatDate, formatPhone } from '@/utils/formatters'
 import { useFieldVerification } from '@/modules/admin/composables/useFieldVerification'
 import type { Application, VerifiableFieldKey, IneComparison } from '@/modules/admin/views/panel/applicationDetail.types'
