@@ -2,13 +2,7 @@
 import { ref } from 'vue'
 import { AppButton } from '@/components/common'
 import { formatDateTime } from '@/utils/formatters'
-
-interface Note {
-  id: string
-  text: string
-  author: string
-  created_at: string
-}
+import type { Note } from '@/modules/admin/views/panel/applicationDetail.types'
 
 defineProps<{
   notes: Note[]

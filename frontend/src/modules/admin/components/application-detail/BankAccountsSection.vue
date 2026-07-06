@@ -1,41 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onUnmounted } from 'vue'
 import applicationService, { type NubariumValidationData } from '@/modules/admin/services/application.staff.service'
-
-// Resultado persistido de la validación de CLABE con Nubarium (lo guarda el
-// webhook en verification_data['nubarium_clabe']). Queda visible aunque se
-// cierre el modal.
-export interface ClabeValidationSummary {
-  status: 'completed' | 'failed' | 'pending'
-  message_code: number | null
-  message: string | null
-  similarity: number | null
-  holder_name_real: string | null
-  bank: string | null
-  validation_code: string | null
-  validation_id: string | null
-  validated_at: string | null
-}
-
-interface BankAccount {
-  id: string
-  type: string
-  bank_name: string
-  bank_code: string
-  clabe: string
-  account_type: string
-  account_type_label?: string
-  holder_name: string
-  holder_rfc?: string
-  is_primary: boolean
-  is_own_account: boolean
-  is_verified: boolean
-  verified_at?: string | null
-  verification_method?: string | null
-  verified_by_nubarium?: boolean
-  clabe_validation?: ClabeValidationSummary | null
-  created_at?: string
-}
+import type { BankAccount, ClabeValidationSummary } from '@/modules/admin/views/panel/applicationDetail.types'
 
 const props = defineProps<{
   accounts: BankAccount[]

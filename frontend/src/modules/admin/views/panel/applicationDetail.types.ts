@@ -7,7 +7,30 @@
  * respuesta cruda del API (esa es V2ApplicationDetail); el mapeo traduce de una a otra.
  */
 
-import type { ClabeValidationSummary } from '@/modules/admin/components/application-detail/BankAccountsSection.vue'
+/**
+ * Resultado persistido de la validación de CLABE con Nubarium (lo guarda el webhook
+ * en verification_data['nubarium_clabe']). Antes vivía en BankAccountsSection.vue; se
+ * movió aquí para que los tipos NO dependan de un componente (import invertido).
+ */
+export interface ClabeValidationSummary {
+  status: 'completed' | 'failed' | 'pending'
+  message_code: number | null
+  message: string | null
+  similarity: number | null
+  holder_name_real: string | null
+  bank: string | null
+  validation_code: string | null
+  validation_id: string | null
+  validated_at: string | null
+}
+
+/** Nota interna del expediente (feed de notas del analista). */
+export interface Note {
+  id: string
+  text: string
+  author: string
+  created_at: string
+}
 
 /**
  * Claves de campo verificables manualmente (verify/reject/unverify) en el detalle.

@@ -2,19 +2,9 @@
 import { computed } from 'vue'
 import { formatPhone } from '@/utils/formatters'
 import { useTenantStore } from '@/stores'
+import type { Reference } from '@/modules/admin/views/panel/applicationDetail.types'
 
 const tenantStore = useTenantStore()
-
-interface Reference {
-  id: string
-  full_name: string
-  relationship: string
-  phone: string
-  verified: boolean
-  verification_result?: 'VERIFIED' | 'NOT_VERIFIED' | 'NO_ANSWER'
-  verification_notes?: string
-  verified_at?: string
-}
 
 const props = defineProps<{
   references: Reference[]
