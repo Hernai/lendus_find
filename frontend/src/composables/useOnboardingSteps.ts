@@ -1,0 +1,76 @@
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { useApplicationStore } from '@/stores/application'
+import { useTenantStore } from '@/stores/tenant'
+import type { OnboardingStep } from '@/types/v2/onboardingStep'
+
+/**
+ * Fuente de verdad de los pasos del onboarding dinámico y su fase. Extraído de
+ * DynamicOnboardingView para adelgazar el orquestador. Es PURO (solo computeds,
+ * sin efectos ni timers):
+ * - `steps`: los pasos del producto, filtrados por `condition` (según hasKycProvider).
+ * - `currentIndex` / `currentStep`: derivados de `route.params.stepId`.
+ * - fases: divide el flujo en 2 (la 1ª termina en el primer `review`).
+ */
+export function useOnboardingSteps() {
+  const route = useRoute()
+  const applicationStore = useApplicationStore()
+  const tenantStore = useTenantStore()
+
+  const steps = computed<OnboardingStep[]>(() => {
+    const product = applicationStore.selectedProduct
+    const raw = (product?.onboarding_steps as unknown as OnboardingStep[]) ?? []
+    // Filtrar pasos por `condition` según integraciones activas del tenant.
+    // `unless_kyc_provider`: el paso solo aplica si NO hay proveedor KYC activo
+    // (porque típicamente Nubarium extrae estos datos del INE automáticamente).
+    const hasKyc = tenantStore.hasKycProvider
+    return raw.filter((s) => {
+      const cond = (s as unknown as { condition?: string }).condition
+      if (!cond) return true
+      if (cond === 'unless_kyc_provider') return !hasKyc
+      if (cond === 'if_kyc_provider') return hasKyc
+      return true
+    })
+  })
+
+  const currentIndex = computed(() => {
+    const stepId = route.params.stepId as string
+    return steps.value.findIndex((s) => s.id === stepId)
+  })
+
+  const currentStep = computed<OnboardingStep | null>(() => steps.value[currentIndex.value] ?? null)
+
+  // Divide los steps en dos fases: la primera termina en el primer 'review'
+  // (review_personal en MoneyCapital). Si no hay review, fallback a la mitad.
+  const phaseSplitIdx = computed(() => {
+    const i = steps.value.findIndex((s) => s.type === 'review')
+    if (i >= 0) return i
+    return Math.max(0, Math.floor(steps.value.length / 2) - 1)
+  })
+  const phaseNumber = computed<1 | 2>(() =>
+    currentIndex.value <= phaseSplitIdx.value ? 1 : 2,
+  )
+  const phaseSteps = computed(() => {
+    if (phaseNumber.value === 1) return steps.value.slice(0, phaseSplitIdx.value + 1)
+    return steps.value.slice(phaseSplitIdx.value + 1)
+  })
+  const phaseCurrentIdx = computed(() =>
+    phaseNumber.value === 1
+      ? currentIndex.value
+      : currentIndex.value - (phaseSplitIdx.value + 1),
+  )
+  const phaseLabel = computed(() =>
+    phaseNumber.value === 1 ? 'Datos personales' : 'Verificación',
+  )
+
+  return {
+    steps,
+    currentIndex,
+    currentStep,
+    phaseSplitIdx,
+    phaseNumber,
+    phaseSteps,
+    phaseCurrentIdx,
+    phaseLabel,
+  }
+}
