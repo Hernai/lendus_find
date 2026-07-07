@@ -2,6 +2,7 @@
 import { computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTenantStore } from '@/stores/tenant'
+import { useOnboardingSteps } from '@/composables/useOnboardingSteps'
 import type { ReviewStep, ReviewFullStep } from '@/types/v2/onboardingStep'
 import { bankName } from '@/utils/banks'
 
@@ -34,6 +35,19 @@ watch(() => props.step.id, () => emit('update:valid', true), { immediate: true }
 
 const router = useRouter()
 const tenantStore = useTenantStore()
+
+// IDs de los pasos REALMENTE activos en este flujo (ya filtrados por rama
+// persona/empresa y por proveedor KYC). El review solo muestra filas de pasos que
+// existen: p.ej. arrendamiento no tiene `credit_history` ni `bank_account`, así
+// que esas filas (Préstamos previos, Cuenta bancaria) no aparecen.
+const { steps } = useOnboardingSteps()
+const activeStepIds = computed(() => new Set(steps.value.map((s) => s.id)))
+// Filtra filas por paso activo. Si aún no se conocen los pasos (set vacío), no
+// filtra (muestra todo) para no dejar el review en blanco por una carga tardía.
+function onlyActiveRows(rows: Row[]): Row[] {
+  const ids = activeStepIds.value
+  return ids.size === 0 ? rows : rows.filter((r) => ids.has(r.stepId))
+}
 
 interface Row {
   stepId: string
@@ -137,19 +151,23 @@ const sections = computed<Section[]>(() => {
   const fd = props.formData ?? {}
   if (isFullReview.value) {
     return [
-      { title: 'Información personal', rows: personalRows(fd) },
-      { title: 'Verificación y documentos', rows: verificationRows(fd) },
-    ]
+      { title: 'Información personal', rows: onlyActiveRows(personalRows(fd)) },
+      { title: 'Verificación y documentos', rows: onlyActiveRows(verificationRows(fd)) },
+    ].filter((sec) => sec.rows.length > 0)
   }
   const s = props.step as ReviewStep
   if (s.sections?.includes('personal')) {
-    return [{ title: 'Información personal', rows: personalRows(fd) }]
+    return [{ title: 'Información personal', rows: onlyActiveRows(personalRows(fd)) }]
   }
   return []
 })
 
 function editRow(stepId: string) {
-  router.push({ name: 'm-onboarding-step', params: { stepId } })
+  // Preserva el nombre de ruta del entry-point (web: tenant-onboarding-dynamic;
+  // móvil: m-onboarding-step) y el resto de params (ej. tenant), en vez de fijar
+  // la ruta móvil — así el "editar" del review funciona también en la web.
+  const name = (router.currentRoute.value.name as string) || 'm-onboarding-step'
+  router.push({ name, params: { ...router.currentRoute.value.params, stepId } })
 }
 </script>
 
