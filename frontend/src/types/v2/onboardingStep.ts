@@ -24,6 +24,10 @@ export type OnboardingStepType =
   | 'company_data'
   | 'company_docs'
 
+// Condiciones que filtran un paso según integraciones del tenant o la rama del flujo.
+export type OnboardingStepCondition =
+  | 'if_kyc_provider' | 'unless_kyc_provider' | 'if_company' | 'if_individual'
+
 export interface OnboardingStepBase {
   id: string
   type: OnboardingStepType
@@ -34,7 +38,9 @@ export interface OnboardingStepBase {
   required?: boolean
   // Filtra el paso según integraciones activas del tenant o la rama del flujo.
   // if_company / if_individual: ramificación persona moral / física (arrendamiento).
-  condition?: 'if_kyc_provider' | 'unless_kyc_provider' | 'if_company' | 'if_individual'
+  // Puede ser un array (AND): ['if_individual','unless_kyc_provider'] = persona
+  // física Y sin proveedor KYC (datos personales a mano en el demo).
+  condition?: OnboardingStepCondition | OnboardingStepCondition[]
   // Elige un DISEÑO alternativo del mismo tipo de paso en el registry (opcional).
   // El registry resuelve type[/variant]; sin variant usa el diseño default.
   variant?: string

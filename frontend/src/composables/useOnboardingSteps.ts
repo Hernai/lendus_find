@@ -30,14 +30,19 @@ export function useOnboardingSteps() {
     // `applicant_type_select` (id 'applicant_type') y vive en dynamicData.
     // Hasta que el usuario elige, se asume INDIVIDUAL (muestra su rama).
     const applicantKind = onboardingStore.dynamicData?.['applicant_type'] as string | undefined
-    return raw.filter((s) => {
-      const cond = (s as unknown as { condition?: string }).condition
-      if (!cond) return true
-      if (cond === 'unless_kyc_provider') return !hasKyc
-      if (cond === 'if_kyc_provider') return hasKyc
-      if (cond === 'if_company') return applicantKind === 'COMPANY'
-      if (cond === 'if_individual') return applicantKind !== 'COMPANY'
+    const evalCond = (c: string): boolean => {
+      if (c === 'unless_kyc_provider') return !hasKyc
+      if (c === 'if_kyc_provider') return hasKyc
+      if (c === 'if_company') return applicantKind === 'COMPANY'
+      if (c === 'if_individual') return applicantKind !== 'COMPANY'
       return true
+    }
+    return raw.filter((s) => {
+      const cond = (s as unknown as { condition?: string | string[] }).condition
+      if (!cond) return true
+      // Un array de condiciones se evalúa con AND (todas deben cumplirse). Ej.
+      // ['if_individual','unless_kyc_provider'] = persona física Y sin proveedor KYC.
+      return Array.isArray(cond) ? cond.every(evalCond) : evalCond(cond)
     })
   })
 
