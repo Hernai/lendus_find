@@ -34,6 +34,38 @@ export interface V2SimulationPayload {
   /** Plazo en días para productos de pago único (SINGLE / BULLET). */
   term_days?: number
   payment_frequency: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'SINGLE'
+  /** Anticipo/enganche (%) para arrendamiento; se ignora en crédito. */
+  down_payment_pct?: number
+}
+
+/** Desglose de arrendamiento que devuelve el backend (LeaseCalculationService). */
+export interface V2LeaseSimulation {
+  modality: string
+  asset_value: number
+  down_payment_pct: number
+  down_payment: number
+  financed_amount: number
+  monthly_rental: number
+  monthly_rental_with_iva: number
+  iva_pct: number
+  is_pago_anticipado: boolean
+  first_installment: {
+    anticipo: number
+    comision: number
+    comision_iva: number
+    deposito_reembolsable: number
+    rentas_anticipadas: number
+    iva_total: number
+    total: number
+  }
+  next_payment_amount: number
+  next_payment_offset_days: number
+  residual_value: number
+  residual_value_pct: number
+  purchase_option: boolean
+  purchase_option_amount: number
+  total_rentas: number
+  total_cost: number
 }
 
 export interface V2SimulationResult {
@@ -62,6 +94,8 @@ export interface V2SimulationResult {
   // devuelve `total_amount` en este endpoint.
   total_to_pay: number
   cat: number
+  /** Detalle de arrendamiento (solo productos ARRENDAMIENTO). */
+  lease?: V2LeaseSimulation
 }
 
 export interface V2AmortizationPayload {

@@ -45,6 +45,7 @@ const defaultDays = computed(() =>
   activeProduct.value?.rules?.default_term_days ?? Math.round((minDays.value + maxDays.value) / 2)
 )
 const formatDays = (v: number) => `${v} ${v === 1 ? 'día' : 'días'}`
+const formatPct = (v: number) => `${v}%`
 
 // Get term_config from product (could be in rules or directly on product)
 const termConfig = computed(() =>
@@ -129,6 +130,15 @@ const selectedPayments = ref(12)
 const selectedDays = ref(10) // solo para pago único (SINGLE)
 const paymentFrequency = ref<PaymentFrequency>('MONTHLY')
 
+// --- Arrendamiento (leasing): 'amount' se reutiliza como VALOR DEL BIEN y se
+// agrega el anticipo (%). Todo condicional a type === 'ARRENDAMIENTO'. ---
+const isLease = computed(() => activeProduct.value?.type === 'ARRENDAMIENTO')
+const leaseConfig = computed(() => activeProduct.value?.rules?.lease)
+const anticipoMin = computed(() => leaseConfig.value?.anticipo_pct_min ?? 0)
+const anticipoMax = computed(() => leaseConfig.value?.anticipo_pct_max ?? 30)
+const downPaymentPct = ref(20)
+const leaseResult = computed(() => applicationStore.simulation?.lease ?? null)
+
 // Convert selected payments to months for API
 const termMonths = computed(() => {
   // Pago único: el backend usa term_days; mandamos el plazo en meses del
@@ -161,7 +171,8 @@ const simulate = async () => {
     amount: amount.value,
     term_months: term,
     term_days: isSinglePayment.value ? selectedDays.value : undefined,
-    payment_frequency: paymentFrequency.value
+    payment_frequency: paymentFrequency.value,
+    down_payment_pct: isLease.value ? downPaymentPct.value : undefined
   })
 }
 
@@ -179,6 +190,11 @@ onMounted(async () => {
     // Set initial payment count to middle option
     const options = paymentCountOptions.value
     selectedPayments.value = options[Math.floor(options.length / 2)] || 12
+  }
+
+  // Anticipo inicial para arrendamiento (del producto).
+  if (isLease.value) {
+    downPaymentPct.value = leaseConfig.value?.anticipo_pct_default ?? 20
   }
 
   // Mark as initialized and run initial simulation
@@ -203,7 +219,7 @@ const simulation = computed(() => applicationStore.simulation)
 const isLoading = computed(() => applicationStore.isLoading)
 
 // Auto-run simulation on changes (only after initialization)
-watch([amount, selectedPayments, selectedDays, paymentFrequency, activeProduct], async () => {
+watch([amount, selectedPayments, selectedDays, paymentFrequency, activeProduct, downPaymentPct], async () => {
   // Skip if not initialized yet (onMounted handles initial simulation)
   if (!isInitialized.value) return
   await simulate()
@@ -263,18 +279,30 @@ const paymentLabel = computed(() => {
 <template>
   <div class="bg-white rounded-2xl shadow-2xl p-6 md:p-8">
     <h2 v-if="!compact" class="text-2xl font-bold text-tenant mb-6">
-      Simula tu crédito
+      {{ isLease ? 'Simula tu arrendamiento' : 'Simula tu crédito' }}
     </h2>
 
-    <!-- Amount slider -->
+    <!-- Monto (crédito) / Valor del bien (arrendamiento) -->
     <div class="mb-6">
       <AppSlider
         v-model="amount"
         :min="minAmount"
         :max="maxAmount"
         :step="1000"
-        label="¿Cuánto necesitas?"
+        :label="isLease ? '¿Cuál es el valor del bien?' : '¿Cuánto necesitas?'"
         :format-value="formatMoney"
+      />
+    </div>
+
+    <!-- Anticipo / enganche (solo arrendamiento) -->
+    <div v-if="isLease" class="mb-6">
+      <AppSlider
+        v-model="downPaymentPct"
+        :min="anticipoMin"
+        :max="anticipoMax"
+        :step="1"
+        label="Anticipo (enganche)"
+        :format-value="formatPct"
       />
     </div>
 
@@ -336,9 +364,9 @@ const paymentLabel = computed(() => {
       </div>
     </div>
 
-    <!-- Results card -->
+    <!-- Resultado CRÉDITO -->
     <div
-      v-if="simulation"
+      v-if="simulation && !isLease"
       class="bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl p-5 md:p-6 text-white mb-6"
     >
       <div class="flex justify-between items-end mb-4">
@@ -363,6 +391,53 @@ const paymentLabel = computed(() => {
           <p class="text-primary-200">Intereses</p>
           <p class="font-semibold">{{ formatMoneyDecimals(simulation.total_interest) }}</p>
         </div>
+      </div>
+    </div>
+
+    <!-- Resultado ARRENDAMIENTO -->
+    <div v-else-if="simulation && isLease && leaseResult" class="mb-6 space-y-4">
+      <!-- Renta mensual -->
+      <div class="bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl p-5 md:p-6 text-white">
+        <p class="text-primary-100 text-sm">Tu renta mensual <span class="opacity-80">(IVA incl.)</span></p>
+        <p class="text-3xl md:text-4xl font-bold">{{ formatMoneyDecimals(leaseResult.monthly_rental_with_iva) }}</p>
+        <p class="text-primary-100 text-xs mt-1">
+          {{ leaseResult.is_pago_anticipado
+            ? 'La 1ª renta va en el desembolso inicial; la siguiente en ~30 días.'
+            : 'Tu primera renta cae en ~30 días.' }}
+        </p>
+      </div>
+
+      <!-- Desembolso inicial desglosado -->
+      <div class="bg-gray-50 rounded-xl p-4">
+        <h3 class="font-semibold text-gray-900 mb-3">Desembolso inicial (al firmar)</h3>
+        <div class="space-y-2 text-sm">
+          <div v-if="leaseResult.first_installment.anticipo" class="flex justify-between">
+            <span class="text-gray-600">Anticipo</span>
+            <span class="font-medium">{{ formatMoneyDecimals(leaseResult.first_installment.anticipo) }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">Comisión de apertura <span class="text-gray-400">(+IVA)</span></span>
+            <span class="font-medium">{{ formatMoneyDecimals(leaseResult.first_installment.comision + leaseResult.first_installment.comision_iva) }}</span>
+          </div>
+          <div v-if="leaseResult.first_installment.deposito_reembolsable" class="flex justify-between">
+            <span class="text-gray-600">Depósito en garantía <span class="text-emerald-600">(reembolsable)</span></span>
+            <span class="font-medium">{{ formatMoneyDecimals(leaseResult.first_installment.deposito_reembolsable) }}</span>
+          </div>
+          <div v-if="leaseResult.first_installment.rentas_anticipadas" class="flex justify-between">
+            <span class="text-gray-600">Renta anticipada <span class="text-gray-400">(IVA incl.)</span></span>
+            <span class="font-medium">{{ formatMoneyDecimals(leaseResult.first_installment.rentas_anticipadas) }}</span>
+          </div>
+          <div class="flex justify-between pt-2 border-t border-gray-200">
+            <span class="text-gray-900 font-semibold">Total a pagar hoy</span>
+            <span class="font-bold text-primary-600">{{ formatMoneyDecimals(leaseResult.first_installment.total) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Opción de compra -->
+      <div v-if="leaseResult.purchase_option && leaseResult.purchase_option_amount" class="bg-blue-50 rounded-xl p-4 text-sm text-blue-800">
+        Al final del plazo puedes <strong>comprar el bien</strong> por
+        {{ formatMoneyDecimals(leaseResult.purchase_option_amount) }} (valor residual).
       </div>
     </div>
 

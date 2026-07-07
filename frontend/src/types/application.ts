@@ -43,6 +43,36 @@ export type ApplicationStatus =
   | 'REJECTED'
   | 'SYNCED'
 
+/** Desglose de una cotización de ARRENDAMIENTO (renta + desembolso inicial). */
+export interface LeaseSimulation {
+  modality: string
+  asset_value: number
+  down_payment_pct: number
+  down_payment: number
+  financed_amount: number
+  monthly_rental: number
+  monthly_rental_with_iva: number
+  iva_pct: number
+  is_pago_anticipado: boolean
+  first_installment: {
+    anticipo: number
+    comision: number
+    comision_iva: number
+    deposito_reembolsable: number
+    rentas_anticipadas: number
+    iva_total: number
+    total: number
+  }
+  next_payment_amount: number
+  next_payment_offset_days: number
+  residual_value: number
+  residual_value_pct: number
+  purchase_option: boolean
+  purchase_option_amount: number
+  total_rentas: number
+  total_cost: number
+}
+
 export interface SimulationResult {
   requested_amount: number
   term_months: number
@@ -57,6 +87,8 @@ export interface SimulationResult {
   total_interest: number
   total_amount: number
   cat: number
+  /** Detalle de arrendamiento (solo productos ARRENDAMIENTO). */
+  lease?: LeaseSimulation
   amortization_table: AmortizationRow[]
 }
 
@@ -78,6 +110,8 @@ export interface SimulationParams {
   /** Plazo real en días para productos de pago único (SINGLE / BULLET). */
   term_days?: number
   payment_frequency: PaymentFrequency
+  /** Anticipo/enganche (%) para arrendamiento; se ignora en crédito. */
+  down_payment_pct?: number
 }
 
 export interface Document {

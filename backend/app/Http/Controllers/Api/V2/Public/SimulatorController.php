@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api\V2\Public;
 
 use App\Enums\PaymentFrequency;
+use App\Enums\ProductType;
 use App\Http\Controllers\Api\V2\Traits\ApiResponses;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Services\LeaseCalculationService;
 use App\Services\LoanCalculationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,7 +25,8 @@ class SimulatorController extends Controller
     use ApiResponses;
 
     public function __construct(
-        protected LoanCalculationService $loanCalculator
+        protected LoanCalculationService $loanCalculator,
+        protected LeaseCalculationService $leaseCalculator,
     ) {}
 
     /**
@@ -42,6 +45,8 @@ class SimulatorController extends Controller
             // Plazo en días para productos de pago único (SINGLE / BULLET).
             'term_days' => 'nullable|integer|min:1',
             'payment_frequency' => ['required', Rule::in(PaymentFrequency::values())],
+            // Anticipo/enganche (%) para arrendamiento; se ignora en crédito.
+            'down_payment_pct' => 'nullable|numeric|min:0|max:100',
         ]);
 
         if ($validator->fails()) {
@@ -84,14 +89,34 @@ class SimulatorController extends Controller
             $termDays = max($minDays, min($maxDays, $requested));
         }
 
-        $calculation = $this->loanCalculator->calculateSimulation(
-            $request->amount,
-            $request->term_months,
-            $request->payment_frequency,
-            $product->annual_rate,
-            $product->opening_commission_rate,
-            $termDays
-        );
+        if ($product->type === ProductType::ARRENDAMIENTO) {
+            // Arrendamiento: `amount` es el VALOR DEL BIEN; se cobra renta, no interés.
+            // El anticipo (%) se acota al rango del producto (rules.lease.anticipo_pct_*).
+            $lease = $product->rules['lease'] ?? [];
+            $minPct = (float) ($lease['anticipo_pct_min'] ?? 0);
+            $maxPct = (float) ($lease['anticipo_pct_max'] ?? 30);
+            $defPct = (float) ($lease['anticipo_pct_default'] ?? 20);
+            $downPct = $request->filled('down_payment_pct') ? (float) $request->down_payment_pct : $defPct;
+            $downPct = max($minPct, min($maxPct, $downPct));
+
+            $calculation = $this->leaseCalculator->calculateLeaseSimulation(
+                (float) $request->amount,
+                $downPct,
+                (int) $request->term_months,
+                $request->payment_frequency,
+                (float) $product->annual_rate,
+                $lease,
+            );
+        } else {
+            $calculation = $this->loanCalculator->calculateSimulation(
+                $request->amount,
+                $request->term_months,
+                $request->payment_frequency,
+                $product->annual_rate,
+                $product->opening_commission_rate,
+                $termDays
+            );
+        }
 
         return $this->success([
             'simulation' => [

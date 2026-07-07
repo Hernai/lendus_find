@@ -139,6 +139,15 @@ export interface ProductRules {
     asset_types?: string[]
     purchase_option?: boolean
     residual_value_pct?: number | null
+    // Config financiera (la lee LeaseCalculationService en el backend).
+    anticipo_pct_default?: number
+    anticipo_pct_min?: number
+    anticipo_pct_max?: number
+    pago_anticipado?: boolean
+    numero_rentas_anticipadas?: number
+    deposito_garantia_meses?: number
+    comision_apertura_pct?: number
+    iva_pct?: number
   }
 }
 

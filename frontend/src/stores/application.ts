@@ -103,7 +103,8 @@ export const useApplicationStore = defineStore('application', () => {
         amount: params.amount,
         term_months: params.term_months,
         term_days: params.term_days,
-        payment_frequency: toSimulatorFrequency(params.payment_frequency)
+        payment_frequency: toSimulatorFrequency(params.payment_frequency),
+        down_payment_pct: params.down_payment_pct
       })
 
       if (!response.success || !response.data) {
@@ -128,6 +129,7 @@ export const useApplicationStore = defineStore('application', () => {
         total_interest: data.total_interest,
         total_amount: data.total_to_pay,
         cat: data.cat,
+        lease: data.lease,
         amortization_table: []
       }
 
