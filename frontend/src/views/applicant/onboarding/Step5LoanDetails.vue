@@ -13,13 +13,20 @@ const tenantStore = useTenantStore()
 
 const simulation = computed(() => applicationStore.simulation)
 
+// ¿Producto de arrendamiento? Adapta el "destino": para arrendamiento el destino
+// es el BIEN arrendado, no un propósito de crédito. Debe declararse ANTES de
+// useStepForm porque la regla condicional del purpose lo referencia.
+const isLease = computed(() => applicationStore.selectedProduct?.type === 'ARRENDAMIENTO')
+
 // Define form using composable
 const { form, errors, submitError, handleSubmit, prevStep, init } = useStepForm({
   step: 5,
   fields: {
     purpose: {
       default: '' as string,
-      rules: [rules.required('Selecciona el propósito del crédito')],
+      // El propósito de crédito solo es obligatorio para crédito. En arrendamiento
+      // el "destino" es el activo, así que la validación se salta (rules.when).
+      rules: [rules.when(() => !isLease.value, rules.required('Selecciona el propósito del crédito'))],
     },
     confirmed_simulation: {
       default: false,
@@ -29,6 +36,8 @@ const { form, errors, submitError, handleSubmit, prevStep, init } = useStepForm(
   prevRoute: '/solicitud/paso-4',
   beforeSave: (formData) => ({
     ...formData,
+    // En arrendamiento el destino es el bien; guardamos OTHER como propósito válido.
+    purpose: isLease.value ? 'OTHER' : formData.purpose,
     confirmed_simulation: true,
   }),
 })
@@ -53,6 +62,20 @@ onMounted(async () => {
 // Get options from backend enums
 const purposeOptions = computed(() => tenantStore.options.loanPurpose)
 
+// Arrendamiento: activo elegido (buffer del simulador) + modalidad (del producto),
+// traducidos con los enums. El PATCH no devuelve metadata, así que leemos del
+// buffer/producto — no de currentApplication.metadata.
+const leaseAssetLabel = computed(() => {
+  const v = applicationStore.selectedAssetType
+  if (!v) return '—'
+  return (tenantStore.options.assetType ?? []).find((o) => o.value === v)?.label ?? v
+})
+const leaseModalityLabel = computed(() => {
+  const v = applicationStore.selectedProduct?.rules?.lease?.modality
+  if (!v) return '—'
+  return (tenantStore.options.leaseModality ?? []).find((o) => o.value === v)?.label ?? v
+})
+
 // Build frequency labels from backend enum
 const frequencyLabels = computed(() => {
   const labels: Record<string, string> = {}
@@ -67,7 +90,7 @@ const frequencyLabels = computed(() => {
 <template>
   <div class="px-4 py-6">
     <div class="max-w-md mx-auto">
-      <h1 class="text-2xl font-bold text-gray-900 mb-2">Confirma tu crédito</h1>
+      <h1 class="text-2xl font-bold text-gray-900 mb-2">{{ isLease ? 'Confirma tu arrendamiento' : 'Confirma tu crédito' }}</h1>
       <p class="text-gray-500 mb-6">Revisa los detalles de tu solicitud.</p>
 
       <!-- Loading state -->
@@ -133,7 +156,9 @@ const frequencyLabels = computed(() => {
           </div>
         </div>
 
+        <!-- Crédito: propósito. Arrendamiento: el "destino" es el bien (tarjeta read-only). -->
         <AppSelect
+          v-if="!isLease"
           v-model="form.purpose"
           :options="purposeOptions"
           label="¿Para qué usarás el crédito?"
@@ -141,6 +166,19 @@ const frequencyLabels = computed(() => {
           :error="errors.purpose"
           required
         />
+        <div v-else class="bg-gray-50 rounded-xl p-4">
+          <h3 class="font-medium text-gray-900 mb-3">Tu arrendamiento</h3>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span class="text-gray-600">Bien a arrendar</span>
+              <span class="font-medium">{{ leaseAssetLabel }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-600">Modalidad</span>
+              <span class="font-medium">{{ leaseModalityLabel }}</span>
+            </div>
+          </div>
+        </div>
 
         <div class="bg-blue-50 rounded-xl p-4 flex gap-3">
           <svg
@@ -157,7 +195,9 @@ const frequencyLabels = computed(() => {
             />
           </svg>
           <p class="text-sm text-blue-800">
-            Podrás modificar el monto y plazo antes de enviar tu solicitud si cambias de opinión.
+            {{ isLease
+              ? 'Podrás ajustar el bien, el monto y el plazo antes de enviar tu solicitud.'
+              : 'Podrás modificar el monto y plazo antes de enviar tu solicitud si cambias de opinión.' }}
           </p>
         </div>
 

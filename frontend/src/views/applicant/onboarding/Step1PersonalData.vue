@@ -369,6 +369,21 @@ const handleSubmit = async () => {
 
         log.debug('Application created after step 1', { appId: newApp?.id })
 
+        // Arrendamiento: volcar el activo elegido en el simulador (buffer) + la
+        // modalidad del producto a applications.metadata.lease. El analista lo lee
+        // de ahí (LeaseInfoSection). Solo para productos ARRENDAMIENTO; no toca crédito.
+        const leaseProduct = applicationStore.selectedProduct
+        const assetType = applicationStore.selectedAssetType
+        if (leaseProduct?.type === 'ARRENDAMIENTO' && assetType) {
+          try {
+            await applicationStore.updateApplication({
+              metadata: { lease: { asset_type: assetType, modality: leaseProduct.rules?.lease?.modality } },
+            } as never)
+          } catch (e) {
+            log.warn('No se pudo guardar metadata.lease', { error: e })
+          }
+        }
+
         // KYC verifications are now automatically recorded by the backend
         // when CURP/INE validation succeeds - no need to call recordVerifications
 

@@ -133,6 +133,13 @@ export interface ProductRules {
   min_age?: number
   max_age?: number
   min_income?: number
+  /** Config de arrendamiento (solo productos ARRENDAMIENTO). */
+  lease?: {
+    modality?: string
+    asset_types?: string[]
+    purchase_option?: boolean
+    residual_value_pct?: number | null
+  }
 }
 
 export type AmortizationType = 'FRENCH' | 'GERMAN' | 'AMERICAN' | 'BULLET'

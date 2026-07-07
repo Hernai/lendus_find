@@ -54,6 +54,12 @@ export const useApplicationStore = defineStore('application', () => {
   const currentApplication = ref<Application | null>(null)
   const simulation = ref<SimulationResult | null>(null)
   const selectedProduct = ref<Product | null>(null)
+  // Buffer del activo elegido en el simulador (arrendamiento). En Step0 aún no
+  // existe la Application, así que se retiene aquí (+storage) hasta Step1, donde
+  // se vuelca a applications.metadata.lease. Null para productos de crédito.
+  const selectedAssetType = ref<string | null>(
+    storage.get<string>(STORAGE_KEYS.SELECTED_ASSET_TYPE) ?? null,
+  )
   const currentStep = ref(1)
   const totalSteps = ref(11) // Simulator + KYC + 9 data steps (incl. cuenta bancaria)
 
@@ -322,8 +328,20 @@ export const useApplicationStore = defineStore('application', () => {
       storage.set(STORAGE_KEYS.SELECTED_PRODUCT, product)
     } else {
       storage.remove(STORAGE_KEYS.SELECTED_PRODUCT)
+      // Al deseleccionar el producto también se descarta el activo elegido.
+      setSelectedAssetType(null)
     }
     log.debug('setSelectedProduct', { product: product?.name ?? null })
+  }
+
+  // Activo elegido en el simulador (arrendamiento). Se retiene hasta Step1.
+  const setSelectedAssetType = (assetType: string | null) => {
+    selectedAssetType.value = assetType
+    if (assetType) {
+      storage.set(STORAGE_KEYS.SELECTED_ASSET_TYPE, assetType)
+    } else {
+      storage.remove(STORAGE_KEYS.SELECTED_ASSET_TYPE)
+    }
   }
 
   const runSimulation = async (params: SimulationParams): Promise<SimulationResult> => {
@@ -407,11 +425,13 @@ export const useApplicationStore = defineStore('application', () => {
     currentApplication,
     simulation,
     selectedProduct,
+    selectedAssetType,
     currentStep,
     totalSteps,
     isLoading,
     // Actions
     setSelectedProduct,
+    setSelectedAssetType,
     runSimulation,
     loadApplications,
     loadApplication,
