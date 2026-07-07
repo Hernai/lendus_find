@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useTenantStore } from '@/stores/tenant'
+import { useApplicationStore } from '@/stores/application'
 import { detectTenantSlug } from '@/utils/tenant'
 import { storage, STORAGE_KEYS } from '@/utils/storage'
 import { platform } from '@/platform'
@@ -92,6 +93,11 @@ router.beforeEach(async (to, from, next) => {
   const isNoTenantRoute = to.matched.some(record => record.meta.noTenant)
   if (!isAdminRoute && !isNoTenantRoute) {
     await tenantStore.loadConfig()
+    // Separación de tenants: descarta producto/simulación residual de OTRO tenant
+    // que haya quedado en localStorage (demo y moneycapital comparten origen). Sin
+    // esto, un producto de MoneyCapital podía manejar el onboarding del demo.
+    const productIds = (tenantStore.activeProducts as Array<{ id: string }>).map(p => p.id)
+    if (productIds.length) useApplicationStore().pruneForeignTenantState(productIds)
   }
 
   // Redirect non-prefixed routes to tenant-prefixed versions

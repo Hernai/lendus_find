@@ -469,6 +469,24 @@ export const useApplicationStore = defineStore('application', () => {
     storage.remove(STORAGE_KEYS.SIMULATION)
   }
 
+  // SEPARACIÓN DE TENANTS: demo y moneycapital comparten origen (lendus.app), así
+  // que un producto/simulación en localStorage de un tenant puede colarse a otro
+  // (ej. MC-SIN-BURO de MoneyCapital apareciendo en el onboarding del demo). Al
+  // cargar la config, el caller pasa los IDs de productos activos del tenant
+  // actual; si el producto en memoria/storage NO está entre ellos, es de OTRO
+  // tenant y se descarta junto con la simulación y el buffer de arrendamiento.
+  const pruneForeignTenantState = (activeProductIds: string[]) => {
+    const selId = (selectedProduct.value as { id?: string } | null)?.id
+    if (!selId || activeProductIds.length === 0) return
+    if (activeProductIds.includes(selId)) return
+    log.warn('Producto de otro tenant en storage — limpiando estado del flujo', { productId: selId })
+    selectedProduct.value = null
+    storage.remove(STORAGE_KEYS.SELECTED_PRODUCT)
+    clearSimulation()
+    clearLeaseDraft()
+    setSelectedAssetType(null)
+  }
+
   // Initialize: restore state from storage on mount
   const init = () => {
     const savedProduct = storage.get<Product>(STORAGE_KEYS.SELECTED_PRODUCT)
@@ -502,6 +520,7 @@ export const useApplicationStore = defineStore('application', () => {
     clearLeaseDraft,
     buildLeaseMetadata,
     persistLeaseMetadata,
+    pruneForeignTenantState,
     runSimulation,
     loadApplications,
     loadApplication,
