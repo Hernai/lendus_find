@@ -254,7 +254,7 @@ const carouselSlides = computed(() => {
   slides.push({
     type: 'welcome',
     title: `Bienvenido a ${tenantName.value}`,
-    description: 'Tu financiera de confianza. Obtén el crédito que necesitas con tasas competitivas y proceso 100% digital.',
+    description: 'Tu financiera de confianza. Obtén el financiamiento que necesitas con condiciones competitivas y proceso 100% digital.',
     icon: 'building',
   })
 
@@ -264,7 +264,7 @@ const carouselSlides = computed(() => {
     slides.push({
       type: 'product',
       title: product.name,
-      description: product.description || `Crédito ${product.name.toLowerCase()} con aprobación rápida`,
+      description: product.description || `${product.name} con aprobación rápida`,
       productId: product.id,
       icon: 'cash',
     })
@@ -371,7 +371,7 @@ const getStatusInfo = (status: string) => {
       color: 'text-green-600',
       bg: 'bg-green-100',
       icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
-      description: 'Tu crédito ha sido aprobado'
+      description: 'Tu solicitud ha sido aprobada'
     },
     REJECTED: {
       label: 'Rechazada',
@@ -399,14 +399,14 @@ const getStatusInfo = (status: string) => {
       color: 'text-blue-600',
       bg: 'bg-blue-100',
       icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
-      description: 'Tu crédito está activo'
+      description: 'Tu contrato está activo'
     },
     COMPLETED: {
       label: 'Completada',
       color: 'text-green-700',
       bg: 'bg-green-50',
       icon: 'M5 13l4 4L19 7',
-      description: 'Crédito liquidado exitosamente'
+      description: 'Liquidado exitosamente'
     },
     DEFAULT: {
       label: 'En Mora',
@@ -854,7 +854,7 @@ const handleCancelApplication = async () => {
                 size="lg"
                 @click="startNewApplication"
               >
-                Solicitar Crédito Ahora
+                Comenzar solicitud
               </AppButton>
               <p class="text-center text-sm text-gray-500 mt-3">
                 Proceso 100% digital • Aprobación en 24 horas
