@@ -439,6 +439,18 @@ const paymentLabel = computed(() => {
         Al final del plazo puedes <strong>comprar el bien</strong> por
         {{ formatMoneyDecimals(leaseResult.purchase_option_amount) }} (valor residual).
       </div>
+
+      <!-- Nota fiscal/informativa según la modalidad (solo presentacional). -->
+      <div class="flex gap-2 text-xs text-gray-500">
+        <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p>
+          {{ leaseResult.modality === 'PURO'
+            ? 'Arrendamiento puro: la renta es 100% deducible como gasto. Al final devuelves el bien (sin opción de compra).'
+            : 'Arrendamiento financiero: deduces la depreciación del bien más los intereses, y tienes opción de compra al final del plazo.' }}
+        </p>
+      </div>
     </div>
 
     <!-- Loading state -->
