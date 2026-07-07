@@ -293,11 +293,9 @@ class DemoDataSeeder extends Seeder
             // Rama EMPRESA (persona moral)
             ['id' => 'company', 'type' => 'company_data', 'label' => 'Datos de la empresa', 'required' => true, 'condition' => 'if_company'],
             ['id' => 'company_docs', 'type' => 'company_docs', 'label' => 'Documentos de la empresa', 'required' => true, 'condition' => 'if_company'],
-            // Rama PERSONA FÍSICA
-            // Datos personales A MANO (nombre/apellidos/fecha/género/nacionalidad)
-            // SOLO si el tenant NO tiene proveedor KYC (caso demo). Con KYC activo la
-            // INE los extrae y este paso se salta (condición unless_kyc_provider).
-            ['id' => 'personal_data', 'type' => 'personal_data', 'label' => 'Datos personales', 'required' => true, 'condition' => ['if_individual', 'unless_kyc_provider']],
+            // Rama PERSONA FÍSICA. NOTA: `personal_data` (captura a mano de nombre/
+            // apellidos/fecha/género) va DESPUÉS de la INE (más abajo), no aquí — así
+            // la INE intenta obtener los datos primero y solo se piden a mano si no hay KYC.
             ['id' => 'education', 'type' => 'select', 'field' => 'education_level', 'enum' => 'EducationLevel', 'label' => 'Nivel educativo', 'required' => true, 'condition' => 'if_individual'],
             ['id' => 'marital', 'type' => 'select', 'field' => 'marital_status', 'enum' => 'MaritalStatus', 'label' => 'Estado civil', 'required' => true, 'condition' => 'if_individual'],
             ['id' => 'employment', 'type' => 'select', 'field' => 'employment_type', 'enum' => 'EmploymentType', 'label' => 'Ocupación', 'required' => true, 'condition' => 'if_individual'],
@@ -312,6 +310,10 @@ class DemoDataSeeder extends Seeder
             ['id' => 'documents', 'type' => 'documents', 'label' => 'Documentos', 'required' => true],
             // Sin cuenta bancaria (CLABE): en arrendamiento NO hay desembolso al cliente.
             ['id' => 'kyc_ine', 'type' => 'kyc_ine', 'label' => 'Validación de identidad', 'required' => true],
+            // Datos personales a mano DESPUÉS de la INE: con proveedor KYC la INE los
+            // extrae y este paso se salta (unless_kyc_provider); sin KYC (demo) se
+            // capturan a mano aquí, ya que la INE no pudo obtenerlos.
+            ['id' => 'personal_data', 'type' => 'personal_data', 'label' => 'Datos personales', 'required' => true, 'condition' => ['if_individual', 'unless_kyc_provider']],
             ['id' => 'kyc_face', 'type' => 'kyc_selfie', 'label' => 'Validación facial', 'required' => true],
             ['id' => 'review', 'type' => 'review_full', 'label' => 'Revisión final'],
         ];

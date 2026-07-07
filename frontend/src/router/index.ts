@@ -100,6 +100,18 @@ router.beforeEach(async (to, from, next) => {
     if (productIds.length) useApplicationStore().pruneForeignTenantState(productIds)
   }
 
+  // Arrendamiento NO usa el flujo LEGACY (/solicitud/verificacion, /solicitud/paso-*).
+  // Si el redirect post-NIP cae ahí con un producto ARRENDAMIENTO, lo mandamos directo
+  // al flujo DINÁMICO aquí en el guard —antes de montar nada— para evitar el flash de
+  // "Verificando configuración" (Paso 1 de 11) antes del "Tipo de solicitante".
+  if (!isAdminRoute && (to.path.includes('/solicitud/verificacion') || to.path.includes('/solicitud/paso'))) {
+    const savedProduct = storage.get(STORAGE_KEYS.SELECTED_PRODUCT) as { type?: string } | null
+    if (savedProduct?.type === 'ARRENDAMIENTO') {
+      const slug = (to.params.tenant as string) || tenantStore.slug || detectTenantSlug()
+      if (slug) return next({ name: 'tenant-onboarding-dynamic', params: { tenant: slug }, replace: true })
+    }
+  }
+
   // Redirect non-prefixed routes to tenant-prefixed versions
   // This handles hardcoded paths like /solicitud/paso-1 -> /demo/solicitud/paso-1
   // IMPORTANT: Only redirect if there's a tenant detected in the current URL
