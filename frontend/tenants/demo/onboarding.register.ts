@@ -27,4 +27,9 @@ registerTenantSteps('demo', {
   references: {
     default: defineAsyncComponent(() => import('./onboarding/ReferencesStep.vue')),
   },
+  // Paso de documentos: sube los required_documents del producto (comprobante de
+  // domicilio, ingresos…) que no captura el KYC.
+  documents: {
+    default: defineAsyncComponent(() => import('./onboarding/DocumentsStep.vue')),
+  },
 })

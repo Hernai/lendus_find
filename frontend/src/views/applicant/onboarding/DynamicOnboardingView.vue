@@ -98,7 +98,7 @@ const MIGRATED_TYPES = new Set<OnboardingStep['type']>([
   // Fase 3 (complejos con contexto: ownPhone / hasKycProvider).
   'references', 'bank_account', 'kyc_ine',
   // Pasos custom del arrendamiento (tenant demo): cada renderer emite update:valid.
-  'applicant_type_select', 'asset_type', 'company_data', 'company_docs',
+  'applicant_type_select', 'asset_type', 'company_data', 'company_docs', 'documents',
 ])
 
 // legacyCanContinue (validación por tipo) vive en ./stepValidation: función PURA

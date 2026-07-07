@@ -293,6 +293,9 @@ class DemoDataSeeder extends Seeder
             // por eso NO se pide `state_city` aparte (evita capturar el domicilio dos veces).
             ['id' => 'address', 'type' => 'address', 'label' => 'Domicilio', 'required' => true],
             ['id' => 'references', 'type' => 'references', 'min' => 2, 'max' => 2, 'label' => 'Referencias', 'required' => true],
+            // Documentos que pide el producto (comprobante de domicilio, ingresos…)
+            // que NO captura el KYC. El renderer lee product.required_documents.
+            ['id' => 'documents', 'type' => 'documents', 'label' => 'Documentos', 'required' => true],
             // Sin cuenta bancaria (CLABE): en arrendamiento NO hay desembolso al cliente.
             ['id' => 'kyc_ine', 'type' => 'kyc_ine', 'label' => 'Validación de identidad', 'required' => true],
             ['id' => 'kyc_face', 'type' => 'kyc_selfie', 'label' => 'Validación facial', 'required' => true],

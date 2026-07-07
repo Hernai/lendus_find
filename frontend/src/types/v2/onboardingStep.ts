@@ -23,6 +23,7 @@ export type OnboardingStepType =
   | 'asset_type'
   | 'company_data'
   | 'company_docs'
+  | 'documents'
 
 // Condiciones que filtran un paso según integraciones del tenant o la rama del flujo.
 export type OnboardingStepCondition =
