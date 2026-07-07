@@ -168,6 +168,8 @@ export interface LeaseInfo {
     rfc?: string | null
     legal_entity_type?: string | null
     incorporation_date?: string | null
+    legal_rep_name?: string | null
+    legal_rep_rfc?: string | null
   } | null
 }
 

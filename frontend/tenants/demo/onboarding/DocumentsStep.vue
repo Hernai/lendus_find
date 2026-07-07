@@ -47,9 +47,20 @@ function extractDocs(raw: unknown): DocItem[] {
 }
 
 const docs = computed<DocItem[]>(() => {
-  const prod = applicationStore.selectedProduct as unknown as
-    { required_documents?: unknown; required_docs?: unknown } | null
-  return extractDocs(prod?.required_documents ?? prod?.required_docs)
+  const prod = applicationStore.selectedProduct as unknown as {
+    required_documents?: unknown
+    required_docs?: unknown
+    rules?: { lease?: { asset_documents?: Array<{ type?: string; label?: string; required?: boolean }> } }
+  } | null
+  const personal = extractDocs(prod?.required_documents ?? prod?.required_docs)
+  // Documentos del BIEN (arrendamiento), configurables por el admin en
+  // rules.lease.asset_documents (tipo + label + requerido/opcional).
+  const asset = (prod?.rules?.lease?.asset_documents ?? [])
+    .map((d): DocItem => ({ type: d.type ?? '', label: d.label ?? d.type ?? '', required: d.required ?? false }))
+    .filter((d) => d.type && !HANDLED_ELSEWHERE.has(d.type))
+  // Dedupe por tipo (por si un tipo apareciera en ambas listas).
+  const seen = new Set<string>()
+  return [...personal, ...asset].filter((d) => (seen.has(d.type) ? false : (seen.add(d.type), true)))
 })
 
 const uploaded = ref<Set<string>>(new Set(props.modelValue ?? []))

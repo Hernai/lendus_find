@@ -164,6 +164,13 @@ class DemoDataSeeder extends Seeder
                     'deposito_garantia_meses' => 1,
                     'comision_apertura_pct' => 1.5,
                     'iva_pct' => 16,
+                    // Documentos del bien que pide el onboarding, CONFIGURABLE por el
+                    // admin (tipo + label + requerido). El bien es la garantía; aquí
+                    // la factura/cotización va OPCIONAL por default — el admin la puede
+                    // volver obligatoria. El renderer de documentos los muestra.
+                    'asset_documents' => [
+                        ['type' => 'VEHICLE_INVOICE', 'label' => 'Factura o cotización del bien', 'required' => false],
+                    ],
                 ],
                 'onboarding_steps' => $this->leaseOnboardingSteps(),
             ],
@@ -196,6 +203,13 @@ class DemoDataSeeder extends Seeder
                     'deposito_garantia_meses' => 1,
                     'comision_apertura_pct' => 1.5,
                     'iva_pct' => 16,
+                    // Documentos del bien que pide el onboarding, CONFIGURABLE por el
+                    // admin (tipo + label + requerido). El bien es la garantía; aquí
+                    // la factura/cotización va OPCIONAL por default — el admin la puede
+                    // volver obligatoria. El renderer de documentos los muestra.
+                    'asset_documents' => [
+                        ['type' => 'VEHICLE_INVOICE', 'label' => 'Factura o cotización del bien', 'required' => false],
+                    ],
                 ],
                 'onboarding_steps' => $this->leaseOnboardingSteps(),
             ],

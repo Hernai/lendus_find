@@ -14,6 +14,9 @@ interface CompanyValue {
   rfc: string
   legal_entity_type: string
   incorporation_date: string
+  // Representante legal: quien firma y responde por la empresa.
+  legal_rep_name: string
+  legal_rep_rfc: string
 }
 
 const props = defineProps<{
@@ -41,12 +44,18 @@ const current = computed<CompanyValue>(() => ({
   rfc: props.modelValue?.rfc ?? '',
   legal_entity_type: props.modelValue?.legal_entity_type ?? '',
   incorporation_date: props.modelValue?.incorporation_date ?? '',
+  legal_rep_name: props.modelValue?.legal_rep_name ?? '',
+  legal_rep_rfc: props.modelValue?.legal_rep_rfc ?? '',
 }))
 
 const rfcValid = computed(() => isPersonaMoral(current.value.rfc.trim().toUpperCase()))
 const rfcTouched = computed(() => current.value.rfc.trim().length > 0)
 
-const isValid = computed(() => current.value.legal_name.trim().length >= 3 && rfcValid.value)
+const isValid = computed(
+  () => current.value.legal_name.trim().length >= 3
+    && rfcValid.value
+    && current.value.legal_rep_name.trim().length >= 3,
+)
 watch(isValid, (v) => emit('update:valid', v), { immediate: true })
 
 function update(patch: Partial<CompanyValue>) {
@@ -102,6 +111,29 @@ function update(patch: Partial<CompanyValue>) {
         type="date"
         :value="current.incorporation_date"
         @input="update({ incorporation_date: ($event.target as HTMLInputElement).value })"
+      />
+    </label>
+
+    <label class="field">
+      <span class="field-label">Representante legal *</span>
+      <input
+        class="field-input"
+        type="text"
+        :value="current.legal_rep_name"
+        placeholder="Nombre completo de quien firma por la empresa"
+        @input="update({ legal_rep_name: ($event.target as HTMLInputElement).value })"
+      />
+    </label>
+
+    <label class="field">
+      <span class="field-label">RFC del representante (opcional)</span>
+      <input
+        class="field-input"
+        type="text"
+        maxlength="13"
+        :value="current.legal_rep_rfc"
+        placeholder="RFC del representante legal"
+        @input="update({ legal_rep_rfc: ($event.target as HTMLInputElement).value.toUpperCase() })"
       />
     </label>
   </div>

@@ -206,6 +206,14 @@ const estimatedValue = computed(() => {
           <p class="text-xs text-gray-500">Fecha de constitución</p>
           <p class="text-sm font-medium text-gray-900">{{ leaseInfo.company.incorporation_date || '—' }}</p>
         </div>
+        <div v-if="leaseInfo.company.legal_rep_name">
+          <p class="text-xs text-gray-500">Representante legal</p>
+          <p class="text-sm font-medium text-gray-900">{{ leaseInfo.company.legal_rep_name }}</p>
+        </div>
+        <div v-if="leaseInfo.company.legal_rep_rfc">
+          <p class="text-xs text-gray-500">RFC del representante</p>
+          <p class="text-sm font-medium text-gray-900 uppercase">{{ leaseInfo.company.legal_rep_rfc }}</p>
+        </div>
       </div>
     </div>
   </div>
