@@ -6,6 +6,7 @@ import { useApplicationStore } from '@/stores/application'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useAuthStore } from '@/stores/auth'
 import OnboardingStepRenderer from '@/components/onboarding/OnboardingStepRenderer.vue'
+import { AppProgressBar } from '@/components/common'
 import type { OnboardingStep } from '@/types/v2/onboardingStep'
 import { legacyCanContinue } from './stepValidation'
 import { useOnboardingSteps } from '@/composables/useOnboardingSteps'
@@ -169,7 +170,12 @@ const headerTitle = computed(() => {
   return s.label || 'Información personal'
 })
 
-const useSheet = computed(() => isPersonalStep.value && !isFirstPersonalStep.value)
+// En WEB (no app nativa) re-skinneamos el flujo al look del onboarding web del
+// demo (tarjeta centrada, sin bottom-sheet). En móvil nativo queda idéntico.
+const isWeb = computed(() => !platform.device.isNative())
+
+// El bottom-sheet es un patrón mobile; en web renderizamos el paso inline.
+const useSheet = computed(() => !isWeb.value && isPersonalStep.value && !isFirstPersonalStep.value)
 const sheetOpen = ref(false)
 
 watch(useSheet, (val) => {
@@ -257,6 +263,10 @@ async function ensureApplication() {
       requested_term_days: termDays,
       payment_frequency: freq as never,
     })
+    // Arrendamiento: el bien se captura en el simulador (leaseDraft) → lo volcamos
+    // a metadata.lease ahora que la solicitud existe (el onboarding ya no tiene
+    // paso de activo). No-op en crédito.
+    if (app?.id) await applicationStore.persistLeaseMetadata(app.id)
     return app
   } catch (e) {
     log.warn('ensureApplication failed', { error: e })
@@ -508,7 +518,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="dyn-onboarding">
+  <div class="dyn-onboarding" :class="{ 'dyn-onboarding--web': isWeb }">
     <header class="dyn-header">
       <div class="header-row">
         <button type="button" class="back-btn" aria-label="Atrás" @click="prev">
@@ -523,7 +533,15 @@ onUnmounted(() => {
         <span class="phase-label">{{ phaseLabel }}</span>
         <span class="phase-count">Paso {{ phaseCurrentIdx + 1 }} de {{ phaseSteps.length }} · Sección {{ phaseNumber }} de 2</span>
       </div>
-      <div class="step-dots step-dots--header">
+      <!-- Progreso: dots en móvil (look app); barra horizontal en web (look demo) -->
+      <AppProgressBar
+        v-if="isWeb"
+        class="web-progress"
+        :current="phaseCurrentIdx + 1"
+        :total="phaseSteps.length"
+        :show-label="false"
+      />
+      <div v-else class="step-dots step-dots--header">
         <div
           v-for="(s, i) in phaseSteps"
           :key="s.id"
@@ -796,6 +814,54 @@ onUnmounted(() => {
   }
   .hero-card { padding: 24px; }
   .options-list { padding: 16px; }
+}
+
+/* ============================================================
+   RE-SKIN WEB (.dyn-onboarding--web): cuando el flujo dinámico
+   corre en la web del demo (no en la app nativa), adopta el look
+   del onboarding web — tarjeta centrada, header limpio con barra
+   de progreso, pasos inline (sin bottom-sheet). Gated por
+   plataforma → el móvil nativo NO recibe estos estilos. Aplica en
+   TODOS los anchos de web (no solo desktop) y gana por especificidad
+   al media query de arriba.
+   ============================================================ */
+.dyn-onboarding--web {
+  background: #f8fafc;
+  align-items: center;
+  padding-top: 24px;
+  padding-bottom: 48px;
+}
+.dyn-onboarding--web > * {
+  width: 100%;
+  max-width: 600px;
+}
+/* Header web: estático, sin chrome mobile; los dots se ocultan (usa la barra). */
+.dyn-onboarding--web .dyn-header {
+  position: static;
+  background: transparent;
+  border-bottom: none;
+  padding: 0 16px 4px;
+}
+.dyn-onboarding--web .header-title { text-align: left; }
+.dyn-onboarding--web .back-btn { color: #64748b; }
+.dyn-onboarding--web .web-progress { margin-top: 10px; }
+/* Lienzo del paso = tarjeta blanca con sombra (como el onboarding web). */
+.dyn-onboarding--web .dyn-body {
+  flex: initial;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 12px 32px -14px rgba(15, 23, 42, 0.15);
+  padding: 24px 24px 28px;
+  margin: 12px 16px 0;
+  overflow: visible;
+}
+/* Footer: botón dentro del flujo, no barra sticky mobile. */
+.dyn-onboarding--web .dyn-footer {
+  position: static;
+  background: transparent;
+  box-shadow: none;
+  padding: 16px;
+  margin: 0 auto;
 }
 
 .dyn-header {

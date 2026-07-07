@@ -248,6 +248,7 @@ export const STORAGE_KEYS = {
   MODULE_OVERRIDES: 'module_overrides',
   SELECTED_PRODUCT: 'selected_product',
   SELECTED_ASSET_TYPE: 'selected_asset_type',
+  LEASE_DRAFT: 'lease_draft',
   SIMULATION: 'simulation',
   ONBOARDING_STEP: 'onboarding_step',
   ONBOARDING_DATA: 'onboarding_data',

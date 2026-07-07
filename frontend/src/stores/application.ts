@@ -49,6 +49,16 @@ interface ApiError extends Error {
   }
 }
 
+// Datos del bien capturados en el simulador de arrendamiento (marca/modelo/año/
+// capacidad). El tipo de bien y el valor viven aparte (selectedAssetType y la
+// simulación); aquí solo el detalle libre que va a metadata.lease.
+interface LeaseDraft {
+  asset_brand?: string
+  asset_model?: string
+  asset_year?: number | null
+  asset_capacity?: string
+}
+
 export const useApplicationStore = defineStore('application', () => {
   // State
   const currentApplication = ref<Application | null>(null)
@@ -59,6 +69,13 @@ export const useApplicationStore = defineStore('application', () => {
   // se vuelca a applications.metadata.lease. Null para productos de crédito.
   const selectedAssetType = ref<string | null>(
     storage.get<string>(STORAGE_KEYS.SELECTED_ASSET_TYPE) ?? null,
+  )
+  // Buffer con los DATOS del bien capturados en el simulador (marca/modelo/año/
+  // capacidad). Igual que selectedAssetType, se retiene aquí (+storage) hasta que
+  // se crea la Application y se vuelca a applications.metadata.lease. Solo aplica
+  // a arrendamiento; en crédito queda vacío.
+  const leaseDraft = ref<LeaseDraft>(
+    storage.get<LeaseDraft>(STORAGE_KEYS.LEASE_DRAFT) ?? {},
   )
   const currentStep = ref(1)
   const totalSteps = ref(11) // Simulator + KYC + 9 data steps (incl. cuenta bancaria)
@@ -330,8 +347,9 @@ export const useApplicationStore = defineStore('application', () => {
       storage.set(STORAGE_KEYS.SELECTED_PRODUCT, product)
     } else {
       storage.remove(STORAGE_KEYS.SELECTED_PRODUCT)
-      // Al deseleccionar el producto también se descarta el activo elegido.
+      // Al deseleccionar el producto también se descarta el activo elegido y su detalle.
       setSelectedAssetType(null)
+      clearLeaseDraft()
     }
     log.debug('setSelectedProduct', { product: product?.name ?? null })
   }
@@ -343,6 +361,50 @@ export const useApplicationStore = defineStore('application', () => {
       storage.set(STORAGE_KEYS.SELECTED_ASSET_TYPE, assetType)
     } else {
       storage.remove(STORAGE_KEYS.SELECTED_ASSET_TYPE)
+    }
+  }
+
+  // Datos del bien (marca/modelo/año/capacidad) capturados en el simulador.
+  // Merge parcial: cada campo del formulario del simulador llama con su patch.
+  const setLeaseDraft = (patch: Partial<LeaseDraft>) => {
+    leaseDraft.value = { ...leaseDraft.value, ...patch }
+    storage.set(STORAGE_KEYS.LEASE_DRAFT, leaseDraft.value)
+  }
+
+  const clearLeaseDraft = () => {
+    leaseDraft.value = {}
+    storage.remove(STORAGE_KEYS.LEASE_DRAFT)
+  }
+
+  // Ensambla el objeto metadata.lease a partir del bien elegido (selectedAssetType),
+  // su detalle (leaseDraft), la modalidad del producto y el valor simulado. Lo usa
+  // el onboarding al crear la solicitud (ya no hay paso de activo en el flujo).
+  const buildLeaseMetadata = (): Record<string, unknown> => {
+    const prod = selectedProduct.value as unknown as
+      { rules?: { lease?: { modality?: string } } } | null
+    const d = leaseDraft.value
+    return {
+      asset_type: selectedAssetType.value ?? undefined,
+      modality: prod?.rules?.lease?.modality ?? undefined,
+      asset_brand: d.asset_brand || undefined,
+      asset_model: d.asset_model || undefined,
+      asset_year: d.asset_year ?? undefined,
+      asset_capacity: d.asset_capacity || undefined,
+      asset_estimated_value: simulation.value?.requested_amount ?? undefined,
+    }
+  }
+
+  // Vuelca el bien capturado en el simulador a applications.metadata.lease de una
+  // solicitud recién creada (arrendamiento). Reemplaza al viejo paso `asset_type`
+  // del onboarding. No-op en crédito (sin tipo de bien no hay nada que persistir).
+  const persistLeaseMetadata = async (appId: string): Promise<void> => {
+    const lease = buildLeaseMetadata()
+    if (!lease.asset_type) return
+    try {
+      await v2.applicant.application.update(appId, { metadata: { lease } } as never)
+      log.debug('persistLeaseMetadata done', { appId })
+    } catch (e) {
+      log.warn('persistLeaseMetadata failed', { error: e })
     }
   }
 
@@ -396,6 +458,7 @@ export const useApplicationStore = defineStore('application', () => {
     // Clear persisted data
     storage.remove(STORAGE_KEYS.SELECTED_PRODUCT)
     storage.remove(STORAGE_KEYS.SIMULATION)
+    clearLeaseDraft()
   }
 
   // Limpia solo la simulación (sin tocar selectedProduct ni currentApplication).
@@ -428,12 +491,17 @@ export const useApplicationStore = defineStore('application', () => {
     simulation,
     selectedProduct,
     selectedAssetType,
+    leaseDraft,
     currentStep,
     totalSteps,
     isLoading,
     // Actions
     setSelectedProduct,
     setSelectedAssetType,
+    setLeaseDraft,
+    clearLeaseDraft,
+    buildLeaseMetadata,
+    persistLeaseMetadata,
     runSimulation,
     loadApplications,
     loadApplication,

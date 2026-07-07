@@ -107,6 +107,27 @@ const selectedAsset = computed<string>({
   set: (v: string) => applicationStore.setSelectedAssetType(v || null),
 })
 
+// Paneles solares capturan "capacidad"; el resto (vehículo/maquinaria) marca/modelo/año.
+const isSolarAsset = computed(() => selectedAsset.value === 'SOLAR_PANELS')
+
+// Detalle del bien, buffereado en el store (leaseDraft) hasta crear la solicitud.
+const leaseBrand = computed<string>({
+  get: () => applicationStore.leaseDraft.asset_brand ?? '',
+  set: (v) => applicationStore.setLeaseDraft({ asset_brand: v }),
+})
+const leaseModel = computed<string>({
+  get: () => applicationStore.leaseDraft.asset_model ?? '',
+  set: (v) => applicationStore.setLeaseDraft({ asset_model: v }),
+})
+const leaseYear = computed<string>({
+  get: () => (applicationStore.leaseDraft.asset_year ?? '').toString(),
+  set: (v) => applicationStore.setLeaseDraft({ asset_year: v ? Number(v) : null }),
+})
+const leaseCapacity = computed<string>({
+  get: () => applicationStore.leaseDraft.asset_capacity ?? '',
+  set: (v) => applicationStore.setLeaseDraft({ asset_capacity: v }),
+})
+
 const selectProduct = (product: Product) => {
   log.info('Product selected', { product: product.name })
   selectedProduct.value = product
@@ -229,7 +250,8 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- Arrendamiento: ¿qué deseas arrendar? (solo productos ARRENDAMIENTO) -->
+      <!-- Arrendamiento: datos del bien a arrendar (solo productos ARRENDAMIENTO).
+           Se captura ANTES de simular la renta; el valor va en la tarjeta de abajo. -->
       <div v-if="isLease && assetOptions.length" class="mb-6 p-4 rounded-xl border border-primary-100 bg-primary-50/40">
         <label class="block text-sm font-medium text-gray-700 mb-2">¿Qué deseas arrendar?</label>
         <select
@@ -239,7 +261,49 @@ onMounted(async () => {
           <option value="" disabled>Selecciona el bien…</option>
           <option v-for="opt in assetOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
         </select>
-        <p class="mt-1 text-xs text-gray-500">Este será el bien de tu arrendamiento.</p>
+
+        <!-- Detalle del bien: marca/modelo/año (vehículo/maquinaria) o capacidad (solar) -->
+        <div v-if="selectedAsset" class="mt-4 grid grid-cols-2 gap-3">
+          <div :class="isSolarAsset ? 'col-span-2' : 'col-span-1'">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Marca</label>
+            <input
+              v-model="leaseBrand"
+              type="text"
+              :placeholder="isSolarAsset ? 'Ej. Jinko, LONGi…' : 'Ej. Toyota, Caterpillar…'"
+              class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            />
+          </div>
+          <div v-if="!isSolarAsset">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Modelo</label>
+            <input
+              v-model="leaseModel"
+              type="text"
+              placeholder="Ej. Hilux, 320D…"
+              class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            />
+          </div>
+          <div v-if="!isSolarAsset">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Año</label>
+            <input
+              v-model="leaseYear"
+              type="number"
+              inputmode="numeric"
+              placeholder="Ej. 2024"
+              class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            />
+          </div>
+          <div v-else class="col-span-2">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Capacidad (kW)</label>
+            <input
+              v-model="leaseCapacity"
+              type="text"
+              placeholder="Ej. 5 kW"
+              class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            />
+          </div>
+        </div>
+
+        <p class="mt-2 text-xs text-gray-500">Con estos datos simulamos tu renta. El anticipo lo eliges abajo.</p>
       </div>
 
       <!-- Simulator Card -->

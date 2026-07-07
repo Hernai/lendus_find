@@ -272,7 +272,10 @@ class DemoDataSeeder extends Seeder
     {
         return [
             ['id' => 'applicant_type', 'type' => 'applicant_type_select', 'label' => 'Tipo de solicitante', 'required' => true],
-            ['id' => 'asset', 'type' => 'asset_type', 'label' => 'Bien a arrendar', 'required' => true],
+            // NOTA: el bien a arrendar (tipo + marca/modelo/año + valor) se captura
+            // en el SIMULADOR, no aquí; se vuelca a metadata.lease al crear la
+            // solicitud (ver application store persistLeaseMetadata). Por eso no hay
+            // paso `asset_type` en el onboarding.
             // Rama EMPRESA (persona moral)
             ['id' => 'company', 'type' => 'company_data', 'label' => 'Datos de la empresa', 'required' => true, 'condition' => 'if_company'],
             ['id' => 'company_docs', 'type' => 'company_docs', 'label' => 'Documentos de la empresa', 'required' => true, 'condition' => 'if_company'],
