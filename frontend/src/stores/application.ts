@@ -391,6 +391,11 @@ export const useApplicationStore = defineStore('application', () => {
       asset_year: d.asset_year ?? undefined,
       asset_capacity: d.asset_capacity || undefined,
       asset_estimated_value: simulation.value?.requested_amount ?? undefined,
+      term_months: simulation.value?.term_months ?? undefined,
+      // Snapshot financiero de la simulación (renta con IVA, desembolso inicial
+      // desglosado, valor residual / opción de compra, monto financiado, etc.) para
+      // que el analista lo vea en el panel sin recalcular. Es LeaseSimulation.
+      simulation: simulation.value?.lease ?? undefined,
     }
   }
 
@@ -398,8 +403,13 @@ export const useApplicationStore = defineStore('application', () => {
   // solicitud recién creada (arrendamiento). Reemplaza al viejo paso `asset_type`
   // del onboarding. No-op en crédito (sin tipo de bien no hay nada que persistir).
   const persistLeaseMetadata = async (appId: string): Promise<void> => {
+    // Solo arrendamiento persiste metadata.lease; en crédito es no-op. Se valida
+    // por TIPO de producto (no por asset_type): antes, si el tipo de bien llegaba
+    // vacío, la solicitud de arrendamiento quedaba sin metadata.lease y el panel
+    // admin no mostraba nada del bien.
+    const prod = selectedProduct.value as unknown as { type?: string } | null
+    if (prod?.type !== 'ARRENDAMIENTO') return
     const lease = buildLeaseMetadata()
-    if (!lease.asset_type) return
     try {
       await v2.applicant.application.update(appId, { metadata: { lease } } as never)
       log.debug('persistLeaseMetadata done', { appId })

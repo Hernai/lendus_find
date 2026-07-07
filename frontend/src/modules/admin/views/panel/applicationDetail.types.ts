@@ -137,6 +137,31 @@ export interface LeaseInfo {
     asset_model?: string | null
     asset_year?: number | null
     asset_capacity?: string | null
+    // Plazo elegido + snapshot financiero de la simulación (lo persiste el
+    // onboarding en metadata.lease). Permite al analista ver renta, desembolso
+    // inicial, valor residual / opción de compra sin recalcular.
+    term_months?: number | null
+    simulation?: {
+      monthly_rental_with_iva?: number | null
+      down_payment_pct?: number | null
+      financed_amount?: number | null
+      is_pago_anticipado?: boolean | null
+      first_installment?: {
+        anticipo?: number | null
+        comision?: number | null
+        comision_iva?: number | null
+        deposito_reembolsable?: number | null
+        rentas_anticipadas?: number | null
+        iva_total?: number | null
+        total?: number | null
+      } | null
+      next_payment_amount?: number | null
+      next_payment_offset_days?: number | null
+      residual_value?: number | null
+      residual_value_pct?: number | null
+      purchase_option?: boolean | null
+      purchase_option_amount?: number | null
+    } | null
   } | null
   company?: {
     legal_name?: string | null
