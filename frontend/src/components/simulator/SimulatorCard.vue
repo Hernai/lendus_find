@@ -139,6 +139,37 @@ const anticipoMax = computed(() => leaseConfig.value?.anticipo_pct_max ?? 30)
 const downPaymentPct = ref(20)
 const leaseResult = computed(() => applicationStore.simulation?.lease ?? null)
 
+// --- Bien a arrendar: tipo + detalle (marca/modelo/año o capacidad). Se captura
+// AQUÍ (en el simulador compartido) para que aparezca en landing, /simulador y
+// onboarding por igual. Buffereado en el store hasta crear la solicitud, donde se
+// vuelca a metadata.lease (ver persistLeaseMetadata). ---
+const assetOptions = computed<{ value: string; label: string }[]>(() => {
+  const allowed = leaseConfig.value?.asset_types ?? []
+  const catalog = tenantStore.options.assetType ?? []
+  return allowed.map((v) => catalog.find((o) => o.value === v) ?? { value: v, label: v })
+})
+const selectedAsset = computed<string>({
+  get: () => applicationStore.selectedAssetType ?? '',
+  set: (v) => applicationStore.setSelectedAssetType(v || null),
+})
+const isSolarAsset = computed(() => selectedAsset.value === 'SOLAR_PANELS')
+const leaseBrand = computed<string>({
+  get: () => applicationStore.leaseDraft.asset_brand ?? '',
+  set: (v) => applicationStore.setLeaseDraft({ asset_brand: v }),
+})
+const leaseModel = computed<string>({
+  get: () => applicationStore.leaseDraft.asset_model ?? '',
+  set: (v) => applicationStore.setLeaseDraft({ asset_model: v }),
+})
+const leaseYear = computed<string>({
+  get: () => (applicationStore.leaseDraft.asset_year ?? '').toString(),
+  set: (v) => applicationStore.setLeaseDraft({ asset_year: v ? Number(v) : null }),
+})
+const leaseCapacity = computed<string>({
+  get: () => applicationStore.leaseDraft.asset_capacity ?? '',
+  set: (v) => applicationStore.setLeaseDraft({ asset_capacity: v }),
+})
+
 // Convert selected payments to months for API
 const termMonths = computed(() => {
   // Pago único: el backend usa term_days; mandamos el plazo en meses del
@@ -281,6 +312,60 @@ const paymentLabel = computed(() => {
     <h2 v-if="!compact" class="text-2xl font-bold text-tenant mb-6">
       {{ isLease ? 'Simula tu arrendamiento' : 'Simula tu crédito' }}
     </h2>
+
+    <!-- Bien a arrendar (solo arrendamiento): tipo + detalle. Se captura ANTES del
+         valor para que "lo primero" sea el bien. -->
+    <div v-if="isLease && assetOptions.length" class="mb-6">
+      <label class="block text-sm font-medium text-tenant mb-2">¿Qué deseas arrendar?</label>
+      <select
+        v-model="selectedAsset"
+        class="w-full px-4 py-2.5 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+      >
+        <option value="" disabled>Selecciona el bien…</option>
+        <option v-for="opt in assetOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+      </select>
+
+      <!-- Detalle: marca/modelo/año (vehículo/maquinaria) o capacidad (solar) -->
+      <div v-if="selectedAsset" class="mt-3 grid grid-cols-2 gap-3">
+        <div :class="isSolarAsset ? 'col-span-2' : 'col-span-1'">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Marca</label>
+          <input
+            v-model="leaseBrand"
+            type="text"
+            :placeholder="isSolarAsset ? 'Ej. Jinko, LONGi…' : 'Ej. Toyota, Caterpillar…'"
+            class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+        </div>
+        <div v-if="!isSolarAsset">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Modelo</label>
+          <input
+            v-model="leaseModel"
+            type="text"
+            placeholder="Ej. Hilux, 320D…"
+            class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+        </div>
+        <div v-if="!isSolarAsset">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Año</label>
+          <input
+            v-model="leaseYear"
+            type="number"
+            inputmode="numeric"
+            placeholder="Ej. 2024"
+            class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+        </div>
+        <div v-else class="col-span-2">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Capacidad (kW)</label>
+          <input
+            v-model="leaseCapacity"
+            type="text"
+            placeholder="Ej. 5 kW"
+            class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+        </div>
+      </div>
+    </div>
 
     <!-- Monto (crédito) / Valor del bien (arrendamiento) -->
     <div class="mb-6">
