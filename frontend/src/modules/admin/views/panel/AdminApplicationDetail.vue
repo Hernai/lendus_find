@@ -1170,8 +1170,8 @@ onUnmounted(() => {
             <!-- Modal: Verificación de INE (confirmado cliente vs OCR vs RENAPO) -->
             <IneVerificationModal v-model:show="showIneVerification" :comparison="ineComparison" />
 
-            <!-- Summary Cards -->
-            <LoanSummaryCards :loan="application.loan" />
+            <!-- Summary Cards (arrendamiento-aware: renta/desembolso vs monto/pago) -->
+            <LoanSummaryCards :loan="application.loan" :lease-info="application.lease_info" />
 
             <!-- Datos del Solicitante -->
             <ApplicantDataSection
@@ -1225,8 +1225,10 @@ onUnmounted(() => {
               <LeaseInfoSection :lease-info="application.lease_info" />
             </div>
 
-            <!-- Loan Details -->
-            <LoanDetailsSection :loan="application.loan" />
+            <!-- Loan Details — SOLO crédito. En arrendamiento, la sección
+                 "Arrendamiento" (LeaseInfoSection) ya muestra renta/desembolso/
+                 condiciones; mostrar "Detalles del Crédito" aquí duplicaría el dato. -->
+            <LoanDetailsSection v-if="!application.lease_info?.lease?.asset_type" :loan="application.loan" />
 
             <!-- Signature - only show if product requires it or if user already signed -->
             <SignatureSection
