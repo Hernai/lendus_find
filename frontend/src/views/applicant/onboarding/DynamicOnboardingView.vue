@@ -13,6 +13,7 @@ import { logger } from '@/utils/logger'
 import { formatCurrency } from '@/utils/formatters'
 import { bankName } from '@/utils/banks'
 import { useIneVerification, type IneVerifiedFields } from '@/composables/useIneVerification'
+import { platform } from '@/platform'
 
 /**
  * Vista de onboarding dinámica (white-label).
@@ -40,6 +41,11 @@ const tenantStore = useTenantStore()
 const applicationStore = useApplicationStore()
 const onboardingStore = useOnboardingStore()
 const authStore = useAuthStore()
+
+// El flujo dinámico se monta bajo distintas rutas: móvil (`m-onboarding-step`,
+// /m/*) y web (`tenant-onboarding-dynamic`, /:tenant/*). Navegamos SIEMPRE a la
+// misma ruta donde ya estamos (route.name) para no acoplarnos a la móvil.
+const stepRouteName = computed(() => (route.name as string) || 'm-onboarding-step')
 
 const isLoading = ref(true)
 
@@ -301,8 +307,14 @@ async function finishOnboarding() {
       log.warn('No application could be created to finish onboarding')
     }
   } finally {
-    // Siempre navegar al home (mostrará el estado correcto según lo que haya en backend)
-    await router.replace({ name: 'm-home' })
+    // Al terminar, al home. En móvil (Capacitor) es `m-home`; en web (flujo de
+    // arrendamiento) al dashboard del tenant, que muestra el estado de la solicitud.
+    if (platform.device.isNative()) {
+      await router.replace({ name: 'm-home' })
+    } else {
+      const slug = (route.params.tenant as string) || tenantStore.slug || 'demo'
+      await router.replace({ name: 'tenant-dashboard', params: { tenant: slug } })
+    }
   }
 }
 
@@ -323,7 +335,7 @@ watch(currentValue, async (v, prev) => {
     saveInBackground()
     sheetOpen.value = false
     const nextId = steps.value[nextIdx]!.id
-    await router.push({ name: 'm-onboarding-step', params: { stepId: nextId } })
+    await router.push({ name: stepRouteName.value, params: { ...route.params, stepId: nextId } })
   }, 250)
 })
 
@@ -451,7 +463,7 @@ async function next() {
   // Avance optimista: guarda en segundo plano y navega de inmediato.
   saveInBackground()
   const nextId = steps.value[nextIdx]!.id
-  await router.push({ name: 'm-onboarding-step', params: { stepId: nextId } })
+  await router.push({ name: stepRouteName.value, params: { ...route.params, stepId: nextId } })
 }
 
 async function prev() {
@@ -462,7 +474,7 @@ async function prev() {
     return
   }
   const prevId = steps.value[prevIdx]!.id
-  await router.push({ name: 'm-onboarding-step', params: { stepId: prevId } })
+  await router.push({ name: stepRouteName.value, params: { ...route.params, stepId: prevId } })
 }
 
 function closeSheet() {
@@ -483,7 +495,7 @@ onMounted(async () => {
   await ensureApplication()
 
   if (!route.params.stepId && steps.value.length > 0) {
-    await router.replace({ name: 'm-onboarding-step', params: { stepId: steps.value[0]!.id } })
+    await router.replace({ name: stepRouteName.value, params: { ...route.params, stepId: steps.value[0]!.id } })
   }
 
   isLoading.value = false

@@ -122,8 +122,14 @@ const goBack = () => {
 
 const handleContinue = () => {
   // User completed simulation and wants to continue with application
-  // Navigate to next step (KYC verification)
   log.info('User continuing to next step after simulation')
+  // Arrendamiento usa el flujo DINÁMICO (selección de bien, persona/empresa,
+  // datos de empresa). El crédito sigue en el flujo legacy (verificación KYC).
+  if (selectedProduct.value?.type === 'ARRENDAMIENTO') {
+    const slug = tenantStore.slug || 'demo'
+    router.push({ name: 'tenant-onboarding-dynamic', params: { tenant: slug } })
+    return
+  }
   router.push('/solicitud/verificacion')
 }
 

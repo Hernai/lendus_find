@@ -152,6 +152,11 @@ router.beforeEach(async (to, from, next) => {
     const savedSimulation = storage.get(STORAGE_KEYS.SIMULATION)
 
     if (savedProduct || savedSimulation) {
+      // Arrendamiento usa el flujo dinámico (bien, persona/empresa); el crédito, el legacy.
+      const prodType = (savedProduct as { type?: string } | null)?.type
+      if (prodType === 'ARRENDAMIENTO' && tenantSlug) {
+        return next({ name: 'tenant-onboarding-dynamic', params: { tenant: tenantSlug } })
+      }
       if (tenantSlug) {
         return next({ path: `/${tenantSlug}/solicitud/verificacion` })
       }

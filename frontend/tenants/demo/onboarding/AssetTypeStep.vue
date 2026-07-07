@@ -15,6 +15,12 @@ interface LeaseValue {
   modality: string | null
   asset_description: string
   asset_estimated_value: number | null
+  // Detalle del bien (opcional). Marca/modelo/año para vehículos y maquinaria;
+  // capacidad para paneles solares. Todo va a metadata.lease (JSONB libre).
+  asset_brand?: string
+  asset_model?: string
+  asset_year?: number | null
+  asset_capacity?: string
 }
 
 const props = defineProps<{
@@ -50,11 +56,19 @@ const allowedAssets = computed<Option[]>(() => {
 const modality = computed(() => lease.value?.modality ?? null)
 
 const current = computed<LeaseValue>(() => ({
-  asset_type: props.modelValue?.asset_type ?? null,
+  // Prefill: si venías del simulador (buffer selectedAssetType), lo tomamos.
+  asset_type: props.modelValue?.asset_type ?? applicationStore.selectedAssetType ?? null,
   modality: props.modelValue?.modality ?? modality.value,
   asset_description: props.modelValue?.asset_description ?? '',
   asset_estimated_value: props.modelValue?.asset_estimated_value ?? null,
+  asset_brand: props.modelValue?.asset_brand ?? '',
+  asset_model: props.modelValue?.asset_model ?? '',
+  asset_year: props.modelValue?.asset_year ?? null,
+  asset_capacity: props.modelValue?.asset_capacity ?? '',
 }))
+
+const hasAsset = computed(() => !!current.value.asset_type)
+const isSolar = computed(() => current.value.asset_type === 'SOLAR_PANELS')
 
 const isValid = computed(() => !!current.value.asset_type)
 watch(isValid, (v) => emit('update:valid', v), { immediate: true })
@@ -114,6 +128,51 @@ function assetIcon(value: string): string {
         Este producto aún no tiene tipos de activo configurados.
       </li>
     </ul>
+
+    <!-- Detalle del bien: marca/modelo/año (vehículos/maquinaria) o capacidad (solar). -->
+    <template v-if="hasAsset">
+      <label class="field">
+        <span class="field-label">Marca</span>
+        <input
+          class="field-input"
+          type="text"
+          :value="current.asset_brand"
+          :placeholder="isSolar ? 'Ej. Jinko, LONGi…' : 'Ej. Toyota, Caterpillar…'"
+          @input="update({ asset_brand: ($event.target as HTMLInputElement).value })"
+        />
+      </label>
+      <label v-if="!isSolar" class="field">
+        <span class="field-label">Modelo</span>
+        <input
+          class="field-input"
+          type="text"
+          :value="current.asset_model"
+          placeholder="Ej. Hilux, 320D…"
+          @input="update({ asset_model: ($event.target as HTMLInputElement).value })"
+        />
+      </label>
+      <label v-if="!isSolar" class="field">
+        <span class="field-label">Año</span>
+        <input
+          class="field-input"
+          type="number"
+          inputmode="numeric"
+          :value="current.asset_year ?? ''"
+          placeholder="Ej. 2024"
+          @input="update({ asset_year: Number(($event.target as HTMLInputElement).value) || null })"
+        />
+      </label>
+      <label v-else class="field">
+        <span class="field-label">Capacidad (kW)</span>
+        <input
+          class="field-input"
+          type="text"
+          :value="current.asset_capacity"
+          placeholder="Ej. 5 kW"
+          @input="update({ asset_capacity: ($event.target as HTMLInputElement).value })"
+        />
+      </label>
+    </template>
 
     <label class="field">
       <span class="field-label">Descripción del bien (opcional)</span>

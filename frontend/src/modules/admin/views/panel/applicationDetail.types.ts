@@ -133,6 +133,10 @@ export interface LeaseInfo {
     modality?: string | null
     asset_description?: string | null
     asset_estimated_value?: number | null
+    asset_brand?: string | null
+    asset_model?: string | null
+    asset_year?: number | null
+    asset_capacity?: string | null
   } | null
   company?: {
     legal_name?: string | null

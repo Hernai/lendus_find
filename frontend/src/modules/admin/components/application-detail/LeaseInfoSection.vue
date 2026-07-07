@@ -51,6 +51,22 @@ const estimatedValue = computed(() => {
         <p class="text-xs text-gray-500">Modalidad</p>
         <p class="text-sm font-medium text-gray-900">{{ modalityLabel }}</p>
       </div>
+      <div v-if="leaseInfo?.lease?.asset_brand">
+        <p class="text-xs text-gray-500">Marca</p>
+        <p class="text-sm font-medium text-gray-900">{{ leaseInfo.lease.asset_brand }}</p>
+      </div>
+      <div v-if="leaseInfo?.lease?.asset_model">
+        <p class="text-xs text-gray-500">Modelo</p>
+        <p class="text-sm font-medium text-gray-900">{{ leaseInfo.lease.asset_model }}</p>
+      </div>
+      <div v-if="leaseInfo?.lease?.asset_year">
+        <p class="text-xs text-gray-500">Año</p>
+        <p class="text-sm font-medium text-gray-900">{{ leaseInfo.lease.asset_year }}</p>
+      </div>
+      <div v-if="leaseInfo?.lease?.asset_capacity">
+        <p class="text-xs text-gray-500">Capacidad</p>
+        <p class="text-sm font-medium text-gray-900">{{ leaseInfo.lease.asset_capacity }}</p>
+      </div>
       <div v-if="leaseInfo?.lease?.asset_description">
         <p class="text-xs text-gray-500">Descripción</p>
         <p class="text-sm font-medium text-gray-900">{{ leaseInfo.lease.asset_description }}</p>

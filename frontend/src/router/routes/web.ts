@@ -32,6 +32,9 @@ const Step6Documents = () => import('@/views/applicant/onboarding/Step6Documents
 const Step7References = () => import('@/views/applicant/onboarding/Step7References.vue')
 const Step8Review = () => import('@/views/applicant/onboarding/Step8Review.vue')
 const StepBankAccount = () => import('@/views/applicant/onboarding/StepBankAccount.vue')
+// Flujo de onboarding DINÁMICO (config-driven por onboarding_steps). El mismo
+// componente que móvil (/m/*); aquí se expone en web para el arrendamiento.
+const DynamicOnboardingView = () => import('@/views/applicant/onboarding/DynamicOnboardingView.vue')
 
 // Applicant Dashboard
 const DashboardView = () => import('@/views/applicant/dashboard/DashboardView.vue')
@@ -132,6 +135,14 @@ export const webRoutes: RouteRecordRaw[] = [
       { path: 'cuenta-bancaria', name: 'tenant-onboarding-bank', component: StepBankAccount, meta: { step: 9, title: 'Cuenta bancaria' } },
       { path: 'paso-8', name: 'tenant-onboarding-step-8', component: Step8Review, meta: { step: 10, title: 'Revisión y firma' } }
     ]
+  },
+  {
+    // Onboarding dinámico en web (arrendamiento): flujo config-driven con
+    // selección de bien, ramificación persona/empresa y datos de empresa.
+    path: '/:tenant/solicitud-arrendamiento/:stepId?',
+    name: 'tenant-onboarding-dynamic',
+    component: DynamicOnboardingView,
+    meta: { requiresAuth: true }
   },
   {
     path: '/:tenant/dashboard',
