@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useTenantStore } from '@/stores/tenant'
 import type { LeaseInfo } from '@/modules/admin/views/panel/applicationDetail.types'
 
@@ -23,6 +23,23 @@ function money(v?: number | null): string {
   if (v == null) return '—'
   return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 }).format(v)
 }
+
+// Calendario de rentas: N rentas iguales (renta con IVA) + opción de compra al
+// final (financiero). Se genera del snapshot; el analista lo expande para ver los
+// montos mensuales. Colapsado por defecto para no saturar el panel.
+const showSchedule = ref(false)
+const scheduleRows = computed(() => {
+  const s = sim.value
+  const n = props.leaseInfo?.lease?.term_months ?? 0
+  const renta = s?.monthly_rental_with_iva
+  if (!renta || !n) return [] as { key: string; label: string; amount: number }[]
+  const rows = Array.from({ length: n }, (_, i) => ({ key: `r${i + 1}`, label: `Renta ${i + 1}`, amount: renta }))
+  if (s?.purchase_option && s?.purchase_option_amount) {
+    rows.push({ key: 'opt', label: 'Opción de compra (fin del plazo)', amount: s.purchase_option_amount })
+  }
+  return rows
+})
+const scheduleTotal = computed(() => scheduleRows.value.reduce((a, r) => a + r.amount, 0))
 
 function labelOf(list: { value: string; label: string }[] | undefined, value?: string | null): string {
   if (!value) return '—'
@@ -143,6 +160,30 @@ const estimatedValue = computed(() => {
       <p v-if="sim?.next_payment_amount" class="mt-2 text-xs text-gray-500">
         Próximo pago: {{ money(sim.next_payment_amount) }} en ~{{ sim.next_payment_offset_days ?? 30 }} días.
       </p>
+
+      <!-- Calendario de rentas (colapsable) -->
+      <template v-if="scheduleRows.length">
+        <button
+          type="button"
+          class="mt-4 flex items-center gap-1 text-xs font-semibold text-primary-600 uppercase tracking-wide"
+          @click="showSchedule = !showSchedule"
+        >
+          Calendario de rentas ({{ leaseInfo?.lease?.term_months }} rentas)
+          <svg class="w-3.5 h-3.5 transition-transform" :class="{ 'rotate-180': showSchedule }" viewBox="0 0 24 24" fill="none">
+            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <div v-if="showSchedule" class="mt-2 rounded-lg border border-gray-100 divide-y divide-gray-100 text-sm max-h-64 overflow-y-auto">
+          <div v-for="row in scheduleRows" :key="row.key" class="flex justify-between px-3 py-1.5">
+            <span class="text-gray-600">{{ row.label }}</span>
+            <span class="font-medium">{{ money(row.amount) }}</span>
+          </div>
+          <div class="flex justify-between px-3 py-2 bg-gray-50 sticky bottom-0">
+            <span class="font-semibold text-gray-700">Total de rentas + opción</span>
+            <span class="font-bold text-primary-600">{{ money(scheduleTotal) }}</span>
+          </div>
+        </div>
+      </template>
     </div>
 
     <!-- Datos de empresa (persona moral) -->

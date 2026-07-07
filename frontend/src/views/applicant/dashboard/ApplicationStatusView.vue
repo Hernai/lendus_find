@@ -208,8 +208,22 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- Loan info -->
-        <div v-if="simulation" class="grid grid-cols-3 gap-4 pt-4 border-t border-gray-100">
+        <!-- Info: arrendamiento (renta/desembolso) vs crédito (monto/pago) -->
+        <div v-if="simulation?.lease" class="grid grid-cols-3 gap-4 pt-4 border-t border-gray-100">
+          <div>
+            <p class="text-xs text-gray-500">Renta mensual</p>
+            <p class="font-semibold text-gray-900">{{ formatMoney(simulation.lease.monthly_rental_with_iva) }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-500">Plazo</p>
+            <p class="font-semibold text-gray-900">{{ simulation.term_months }} meses</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-500">Desembolso inicial</p>
+            <p class="font-semibold text-gray-900">{{ formatMoney(simulation.lease.first_installment.total) }}</p>
+          </div>
+        </div>
+        <div v-else-if="simulation" class="grid grid-cols-3 gap-4 pt-4 border-t border-gray-100">
           <div>
             <p class="text-xs text-gray-500">Monto</p>
             <p class="font-semibold text-gray-900">{{ formatMoney(simulation.requested_amount) }}</p>
