@@ -79,6 +79,17 @@ onMounted(async () => {
       }
     }
 
+    // Arrendamiento NO usa el flujo legacy: cae al dinámico (selección de bien,
+    // persona/empresa, datos de empresa). Esto cubre CUALQUIER entrada al legacy
+    // —incluido el default de auth para usuario nuevo, que empuja a
+    // /solicitud/verificacion sin pasar por el simulador ni por el guard.
+    if (applicationStore.selectedProduct?.type === 'ARRENDAMIENTO') {
+      const slug = tenantStore.slug || 'demo'
+      log.info('Producto ARRENDAMIENTO en flujo legacy → redirijo al dinámico')
+      router.replace({ name: 'tenant-onboarding-dynamic', params: { tenant: slug } })
+      return
+    }
+
     // Check if Nubarium is configured
     const hasNubarium = await kycStore.checkServices()
 

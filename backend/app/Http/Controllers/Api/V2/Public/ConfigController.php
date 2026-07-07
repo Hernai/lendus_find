@@ -258,6 +258,10 @@ class ConfigController extends Controller
             'min_age' => $rules['min_age'] ?? 18,
             'max_age' => $rules['max_age'] ?? 75,
             'min_income' => $rules['min_income'] ?? 8000,
+            // Config de arrendamiento (asset_types, modalidad, anticipos, IVA…). Solo
+            // existe en productos ARRENDAMIENTO; el frontend (AssetTypeStep, simulador)
+            // la lee de `rules.lease`. Sin este passthrough el selector de bien sale vacío.
+            'lease' => $rules['lease'] ?? null,
         ];
     }
 
