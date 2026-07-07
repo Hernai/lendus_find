@@ -477,6 +477,23 @@ class ApplicationController extends Controller
         // Check for rejected items (data fields and documents)
         $rejectionInfo = $this->getRejectionInfo($app);
 
+        // Datos de ARRENDAMIENTO (metadata.lease): renta mensual, bien y desembolso
+        // para que el dashboard/estado del aplicante muestren la RENTA, no el valor
+        // del bien como si fuera un monto de crédito. Null en productos de crédito.
+        $typeVal = $app->product?->type;
+        $isLease = ($typeVal instanceof \BackedEnum ? $typeVal->value : $typeVal) === 'ARRENDAMIENTO';
+        $leaseMeta = $app->metadata['lease'] ?? [];
+        $leaseSim = $leaseMeta['simulation'] ?? [];
+        $leaseInfo = $isLease ? [
+            'asset_type' => $leaseMeta['asset_type'] ?? null,
+            'modality' => $leaseMeta['modality'] ?? null,
+            'asset_estimated_value' => $leaseMeta['asset_estimated_value'] ?? $app->requested_amount,
+            'term_months' => $leaseMeta['term_months'] ?? $app->requested_term_months,
+            'monthly_rental' => $leaseSim['monthly_rental_with_iva'] ?? null,
+            'first_installment_total' => $leaseSim['first_installment']['total'] ?? null,
+            'purchase_option_amount' => $leaseSim['purchase_option_amount'] ?? null,
+        ] : null;
+
         return [
             'id' => $app->id,
             'status' => $app->status,
@@ -500,6 +517,7 @@ class ApplicationController extends Controller
             'counter_offer' => $app->counter_offer,
             'approved_amount' => $app->approved_amount,
             'approved_term_months' => $app->approved_term_months,
+            'lease_info' => $leaseInfo,
             'created_at' => $app->created_at?->toIso8601String(),
             'submitted_at' => $app->submitted_at?->toIso8601String(),
             'decision_at' => $app->decision_at?->toIso8601String(),

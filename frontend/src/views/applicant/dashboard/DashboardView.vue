@@ -40,6 +40,25 @@ interface Application {
   has_rejected_items?: boolean
   rejected_fields_count?: number
   rejected_documents_count?: number
+  // Arrendamiento: renta/bien para mostrar la renta mensual (no el valor del bien
+  // como si fuera monto de crédito). Null en productos de crédito.
+  lease_info?: {
+    asset_type?: string | null
+    modality?: string | null
+    asset_estimated_value?: number | null
+    term_months?: number | null
+    monthly_rental?: number | null
+    first_installment_total?: number | null
+    purchase_option_amount?: number | null
+  } | null
+}
+
+// Etiqueta legible del tipo de bien arrendado (para la tarjeta de arrendamiento).
+const ASSET_LABELS: Record<string, string> = {
+  SOLAR_PANELS: 'Paneles solares', VEHICLE: 'Vehículo', MACHINERY: 'Maquinaria',
+}
+function leaseAssetLabel(type?: string | null): string {
+  return (type && ASSET_LABELS[type]) || 'Bien a arrendar'
 }
 
 const isLoading = ref(true)
@@ -590,8 +609,20 @@ const handleCancelApplication = async () => {
                 <div class="flex items-start justify-between mb-4">
                   <div>
                     <p class="text-sm text-gray-500">{{ app.product_name }}</p>
-                    <p class="text-2xl font-bold text-gray-900">{{ formatMoney(app.requested_amount) }}</p>
-                    <p class="text-sm text-gray-500">{{ app.term_months }} meses</p>
+                    <!-- Arrendamiento: renta mensual (no el valor del bien como monto de crédito) -->
+                    <template v-if="app.lease_info">
+                      <p class="text-2xl font-bold text-gray-900">
+                        {{ formatMoney(app.lease_info.monthly_rental ?? 0) }}
+                        <span class="text-sm font-normal text-gray-500">/mes</span>
+                      </p>
+                      <p class="text-sm text-gray-500">
+                        {{ leaseAssetLabel(app.lease_info.asset_type) }} · {{ app.lease_info.term_months }} meses
+                      </p>
+                    </template>
+                    <template v-else>
+                      <p class="text-2xl font-bold text-gray-900">{{ formatMoney(app.requested_amount) }}</p>
+                      <p class="text-sm text-gray-500">{{ app.term_months }} meses</p>
+                    </template>
                   </div>
                   <div class="text-right text-sm text-gray-500">
                     <p>Creada</p>
