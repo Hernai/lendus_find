@@ -288,8 +288,9 @@ class DemoDataSeeder extends Seeder
             ['id' => 'marital', 'type' => 'select', 'field' => 'marital_status', 'enum' => 'MaritalStatus', 'label' => 'Estado civil', 'required' => true, 'condition' => 'if_individual'],
             ['id' => 'employment', 'type' => 'select', 'field' => 'employment_type', 'enum' => 'EmploymentType', 'label' => 'Ocupación', 'required' => true, 'condition' => 'if_individual'],
             ['id' => 'salary_range', 'type' => 'select', 'field' => 'salary_range', 'enum' => 'SalaryRange', 'label' => 'Rango de ingresos', 'required' => true, 'condition' => 'if_individual'],
-            // Común a ambos
-            ['id' => 'location', 'type' => 'state_city', 'fields' => ['state', 'city'], 'label' => 'Estado y ciudad', 'required' => true],
+            // Común a ambos. El domicilio COMPLETO (calle, CP, estado, ciudad,
+            // municipio) se captura en `address`, que autollena estado/ciudad por CP;
+            // por eso NO se pide `state_city` aparte (evita capturar el domicilio dos veces).
             ['id' => 'address', 'type' => 'address', 'label' => 'Domicilio', 'required' => true],
             ['id' => 'references', 'type' => 'references', 'min' => 2, 'max' => 2, 'label' => 'Referencias', 'required' => true],
             // Sin cuenta bancaria (CLABE): en arrendamiento NO hay desembolso al cliente.

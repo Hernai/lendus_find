@@ -22,4 +22,9 @@ registerTenantSteps('demo', {
   company_docs: {
     default: defineAsyncComponent(() => import('./onboarding/CompanyDocsStep.vue')),
   },
+  // Override del paso base `references`: variante demo con nombre/apellidos
+  // separados. MoneyCapital sigue usando el ReferencesStepRenderer base.
+  references: {
+    default: defineAsyncComponent(() => import('./onboarding/ReferencesStep.vue')),
+  },
 })

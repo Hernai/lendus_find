@@ -880,7 +880,9 @@ export const useOnboardingStore = defineStore('onboarding', () => {
         case 'review':
           break
         case 'references': {
-          const refs = Array.isArray(payload) ? (payload as Array<{ type: string; name: string; phone: string }>) : []
+          const refs = Array.isArray(payload)
+            ? (payload as Array<{ type: string; name?: string; first_name?: string; last_name_1?: string; last_name_2?: string; phone: string }>)
+            : []
           // Borrar las referencias existentes para no duplicar al reeditar/retroceder.
           try {
             const existing = await profileService.listReferences()
@@ -890,20 +892,34 @@ export const useOnboardingStore = defineStore('onboarding', () => {
             }
           } catch { stepHadError = true }
           for (const r of refs) {
-            if (!r?.name || !r?.phone) continue
-            // Split del nombre completo: 1ª palabra como nombre, resto como
-            // apellido. Si solo hay una palabra, el apellido queda vacío (NO se
-            // duplica el nombre como apellido).
-            const parts = r.name.trim().split(/\s+/)
-            const first = parts[0] ?? r.name
-            const last = parts.length > 1 ? parts.slice(1).join(' ') : ''
+            if (!r?.phone) continue
+            // El demo captura nombre/apellidos POR SEPARADO (first_name/last_name_1/
+            // last_name_2). El renderer base (MoneyCapital) manda `name` completo →
+            // split (1ª palabra = nombre, resto = apellido). Aceptamos ambos.
+            let first: string
+            let last1: string
+            let last2: string | undefined
+            if (r.first_name) {
+              first = r.first_name.trim()
+              last1 = (r.last_name_1 ?? '').trim()
+              last2 = (r.last_name_2 ?? '').trim() || undefined
+            } else {
+              const name = (r.name ?? '').trim()
+              if (!name) continue
+              const parts = name.split(/\s+/)
+              first = parts[0] ?? name
+              last1 = parts.length > 1 ? parts.slice(1).join(' ') : ''
+              last2 = undefined
+            }
+            if (!first) continue
             // El backend solo soporta type PERSONAL|WORK; el parentesco real va en relationship.
             const relationship = r.type === 'FAMILY' ? 'FAMILIAR' : 'AMIGO'
             try {
               await profileService.addReference({
                 type: 'PERSONAL',
                 first_name: first,
-                last_name_1: last,
+                last_name_1: last1,
+                last_name_2: last2,
                 phone: r.phone.replace(/\D/g, ''),
                 relationship,
               } as never)
