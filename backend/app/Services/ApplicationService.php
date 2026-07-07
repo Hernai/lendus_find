@@ -485,6 +485,12 @@ class ApplicationService
                 'phone' => $applicant->primary_phone ?? '',
             ];
 
+            // Arrendamiento vs crédito: las notificaciones deben decir "arrendamiento"
+            // y mostrar la RENTA mensual, no el valor del bien como monto de crédito.
+            $typeVal = $application->product?->type;
+            $isLease = ($typeVal instanceof \BackedEnum ? $typeVal->value : $typeVal) === 'ARRENDAMIENTO';
+            $monthlyRental = $application->metadata['lease']['simulation']['monthly_rental_with_iva'] ?? null;
+
             $variables = array_merge([
                 'user' => $who,
                 'applicant' => $who,
@@ -496,6 +502,14 @@ class ApplicationService
                     'product_name' => $application->product?->name ?? '',
                     'status' => $application->status,
                     'status_label' => Application::statuses()[$application->status] ?? $application->status,
+                    // Framing por tipo de producto para templates arrendamiento-aware.
+                    'is_lease' => $isLease,
+                    'type_label' => $isLease ? 'arrendamiento' : 'crédito',
+                    'primary_label' => $isLease ? 'Renta mensual' : 'Monto',
+                    'primary_amount' => $isLease && $monthlyRental !== null
+                        ? '$' . number_format($monthlyRental, 2)
+                        : '$' . number_format($application->requested_amount ?? 0, 2),
+                    'monthly_rental' => $monthlyRental !== null ? '$' . number_format($monthlyRental, 2) : null,
                 ],
                 'tenant' => [
                     'name' => $application->tenant?->name ?? '',

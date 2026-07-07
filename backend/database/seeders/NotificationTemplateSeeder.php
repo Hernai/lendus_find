@@ -106,11 +106,11 @@ Por tu seguridad:
 
 ¡Gracias por confiar en {{tenant.name}}!
 
-Hemos recibido tu solicitud de crédito con los siguientes detalles:
+Hemos recibido tu solicitud de {{application.type_label}} con los siguientes detalles:
 
 ━━━━━━━━━━━━━━━━━━━━━━
 📋 Folio: {{application.folio}}
-💰 Monto: ${{currency application.amount}} MXN
+💰 {{application.primary_label}}: ${{currency application.primary_amount}} MXN
 📅 Plazo: {{application.term_months}} meses
 🏦 Producto: {{application.product_name}}
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -119,7 +119,7 @@ Hemos recibido tu solicitud de crédito con los siguientes detalles:
 
 1️⃣ Revisión inicial (24-48 hrs)
 2️⃣ Verificación de documentos
-3️⃣ Análisis de crédito
+3️⃣ Análisis de tu solicitud
 4️⃣ Decisión final
 
 Te mantendremos informado sobre cada paso del proceso.
@@ -162,7 +162,7 @@ Equipo {{tenant.name}}',
                             </p>
 
                             <p style="margin: 0 0 32px; font-size: 16px; line-height: 24px; color: #374151;">
-                                Hemos recibido exitosamente tu solicitud de crédito. A continuación los detalles:
+                                Hemos recibido exitosamente tu solicitud de {{application.type_label}}. A continuación los detalles:
                             </p>
 
                             <!-- Application Details -->
@@ -175,8 +175,8 @@ Equipo {{tenant.name}}',
                                                 <td style="font-size: 16px; color: #075985; font-weight: 700;">{{application.folio}}</td>
                                             </tr>
                                             <tr>
-                                                <td style="font-size: 14px; color: #0369a1; font-weight: 600; padding-top: 8px;">💰 Monto Solicitado</td>
-                                                <td style="font-size: 20px; color: #075985; font-weight: 700; padding-top: 8px;">${{currency application.amount}} MXN</td>
+                                                <td style="font-size: 14px; color: #0369a1; font-weight: 600; padding-top: 8px;">💰 {{application.primary_label}}</td>
+                                                <td style="font-size: 20px; color: #075985; font-weight: 700; padding-top: 8px;">${{currency application.primary_amount}} MXN</td>
                                             </tr>
                                             <tr>
                                                 <td style="font-size: 14px; color: #0369a1; font-weight: 600; padding-top: 8px;">📅 Plazo</td>
@@ -224,7 +224,7 @@ Equipo {{tenant.name}}',
                                 <tr>
                                     <td style="padding: 16px; background-color: #f9fafb; border-left: 4px solid #f59e0b; margin-bottom: 12px; border-radius: 8px;">
                                         <p style="margin: 0 0 4px; font-size: 16px; font-weight: 600; color: #111827;">
-                                            3️⃣ Análisis de Crédito
+                                            3️⃣ Análisis de tu solicitud
                                         </p>
                                         <p style="margin: 0; font-size: 14px; color: #6b7280;">
                                             Evaluaremos tu perfil crediticio
@@ -307,7 +307,7 @@ Hola *{{user.first_name}}*, gracias por confiar en *{{tenant.name}}*.
 📋 *Detalles de tu Solicitud:*
 
 • Folio: `{{application.folio}}`
-• Monto: *${{currency application.amount}} MXN*
+• {{application.primary_label}}: *${{currency application.primary_amount}} MXN*
 • Plazo: *{{application.term_months}} meses*
 • Producto: {{application.product_name}}
 • Fecha: {{date application.created_at}}
@@ -318,7 +318,7 @@ Hola *{{user.first_name}}*, gracias por confiar en *{{tenant.name}}*.
 
 1️⃣ Revisión inicial (24-48 hrs)
 2️⃣ Verificación de documentos
-3️⃣ Análisis de crédito
+3️⃣ Análisis de tu solicitud
 4️⃣ Decisión final
 
 Te mantendremos informado en cada etapa del proceso.
@@ -339,7 +339,7 @@ _Mensaje automático - {{tenant.name}}_',
                 'channel' => NotificationChannel::SMS,
                 'priority' => 3,
                 'subject' => null,
-                'body' => '{{tenant.name}}: Solicitud {{application.folio}} recibida por ${{currency application.amount}} a {{application.term_months}} meses. Te contactaremos pronto. Dudas: {{tenant.phone}}',
+                'body' => '{{tenant.name}}: Solicitud {{application.folio}} recibida por ${{currency application.primary_amount}} a {{application.term_months}} meses. Te contactaremos pronto. Dudas: {{tenant.phone}}',
             ],
 
             // ==========================================
@@ -363,7 +363,7 @@ _Mensaje automático - {{tenant.name}}_',
 
 Hola *{{user.first_name}}*,
 
-Tu solicitud *{{application.folio}}* está siendo revisada por nuestro equipo de analistas de crédito.
+Tu solicitud *{{application.folio}}* está siendo revisada por nuestro equipo de analistas.
 
 ⏱️ Tiempo estimado: 24-48 horas
 
@@ -432,7 +432,7 @@ Por favor ingresa a tu cuenta y sube los documentos faltantes.
                 'channel' => NotificationChannel::SMS,
                 'priority' => 1,
                 'subject' => null,
-                'body' => '🎉 {{tenant.name}}: ¡APROBADO! Tu solicitud {{application.folio}} por ${{currency application.amount}} fue aprobada. Te contactaremos en 24hrs.',
+                'body' => '🎉 {{tenant.name}}: ¡APROBADO! Tu solicitud {{application.folio}} por ${{currency application.primary_amount}} fue aprobada. Te contactaremos en 24hrs.',
             ],
             [
                 'name' => 'Solicitud Aprobada - WhatsApp',
@@ -442,14 +442,14 @@ Por favor ingresa a tu cuenta y sube los documentos faltantes.
                 'subject' => null,
                 'body' => '🎉🎊 *¡FELICIDADES {{user.first_name}}!* 🎊🎉
 
-Tu solicitud de crédito ha sido *APROBADA* ✅
+Tu solicitud de {{application.type_label}} ha sido *APROBADA* ✅
 
 ┏━━━━━━━━━━━━━━━━━━━┓
 ┃  *DETALLES DEL CRÉDITO*  ┃
 ┗━━━━━━━━━━━━━━━━━━━┛
 
 📋 Folio: `{{application.folio}}`
-💰 Monto: *${{currency application.amount}} MXN*
+💰 {{application.primary_label}}: *${{currency application.primary_amount}} MXN*
 📅 Plazo: *{{application.term_months}} meses*
 📊 Tasa: *{{application.interest_rate}}%*
 
@@ -480,9 +480,9 @@ _¡Gracias por confiar en {{tenant.name}}!_',
                 'subject' => 'Actualización sobre tu solicitud {{application.folio}}',
                 'body' => 'Hola {{user.first_name}} {{user.last_name}},
 
-Lamentamos informarte que en esta ocasión tu solicitud de crédito {{application.folio}} no ha sido aprobada.
+Lamentamos informarte que en esta ocasión tu solicitud de {{application.type_label}} {{application.folio}} no ha sido aprobada.
 
-Esta decisión se basa en nuestro análisis de crédito y políticas internas.
+Esta decisión se basa en nuestro Análisis de tu solicitud y políticas internas.
 
 Esto no significa que no puedas aplicar nuevamente. Te invitamos a intentarlo después de 90 días, cuando tu situación financiera pueda haber mejorado.
 
@@ -567,11 +567,11 @@ Por favor ingresa a tu cuenta.
                 'subject' => '📋 Nueva solicitud asignada - {{application.folio}}',
                 'body' => 'Hola {{staff.first_name}},
 
-Se te ha asignado una nueva solicitud de crédito para revisión:
+Se te ha asignado una nueva solicitud de {{application.type_label}} para revisión:
 
 Solicitud: {{application.folio}}
 Solicitante: {{user.first_name}} {{user.last_name}}
-Monto: ${{currency application.amount}} MXN
+Monto: ${{currency application.primary_amount}} MXN
 Plazo: {{application.term_months}} meses
 Producto: {{application.product_name}}
 
@@ -585,7 +585,7 @@ Por favor revisa la solicitud en el panel administrativo.
                 'channel' => NotificationChannel::IN_APP,
                 'priority' => 2,
                 'subject' => 'Nueva solicitud asignada',
-                'body' => 'Se te ha asignado la solicitud {{application.folio}} de {{user.first_name}} {{user.last_name}} por ${{currency application.amount}}.',
+                'body' => 'Se te ha asignado la solicitud {{application.folio}} de {{user.first_name}} {{user.last_name}} por ${{currency application.primary_amount}}.',
             ],
 
             // ==========================================
