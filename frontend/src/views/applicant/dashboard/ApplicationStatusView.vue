@@ -17,6 +17,34 @@ const application = computed(() => applicationStore.currentApplication)
 const simulation = computed(() => applicationStore.simulation)
 const isLoading = ref(false)
 
+// Arrendamiento: preferimos el lease_info PERSISTIDO (viene del detalle de la API en
+// currentApplication) sobre el snapshot efímero del simulador, que es null si el
+// usuario vuelve en otra sesión o dispositivo (restoreSimulationFromApp no rehidrata
+// simulation.lease). Así "Ver Detalle" muestra la renta/desembolso siempre.
+interface LeaseInfo {
+  asset_type?: string | null; asset_brand?: string | null; asset_model?: string | null
+  asset_year?: number | null; asset_capacity?: string | null; modality?: string | null
+  asset_estimated_value?: number | null; term_months?: number | null
+  monthly_rental?: number | null; first_installment_total?: number | null; purchase_option_amount?: number | null
+}
+const leaseInfo = computed(() => (application.value as { lease_info?: LeaseInfo | null } | null)?.lease_info ?? null)
+const isLease = computed(() =>
+  (application.value as { product?: { type?: string } } | null)?.product?.type === 'ARRENDAMIENTO'
+  || !!simulation.value?.lease,
+)
+const leaseMonthly = computed(() => leaseInfo.value?.monthly_rental ?? simulation.value?.lease?.monthly_rental_with_iva ?? null)
+const leaseFirstInstallment = computed(() => leaseInfo.value?.first_installment_total ?? simulation.value?.lease?.first_installment?.total ?? null)
+const leaseTerm = computed(() => leaseInfo.value?.term_months ?? simulation.value?.term_months ?? null)
+const ASSET_LABELS: Record<string, string> = { SOLAR_PANELS: 'Paneles solares', VEHICLE: 'Vehículo', MACHINERY: 'Maquinaria' }
+const leaseAssetLabel = computed(() => {
+  const li = leaseInfo.value
+  const base = (li?.asset_type && ASSET_LABELS[li.asset_type]) || 'Bien a arrendar'
+  const detail = li?.asset_type === 'SOLAR_PANELS'
+    ? [li?.asset_brand, li?.asset_capacity].filter(Boolean).join(' ')
+    : [li?.asset_brand, li?.asset_model, li?.asset_year].filter(Boolean).join(' ')
+  return detail ? `${base} · ${detail}` : base
+})
+
 interface TimelineStep {
   id: string
   title: string
@@ -208,21 +236,27 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- Info: arrendamiento (renta/desembolso) vs crédito (monto/pago) -->
-        <div v-if="simulation?.lease" class="grid grid-cols-3 gap-4 pt-4 border-t border-gray-100">
-          <div>
-            <p class="text-xs text-gray-500">Renta mensual</p>
-            <p class="font-semibold text-gray-900">{{ formatMoney(simulation.lease.monthly_rental_with_iva) }}</p>
+        <!-- Info: arrendamiento (bien + renta/desembolso) vs crédito (monto/pago) -->
+        <template v-if="isLease">
+          <div class="pt-4 border-t border-gray-100">
+            <p class="text-xs text-gray-500">Bien a arrendar</p>
+            <p class="font-semibold text-gray-900">{{ leaseAssetLabel }}</p>
           </div>
-          <div>
-            <p class="text-xs text-gray-500">Plazo</p>
-            <p class="font-semibold text-gray-900">{{ simulation.term_months }} meses</p>
+          <div class="grid grid-cols-3 gap-4 pt-3">
+            <div>
+              <p class="text-xs text-gray-500">Renta mensual</p>
+              <p class="font-semibold text-gray-900">{{ leaseMonthly != null ? formatMoney(leaseMonthly) : '—' }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500">Plazo</p>
+              <p class="font-semibold text-gray-900">{{ leaseTerm ?? '—' }} meses</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500">Desembolso inicial</p>
+              <p class="font-semibold text-gray-900">{{ leaseFirstInstallment != null ? formatMoney(leaseFirstInstallment) : '—' }}</p>
+            </div>
           </div>
-          <div>
-            <p class="text-xs text-gray-500">Desembolso inicial</p>
-            <p class="font-semibold text-gray-900">{{ formatMoney(simulation.lease.first_installment.total) }}</p>
-          </div>
-        </div>
+        </template>
         <div v-else-if="simulation" class="grid grid-cols-3 gap-4 pt-4 border-t border-gray-100">
           <div>
             <p class="text-xs text-gray-500">Monto</p>
