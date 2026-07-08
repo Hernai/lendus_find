@@ -60,6 +60,7 @@ const {
   phaseSteps,
   phaseCurrentIdx,
   phaseLabel,
+  isSinglePhase,
 } = useOnboardingSteps()
 
 const formData = computed<Record<string, unknown>>(() => onboardingStore.dynamicData ?? {})
@@ -531,7 +532,7 @@ onUnmounted(() => {
       </div>
       <div class="phase-meta">
         <span class="phase-label">{{ phaseLabel }}</span>
-        <span class="phase-count">Paso {{ phaseCurrentIdx + 1 }} de {{ phaseSteps.length }} · Sección {{ phaseNumber }} de 2</span>
+        <span class="phase-count">Paso {{ phaseCurrentIdx + 1 }} de {{ phaseSteps.length }}<template v-if="!isSinglePhase"> · Sección {{ phaseNumber }} de 2</template></span>
       </div>
       <!-- Progreso: dots en móvil (look app); barra horizontal en web (look demo) -->
       <AppProgressBar

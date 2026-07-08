@@ -54,11 +54,16 @@ export function useOnboardingSteps() {
   const currentStep = computed<OnboardingStep | null>(() => steps.value[currentIndex.value] ?? null)
 
   // Divide los steps en dos fases: la primera termina en el primer 'review'
-  // (review_personal en MoneyCapital). Si no hay review, fallback a la mitad.
+  // (review_personal en MoneyCapital). Si NO hay un `review` intermedio (ej.
+  // arrendamiento, que solo tiene `review_full` al final), es UNA sola fase — no se
+  // parte a la mitad (eso metía la INE bajo "Datos personales" y descuadraba todo).
+  const hasReviewSplit = computed(() => steps.value.some((s) => s.type === 'review'))
+  const isSinglePhase = computed(() => !hasReviewSplit.value)
   const phaseSplitIdx = computed(() => {
     const i = steps.value.findIndex((s) => s.type === 'review')
     if (i >= 0) return i
-    return Math.max(0, Math.floor(steps.value.length / 2) - 1)
+    // Una sola fase: todo cae en fase 1 (split al final).
+    return Math.max(0, steps.value.length - 1)
   })
   const phaseNumber = computed<1 | 2>(() =>
     currentIndex.value <= phaseSplitIdx.value ? 1 : 2,
@@ -73,7 +78,9 @@ export function useOnboardingSteps() {
       : currentIndex.value - (phaseSplitIdx.value + 1),
   )
   const phaseLabel = computed(() =>
-    phaseNumber.value === 1 ? 'Datos personales' : 'Verificación',
+    isSinglePhase.value
+      ? 'Solicitud'
+      : (phaseNumber.value === 1 ? 'Datos personales' : 'Verificación'),
   )
 
   return {
@@ -85,5 +92,6 @@ export function useOnboardingSteps() {
     phaseSteps,
     phaseCurrentIdx,
     phaseLabel,
+    isSinglePhase,
   }
 }
