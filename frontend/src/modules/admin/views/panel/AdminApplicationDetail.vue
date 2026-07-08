@@ -1220,10 +1220,10 @@ onUnmounted(() => {
                 @reject="openRejectDataModal('employment')"
                 @unreject="openUnverifyModal('employment')"
               />
-
-              <!-- Arrendamiento (solo solicitudes de productos ARRENDAMIENTO) -->
-              <LeaseInfoSection :lease-info="application.lease_info" />
             </div>
+
+            <!-- Arrendamiento a TODO EL ANCHO (solo productos ARRENDAMIENTO). -->
+            <LeaseInfoSection :lease-info="application.lease_info" />
 
             <!-- Loan Details — SOLO crédito. En arrendamiento, la sección
                  "Arrendamiento" (LeaseInfoSection) ya muestra renta/desembolso/

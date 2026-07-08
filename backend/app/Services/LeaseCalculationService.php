@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\Application;
+
 /**
  * Motor de cálculo de ARRENDAMIENTO (leasing) para arrendadoras.
  *
@@ -18,6 +20,45 @@ class LeaseCalculationService
     public function __construct(
         private LoanCalculationService $loan,
     ) {
+    }
+
+    /**
+     * Snapshot financiero (sub-objeto `lease`) de una solicitud de ARRENDAMIENTO a
+     * partir de su producto + metadata. Sirve de BACKFILL en los formatters cuando
+     * `metadata.lease.simulation` no se guardó al crear (solicitudes viejas), para
+     * que renta mensual y desembolso inicial se muestren igual. No persiste; calcula.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function snapshotForApplication(Application $app): ?array
+    {
+        $product = $app->product;
+        if (!$product) {
+            return null;
+        }
+        $leaseConfig = $product->rules['lease'] ?? [];
+        $meta = $app->metadata['lease'] ?? [];
+        $assetValue = (float) ($meta['asset_estimated_value'] ?? $app->requested_amount ?? 0);
+        if ($assetValue <= 0) {
+            return null;
+        }
+        $term = (int) ($meta['term_months'] ?? $app->requested_term_months ?? 12);
+        $downPct = (float) ($meta['simulation']['down_payment_pct'] ?? $leaseConfig['anticipo_pct_default'] ?? 20);
+
+        try {
+            $calc = $this->calculateLeaseSimulation(
+                $assetValue,
+                $downPct,
+                $term,
+                'MONTHLY',
+                (float) $product->annual_rate,
+                $leaseConfig,
+            );
+
+            return $calc['lease'] ?? null;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     /**

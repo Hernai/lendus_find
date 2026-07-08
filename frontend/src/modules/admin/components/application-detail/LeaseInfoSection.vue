@@ -49,12 +49,6 @@ function labelOf(list: { value: string; label: string }[] | undefined, value?: s
 const assetLabel = computed(() => labelOf(tenantStore.options.assetType, props.leaseInfo?.lease?.asset_type))
 const modalityLabel = computed(() => labelOf(tenantStore.options.leaseModality, props.leaseInfo?.lease?.modality))
 const isCompany = computed(() => String(props.leaseInfo?.applicant_kind ?? '').toUpperCase() === 'COMPANY')
-
-const estimatedValue = computed(() => {
-  const v = props.leaseInfo?.lease?.asset_estimated_value
-  if (v == null) return '—'
-  return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(v)
-})
 </script>
 
 <template>
@@ -96,10 +90,8 @@ const estimatedValue = computed(() => {
         <p class="text-xs text-gray-500">Descripción</p>
         <p class="text-sm font-medium text-gray-900">{{ leaseInfo.lease.asset_description }}</p>
       </div>
-      <div>
-        <p class="text-xs text-gray-500">Valor estimado</p>
-        <p class="text-sm font-medium text-gray-900">{{ estimatedValue }}</p>
-      </div>
+      <!-- "Valor estimado" se muestra arriba (Summary Cards: "Valor del bien"); aquí
+           se omite para no repetir el dato. -->
     </div>
 
     <!-- Condiciones financieras: snapshot de la simulación (renta, desembolso

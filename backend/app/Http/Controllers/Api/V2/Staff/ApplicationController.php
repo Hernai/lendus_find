@@ -14,6 +14,7 @@ use App\Services\ApplicationEventService;
 use App\Services\ApplicationService;
 use App\Services\IneVerificationService;
 use App\Services\KycServiceFactory;
+use App\Services\LeaseCalculationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -32,6 +33,7 @@ class ApplicationController extends Controller
         private ApplicationService $service,
         private KycServiceFactory $kycFactory,
         private IneVerificationService $ineVerificationService,
+        private LeaseCalculationService $leaseCalculator,
     ) {}
 
     /**
@@ -837,9 +839,18 @@ class ApplicationController extends Controller
 
         // Datos de ARRENDAMIENTO captados en el onboarding (metadata) para el panel.
         // Solo tiene contenido en solicitudes de productos ARRENDAMIENTO.
+        $leaseMeta = $app->metadata['lease'] ?? null;
+        // Backfill del snapshot financiero (renta/desembolso) si no se guardó al crear
+        // (solicitudes viejas): lo calculamos al vuelo, sin persistir.
+        if (is_array($leaseMeta) && empty($leaseMeta['simulation'])) {
+            $sim = $this->leaseCalculator->snapshotForApplication($app);
+            if ($sim) {
+                $leaseMeta['simulation'] = $sim;
+            }
+        }
         $data['lease_info'] = [
             'applicant_kind' => $app->metadata['applicant_kind'] ?? $app->applicant_type,
-            'lease' => $app->metadata['lease'] ?? null,
+            'lease' => $leaseMeta,
             'company' => $app->metadata['company'] ?? null,
         ];
 

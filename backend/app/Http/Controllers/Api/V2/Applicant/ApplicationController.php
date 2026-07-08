@@ -9,6 +9,7 @@ use App\Models\Application;
 use App\Models\Product;
 use App\Services\ApplicationEventService;
 use App\Services\ApplicationService;
+use App\Services\LeaseCalculationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -24,7 +25,8 @@ class ApplicationController extends Controller
 
     public function __construct(
         private ApplicationService $service,
-        private ApplicationEventService $eventService
+        private ApplicationEventService $eventService,
+        private LeaseCalculationService $leaseCalculator,
     ) {}
 
     /**
@@ -503,6 +505,12 @@ class ApplicationController extends Controller
         $isLease = ($typeVal instanceof \BackedEnum ? $typeVal->value : $typeVal) === 'ARRENDAMIENTO';
         $leaseMeta = $app->metadata['lease'] ?? [];
         $leaseSim = $leaseMeta['simulation'] ?? [];
+        // Backfill: solicitudes creadas antes de guardar el snapshot no tienen
+        // metadata.lease.simulation; lo calculamos al vuelo (no se persiste) para
+        // que la renta y el desembolso se muestren igual.
+        if ($isLease && empty($leaseSim)) {
+            $leaseSim = $this->leaseCalculator->snapshotForApplication($app) ?? [];
+        }
         $leaseInfo = $isLease ? [
             'asset_type' => $leaseMeta['asset_type'] ?? null,
             'asset_brand' => $leaseMeta['asset_brand'] ?? null,
