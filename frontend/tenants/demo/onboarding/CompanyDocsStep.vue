@@ -64,30 +64,39 @@ async function onFile(type: string, ev: Event) {
 
     <ul class="docs-list">
       <li v-for="doc in DOCS" :key="doc.type" class="doc-row" :class="{ 'doc-row--done': uploaded.has(doc.type) }">
-        <span class="doc-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none">
-            <path d="M7 3h7l4 4v14H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
-            <path d="M14 3v4h4" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
-          </svg>
-        </span>
-        <span class="doc-label">{{ doc.label }}</span>
+        <div class="doc-head">
+          <span class="doc-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M7 3h7l4 4v14H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+              <path d="M14 3v4h4" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+            </svg>
+          </span>
+          <span class="doc-label">{{ doc.label }}</span>
+          <span v-if="uploaded.has(doc.type)" class="doc-check" aria-label="Subido">
+            <svg viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" fill="#10b981" />
+              <path d="M8 12l2.5 2.5L16 9" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
+        </div>
 
-        <span v-if="uploaded.has(doc.type)" class="doc-check" aria-label="Subido">
-          <svg viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="10" fill="#10b981" />
-            <path d="M8 12l2.5 2.5L16 9" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </span>
-        <label v-else class="doc-btn" :class="{ 'doc-btn--loading': uploading === doc.type }">
-          {{ uploading === doc.type ? 'Subiendo…' : 'Subir' }}
-          <input
-            type="file"
-            accept="image/*,application/pdf"
-            class="doc-input"
-            :disabled="uploading === doc.type"
-            @change="onFile(doc.type, $event)"
-          />
-        </label>
+        <div v-if="!uploaded.has(doc.type)" class="doc-actions">
+          <label class="doc-btn" :class="{ 'doc-btn--loading': uploading === doc.type }">
+            <svg class="doc-btn-icon" viewBox="0 0 24 24" fill="none">
+              <path d="M4 8h3l1.5-2h7L17 8h3v11H4z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+              <circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="1.7" />
+            </svg>
+            {{ uploading === doc.type ? 'Subiendo…' : 'Tomar foto' }}
+            <input type="file" accept="image/*" capture="environment" class="doc-input" :disabled="uploading === doc.type" @change="onFile(doc.type, $event)" />
+          </label>
+          <label class="doc-btn doc-btn--ghost" :class="{ 'doc-btn--loading': uploading === doc.type }">
+            <svg class="doc-btn-icon" viewBox="0 0 24 24" fill="none">
+              <path d="M12 15V4M8 8l4-4 4 4M5 19h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            Subir archivo
+            <input type="file" accept="image/*,application/pdf" class="doc-input" :disabled="uploading === doc.type" @change="onFile(doc.type, $event)" />
+          </label>
+        </div>
       </li>
     </ul>
 
@@ -101,20 +110,26 @@ async function onFile(type: string, ev: Event) {
 .intro { font-size: 13.5px; color: #475569; margin: 0; }
 .docs-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .doc-row {
-  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
-  background: #fff; border: 1.5px solid #e5e7eb; border-radius: 12px; min-height: 56px;
+  display: flex; flex-direction: column; gap: 10px; padding: 12px 14px;
+  background: #fff; border: 1.5px solid #e5e7eb; border-radius: 12px;
 }
 .doc-row--done { border-color: var(--tenant-primary, #5B21B6); background: rgb(var(--surface-soft-rgb, 243 242 250) / 1); }
+.doc-head { display: flex; align-items: center; gap: 12px; }
 .doc-icon { width: 22px; height: 22px; color: var(--tenant-primary, #5B21B6); flex-shrink: 0; }
 .doc-icon svg { width: 100%; height: 100%; }
 .doc-label { flex: 1; font-size: 14px; color: #0f172a; line-height: 1.3; }
 .doc-check { width: 24px; height: 24px; flex-shrink: 0; }
 .doc-check svg { width: 100%; height: 100%; }
+.doc-actions { display: flex; gap: 8px; }
 .doc-btn {
-  flex-shrink: 0; cursor: pointer; font-size: 13.5px; font-weight: 700;
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+  cursor: pointer; font-size: 13.5px; font-weight: 700; min-height: 44px;
   color: #fff; background: var(--tenant-primary, #5B21B6);
-  padding: 8px 16px; border-radius: 10px; position: relative; overflow: hidden;
+  padding: 10px 12px; border-radius: 10px; position: relative; overflow: hidden;
+  border: 1.5px solid var(--tenant-primary, #5B21B6);
 }
+.doc-btn--ghost { background: #fff; color: var(--tenant-primary, #5B21B6); }
+.doc-btn-icon { width: 16px; height: 16px; flex-shrink: 0; }
 .doc-btn--loading { opacity: 0.6; cursor: default; }
 .doc-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .doc-error { font-size: 13px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 10px 12px; margin: 0; }
