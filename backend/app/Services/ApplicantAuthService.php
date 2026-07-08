@@ -54,6 +54,20 @@ class ApplicantAuthService
             ];
         }
 
+        // Cuenta de PRUEBA de revisión de tienda: NO enviamos SMS ni tocamos el
+        // proveedor. El OTP fijo se valida en verifyOtp. Sin rate limit para que el
+        // revisor pueda reintentar. Acotado al tenant + número de config.
+        if ($this->isStoreReviewLogin($tenantId, $type, $identifier)) {
+            return [
+                'success' => true,
+                'message' => 'Código enviado',
+                'data' => [
+                    'expires_in' => 600,
+                    'masked_target' => $this->maskIdentifier($type, $identifier),
+                ],
+            ];
+        }
+
         // Check rate limit
         if (!OtpCode::canSendOtp($type, $identifier)) {
             return [
@@ -263,6 +277,15 @@ class ApplicantAuthService
     ): array {
         $type = strtoupper($type);
 
+        // Cuenta de PRUEBA de revisión de tienda: aceptamos SOLO el OTP fijo de
+        // config y entramos/registramos directo, sin OtpRequest ni proveedor (SMS).
+        if ($this->isStoreReviewLogin($tenantId, $type, $identifier)) {
+            if (!$this->isStoreReviewOtp($code)) {
+                return ['success' => false, 'message' => 'Código incorrecto', 'error' => 'INVALID_CODE'];
+            }
+            return $this->authenticateOrRegister($tenantId, $type, $identifier);
+        }
+
         // Get the latest valid OTP
         $otpRequest = OtpRequest::getLatestValidOtp($type, $identifier);
 
@@ -335,6 +358,17 @@ class ApplicantAuthService
         }
 
         // OTP verified - find or create account
+        return $this->authenticateOrRegister($tenantId, $type, $identifier);
+    }
+
+    /**
+     * Tras un OTP válido (o el bypass de revisión de tienda): encuentra la
+     * identidad y entra, o crea una cuenta nueva. Extraído para reusarlo.
+     *
+     * @return array{success: bool, message: string, data?: array, error?: string}
+     */
+    private function authenticateOrRegister(string $tenantId, string $type, string $identifier): array
+    {
         return DB::transaction(function () use ($tenantId, $type, $identifier) {
             $identity = ApplicantIdentity::findByIdentifier($type, $identifier, $tenantId);
 
@@ -364,6 +398,39 @@ class ApplicantAuthService
             // New user - create account and identity
             return $this->createNewAccount($tenantId, $type, $identifier);
         });
+    }
+
+    /**
+     * ¿Este login es la cuenta de PRUEBA de revisión de tienda (Google Play/App
+     * Store)? Acotado a: feature activo + tipo PHONE + número configurado + el
+     * tenant configurado (slug). Solo consulta el tenant si el número coincide.
+     */
+    private function isStoreReviewLogin(string $tenantId, string $type, string $identifier): bool
+    {
+        if (!config('services.store_review.enabled', false)) {
+            return false;
+        }
+        if (strtoupper($type) !== 'PHONE') {
+            return false;
+        }
+        $reviewPhone = preg_replace('/\D/', '', (string) config('services.store_review.phone', ''));
+        if ($reviewPhone === '' || preg_replace('/\D/', '', $identifier) !== $reviewPhone) {
+            return false;
+        }
+        $slug = config('services.store_review.tenant_slug');
+        if (empty($slug)) {
+            return true;
+        }
+        return Tenant::whereKey($tenantId)->value('slug') === $slug;
+    }
+
+    /**
+     * ¿El código coincide con el OTP fijo de la cuenta de revisión de tienda?
+     */
+    private function isStoreReviewOtp(string $code): bool
+    {
+        $otp = (string) config('services.store_review.otp', '');
+        return $otp !== '' && trim($code) === $otp;
     }
 
     /**

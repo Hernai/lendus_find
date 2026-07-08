@@ -69,4 +69,17 @@ return [
         'verify_action' => filter_var(env('RECAPTCHA_VERIFY_ACTION', true), FILTER_VALIDATE_BOOLEAN),
     ],
 
+    // Cuenta de PRUEBA para revisión de tienda (Google Play / App Store): un
+    // teléfono fijo con OTP fijo, SOLO para que el personal de revisión pueda
+    // entrar sin recibir SMS real. Acotado a un tenant (slug) y a ese número.
+    // NO envía SMS y NO expone el código; al revisor se le dan las credenciales
+    // aparte. Poner STORE_REVIEW_ENABLED=false para desactivarlo por completo.
+    'store_review' => [
+        'enabled' => filter_var(env('STORE_REVIEW_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        'tenant_slug' => env('STORE_REVIEW_TENANT', 'moneycapital'),
+        // Solo dígitos; se compara normalizando (sin +52 ni espacios).
+        'phone' => env('STORE_REVIEW_PHONE', '9615000000'),
+        'otp' => env('STORE_REVIEW_OTP', '321987'),
+    ],
+
 ];
