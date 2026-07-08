@@ -20,7 +20,16 @@ export function useOnboardingSteps() {
   const onboardingStore = useOnboardingStore()
 
   const steps = computed<OnboardingStep[]>(() => {
-    const product = applicationStore.selectedProduct
+    const sel = applicationStore.selectedProduct as { id?: string; onboarding_steps?: unknown } | null
+    // Los onboarding_steps se leen de la config FRESCA del tenant (por id), NO de la
+    // copia de selectedProduct persistida en localStorage — esa puede traer un orden
+    // viejo de antes de un re-seed (causaba que el flujo mostrara pasos en orden
+    // desactualizado). Fallback a selectedProduct si aún no está la config.
+    const fresh = sel?.id
+      ? (tenantStore.products as Array<{ id?: string; onboarding_steps?: unknown }> | undefined)
+          ?.find((p) => p.id === sel.id)
+      : null
+    const product = fresh ?? sel
     const raw = (product?.onboarding_steps as unknown as OnboardingStep[]) ?? []
     // Filtrar pasos por `condition` según integraciones activas del tenant.
     // `unless_kyc_provider`: el paso solo aplica si NO hay proveedor KYC activo
