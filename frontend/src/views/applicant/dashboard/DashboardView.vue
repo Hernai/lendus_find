@@ -44,6 +44,8 @@ interface Application {
   // como si fuera monto de crédito). Null en productos de crédito.
   lease_info?: {
     asset_type?: string | null
+    asset_brand?: string | null
+    asset_model?: string | null
     modality?: string | null
     asset_estimated_value?: number | null
     term_months?: number | null
@@ -59,6 +61,11 @@ const ASSET_LABELS: Record<string, string> = {
 }
 function leaseAssetLabel(type?: string | null): string {
   return (type && ASSET_LABELS[type]) || 'Bien a arrendar'
+}
+function leaseModalityLabel(m?: string | null): string {
+  if (m === 'PURO') return 'Arrendamiento puro'
+  if (m === 'FINANCIERO') return 'Arrendamiento financiero'
+  return 'Arrendamiento'
 }
 
 const isLoading = ref(true)
@@ -609,16 +616,20 @@ const handleCancelApplication = async () => {
                 <div class="flex items-start justify-between mb-4">
                   <div>
                     <p class="text-sm text-gray-500">{{ app.product_name }}</p>
-                    <!-- Arrendamiento: renta mensual (no el valor del bien como monto de crédito) -->
+                    <!-- Arrendamiento: bien + renta mensual (o valor del bien si aún no se simuló) -->
                     <template v-if="app.lease_info">
-                      <p class="text-2xl font-bold text-gray-900">
-                        {{ formatMoney(app.lease_info.monthly_rental ?? 0) }}
-                        <span class="text-sm font-normal text-gray-500">/mes</span>
+                      <p class="text-base font-semibold text-gray-900">
+                        {{ leaseAssetLabel(app.lease_info.asset_type) }}<span v-if="app.lease_info.asset_brand" class="font-normal text-gray-500"> · {{ app.lease_info.asset_brand }} {{ app.lease_info.asset_model }}</span>
                       </p>
-                      <p class="text-sm text-gray-500">
-                        {{ leaseAssetLabel(app.lease_info.asset_type) }} · {{ app.lease_info.term_months }} meses
+                      <p v-if="app.lease_info.monthly_rental" class="text-2xl font-bold text-primary-600">
+                        {{ formatMoney(app.lease_info.monthly_rental) }}<span class="text-sm font-normal text-gray-500"> /mes</span>
                       </p>
+                      <p v-else class="text-xl font-bold text-gray-900">
+                        {{ formatMoney(app.lease_info.asset_estimated_value ?? app.requested_amount) }}<span class="text-sm font-normal text-gray-500"> valor del bien</span>
+                      </p>
+                      <p class="text-sm text-gray-500">{{ leaseModalityLabel(app.lease_info.modality) }} · {{ app.lease_info.term_months ?? app.term_months }} meses</p>
                     </template>
+                    <!-- Crédito: monto + plazo -->
                     <template v-else>
                       <p class="text-2xl font-bold text-gray-900">{{ formatMoney(app.requested_amount) }}</p>
                       <p class="text-sm text-gray-500">{{ app.term_months }} meses</p>

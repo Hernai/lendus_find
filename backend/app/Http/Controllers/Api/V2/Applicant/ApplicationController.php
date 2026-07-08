@@ -486,6 +486,8 @@ class ApplicationController extends Controller
         $leaseSim = $leaseMeta['simulation'] ?? [];
         $leaseInfo = $isLease ? [
             'asset_type' => $leaseMeta['asset_type'] ?? null,
+            'asset_brand' => $leaseMeta['asset_brand'] ?? null,
+            'asset_model' => $leaseMeta['asset_model'] ?? null,
             'modality' => $leaseMeta['modality'] ?? null,
             'asset_estimated_value' => $leaseMeta['asset_estimated_value'] ?? $app->requested_amount,
             'term_months' => $leaseMeta['term_months'] ?? $app->requested_term_months,
