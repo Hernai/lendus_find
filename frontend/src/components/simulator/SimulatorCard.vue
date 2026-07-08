@@ -322,60 +322,92 @@ const paymentLabel = computed(() => {
     <h2 v-if="!compact" class="text-2xl font-bold text-tenant" :class="hasAssetStep ? 'mb-1' : 'mb-6'">
       {{ isLease ? 'Simula tu arrendamiento' : 'Simula tu crédito' }}
     </h2>
-    <!-- Indicador de paso (arrendamiento en 2 pasos: el bien / tu renta) -->
-    <p v-if="hasAssetStep" class="text-sm font-medium text-gray-500 mb-6">
-      Paso {{ leaseStep }} de 2 · {{ leaseStep === 1 ? 'El bien' : 'Tu renta' }}
-    </p>
+    <!-- Indicador de paso: barra de 2 segmentos + etiqueta -->
+    <div v-if="hasAssetStep" class="mb-6">
+      <div class="flex items-center gap-1.5 mb-2">
+        <span class="h-1.5 flex-1 rounded-full transition-colors" :class="leaseStep >= 1 ? 'bg-primary-600' : 'bg-gray-200'" />
+        <span class="h-1.5 flex-1 rounded-full transition-colors" :class="leaseStep >= 2 ? 'bg-primary-600' : 'bg-gray-200'" />
+      </div>
+      <p class="text-sm font-medium text-gray-500">
+        Paso {{ leaseStep }} de 2 · {{ leaseStep === 1 ? 'El bien' : 'Tu renta' }}
+      </p>
+    </div>
 
-    <!-- PASO 1 — Bien a arrendar: tipo + detalle. Se captura ANTES del valor para
-         que "lo primero" sea el bien; al continuar pasamos a la simulación (paso 2). -->
+    <!-- PASO 1 — Bien a arrendar: tipo (tarjetas) + detalle. Se captura ANTES del
+         valor para que "lo primero" sea el bien; al continuar vamos al paso 2. -->
     <div v-if="hasAssetStep && leaseStep === 1" class="mb-6">
-      <label class="block text-sm font-medium text-tenant mb-2">¿Qué deseas arrendar?</label>
-      <select
-        v-model="selectedAsset"
-        class="w-full px-4 py-2.5 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
-      >
-        <option value="" disabled>Selecciona el bien…</option>
-        <option v-for="opt in assetOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-      </select>
+      <label class="block text-sm font-semibold text-tenant mb-3">¿Qué deseas arrendar?</label>
+      <div class="grid grid-cols-3 gap-2.5">
+        <button
+          v-for="opt in assetOptions"
+          :key="opt.value"
+          type="button"
+          :class="[
+            'flex flex-col items-center justify-center gap-2 rounded-2xl border-2 px-2 py-4 text-center transition-all duration-150 focus:outline-none',
+            selectedAsset === opt.value
+              ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-sm'
+              : 'border-gray-200 bg-white text-gray-500 hover:border-primary-300 hover:bg-gray-50'
+          ]"
+          @click="selectedAsset = opt.value"
+        >
+          <!-- Ícono según el tipo de bien -->
+          <svg v-if="opt.value === 'SOLAR_PANELS'" class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+            <circle cx="12" cy="12" r="3.5" />
+            <path stroke-linecap="round" d="M12 2.5v2M12 19.5v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2.5 12h2M19.5 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" />
+          </svg>
+          <svg v-else-if="opt.value === 'VEHICLE'" class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.5 13.5l1.6-4.2A2.5 2.5 0 017.4 7.6h9.2a2.5 2.5 0 012.3 1.7l1.6 4.2M3.5 13.5h17M3.5 13.5a1.5 1.5 0 00-1.5 1.5v2.5h2.2M20.5 13.5a1.5 1.5 0 011.5 1.5v2.5h-2.2" />
+            <circle cx="7" cy="17.5" r="1.6" />
+            <circle cx="17" cy="17.5" r="1.6" />
+          </svg>
+          <svg v-else-if="opt.value === 'MACHINERY'" class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.34 3.94c.09-.54.56-.94 1.11-.94h1.1c.55 0 1.02.4 1.11.94l.16.95c.05.31.27.57.56.68.16.06.32.13.47.21.28.15.62.14.89-.03l.79-.5c.46-.29 1.07-.16 1.37.3l.55.9c.29.46.16 1.07-.3 1.36l-.79.5c-.27.18-.42.5-.38.83.02.17.02.34 0 .51-.04.33.11.65.38.83l.79.5c.46.29.59.9.3 1.36l-.55.9c-.3.46-.91.59-1.37.3l-.79-.5c-.27-.17-.61-.18-.89-.03-.15.08-.31.15-.47.21-.29.11-.51.37-.56.68l-.16.95c-.09.54-.56.94-1.11.94h-1.1c-.55 0-1.02-.4-1.11-.94l-.16-.95c-.05-.31-.27-.57-.56-.68a5.5 5.5 0 01-.47-.21c-.28-.15-.62-.14-.89.03l-.79.5c-.46.29-1.07.16-1.37-.3l-.55-.9c-.29-.46-.16-1.07.3-1.36l.79-.5c.27-.18.42-.5.38-.83a4.6 4.6 0 010-.51c.04-.33-.11-.65-.38-.83l-.79-.5c-.46-.29-.59-.9-.3-1.36l.55-.9c.3-.46.91-.59 1.37-.3l.79.5c.27.17.61.18.89.03.15-.08.31-.15.47-.21.29-.11.51-.37.56-.68l.16-.95z" />
+            <circle cx="12" cy="12" r="2.5" />
+          </svg>
+          <svg v-else class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="4" y="7" width="16" height="12" rx="2" /><path stroke-linecap="round" d="M9 7V5.5A1.5 1.5 0 0110.5 4h3A1.5 1.5 0 0115 5.5V7" />
+          </svg>
+          <span class="text-xs font-semibold leading-tight">{{ opt.label }}</span>
+        </button>
+      </div>
 
-      <!-- Detalle: marca/modelo/año (vehículo/maquinaria) o capacidad (solar) -->
-      <div v-if="selectedAsset" class="mt-3 grid grid-cols-2 gap-3">
+      <!-- Detalle del bien (aparece al elegir): marca/modelo/año o capacidad -->
+      <div v-if="selectedAsset" class="mt-4 rounded-2xl bg-gray-50 border border-gray-100 p-4 grid grid-cols-2 gap-3">
         <div :class="isSolarAsset ? 'col-span-2' : 'col-span-1'">
-          <label class="block text-xs font-medium text-gray-600 mb-1">Marca</label>
+          <label class="block text-xs font-medium text-gray-500 mb-1.5">Marca</label>
           <input
             v-model="leaseBrand"
             type="text"
             :placeholder="isSolarAsset ? 'Ej. Jinko, LONGi…' : 'Ej. Toyota, Caterpillar…'"
-            class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl bg-white text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
           />
         </div>
         <div v-if="!isSolarAsset">
-          <label class="block text-xs font-medium text-gray-600 mb-1">Modelo</label>
+          <label class="block text-xs font-medium text-gray-500 mb-1.5">Modelo</label>
           <input
             v-model="leaseModel"
             type="text"
             placeholder="Ej. Hilux, 320D…"
-            class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl bg-white text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
           />
         </div>
         <div v-if="!isSolarAsset">
-          <label class="block text-xs font-medium text-gray-600 mb-1">Año</label>
+          <label class="block text-xs font-medium text-gray-500 mb-1.5">Año</label>
           <input
             v-model="leaseYear"
             type="number"
             inputmode="numeric"
             placeholder="Ej. 2024"
-            class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl bg-white text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
           />
         </div>
         <div v-else class="col-span-2">
-          <label class="block text-xs font-medium text-gray-600 mb-1">Capacidad (kW)</label>
+          <label class="block text-xs font-medium text-gray-500 mb-1.5">Capacidad (kW)</label>
           <input
             v-model="leaseCapacity"
             type="text"
             placeholder="Ej. 5 kW"
-            class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl bg-white text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
           />
         </div>
       </div>
