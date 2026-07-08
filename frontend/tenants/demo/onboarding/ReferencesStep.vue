@@ -2,12 +2,14 @@
 import { computed, ref, watch } from 'vue'
 import { formatPhoneInput } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/auth'
+import { useTenantStore } from '@/stores/tenant'
 
 /**
- * Referencias — variante del tenant DEMO. Igual que el renderer base pero captura
- * el nombre SEPARADO en nombre / primer apellido / segundo apellido (el backend
- * guarda first_name / last_name_1 / last_name_2). Registrado vía
- * registerTenantSteps('demo', { references }) — MoneyCapital sigue con el base.
+ * Referencias — variante del tenant DEMO. Captura el nombre SEPARADO (nombre /
+ * primer apellido / segundo apellido, con los apellidos EN LÍNEA) + el TIPO DE
+ * RELACIÓN en combo. El backend guarda first_name/last_name_1/last_name_2 +
+ * relationship. Registrado vía registerTenantSteps('demo', { references }) —
+ * MoneyCapital sigue con el ReferencesStepRenderer base.
  */
 
 interface Reference {
@@ -15,6 +17,7 @@ interface Reference {
   first_name: string
   last_name_1: string
   last_name_2: string
+  relationship: string
   phone: string
 }
 
@@ -28,16 +31,20 @@ const emit = defineEmits<{
   'update:valid': [valid: boolean]
 }>()
 
+const tenantStore = useTenantStore()
+// Parentescos: familiar (madre/padre/hermano…) vs no-familiar (amigo/vecino…).
+const familyRels = computed(() => tenantStore.options.relationshipFamily ?? [])
+const personalRels = computed(() => tenantStore.options.relationshipNonFamily ?? [])
+
 const emptyRef = (type: 'FAMILY' | 'PERSONAL'): Reference => ({
-  type, first_name: '', last_name_1: '', last_name_2: '', phone: '',
+  type, first_name: '', last_name_1: '', last_name_2: '', relationship: '', phone: '',
 })
 const family = ref<Reference>(props.modelValue?.find((r) => r.type === 'FAMILY') ?? emptyRef('FAMILY'))
 const personal = ref<Reference>(props.modelValue?.find((r) => r.type === 'PERSONAL') ?? emptyRef('PERSONAL'))
 
-// Requiere nombre + primer apellido (el backend exige first_name y last_name_1);
-// el segundo apellido es opcional.
-const validName = (r: Reference) =>
-  r.first_name.trim().length >= 2 && r.last_name_1.trim().length >= 2
+// Requiere nombre + primer apellido + relación (segundo apellido opcional).
+const validRef = (r: Reference) =>
+  r.first_name.trim().length >= 2 && r.last_name_1.trim().length >= 2 && !!r.relationship
 const validPhone = (p: string) => p.replace(/\D/g, '').length === 10
 
 const authStore = useAuthStore()
@@ -67,8 +74,8 @@ const dupError = computed(() => {
 })
 
 const isValid = computed(() =>
-  validName(family.value) && validPhone(family.value.phone) &&
-  validName(personal.value) && validPhone(personal.value.phone) &&
+  validRef(family.value) && validPhone(family.value.phone) &&
+  validRef(personal.value) && validPhone(personal.value.phone) &&
   !dupError.value,
 )
 watch(isValid, (v) => emit('update:valid', v), { immediate: true })
@@ -96,13 +103,26 @@ watch([family, personal], () => emit('update:modelValue', [family.value, persona
       <div class="field" :class="{ 'field--valid': family.first_name.trim().length >= 2 }">
         <input v-model="family.first_name" type="text" placeholder="Ej. María" class="field-input" />
       </div>
-      <label class="field-label">Primer apellido</label>
-      <div class="field" :class="{ 'field--valid': family.last_name_1.trim().length >= 2 }">
-        <input v-model="family.last_name_1" type="text" placeholder="Ej. López" class="field-input" />
+      <div class="name-row">
+        <div>
+          <label class="field-label">Primer apellido</label>
+          <div class="field" :class="{ 'field--valid': family.last_name_1.trim().length >= 2 }">
+            <input v-model="family.last_name_1" type="text" placeholder="Ej. López" class="field-input" />
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Segundo apellido (opcional)</label>
+          <div class="field">
+            <input v-model="family.last_name_2" type="text" placeholder="Ej. García" class="field-input" />
+          </div>
+        </div>
       </div>
-      <label class="field-label">Segundo apellido (opcional)</label>
-      <div class="field">
-        <input v-model="family.last_name_2" type="text" placeholder="Ej. García" class="field-input" />
+      <label class="field-label">Parentesco</label>
+      <div class="field" :class="{ 'field--valid': !!family.relationship }">
+        <select v-model="family.relationship" class="field-input field-select">
+          <option value="" disabled>Selecciona…</option>
+          <option v-for="r in familyRels" :key="r.value" :value="r.value">{{ r.label }}</option>
+        </select>
       </div>
       <label class="field-label">Teléfono</label>
       <div class="field" :class="{ 'field--valid': validPhone(family.phone) }">
@@ -119,13 +139,26 @@ watch([family, personal], () => emit('update:modelValue', [family.value, persona
       <div class="field" :class="{ 'field--valid': personal.first_name.trim().length >= 2 }">
         <input v-model="personal.first_name" type="text" placeholder="Ej. Carlos" class="field-input" />
       </div>
-      <label class="field-label">Primer apellido</label>
-      <div class="field" :class="{ 'field--valid': personal.last_name_1.trim().length >= 2 }">
-        <input v-model="personal.last_name_1" type="text" placeholder="Ej. Ramírez" class="field-input" />
+      <div class="name-row">
+        <div>
+          <label class="field-label">Primer apellido</label>
+          <div class="field" :class="{ 'field--valid': personal.last_name_1.trim().length >= 2 }">
+            <input v-model="personal.last_name_1" type="text" placeholder="Ej. Ramírez" class="field-input" />
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Segundo apellido (opcional)</label>
+          <div class="field">
+            <input v-model="personal.last_name_2" type="text" placeholder="Ej. Soto" class="field-input" />
+          </div>
+        </div>
       </div>
-      <label class="field-label">Segundo apellido (opcional)</label>
-      <div class="field">
-        <input v-model="personal.last_name_2" type="text" placeholder="Ej. Soto" class="field-input" />
+      <label class="field-label">Relación</label>
+      <div class="field" :class="{ 'field--valid': !!personal.relationship }">
+        <select v-model="personal.relationship" class="field-input field-select">
+          <option value="" disabled>Selecciona…</option>
+          <option v-for="r in personalRels" :key="r.value" :value="r.value">{{ r.label }}</option>
+        </select>
       </div>
       <label class="field-label">Teléfono</label>
       <div class="field" :class="{ 'field--valid': validPhone(personal.phone) }">
@@ -145,6 +178,8 @@ watch([family, personal], () => emit('update:modelValue', [family.value, persona
 .ref-section { display: flex; flex-direction: column; gap: 6px; }
 .ref-header { margin-bottom: 2px; }
 .ref-header h3 { font-size: 14px; font-weight: 700; color: var(--tenant-primary, #5B21B6); margin: 0; }
+.name-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.name-row > div { display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-size: 12.5px; color: #64748b; font-weight: 500; margin-top: 6px; }
 .field {
   display: flex; align-items: center; gap: 10px; padding: 0 14px;
@@ -161,5 +196,6 @@ watch([family, personal], () => emit('update:modelValue', [family.value, persona
   flex: 1; border: none; background: transparent; font-size: 14.5px; color: #0f172a;
   outline: none; padding: 14px 0; min-width: 0;
 }
+.field-select { cursor: pointer; }
 .field-input::placeholder { color: #9ca3af; }
 </style>

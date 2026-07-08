@@ -881,7 +881,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           break
         case 'references': {
           const refs = Array.isArray(payload)
-            ? (payload as Array<{ type: string; name?: string; first_name?: string; last_name_1?: string; last_name_2?: string; phone: string }>)
+            ? (payload as Array<{ type: string; name?: string; first_name?: string; last_name_1?: string; last_name_2?: string; relationship?: string; phone: string }>)
             : []
           // Borrar las referencias existentes para no duplicar al reeditar/retroceder.
           try {
@@ -912,8 +912,10 @@ export const useOnboardingStore = defineStore('onboarding', () => {
               last2 = undefined
             }
             if (!first) continue
-            // El backend solo soporta type PERSONAL|WORK; el parentesco real va en relationship.
-            const relationship = r.type === 'FAMILY' ? 'FAMILIAR' : 'AMIGO'
+            // El backend solo soporta type PERSONAL|WORK; el parentesco real va en
+            // relationship. El demo captura el parentesco específico (combo); si no
+            // viene, fallback al genérico por tipo (base/MoneyCapital).
+            const relationship = r.relationship || (r.type === 'FAMILY' ? 'FAMILIAR' : 'AMIGO')
             try {
               await profileService.addReference({
                 type: 'PERSONAL',

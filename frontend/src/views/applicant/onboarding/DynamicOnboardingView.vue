@@ -156,6 +156,22 @@ const minAmountFmt = computed(() => {
   return min == null ? '$300' : formatCurrency(Number(min))
 })
 
+// Arrendamiento: el hero muestra el BIEN, no el monto de crédito (que además cae al
+// fallback $15,000 porque el producto de arrendamiento no usa max_amount). Gateado
+// por tipo de producto → MoneyCapital (crédito) mantiene su hero de monto.
+const isLease = computed(() => (product.value as { type?: string } | null)?.type === 'ARRENDAMIENTO')
+const ASSET_LABELS: Record<string, string> = {
+  SOLAR_PANELS: 'Paneles solares', VEHICLE: 'Vehículo', MACHINERY: 'Maquinaria',
+}
+const assetLabel = computed(() => {
+  const t = applicationStore.selectedAssetType
+  return (t && ASSET_LABELS[t]) || 'Bien a arrendar'
+})
+const assetValueFmt = computed(() => {
+  const v = applicationStore.simulation?.requested_amount
+  return v != null ? formatCurrency(Number(v)) : ''
+})
+
 const headerTitle = computed(() => {
   const s = currentStep.value
   if (!s) return 'Información personal'
@@ -570,7 +586,15 @@ onUnmounted(() => {
             <circle cx="12" cy="16.5" r="1.2" fill="currentColor" />
           </svg>
         </span>
-        <div class="hero-body">
+        <!-- Arrendamiento: el bien; crédito: el monto -->
+        <div v-if="isLease" class="hero-body">
+          <span class="hero-label">Bien a arrendar</span>
+          <div class="hero-amount">
+            <span class="hero-amount-value hero-amount-value--asset">{{ assetLabel }}</span>
+          </div>
+          <span v-if="assetValueFmt" class="hero-pill">Valor estimado <strong>{{ assetValueFmt }}</strong></span>
+        </div>
+        <div v-else class="hero-body">
           <span class="hero-label">Hasta</span>
           <div class="hero-amount">
             <span class="hero-amount-value">{{ maxAmountFmt }}</span>
@@ -580,13 +604,16 @@ onUnmounted(() => {
         </div>
       </section>
 
-      <!-- Pill "Hasta $15,000" en pasos personales 2-5 (sin dots a la derecha) -->
-      <span v-else-if="isPersonalStep" class="compact-pill">Hasta <strong>{{ maxAmountFmt }}</strong></span>
+      <!-- Pill compacto en pasos personales 2-5: bien (arrendamiento) o monto (crédito) -->
+      <span v-else-if="isPersonalStep" class="compact-pill">
+        <template v-if="isLease">{{ assetLabel }}</template>
+        <template v-else>Hasta <strong>{{ maxAmountFmt }}</strong></template>
+      </span>
 
       <!-- Copy contextual por layout -->
       <p v-if="isFirstPersonalStep" class="motivational">
-        Completa tu información personal con datos reales. Esto nos ayuda a evaluar tu solicitud y puede
-        <strong>mejorar tu perfil crediticio.</strong>
+        Completa tu información con datos reales. Esto nos ayuda a evaluar tu solicitud<template v-if="!isLease"> y puede
+        <strong>mejorar tu perfil crediticio.</strong></template><template v-else>.</template>
       </p>
       <p v-else-if="isPersonalStep" class="motivational motivational--compact">{{ compactCopy }}</p>
 
@@ -954,6 +981,7 @@ onUnmounted(() => {
 .hero-label { font-size: 14px; color: #475569; }
 .hero-amount { display: flex; align-items: baseline; gap: 6px; color: var(--tenant-primary, #5B21B6); }
 .hero-amount-value { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }
+.hero-amount-value--asset { font-size: 22px; }
 .hero-amount-currency { font-size: 12px; font-weight: 700; }
 .hero-pill { align-self: flex-start; background: #fff; border-radius: 999px; padding: 4px 12px; font-size: 12px; color: #475569; }
 .hero-pill strong { color: var(--tenant-primary, #5B21B6); font-weight: 700; }

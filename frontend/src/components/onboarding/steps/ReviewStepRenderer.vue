@@ -2,6 +2,7 @@
 import { computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTenantStore } from '@/stores/tenant'
+import { useApplicationStore } from '@/stores/application'
 import { useOnboardingSteps } from '@/composables/useOnboardingSteps'
 import type { ReviewStep, ReviewFullStep } from '@/types/v2/onboardingStep'
 import { bankName } from '@/utils/banks'
@@ -35,6 +36,7 @@ watch(() => props.step.id, () => emit('update:valid', true), { immediate: true }
 
 const router = useRouter()
 const tenantStore = useTenantStore()
+const applicationStore = useApplicationStore()
 
 // IDs de los pasos REALMENTE activos en este flujo (ya filtrados por rama
 // persona/empresa y por proveedor KYC). El review solo muestra filas de pasos que
@@ -46,7 +48,8 @@ const activeStepIds = computed(() => new Set(steps.value.map((s) => s.id)))
 // filtra (muestra todo) para no dejar el review en blanco por una carga tardía.
 function onlyActiveRows(rows: Row[]): Row[] {
   const ids = activeStepIds.value
-  return ids.size === 0 ? rows : rows.filter((r) => ids.has(r.stepId))
+  // 'asset' (bien) no es un paso del onboarding pero siempre se muestra en el review.
+  return ids.size === 0 ? rows : rows.filter((r) => r.stepId === 'asset' || ids.has(r.stepId))
 }
 
 interface Row {
@@ -84,7 +87,18 @@ function labelFor(enumName: string, value: unknown): string {
 }
 
 function personalRows(fd: Record<string, unknown>): Row[] {
-  return [
+  const rows: Row[] = []
+  // Nombre completo (del paso personal_data, capturado a mano cuando no hay KYC).
+  const pd = (fd.personal_data ?? {}) as { first_name?: string; last_name_1?: string; last_name_2?: string }
+  const fullName = [pd.first_name, pd.last_name_1, pd.last_name_2].filter(Boolean).join(' ')
+  if (fullName) rows.push({ stepId: 'personal_data', icon: 'user', label: 'Nombre completo', value: fullName })
+  // Bien a arrendar (arrendamiento): viene del simulador (applicationStore), no de
+  // formData. stepId 'asset' está exento del filtro (no es un paso del onboarding).
+  const assetType = applicationStore.selectedAssetType
+  if (assetType) {
+    rows.push({ stepId: 'asset', icon: 'briefcase', label: 'Bien a arrendar', value: labelFor('assetType', assetType) })
+  }
+  rows.push(
     { stepId: 'education', icon: 'cap', label: 'Nivel educativo', value: labelFor('EducationLevel', fd.education_level) },
     { stepId: 'marital', icon: 'user', label: 'Estado civil', value: labelFor('MaritalStatus', fd.marital_status) },
     {
@@ -95,11 +109,21 @@ function personalRows(fd: Record<string, unknown>): Row[] {
     },
     { stepId: 'employment', icon: 'briefcase', label: 'Tipo de actividad o trabajo', value: labelFor('EmploymentType', fd.employment_type) },
     { stepId: 'salary_range', icon: 'wallet', label: 'Rango salarial mensual', value: labelFor('SalaryRange', fd.salary_range) },
-  ]
+  )
+  return rows
+}
+
+interface RefLike {
+  type?: string; name?: string; first_name?: string; last_name_1?: string; last_name_2?: string; relationship?: string; phone?: string
+}
+// Nombre de la referencia: acepta `name` (base/MoneyCapital) o campos separados (demo).
+function refDisplayName(r?: RefLike): string {
+  if (!r) return ''
+  return r.name || [r.first_name, r.last_name_1, r.last_name_2].filter(Boolean).join(' ')
 }
 
 function verificationRows(fd: Record<string, unknown>): Row[] {
-  const refs = Array.isArray(fd.references) ? (fd.references as Array<{ type?: string; name?: string; phone?: string }>) : []
+  const refs = Array.isArray(fd.references) ? (fd.references as RefLike[]) : []
   const family = refs.find((r) => r.type === 'FAMILY')
   const personal = refs.find((r) => r.type === 'PERSONAL')
   const bank = fd.bank_account as { type?: string; bank_code?: string; account_number?: string } | undefined
@@ -110,13 +134,13 @@ function verificationRows(fd: Record<string, unknown>): Row[] {
       stepId: 'references',
       icon: 'users',
       label: 'Referencia familiar',
-      value: family?.name ? `${family.name} · ${formatPhoneDisplay(family.phone)}` : '—',
+      value: refDisplayName(family) ? `${refDisplayName(family)} · ${formatPhoneDisplay(family?.phone)}` : '—',
     },
     {
       stepId: 'references',
       icon: 'users',
       label: 'Referencia personal',
-      value: personal?.name ? `${personal.name} · ${formatPhoneDisplay(personal.phone)}` : '—',
+      value: refDisplayName(personal) ? `${refDisplayName(personal)} · ${formatPhoneDisplay(personal?.phone)}` : '—',
     },
     {
       stepId: 'credit_history',
@@ -163,6 +187,8 @@ const sections = computed<Section[]>(() => {
 })
 
 function editRow(stepId: string) {
+  // El bien se captura en el simulador, no es un paso editable del onboarding.
+  if (stepId === 'asset') return
   // Preserva el nombre de ruta del entry-point (web: tenant-onboarding-dynamic;
   // móvil: m-onboarding-step) y el resto de params (ej. tenant), en vez de fijar
   // la ruta móvil — así el "editar" del review funciona también en la web.
