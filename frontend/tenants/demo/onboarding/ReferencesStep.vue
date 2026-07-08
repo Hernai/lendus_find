@@ -207,20 +207,22 @@ watch([family, personal], () => emit('update:modelValue', [family.value, persona
 .name-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .name-row > div { display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-size: 12.5px; color: #64748b; font-weight: 500; margin-top: 6px; }
+/* Mismo tamaño de input que los demás pasos (personal_data/address/company):
+   ~44px de alto, radio 12px, fuente 14px, box-sizing border-box. */
 .field {
-  display: flex; align-items: center; gap: 10px; padding: 0 14px;
-  background: #fff; border: 1.5px solid #e5e7eb; border-radius: 14px; min-height: 52px;
+  display: flex; align-items: center; gap: 10px; padding: 0 14px; box-sizing: border-box;
+  background: #fff; border: 1.5px solid #e5e7eb; border-radius: 12px; min-height: 44px;
   transition: border-color 140ms ease;
 }
 .field:focus-within { border-color: var(--tenant-primary, #5B21B6); }
 .field--valid { border-color: var(--tenant-primary, #5B21B6); }
 .field-prefix {
-  font-size: 14.5px; color: var(--tenant-primary, #5B21B6); font-weight: 600;
+  font-size: 14px; color: var(--tenant-primary, #5B21B6); font-weight: 600;
   border-right: 1px solid #e5e7eb; padding-right: 8px;
 }
 .field-input {
-  flex: 1; border: none; background: transparent; font-size: 14.5px; color: #0f172a;
-  outline: none; padding: 14px 0; min-width: 0;
+  flex: 1; border: none; background: transparent; font-size: 14px; color: #0f172a;
+  outline: none; padding: 12px 0; min-width: 0; box-sizing: border-box;
 }
 .field-select { cursor: pointer; }
 .field-input::placeholder { color: #9ca3af; }

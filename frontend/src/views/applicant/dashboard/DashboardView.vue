@@ -150,6 +150,9 @@ const loadApplications = async () => {
         has_rejected_items: app.has_rejected_items,
         rejected_fields_count: app.rejected_fields_count,
         rejected_documents_count: app.rejected_documents_count,
+        // Arrendamiento: bien + renta/desembolso (para la tarjeta). Antes se perdía
+        // aquí porque el mapeo no copiaba lease_info → la tarjeta caía a crédito.
+        lease_info: app.lease_info,
       }))
     }
   } catch (e) {

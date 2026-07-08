@@ -761,6 +761,21 @@ export interface V2Application {
   risk_score: number | null
   risk_assessment: Record<string, unknown> | null
   counter_offer: V2CounterOffer | null
+  // Arrendamiento: bien + renta/desembolso para mostrar la RENTA (no el valor del
+  // bien como si fuera monto de crédito). Null en productos de crédito.
+  lease_info?: {
+    asset_type?: string | null
+    asset_brand?: string | null
+    asset_model?: string | null
+    asset_year?: number | null
+    asset_capacity?: string | null
+    modality?: string | null
+    asset_estimated_value?: number | null
+    term_months?: number | null
+    monthly_rental?: number | null
+    first_installment_total?: number | null
+    purchase_option_amount?: number | null
+  } | null
   // status_history removido: usar el feed unificado `/applications/{id}/activity`.
   created_at: string
   updated_at: string
