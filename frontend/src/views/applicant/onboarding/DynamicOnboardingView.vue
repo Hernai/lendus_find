@@ -171,6 +171,16 @@ const assetValueFmt = computed(() => {
   const v = applicationStore.simulation?.requested_amount
   return v != null ? formatCurrency(Number(v)) : ''
 })
+// Detalle del bien (marca/modelo/año, o marca/capacidad en solar) capturado en el
+// simulador (leaseDraft), para mostrar CUÁL bien, no solo el tipo genérico.
+const assetDetail = computed(() => {
+  const d = applicationStore.leaseDraft
+  if (!d) return ''
+  const parts = applicationStore.selectedAssetType === 'SOLAR_PANELS'
+    ? [d.asset_brand, d.asset_capacity]
+    : [d.asset_brand, d.asset_model, d.asset_year]
+  return parts.filter(Boolean).join(' ')
+})
 
 const headerTitle = computed(() => {
   const s = currentStep.value
@@ -592,6 +602,7 @@ onUnmounted(() => {
           <div class="hero-amount">
             <span class="hero-amount-value hero-amount-value--asset">{{ assetLabel }}</span>
           </div>
+          <span v-if="assetDetail" class="hero-detail">{{ assetDetail }}</span>
           <span v-if="assetValueFmt" class="hero-pill">Valor estimado <strong>{{ assetValueFmt }}</strong></span>
         </div>
         <div v-else class="hero-body">
@@ -982,6 +993,7 @@ onUnmounted(() => {
 .hero-amount { display: flex; align-items: baseline; gap: 6px; color: var(--tenant-primary, #5B21B6); }
 .hero-amount-value { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }
 .hero-amount-value--asset { font-size: 22px; }
+.hero-detail { font-size: 13px; color: #0f172a; font-weight: 600; margin-top: -2px; }
 .hero-amount-currency { font-size: 12px; font-weight: 700; }
 .hero-pill { align-self: flex-start; background: #fff; border-radius: 999px; padding: 4px 12px; font-size: 12px; color: #475569; }
 .hero-pill strong { color: var(--tenant-primary, #5B21B6); font-weight: 700; }

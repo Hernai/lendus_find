@@ -177,6 +177,25 @@ class ApplicationController extends Controller
             );
         }
 
+        // Snapshot financiero del ARRENDAMIENTO al crear (robustez): guardamos la
+        // simulación (renta mensual, desembolso inicial) en metadata.lease.simulation
+        // desde el simulation_data que manda el front, AUNQUE el PATCH posterior
+        // (persistLeaseMetadata, que además trae marca/modelo/año) falle o no corra.
+        // Así el dashboard/estado del aplicante siempre muestran la renta y la cuota
+        // inicial, no el valor del bien como si fuera un monto de crédito.
+        $productType = $product->type instanceof \BackedEnum ? $product->type->value : $product->type;
+        $leaseSnapshot = $validated['simulation_data']['lease'] ?? null;
+        if ($productType === 'ARRENDAMIENTO' && is_array($leaseSnapshot)) {
+            $meta = $application->metadata ?? [];
+            $meta['lease'] = array_merge($meta['lease'] ?? [], [
+                'simulation' => $leaseSnapshot,
+                'asset_estimated_value' => $validated['simulation_data']['requested_amount'] ?? $application->requested_amount,
+                'term_months' => $validated['simulation_data']['term_months'] ?? $application->requested_term_months,
+            ]);
+            $application->metadata = $meta;
+            $application->save();
+        }
+
         // Record event for timeline
         $this->eventService->recordApplicationCreated(
             $application,
@@ -488,6 +507,8 @@ class ApplicationController extends Controller
             'asset_type' => $leaseMeta['asset_type'] ?? null,
             'asset_brand' => $leaseMeta['asset_brand'] ?? null,
             'asset_model' => $leaseMeta['asset_model'] ?? null,
+            'asset_year' => $leaseMeta['asset_year'] ?? null,
+            'asset_capacity' => $leaseMeta['asset_capacity'] ?? null,
             'modality' => $leaseMeta['modality'] ?? null,
             'asset_estimated_value' => $leaseMeta['asset_estimated_value'] ?? $app->requested_amount,
             'term_months' => $leaseMeta['term_months'] ?? $app->requested_term_months,

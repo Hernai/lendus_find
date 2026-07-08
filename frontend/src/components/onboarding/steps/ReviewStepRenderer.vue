@@ -6,6 +6,7 @@ import { useApplicationStore } from '@/stores/application'
 import { useOnboardingSteps } from '@/composables/useOnboardingSteps'
 import type { ReviewStep, ReviewFullStep } from '@/types/v2/onboardingStep'
 import { bankName } from '@/utils/banks'
+import { formatCurrency } from '@/utils/formatters'
 
 /**
  * Renderiza step `review` (pantalla 8): Revisión de información personal.
@@ -89,14 +90,30 @@ function labelFor(enumName: string, value: unknown): string {
 function personalRows(fd: Record<string, unknown>): Row[] {
   const rows: Row[] = []
   // Nombre completo (del paso personal_data, capturado a mano cuando no hay KYC).
-  const pd = (fd.personal_data ?? {}) as { first_name?: string; last_name_1?: string; last_name_2?: string }
-  const fullName = [pd.first_name, pd.last_name_1, pd.last_name_2].filter(Boolean).join(' ')
+  // El renderer de demo emite last_name/second_last_name; otros usan last_name_1/2.
+  const pd = (fd.personal_data ?? {}) as {
+    first_name?: string; last_name?: string; second_last_name?: string; last_name_1?: string; last_name_2?: string
+  }
+  const fullName = [
+    pd.first_name,
+    pd.last_name ?? pd.last_name_1,
+    pd.second_last_name ?? pd.last_name_2,
+  ].filter(Boolean).join(' ')
   if (fullName) rows.push({ stepId: 'personal_data', icon: 'user', label: 'Nombre completo', value: fullName })
-  // Bien a arrendar (arrendamiento): viene del simulador (applicationStore), no de
-  // formData. stepId 'asset' está exento del filtro (no es un paso del onboarding).
+  // Bien a arrendar (arrendamiento): tipo + marca/modelo/año (o capacidad en solar) +
+  // valor estimado, todo del simulador (applicationStore), no de formData. stepId
+  // 'asset' está exento del filtro (no es un paso del onboarding).
   const assetType = applicationStore.selectedAssetType
   if (assetType) {
-    rows.push({ stepId: 'asset', icon: 'briefcase', label: 'Bien a arrendar', value: labelFor('assetType', assetType) })
+    const d = applicationStore.leaseDraft
+    const detail = (assetType === 'SOLAR_PANELS'
+      ? [d?.asset_brand, d?.asset_capacity]
+      : [d?.asset_brand, d?.asset_model, d?.asset_year]
+    ).filter(Boolean).join(' ')
+    const val = applicationStore.simulation?.requested_amount
+    const parts = [labelFor('assetType', assetType), detail || null].filter(Boolean).join(' · ')
+    const value = val != null ? `${parts} — ${formatCurrency(Number(val))}` : parts
+    rows.push({ stepId: 'asset', icon: 'briefcase', label: 'Bien a arrendar', value })
   }
   rows.push(
     { stepId: 'education', icon: 'cap', label: 'Nivel educativo', value: labelFor('EducationLevel', fd.education_level) },
@@ -129,6 +146,10 @@ function verificationRows(fd: Record<string, unknown>): Row[] {
   const bank = fd.bank_account as { type?: string; bank_code?: string; account_number?: string } | undefined
   const ine = fd.kyc_ine as { front_image?: string; back_image?: string } | undefined
   const selfie = fd.kyc_face as string | undefined
+  // Documentos subidos (arrendamiento demo): DocumentsStep → fd.documents;
+  // CompanyDocsStep → fd.company_docs. Cada uno es un arreglo de tipos subidos.
+  const documents = Array.isArray(fd.documents) ? (fd.documents as string[]) : []
+  const companyDocs = Array.isArray(fd.company_docs) ? (fd.company_docs as string[]) : []
   return [
     {
       stepId: 'references',
@@ -167,6 +188,20 @@ function verificationRows(fd: Record<string, unknown>): Row[] {
       icon: 'face',
       label: 'Validación facial',
       value: selfie ? 'Selfie capturada' : '—',
+    },
+    {
+      stepId: 'company_docs',
+      icon: 'id',
+      label: 'Documentos de la empresa',
+      value: companyDocs.length ? `${companyDocs.length} cargados` : '—',
+    },
+    {
+      stepId: 'documents',
+      icon: 'id',
+      label: 'Documentos',
+      value: documents.length
+        ? `${documents.length} documento${documents.length === 1 ? '' : 's'} cargado${documents.length === 1 ? '' : 's'}`
+        : '—',
     },
   ]
 }

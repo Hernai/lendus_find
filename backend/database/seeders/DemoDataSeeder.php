@@ -294,13 +294,14 @@ class DemoDataSeeder extends Seeder
             ['id' => 'company', 'type' => 'company_data', 'label' => 'Datos de la empresa', 'required' => true, 'condition' => 'if_company'],
             ['id' => 'company_docs', 'type' => 'company_docs', 'label' => 'Documentos de la empresa', 'required' => true, 'condition' => 'if_company'],
 
-            // IDENTIDAD al frente: INE → datos personales → facial → documentos. La INE
-            // intenta obtener los datos primero; `personal_data` (captura a mano) se salta
-            // si hay proveedor KYC (unless_kyc_provider) y solo aplica a persona física. En
-            // empresa, INE/facial son del representante legal.
+            // IDENTIDAD al frente: INE + facial JUNTAS (para facematch), y DESPUÉS los datos
+            // personales. La INE + selfie validan identidad primero; `personal_data` (captura
+            // a mano) solo aplica a persona física y se salta si hay proveedor KYC
+            // (unless_kyc_provider) que derive los datos del INE. En empresa, INE/facial son
+            // del representante legal.
             ['id' => 'kyc_ine', 'type' => 'kyc_ine', 'label' => 'Validación de identidad', 'required' => true],
-            ['id' => 'personal_data', 'type' => 'personal_data', 'label' => 'Datos personales', 'required' => true, 'condition' => ['if_individual', 'unless_kyc_provider']],
             ['id' => 'kyc_face', 'type' => 'kyc_selfie', 'label' => 'Validación facial', 'required' => true],
+            ['id' => 'personal_data', 'type' => 'personal_data', 'label' => 'Datos personales', 'required' => true, 'condition' => ['if_individual', 'unless_kyc_provider']],
             // Documentos del producto (comprobante de domicilio/ingresos) + del bien
             // (rules.lease.asset_documents). El renderer lee ambos.
             ['id' => 'documents', 'type' => 'documents', 'label' => 'Documentos', 'required' => true],

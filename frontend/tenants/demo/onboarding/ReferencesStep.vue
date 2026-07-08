@@ -86,6 +86,12 @@ function handlePhoneInput(r: Reference, ev: Event) {
   if (input.value !== r.phone) input.value = r.phone
 }
 
+// Nombres/apellidos de las referencias en MAYÚSCULA (transformamos on-input para
+// que el valor guardado ya vaya en mayúscula).
+function onNameInput(r: Reference, field: 'first_name' | 'last_name_1' | 'last_name_2', ev: Event) {
+  r[field] = (ev.target as HTMLInputElement).value.toUpperCase()
+}
+
 watch([family, personal], () => emit('update:modelValue', [family.value, personal.value]), { deep: true })
 </script>
 
@@ -101,33 +107,43 @@ watch([family, personal], () => emit('update:modelValue', [family.value, persona
 
       <label class="field-label">Nombre(s)</label>
       <div class="field" :class="{ 'field--valid': family.first_name.trim().length >= 2 }">
-        <input v-model="family.first_name" type="text" placeholder="Ej. María" class="field-input" />
+        <input :value="family.first_name" type="text" placeholder="Ej. María" class="field-input" @input="onNameInput(family, 'first_name', $event)" />
       </div>
       <div class="name-row">
         <div>
           <label class="field-label">Primer apellido</label>
           <div class="field" :class="{ 'field--valid': family.last_name_1.trim().length >= 2 }">
-            <input v-model="family.last_name_1" type="text" placeholder="Ej. López" class="field-input" />
+            <input :value="family.last_name_1" type="text" placeholder="Ej. López" class="field-input" @input="onNameInput(family, 'last_name_1', $event)" />
           </div>
         </div>
         <div>
           <label class="field-label">Segundo apellido (opcional)</label>
           <div class="field">
-            <input v-model="family.last_name_2" type="text" placeholder="Ej. García" class="field-input" />
+            <input :value="family.last_name_2" type="text" placeholder="Ej. García" class="field-input" @input="onNameInput(family, 'last_name_2', $event)" />
           </div>
         </div>
       </div>
-      <label class="field-label">Parentesco</label>
-      <div class="field" :class="{ 'field--valid': !!family.relationship }">
-        <select v-model="family.relationship" class="field-input field-select">
-          <option value="" disabled>Selecciona…</option>
-          <option v-for="r in familyRels" :key="r.value" :value="r.value">{{ r.label }}</option>
-        </select>
-      </div>
-      <label class="field-label">Teléfono</label>
-      <div class="field" :class="{ 'field--valid': validPhone(family.phone) }">
-        <span class="field-prefix">+52</span>
-        <input :value="family.phone" type="tel" inputmode="numeric" placeholder="10 dígitos" maxlength="12" class="field-input" @input="handlePhoneInput(family, $event)" />
+      <!-- Parentesco (combo) + Teléfono en línea; el teléfono muestra palomita al completar. -->
+      <div class="name-row">
+        <div>
+          <label class="field-label">Parentesco</label>
+          <div class="field" :class="{ 'field--valid': !!family.relationship }">
+            <select v-model="family.relationship" class="field-input field-select">
+              <option value="" disabled>Selecciona…</option>
+              <option v-for="r in familyRels" :key="r.value" :value="r.value">{{ r.label }}</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Teléfono</label>
+          <div class="field" :class="{ 'field--valid': validPhone(family.phone) }">
+            <span class="field-prefix">+52</span>
+            <input :value="family.phone" type="tel" inputmode="numeric" placeholder="10 dígitos" maxlength="12" class="field-input" @input="handlePhoneInput(family, $event)" />
+            <svg v-if="validPhone(family.phone)" class="field-check" viewBox="0 0 24 24" fill="none">
+              <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -137,33 +153,43 @@ watch([family, personal], () => emit('update:modelValue', [family.value, persona
 
       <label class="field-label">Nombre(s)</label>
       <div class="field" :class="{ 'field--valid': personal.first_name.trim().length >= 2 }">
-        <input v-model="personal.first_name" type="text" placeholder="Ej. Carlos" class="field-input" />
+        <input :value="personal.first_name" type="text" placeholder="Ej. Carlos" class="field-input" @input="onNameInput(personal, 'first_name', $event)" />
       </div>
       <div class="name-row">
         <div>
           <label class="field-label">Primer apellido</label>
           <div class="field" :class="{ 'field--valid': personal.last_name_1.trim().length >= 2 }">
-            <input v-model="personal.last_name_1" type="text" placeholder="Ej. Ramírez" class="field-input" />
+            <input :value="personal.last_name_1" type="text" placeholder="Ej. Ramírez" class="field-input" @input="onNameInput(personal, 'last_name_1', $event)" />
           </div>
         </div>
         <div>
           <label class="field-label">Segundo apellido (opcional)</label>
           <div class="field">
-            <input v-model="personal.last_name_2" type="text" placeholder="Ej. Soto" class="field-input" />
+            <input :value="personal.last_name_2" type="text" placeholder="Ej. Soto" class="field-input" @input="onNameInput(personal, 'last_name_2', $event)" />
           </div>
         </div>
       </div>
-      <label class="field-label">Relación</label>
-      <div class="field" :class="{ 'field--valid': !!personal.relationship }">
-        <select v-model="personal.relationship" class="field-input field-select">
-          <option value="" disabled>Selecciona…</option>
-          <option v-for="r in personalRels" :key="r.value" :value="r.value">{{ r.label }}</option>
-        </select>
-      </div>
-      <label class="field-label">Teléfono</label>
-      <div class="field" :class="{ 'field--valid': validPhone(personal.phone) }">
-        <span class="field-prefix">+52</span>
-        <input :value="personal.phone" type="tel" inputmode="numeric" placeholder="10 dígitos" maxlength="12" class="field-input" @input="handlePhoneInput(personal, $event)" />
+      <!-- Relación (combo) + Teléfono en línea; el teléfono muestra palomita al completar. -->
+      <div class="name-row">
+        <div>
+          <label class="field-label">Relación</label>
+          <div class="field" :class="{ 'field--valid': !!personal.relationship }">
+            <select v-model="personal.relationship" class="field-input field-select">
+              <option value="" disabled>Selecciona…</option>
+              <option v-for="r in personalRels" :key="r.value" :value="r.value">{{ r.label }}</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Teléfono</label>
+          <div class="field" :class="{ 'field--valid': validPhone(personal.phone) }">
+            <span class="field-prefix">+52</span>
+            <input :value="personal.phone" type="tel" inputmode="numeric" placeholder="10 dígitos" maxlength="12" class="field-input" @input="handlePhoneInput(personal, $event)" />
+            <svg v-if="validPhone(personal.phone)" class="field-check" viewBox="0 0 24 24" fill="none">
+              <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -198,4 +224,6 @@ watch([family, personal], () => emit('update:modelValue', [family.value, persona
 }
 .field-select { cursor: pointer; }
 .field-input::placeholder { color: #9ca3af; }
+/* Palomita verde cuando el teléfono está completo (10 dígitos), como en MoneyCapital. */
+.field-check { width: 20px; height: 20px; color: #16a34a; flex-shrink: 0; }
 </style>

@@ -110,6 +110,12 @@ function onRfcInput(event: Event) {
   form.value.rfc = (event.target as HTMLInputElement).value.toUpperCase().replace(/\s/g, '')
 }
 
+// Nombres/apellidos en MAYÚSCULA (como aparecen en la identificación). Igual que
+// RFC: transformamos on-input para que el valor guardado ya vaya en mayúscula.
+function onNameInput(field: 'first_name' | 'last_name' | 'second_last_name', event: Event) {
+  form.value[field] = (event.target as HTMLInputElement).value.toUpperCase()
+}
+
 onMounted(async () => {
   if (mexicanStates.value.length === 0 && !tenantStore.isLoaded) {
     try { await tenantStore.loadConfig() } catch { /* noop */ }
@@ -131,16 +137,16 @@ watch(form, () => {
 
     <div class="field">
       <label>Nombre(s)</label>
-      <input v-model="form.first_name" type="text" autocomplete="given-name" placeholder="Ej. Juan Carlos" />
+      <input :value="form.first_name" type="text" autocomplete="given-name" placeholder="Ej. Juan Carlos" @input="onNameInput('first_name', $event)" />
     </div>
     <div class="grid-2">
       <div class="field">
         <label>Apellido paterno</label>
-        <input v-model="form.last_name" type="text" autocomplete="family-name" placeholder="Ej. Pérez" />
+        <input :value="form.last_name" type="text" autocomplete="family-name" placeholder="Ej. Pérez" @input="onNameInput('last_name', $event)" />
       </div>
       <div class="field">
         <label>Apellido materno</label>
-        <input v-model="form.second_last_name" type="text" placeholder="Ej. López" />
+        <input :value="form.second_last_name" type="text" placeholder="Ej. López" @input="onNameInput('second_last_name', $event)" />
       </div>
     </div>
 
