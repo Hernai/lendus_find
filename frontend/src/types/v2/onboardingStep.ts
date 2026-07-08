@@ -132,6 +132,10 @@ export interface CompanyDocsStep extends OnboardingStepBase {
   type: 'company_docs'
 }
 
+export interface DocumentsStep extends OnboardingStepBase {
+  type: 'documents'
+}
+
 export type OnboardingStep =
   | SelectStep
   | StateCityStep
@@ -148,3 +152,4 @@ export type OnboardingStep =
   | AssetTypeStep
   | CompanyDataStep
   | CompanyDocsStep
+  | DocumentsStep

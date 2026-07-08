@@ -170,6 +170,16 @@ const leaseCapacity = computed<string>({
   set: (v) => applicationStore.setLeaseDraft({ asset_capacity: v }),
 })
 
+// --- Simulador de arrendamiento en 2 pasos DENTRO de la misma tarjeta:
+// paso 1 = el bien (tipo + marca/modelo/año|capacidad), paso 2 = valor/anticipo/
+// plazo → renta. Solo aplica si el producto tiene bienes que elegir; el crédito
+// lo ignora por completo (hasAssetStep = false). ---
+const hasAssetStep = computed(() => isLease.value && assetOptions.value.length > 0)
+const leaseStep = ref<1 | 2>(1)
+const canAdvanceLease = computed(() => !!selectedAsset.value)
+// Al cambiar de producto volvemos al paso 1 del bien.
+watch(activeProduct, () => { leaseStep.value = 1 })
+
 // Convert selected payments to months for API
 const termMonths = computed(() => {
   // Pago único: el backend usa term_days; mandamos el plazo en meses del
@@ -309,13 +319,17 @@ const paymentLabel = computed(() => {
 
 <template>
   <div class="bg-white rounded-2xl shadow-2xl p-6 md:p-8">
-    <h2 v-if="!compact" class="text-2xl font-bold text-tenant mb-6">
+    <h2 v-if="!compact" class="text-2xl font-bold text-tenant" :class="hasAssetStep ? 'mb-1' : 'mb-6'">
       {{ isLease ? 'Simula tu arrendamiento' : 'Simula tu crédito' }}
     </h2>
+    <!-- Indicador de paso (arrendamiento en 2 pasos: el bien / tu renta) -->
+    <p v-if="hasAssetStep" class="text-sm font-medium text-gray-500 mb-6">
+      Paso {{ leaseStep }} de 2 · {{ leaseStep === 1 ? 'El bien' : 'Tu renta' }}
+    </p>
 
-    <!-- Bien a arrendar (solo arrendamiento): tipo + detalle. Se captura ANTES del
-         valor para que "lo primero" sea el bien. -->
-    <div v-if="isLease && assetOptions.length" class="mb-6">
+    <!-- PASO 1 — Bien a arrendar: tipo + detalle. Se captura ANTES del valor para
+         que "lo primero" sea el bien; al continuar pasamos a la simulación (paso 2). -->
+    <div v-if="hasAssetStep && leaseStep === 1" class="mb-6">
       <label class="block text-sm font-medium text-tenant mb-2">¿Qué deseas arrendar?</label>
       <select
         v-model="selectedAsset"
@@ -366,6 +380,34 @@ const paymentLabel = computed(() => {
         </div>
       </div>
     </div>
+
+    <!-- PASO 1 → 2: continuar del bien a la simulación de la renta -->
+    <AppButton
+      v-if="hasAssetStep && leaseStep === 1"
+      variant="primary"
+      size="lg"
+      full-width
+      :disabled="!canAdvanceLease"
+      @click="leaseStep = 2"
+    >
+      Continuar
+    </AppButton>
+
+    <!-- PASO 2 — Simulación: valor/anticipo/plazo → renta y desembolso.
+         (Crédito: siempre visible; no tiene paso del bien.) -->
+    <template v-if="!hasAssetStep || leaseStep === 2">
+    <!-- Volver a elegir el bien (solo arrendamiento) -->
+    <button
+      v-if="hasAssetStep"
+      type="button"
+      class="inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-700 mb-4"
+      @click="leaseStep = 1"
+    >
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+      </svg>
+      Cambiar el bien
+    </button>
 
     <!-- Monto (crédito) / Valor del bien (arrendamiento) -->
     <div class="mb-6">
@@ -561,5 +603,6 @@ const paymentLabel = computed(() => {
     <p class="text-xs text-gray-400 text-center mt-4">
       *CAT promedio informativo. Sujeto a aprobación de crédito.
     </p>
+    </template>
   </div>
 </template>
