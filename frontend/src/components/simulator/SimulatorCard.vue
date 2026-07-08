@@ -175,6 +175,8 @@ const leaseCapacity = computed<string>({
 // plazo → renta. Solo aplica si el producto tiene bienes que elegir; el crédito
 // lo ignora por completo (hasAssetStep = false). ---
 const hasAssetStep = computed(() => isLease.value && assetOptions.value.length > 0)
+// Hasta 3 bienes → tarjetas con ícono; con 4+ usamos un combo (no caben cómodas).
+const useAssetCards = computed(() => assetOptions.value.length <= 3)
 const leaseStep = ref<1 | 2>(1)
 const canAdvanceLease = computed(() => !!selectedAsset.value)
 // Al cambiar de producto volvemos al paso 1 del bien.
@@ -337,7 +339,7 @@ const paymentLabel = computed(() => {
          valor para que "lo primero" sea el bien; al continuar vamos al paso 2. -->
     <div v-if="hasAssetStep && leaseStep === 1" class="mb-6">
       <label class="block text-sm font-semibold text-tenant mb-3">¿Qué deseas arrendar?</label>
-      <div class="grid grid-cols-3 gap-2.5">
+      <div v-if="useAssetCards" class="grid grid-cols-3 gap-2.5">
         <button
           v-for="opt in assetOptions"
           :key="opt.value"
@@ -370,6 +372,15 @@ const paymentLabel = computed(() => {
           <span class="text-xs font-semibold leading-tight">{{ opt.label }}</span>
         </button>
       </div>
+      <!-- Con 4+ bienes, un combo es más manejable que las tarjetas. -->
+      <select
+        v-else
+        v-model="selectedAsset"
+        class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-white text-sm text-gray-900 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+      >
+        <option value="" disabled>Selecciona el bien…</option>
+        <option v-for="opt in assetOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+      </select>
 
       <!-- Detalle del bien (aparece al elegir): marca/modelo/año o capacidad -->
       <div v-if="selectedAsset" class="mt-4 rounded-2xl bg-gray-50 border border-gray-100 p-4 grid grid-cols-2 gap-3">

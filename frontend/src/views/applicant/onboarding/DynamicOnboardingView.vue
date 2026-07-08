@@ -86,7 +86,11 @@ const currentValue = computed({
 // Validez del renderer del paso actual (contrato v-model:valid). Se resetea al
 // navegar para NO arrastrar la validez del paso anterior. Ver plan Fase 0.
 const rendererValid = ref(false)
-watch(currentStep, () => { rendererValid.value = false })
+// Bloquea el botón "Continuar" desde el clic hasta que se complete la navegación
+// (evita doble tap / re-habilitación en el gap async, sobre todo al enviar la
+// solicitud en el último paso). Se resetea cuando el paso cambia (navegó) abajo.
+const isAdvancing = ref(false)
+watch(currentStep, () => { rendererValid.value = false; isAdvancing.value = false })
 
 // Tipos cuyo renderer es dueño de su validación (contrato update:valid). Los 11
 // tipos base están migrados; un tipo fuera de este set (p.ej. un paso CUSTOM de
@@ -491,13 +495,17 @@ function confirmIne() {
 }
 
 async function next() {
-  if (!canContinue.value || !currentStep.value) return
+  if (!canContinue.value || !currentStep.value || isAdvancing.value) return
+  isAdvancing.value = true
   const nextIdx = currentIndex.value + 1
   if (nextIdx >= steps.value.length) {
+    // finishOnboarding SIEMPRE navega (su finally); dejamos isAdvancing en true
+    // hasta que la vista se desmonte, para no re-habilitar el botón de enviar.
     await finishOnboarding()
     return
   }
-  // Avance optimista: guarda en segundo plano y navega de inmediato.
+  // Avance optimista: guarda en segundo plano y navega de inmediato. isAdvancing
+  // se resetea en el watch(currentStep) cuando el nuevo paso ya está montado.
   saveInBackground()
   const nextId = steps.value[nextIdx]!.id
   await router.push({ name: stepRouteName.value, params: { ...route.params, stepId: nextId } })
@@ -657,7 +665,7 @@ onUnmounted(() => {
       <button
         type="button"
         class="btn-continue"
-        :disabled="!canContinue || ineValidating"
+        :disabled="!canContinue || ineValidating || isAdvancing"
         @click="handleContinue"
       >
         {{ ineValidating ? 'Validando tu INE…' : 'Continuar' }}
@@ -783,7 +791,7 @@ onUnmounted(() => {
             <button
               type="button"
               class="btn-continue"
-              :disabled="!canContinue"
+              :disabled="!canContinue || isAdvancing"
               @click="next"
             >
               Continuar

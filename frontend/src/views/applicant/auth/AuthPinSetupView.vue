@@ -13,6 +13,11 @@ const pin = ref('')
 const confirmPin = ref('')
 const error = ref('')
 const currentInput = ref<'pin' | 'confirm'>('pin')
+// Bloquea el botón desde el clic hasta que la navegación termine. authStore.isLoading
+// se apaga cuando setupPin resuelve, pero router.push (sin await) aún no navega → sin
+// esto el botón se re-habilita en ese gap y permite doble envío. Solo se resetea si
+// falla (en éxito navegamos fuera y la vista se desmonta).
+const navigating = ref(false)
 
 // Get tenant slug from route params or store
 const getTenantSlug = (): string | undefined => {
@@ -54,6 +59,7 @@ const handleDelete = () => {
 }
 
 const handleSubmit = async () => {
+  if (navigating.value) return
   if (!isValid.value) {
     if (pin.value !== confirmPin.value) {
       error.value = 'Los NIP no coinciden'
@@ -63,6 +69,7 @@ const handleSubmit = async () => {
     return
   }
 
+  navigating.value = true
   const result = await authStore.setupPin(pin.value)
 
   if (result.success) {
@@ -131,6 +138,7 @@ const handleSubmit = async () => {
     pin.value = ''
     confirmPin.value = ''
     currentInput.value = 'pin'
+    navigating.value = false // falló: re-habilitamos para reintentar
   }
 }
 
@@ -298,8 +306,8 @@ const skipSetup = async () => {
             variant="primary"
             size="lg"
             class="w-full"
-            :disabled="!isValid || authStore.isLoading"
-            :loading="authStore.isLoading"
+            :disabled="!isValid || authStore.isLoading || navigating"
+            :loading="authStore.isLoading || navigating"
             @click="handleSubmit"
           >
             Guardar NIP

@@ -16,6 +16,11 @@ const phone = computed(() => route.query.phone as string || '')
 const pin = ref('')
 const error = ref('')
 const attemptsRemaining = ref<number | null>(null)
+// Bloquea el teclado desde que el NIP es correcto hasta que la navegación termine.
+// authStore.isLoading se apaga cuando loginWithPin resuelve, pero router.push (sin
+// await) aún no navega → sin esto el pad se re-habilita en ese gap. Solo se resetea
+// si falla (en éxito navegamos fuera y la vista se desmonta).
+const navigating = ref(false)
 
 // Get tenant slug from route params or store
 const getTenantSlug = (): string | undefined => {
@@ -45,7 +50,8 @@ const handleDelete = () => {
 }
 
 const handleSubmit = async () => {
-  if (pin.value.length !== 4) return
+  if (pin.value.length !== 4 || navigating.value) return
+  navigating.value = true
 
   log.debug('PIN Login attempt', { phone: phone.value, query: route.query, userBefore: authStore.user })
 
@@ -97,6 +103,7 @@ const handleSubmit = async () => {
       error.value = 'Error al iniciar sesión'
     }
     pin.value = ''
+    navigating.value = false // falló (o NO_PIN_SET que navega y desmonta): re-habilitar
   }
 }
 
@@ -211,7 +218,7 @@ const goBack = () => {
             v-for="digit in ['1', '2', '3', '4', '5', '6', '7', '8', '9']"
             :key="digit"
             class="h-16 text-2xl font-semibold text-gray-900 bg-white rounded-xl shadow-sm hover:bg-gray-50 active:bg-gray-100 transition-colors"
-            :disabled="authStore.isLoading"
+            :disabled="authStore.isLoading || navigating"
             @click="handlePinInput(digit)"
           >
             {{ digit }}
@@ -226,7 +233,7 @@ const goBack = () => {
 
           <button
             class="h-16 text-2xl font-semibold text-gray-900 bg-white rounded-xl shadow-sm hover:bg-gray-50 active:bg-gray-100 transition-colors"
-            :disabled="authStore.isLoading"
+            :disabled="authStore.isLoading || navigating"
             @click="handlePinInput('0')"
           >
             0
