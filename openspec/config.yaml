@@ -1,0 +1,37 @@
+schema: spec-driven
+
+# Project context — se muestra a la IA al crear artefactos (proposals, specs, tasks).
+context: |
+  LendusFind — SaaS white-label de Originación de Crédito (LOS) para SOFOMES
+  mexicanas. Captura clientes, valida identidad (KYC) y origina solicitudes de
+  crédito y arrendamiento; NO administra cartera ni pagos. Integra vía webhooks
+  (JSON estándar) con sistemas externos (SAP, core bancario).
+
+  Stack:
+  - Backend: PHP 8.2+ / Laravel 12 (API REST V2, Sanctum). PostgreSQL 15+ (campos
+    JSONB). Redis (colas/caché). S3/MinIO (documentos). Twilio (SMS/WhatsApp),
+    Nubarium (KYC: CURP/RFC/INE/biometría/PLD), Laravel Reverb (WebSocket).
+  - Frontend: Vue 3 (Composition API, <script setup lang="ts">) + TypeScript +
+    Tailwind CSS 3. Pinia (stores), servicios V2 por rol.
+
+  Convenciones:
+  - Multitenancy: single DB con tenant scoping (trait HasTenant); tenant por
+    subdominio o header X-Tenant-ID (slug o UUID). Aislar SIEMPRE entre tenants.
+  - IDs: UUID en todo (nunca autoincremental).
+  - Enums: string-backed, valores UPPERCASE, trait HasOptions.
+  - API V2: rutas v2/public|applicant|staff; respuesta
+    { success, data?, message?, error?, errors? }; trait ApiResponses.
+  - UI/toasts/validaciones en ESPAÑOL (mexicano neutro). Comentarios de código en
+    español; identificadores en inglés.
+  - Validadores MX: CURP (18), RFC (12-13), CLABE (18), teléfono (10 díg. +52).
+  - Git: Conventional Commits en español.
+  - Detalle por área en .claude/skills/ (backend-conventions, frontend-conventions,
+    api-design, database-patterns, multitenancy, application-lifecycle,
+    kyc-integration, notification-system, ui-components).
+
+# Per-artifact rules (opcional) — reglas por tipo de artefacto. Ejemplo:
+#   rules:
+#     proposal:
+#       - Mantener proposals concisos, con sección "Non-goals"
+#     tasks:
+#       - Dividir tareas en chunks de máx 2 horas
