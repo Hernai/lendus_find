@@ -260,6 +260,33 @@ export interface Application {
     // requested_term_days / requested_term_months: el backend manda ambos según el formato del producto.
     requested_term_days?: number
     requested_term_months?: number
+    approved_term_days?: number | null
+    // Contraoferta vigente (snapshot completo) y su estado de respuesta
+    has_counter_offer?: boolean
+    counter_offer?: {
+      amount: number
+      term_days?: number | null
+      term_months?: number | null
+      interest_rate?: number | null
+      opening_commission?: number | null
+      reason?: string | null
+      offered_at?: string | null
+      expires_at?: string | null
+      responded_at?: string | null
+      accepted?: boolean | null
+    } | null
+    counter_offer_accepted?: boolean | null
+    // Límites del producto para validar contraofertas
+    product_limits?: {
+      min_amount?: number | null
+      max_amount?: number | null
+      min_term_months?: number | null
+      max_term_months?: number | null
+      min_term_days?: number | null
+      max_term_days?: number | null
+      annual_rate?: number | null
+      opening_commission?: number | null
+    } | null
   }
   documents: Document[]
   references: Reference[]

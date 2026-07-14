@@ -81,7 +81,7 @@ defineEmits<{
       <div class="flex flex-col gap-2 flex-shrink-0">
         <!-- Contraoferta: Solo supervisores/admins que pueden aprobar/rechazar -->
         <button
-          v-if="canApproveReject && ['IN_REVIEW', 'DOCS_PENDING'].includes(application.status)"
+          v-if="canApproveReject && ['IN_REVIEW', 'DOCS_PENDING', 'COUNTER_OFFERED'].includes(application.status)"
           class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors"
           :style="{
             backgroundColor: `${primaryColor}15`,
@@ -90,7 +90,7 @@ defineEmits<{
           }"
           @click="$emit('open-counter-offer')"
         >
-          Contraoferta
+          {{ application.status === 'COUNTER_OFFERED' ? 'Reenviar Contraoferta' : 'Contraoferta' }}
         </button>
         <!-- Asignar: Solo supervisores/admins -->
         <button

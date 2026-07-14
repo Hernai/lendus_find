@@ -40,6 +40,14 @@ interface Application {
   has_rejected_items?: boolean
   rejected_fields_count?: number
   rejected_documents_count?: number
+  // Contraoferta vigente (snapshot del backend): term_days ⇒ producto en días
+  // (pantalla de oferta móvil); term_months ⇒ vista de estado.
+  counter_offer?: {
+    amount?: number
+    term_days?: number | null
+    term_months?: number | null
+    expires_at?: string | null
+  } | null
   // Arrendamiento: renta/bien para mostrar la renta mensual (no el valor del bien
   // como si fuera monto de crédito). Null en productos de crédito.
   lease_info?: {
@@ -153,6 +161,7 @@ const loadApplications = async () => {
         // Arrendamiento: bien + renta/desembolso (para la tarjeta). Antes se perdía
         // aquí porque el mapeo no copiaba lease_info → la tarjeta caía a crédito.
         lease_info: app.lease_info,
+        counter_offer: app.counter_offer ?? null,
       }))
     }
   } catch (e) {
@@ -175,6 +184,9 @@ onMounted(async () => {
   ])
 
   isLoading.value = false
+
+  // Con contraoferta activa, la oferta es la pantalla principal
+  redirectToActiveOffer()
 })
 
 const getNextAction = (status: string, hasRejectedItems?: boolean): string | undefined => {
@@ -465,7 +477,7 @@ const correctData = () => {
 
 const acceptCounterOffer = async (app: Application) => {
   try {
-    await v2.applicant.application.respondToCounterOffer(app.id, { accept: true })
+    await v2.applicant.application.respondToCounterOffer(app.id, { accepted: true })
     // Reload applications
     await loadApplications()
   } catch (e) {
@@ -475,12 +487,37 @@ const acceptCounterOffer = async (app: Application) => {
 
 const rejectCounterOffer = async (app: Application) => {
   try {
-    await v2.applicant.application.respondToCounterOffer(app.id, { accept: false, reason: 'Rechazado por el solicitante' })
+    await v2.applicant.application.respondToCounterOffer(app.id, { accepted: false })
     // Reload applications
     await loadApplications()
   } catch (e) {
     log.error('Failed to reject counter offer:', e)
   }
+}
+
+// Ruta de la pantalla de oferta según el producto: días → vista móvil de oferta
+// (LoanOfferView); meses → vista de estado con sección de contraoferta.
+const offerRoute = (app: Application) =>
+  app.counter_offer?.term_days
+    ? { name: 'm-loan-offer', params: { id: app.id } }
+    : `/solicitud/${app.id}/estado`
+
+const goToOffer = (app: Application) => {
+  router.push(offerRoute(app))
+}
+
+// Redirect de entrada: con una contraoferta esperando respuesta, la pantalla de
+// oferta es la "pantalla principal". Solo una vez por sesión de pestaña (flag en
+// sessionStorage) para dejar salida libre de regreso al dashboard. Las solicitudes
+// vienen del API scoped por el tenant actual (header X-Tenant-ID), así que no hay
+// riesgo de redirigir a una oferta de otro tenant (a diferencia de localStorage).
+const redirectToActiveOffer = () => {
+  const offerApp = applications.value.find(a => a.status === 'COUNTER_OFFERED')
+  if (!offerApp) return
+  const key = `counter_offer_redirected_${offerApp.id}`
+  if (sessionStorage.getItem(key)) return
+  sessionStorage.setItem(key, '1')
+  router.replace(offerRoute(offerApp))
 }
 
 const canCancel = (status: string) => {
@@ -742,6 +779,17 @@ const handleCancelApplication = async () => {
                     v-if="app.status === 'COUNTER_OFFERED'"
                     variant="primary"
                     class="flex-1"
+                    @click="goToOffer(app)"
+                  >
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    Ver oferta
+                  </AppButton>
+                  <AppButton
+                    v-if="app.status === 'COUNTER_OFFERED' && !app.counter_offer?.term_days"
+                    variant="outline"
+                    class="flex-1"
                     @click="acceptCounterOffer(app)"
                   >
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -750,7 +798,7 @@ const handleCancelApplication = async () => {
                     Aceptar
                   </AppButton>
                   <AppButton
-                    v-if="app.status === 'COUNTER_OFFERED'"
+                    v-if="app.status === 'COUNTER_OFFERED' && !app.counter_offer?.term_days"
                     variant="outline"
                     class="flex-1"
                     @click="rejectCounterOffer(app)"

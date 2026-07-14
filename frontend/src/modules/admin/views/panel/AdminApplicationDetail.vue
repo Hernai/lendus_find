@@ -1043,17 +1043,40 @@ const openCounterOfferModal = () => {
   }
 }
 
-const submitCounterOffer = async (payload: { amount: number; term_months: number; interest_rate: number; payment_frequency: string; reason: string }) => {
+// Tarjeta de contraoferta vigente: estado legible + vigencia
+const counterOfferCard = computed(() => {
+  const co = application.value?.loan.counter_offer
+  if (!co || !application.value) return null
+  const accepted = application.value.loan.counter_offer_accepted
+  const expired = co.expires_at ? new Date(co.expires_at).getTime() < Date.now() : false
+  const state = co.responded_at
+    ? (accepted ? { label: 'Aceptada por el cliente', cls: 'text-green-700 bg-green-50' } : { label: 'Rechazada por el cliente', cls: 'text-red-700 bg-red-50' })
+    : expired
+      ? { label: 'Expirada', cls: 'text-red-700 bg-red-50' }
+      : { label: 'Esperando respuesta', cls: 'text-amber-700 bg-amber-50' }
+  return {
+    amount: co.amount,
+    termLabel: co.term_days ? `${co.term_days} días` : `${co.term_months} meses`,
+    expiresAt: co.expires_at,
+    reason: co.reason,
+    state
+  }
+})
+
+const submitCounterOffer = async (payload: { amount: number; term_months?: number; term_days?: number; interest_rate?: number; reason: string; expires_in_minutes: number }) => {
   if (!application.value) return
 
   isSubmittingCounterOffer.value = true
 
   try {
+    // Plazo en días XOR meses según el producto (el modal ya emite el correcto)
     await staff.application.createCounterOffer(application.value.id, {
       amount: payload.amount,
       term_months: payload.term_months,
+      term_days: payload.term_days,
       interest_rate: payload.interest_rate,
-      reason: payload.reason
+      reason: payload.reason,
+      expires_in_minutes: payload.expires_in_minutes
     })
 
     await fetchApplication()
@@ -1151,6 +1174,29 @@ onUnmounted(() => {
         @unapprove-selfie="showSelfieUnapproveModal = true"
         @unreject-selfie="showSelfieUnrejectModal = true"
       />
+
+      <!-- Contraoferta vigente -->
+      <div
+        v-if="counterOfferCard"
+        class="bg-white rounded-xl shadow-sm p-4 mb-4 border-l-4 border-purple-400 flex flex-wrap items-center gap-x-6 gap-y-2"
+      >
+        <div>
+          <p class="text-xs text-gray-500">Contraoferta</p>
+          <p class="text-lg font-bold text-gray-900">
+            {{ new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(counterOfferCard.amount) }}
+            <span class="text-sm font-medium text-gray-600">a {{ counterOfferCard.termLabel }}</span>
+          </p>
+        </div>
+        <span :class="['px-2.5 py-1 text-xs font-medium rounded-full', counterOfferCard.state.cls]">
+          {{ counterOfferCard.state.label }}
+        </span>
+        <p v-if="counterOfferCard.expiresAt" class="text-xs text-gray-500">
+          Vigente hasta {{ new Date(counterOfferCard.expiresAt).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) }}
+        </p>
+        <p v-if="counterOfferCard.reason" class="text-xs text-gray-500 w-full">
+          Motivo: {{ counterOfferCard.reason }}
+        </p>
+      </div>
 
       <!-- Avance del Expediente -->
       <CompletenessCard

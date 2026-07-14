@@ -5,6 +5,9 @@ import { useApplicationStore } from '@/stores'
 import { AppButton, AppProgressBar } from '@/components/common'
 import { logger } from '@/utils/logger'
 import { formatMoney, formatFrequency } from '@/utils/formatters'
+import { useToast } from '@/composables/useToast'
+import { v2 } from '@/services/v2'
+import type { V2CounterOffer } from '@/types/v2'
 
 const log = logger.child('ApplicationStatusView')
 
@@ -57,9 +60,9 @@ const timeline = computed<TimelineStep[]>(() => {
   const status = application.value?.status || 'DRAFT'
 
   const steps = [
-    { id: 'submitted', title: 'Solicitud enviada', description: 'Tu solicitud fue recibida', statusWhen: ['SUBMITTED', 'IN_REVIEW', 'DOCS_PENDING', 'CORRECTIONS_PENDING', 'APPROVED', 'REJECTED', 'SYNCED'] },
-    { id: 'review', title: 'En revisión', description: 'Estamos analizando tu información', statusWhen: ['IN_REVIEW', 'DOCS_PENDING', 'CORRECTIONS_PENDING', 'APPROVED', 'REJECTED', 'SYNCED'] },
-    { id: 'docs', title: 'Documentos verificados', description: 'Tus documentos fueron revisados', statusWhen: ['APPROVED', 'REJECTED', 'SYNCED'] },
+    { id: 'submitted', title: 'Solicitud enviada', description: 'Tu solicitud fue recibida', statusWhen: ['SUBMITTED', 'IN_REVIEW', 'DOCS_PENDING', 'CORRECTIONS_PENDING', 'COUNTER_OFFERED', 'APPROVED', 'REJECTED', 'SYNCED'] },
+    { id: 'review', title: 'En revisión', description: 'Estamos analizando tu información', statusWhen: ['IN_REVIEW', 'DOCS_PENDING', 'CORRECTIONS_PENDING', 'COUNTER_OFFERED', 'APPROVED', 'REJECTED', 'SYNCED'] },
+    { id: 'docs', title: 'Documentos verificados', description: 'Tus documentos fueron revisados', statusWhen: ['COUNTER_OFFERED', 'APPROVED', 'REJECTED', 'SYNCED'] },
     { id: 'decision', title: 'Decisión', description: 'Resultado de tu solicitud', statusWhen: ['APPROVED', 'REJECTED', 'SYNCED'] }
   ]
 
@@ -83,6 +86,7 @@ const statusConfig = computed((): { color: string; label: string; icon: string }
     IN_REVIEW: { color: 'yellow', label: 'En revisión', icon: 'search' },
     DOCS_PENDING: { color: 'orange', label: 'Documentos pendientes', icon: 'document' },
     CORRECTIONS_PENDING: { color: 'orange', label: 'Correcciones pendientes', icon: 'edit' },
+    COUNTER_OFFERED: { color: 'purple', label: 'Tienes una oferta', icon: 'refresh' },
     APPROVED: { color: 'green', label: 'Aprobada', icon: 'check' },
     REJECTED: { color: 'red', label: 'Rechazada', icon: 'x' },
     SYNCED: { color: 'purple', label: 'Sincronizada', icon: 'cloud' }
@@ -120,6 +124,39 @@ const actionMessage = computed(() => {
 const goToAction = () => {
   if (actionMessage.value) {
     router.push(actionMessage.value.route)
+  }
+}
+
+// ==========================================================
+// Contraoferta (tenants con plazo en meses; los productos en
+// días usan LoanOfferView en /m/solicitud/:id/oferta)
+// ==========================================================
+const toast = useToast()
+const respondingOffer = ref(false)
+
+const counterOffer = computed<V2CounterOffer | null>(() => {
+  const app = application.value as { status?: string; counter_offer?: V2CounterOffer | null } | null
+  if (!app || app.status !== 'COUNTER_OFFERED') return null
+  const co = app.counter_offer
+  return co && !co.responded_at ? co : null
+})
+
+const offerExpired = computed(() => {
+  const exp = counterOffer.value?.expires_at
+  return exp ? new Date(exp).getTime() < Date.now() : false
+})
+
+const respondToOffer = async (accepted: boolean) => {
+  respondingOffer.value = true
+  try {
+    await v2.applicant.application.respondToCounterOffer(applicationId.value, { accepted })
+    toast.success(accepted ? '¡Oferta aceptada! Tu crédito fue aprobado.' : 'Tu solicitud ha quedado cancelada')
+    await applicationStore.loadApplication(applicationId.value)
+  } catch (e) {
+    log.error('Failed to respond to counter offer', { error: e })
+    toast.error('No fue posible procesar tu respuesta')
+  } finally {
+    respondingOffer.value = false
   }
 }
 
@@ -271,6 +308,65 @@ onMounted(async () => {
             <p class="font-semibold text-gray-900">{{ formatMoney(simulation.periodic_payment) }}</p>
           </div>
         </div>
+      </div>
+
+      <!-- Contraoferta pendiente (productos en meses) -->
+      <div v-if="counterOffer" class="bg-purple-50 border-2 border-purple-200 rounded-2xl p-6 mb-6">
+        <div class="flex items-start gap-3 mb-4">
+          <div class="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+          </div>
+          <div class="flex-1">
+            <h3 class="font-semibold text-purple-900 mb-1">Te proponemos una oferta ajustada</h3>
+            <p class="text-sm text-purple-700">
+              Revisamos tu solicitud y podemos ofrecerte estas condiciones:
+            </p>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl p-4 mb-4 grid grid-cols-3 gap-4 text-center">
+          <div>
+            <p class="text-xs text-gray-500">Monto</p>
+            <p class="font-bold text-gray-900">{{ formatMoney(counterOffer.amount) }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-500">Plazo</p>
+            <p class="font-bold text-gray-900">{{ counterOffer.term_months }} meses</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-500">Tasa anual</p>
+            <p class="font-bold text-gray-900">{{ counterOffer.interest_rate }}%</p>
+          </div>
+        </div>
+
+        <p v-if="counterOffer.reason" class="text-sm text-purple-700 mb-4 italic">
+          {{ counterOffer.reason }}
+        </p>
+
+        <div v-if="offerExpired" class="bg-red-50 text-red-700 rounded-xl p-3 text-sm text-center mb-2">
+          Esta oferta ya expiró. Un asesor se pondrá en contacto contigo.
+        </div>
+        <template v-else>
+          <AppButton
+            variant="primary"
+            size="lg"
+            class="w-full"
+            :loading="respondingOffer"
+            @click="respondToOffer(true)"
+          >
+            Aceptar oferta
+          </AppButton>
+          <button
+            type="button"
+            class="w-full text-center text-sm text-gray-500 py-2 mt-2"
+            :disabled="respondingOffer"
+            @click="respondToOffer(false)"
+          >
+            No me interesa
+          </button>
+        </template>
       </div>
 
       <!-- Action Required Alert -->

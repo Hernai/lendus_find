@@ -231,7 +231,16 @@ export function mapApplicationDetail(
       monthly_payment: loan?.monthly_payment || 0,
       total_to_pay: loan?.total_amount || 0,
       purpose: loan?.purpose || '',
-      purpose_label: loan?.purpose_label || undefined
+      purpose_label: loan?.purpose_label || undefined,
+      // Plazo en días + contraoferta (modal adaptivo y tarjeta de oferta vigente)
+      term_in_days: loan?.term_in_days ?? false,
+      requested_term_days: loan?.requested_term_days ?? undefined,
+      requested_term_months: loan?.requested_term_months ?? undefined,
+      approved_term_days: loan?.approved_term_days ?? null,
+      has_counter_offer: loan?.has_counter_offer ?? false,
+      counter_offer: loan?.counter_offer ?? null,
+      counter_offer_accepted: loan?.counter_offer_accepted ?? null,
+      product_limits: loan?.product_limits ?? null
     },
     documents: docs.map(d => ({
       id: d.id,

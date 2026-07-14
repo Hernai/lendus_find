@@ -461,6 +461,11 @@ export interface V2ApplicationLoan {
   product_type: string | null
   requested_amount: number
   requested_term_months: number
+  /** Plazo solicitado en días (productos con rules.term_in_days). */
+  requested_term_days?: number | null
+  /** true si el producto mide el plazo en días (ej. MoneyCapital). */
+  term_in_days?: boolean
+  payment_frequency?: string | null
   purpose: string | null
   purpose_label: string | null
   purpose_description: string | null
@@ -471,10 +476,22 @@ export interface V2ApplicationLoan {
   cat: number | null
   approved_amount: number | null
   approved_term_months: number | null
+  approved_term_days?: number | null
   approved_interest_rate: number | null
   has_counter_offer: boolean
   counter_offer: V2CounterOffer | null
   counter_offer_accepted: boolean | null
+  /** Límites del producto para validar contraofertas en el modal admin. */
+  product_limits?: {
+    min_amount?: number | null
+    max_amount?: number | null
+    min_term_months?: number | null
+    max_term_months?: number | null
+    min_term_days?: number | null
+    max_term_days?: number | null
+    annual_rate?: number | null
+    opening_commission?: number | null
+  } | null
   risk_level: string | null
   risk_data: Record<string, unknown> | null
 }
@@ -811,15 +828,23 @@ export interface V2PendingDocument {
   required: boolean
 }
 
+/**
+ * Snapshot completo de la contraoferta (JSONB counter_offer del backend).
+ * Plazo en term_days (productos en días, ej. MoneyCapital) O term_months.
+ * Tasa y comisión se congelan del producto al momento de ofertar.
+ */
 export interface V2CounterOffer {
   amount: number
-  term_months: number
-  interest_rate: number
-  payment_frequency: V2PaymentFrequency
-  monthly_payment: number
-  reason: string
+  term_months: number | null
+  term_days: number | null
+  interest_rate: number | null
+  opening_commission: number | null
+  monthly_payment?: number | null
+  total_amount?: number | null
+  reason: string | null
   offered_by: string
   offered_at: string
+  expires_at: string | null
   responded_at: string | null
   accepted: boolean | null
 }
@@ -847,12 +872,12 @@ export interface V2ApplicationUpdatePayload {
   metadata?: Record<string, unknown>
 }
 
+/**
+ * Respuesta del solicitante a la contraoferta. El backend valida `accepted`
+ * (los valores son fijos: monto y plazo salen del snapshot en el servidor).
+ */
 export interface V2CounterOfferResponsePayload {
-  accept: boolean
-  reason?: string
-  // Para módulo loan_portfolio (MoneyCapital): ajustes finales a la oferta
-  amount?: number
-  term_days?: number
+  accepted: boolean
 }
 
 // =====================================================
@@ -1018,9 +1043,14 @@ export interface V2RejectPayload {
  */
 export interface V2CounterOfferCreatePayload {
   amount: number
-  term_months: number
+  /** Plazo en meses (productos estándar). Excluyente con term_days. */
+  term_months?: number
+  /** Plazo en días (productos con rules.term_in_days, ej. MoneyCapital). */
+  term_days?: number
   interest_rate?: number
   reason?: string
+  /** Vigencia de la oferta en minutos (default backend: 30). */
+  expires_in_minutes?: number
 }
 
 /**

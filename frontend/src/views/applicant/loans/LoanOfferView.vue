@@ -1,26 +1,27 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useTenantStore } from '@/stores'
 import { useToast } from '@/composables/useToast'
 import { v2 } from '@/services/v2'
 import AppButton from '@/components/common/AppButton.vue'
 
+// Snapshot de la contraoferta (JSONB counter_offer del backend). Valores FIJOS:
+// el admin dicta monto y días exactos; los sliders quedan bloqueados (min=max).
 interface CounterOffer {
   amount?: number | null
-  min_amount?: number | null
-  max_amount?: number | null
   term_days?: number | null
-  min_term_days?: number | null
-  max_term_days?: number | null
+  term_months?: number | null
   interest_rate?: number | null
+  opening_commission?: number | null
+  reason?: string | null
   expires_at?: string | null
+  responded_at?: string | null
+  accepted?: boolean | null
   cat?: number | null
 }
 
 const route = useRoute()
 const router = useRouter()
-const tenantStore = useTenantStore()
 const toast = useToast()
 
 const applicationId = computed(() => String(route.params.id ?? ''))
@@ -46,20 +47,29 @@ const remainingLabel = computed(() => {
 })
 const expired = computed(() => remainingMs.value != null && remainingMs.value === 0)
 
-const minAmount = computed(() => Number(offer.value?.min_amount ?? offer.value?.amount ?? 0))
-const maxAmount = computed(() => Number(offer.value?.max_amount ?? offer.value?.amount ?? 0))
-const minTerm = computed(() => Number(offer.value?.min_term_days ?? offer.value?.term_days ?? 0))
-const maxTerm = computed(() => Number(offer.value?.max_term_days ?? offer.value?.term_days ?? 0))
+// Valores fijos: min = max = lo ofertado, así los sliders se deshabilitan solos.
+const minAmount = computed(() => Number(offer.value?.amount ?? 0))
+const maxAmount = computed(() => Number(offer.value?.amount ?? 0))
+const minTerm = computed(() => Number(offer.value?.term_days ?? 0))
+const maxTerm = computed(() => Number(offer.value?.term_days ?? 0))
 
 const interestRate = computed(() => Number(offer.value?.interest_rate ?? 0))
+const commissionRate = computed(() => Number(offer.value?.opening_commission ?? 0))
 
+// Interés simple prorrateado por días + IVA (misma fórmula que el resumen admin)
 const interestAmount = computed(() => {
   if (!amount.value || !termDays.value || !interestRate.value) return 0
   return +(amount.value * (interestRate.value / 100) * (termDays.value / 365)).toFixed(2)
 })
 
 const ivaInterest = computed(() => +(interestAmount.value * 0.16).toFixed(2))
-const totalToPay = computed(() => +(amount.value + interestAmount.value + ivaInterest.value).toFixed(2))
+
+// Comisión de apertura (IVA incluido), congelada en el snapshot al ofertar
+const commissionAmount = computed(() => +(amount.value * (commissionRate.value / 100)).toFixed(2))
+const commissionWithIva = computed(() => +(commissionAmount.value * 1.16).toFixed(2))
+
+const totalToPay = computed(() =>
+  +(amount.value + interestAmount.value + ivaInterest.value + commissionWithIva.value).toFixed(2))
 
 const dueDate = computed(() => {
   if (!termDays.value) return null
@@ -91,15 +101,18 @@ const loadOffer = async () => {
   loading.value = true
   try {
     const res = await v2.applicant.application.get(applicationId.value)
-    const app = res.data
-    const co = ((app as unknown as { counter_offer?: CounterOffer })?.counter_offer ?? null)
-    if (!co) {
-      toast.error('No hay oferta disponible')
+    const app = res.data as unknown as { status?: string; counter_offer?: CounterOffer }
+    const co = app?.counter_offer ?? null
+    // Sin contraoferta pendiente (no existe, ya respondida o el estado cambió):
+    // esta pantalla no aplica; lo mandamos a su vista de estado.
+    if (!co || co.responded_at || app?.status !== 'COUNTER_OFFERED') {
+      toast.error('No hay una oferta pendiente')
+      router.replace(`/solicitud/${applicationId.value}/estado`)
       return
     }
     offer.value = co
-    amount.value = Number(co.amount ?? co.max_amount ?? co.min_amount ?? 0)
-    termDays.value = Number(co.term_days ?? co.max_term_days ?? co.min_term_days ?? 0)
+    amount.value = Number(co.amount ?? 0)
+    termDays.value = Number(co.term_days ?? 0)
   } finally {
     loading.value = false
   }
@@ -108,20 +121,19 @@ const loadOffer = async () => {
 const respond = async (accept: boolean) => {
   submitting.value = true
   try {
+    // Valores fijos: el backend toma monto/plazo del snapshot; solo va la decisión.
     await v2.applicant.application.respondToCounterOffer(applicationId.value, {
-      accept,
-      amount: accept ? amount.value : undefined,
-      term_days: accept ? termDays.value : undefined,
+      accepted: accept,
     })
     if (accept) {
       accepted.value = true
       toast.success('¡Préstamo aceptado!')
       router.replace({ name: 'm-processing', params: { id: applicationId.value } })
     } else {
-      toast.success('Oferta rechazada')
+      toast.success('Tu solicitud ha quedado cancelada')
       router.replace({ name: 'dashboard' })
     }
-  } catch (e) {
+  } catch {
     toast.error('No fue posible procesar la oferta')
   } finally {
     submitting.value = false
@@ -150,10 +162,13 @@ onUnmounted(() => {
 
     <div v-else-if="offer" class="px-4 py-5 space-y-4">
       <div class="bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-2xl p-5 shadow-md">
-        <p class="text-sm opacity-90">¡Felicidades, {{ tenantStore.tenant?.name || 'cliente' }}!</p>
-        <h2 class="text-xl font-bold mt-1">Tu préstamo fue preaprobado</h2>
+        <p class="text-sm opacity-90">¡Buenas noticias!</p>
+        <h2 class="text-xl font-bold mt-1">Tenemos una oferta para ti</h2>
         <p class="text-sm opacity-90 mt-2">
-          Este primer crédito construye tu historial. Paga puntual y podrás acceder a un monto mayor.
+          Ajustamos las condiciones de tu préstamo según tu perfil. Paga puntual y podrás acceder a un monto mayor.
+        </p>
+        <p v-if="offer?.reason" class="text-xs opacity-80 mt-2 italic">
+          {{ offer.reason }}
         </p>
       </div>
 
@@ -215,6 +230,10 @@ onUnmounted(() => {
           <span>IVA del interés (16%)</span>
           <span class="font-medium text-gray-900">{{ formatMoney(ivaInterest) }}</span>
         </div>
+        <div v-if="commissionWithIva > 0" class="flex justify-between text-gray-600">
+          <span>Comisiones (IVA incluido)</span>
+          <span class="font-medium text-gray-900">{{ formatMoney(commissionWithIva) }}</span>
+        </div>
         <div v-if="offer?.cat" class="flex justify-between text-gray-600">
           <span>CAT informativo</span>
           <span class="font-medium text-gray-900">{{ offer.cat }}%</span>
@@ -265,7 +284,7 @@ onUnmounted(() => {
         :disabled="submitting"
         @click="respond(false)"
       >
-        Rechazar oferta
+        No me interesa
       </button>
     </div>
   </div>

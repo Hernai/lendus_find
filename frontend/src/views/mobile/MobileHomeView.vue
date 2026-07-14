@@ -54,7 +54,7 @@ const isProcessing = computed(() =>
   !activeLoan.value && (status.value === 'SUBMITTED' || status.value === 'IN_REVIEW' || status.value === 'DRAFT'),
 )
 const hasOffer = computed(() =>
-  !activeLoan.value && (status.value === 'PRE_APPROVED' || status.value === 'APPROVED'),
+  !activeLoan.value && (status.value === 'PRE_APPROVED' || status.value === 'APPROVED' || status.value === 'COUNTER_OFFERED'),
 )
 const isRejected = computed(() => !activeLoan.value && status.value === 'REJECTED')
 // "Sin solicitud" solo si ya cargamos al menos una vez SIN error (evita mostrar
@@ -120,6 +120,16 @@ async function refresh() {
       application.value = latest
       if (latest.status === 'IN_REVIEW') progress.value = Math.min(80, progress.value + 1)
       else if (latest.status === 'PRE_APPROVED' || latest.status === 'APPROVED') progress.value = 100
+      // Contraoferta activa: la pantalla de oferta es la "pantalla principal".
+      // Redirect una sola vez por sesión de pestaña (misma llave que DashboardView)
+      // para dejar salida libre; la tarjeta hasOffer permite volver manualmente.
+      if (latest.status === 'COUNTER_OFFERED') {
+        const key = `counter_offer_redirected_${latest.id}`
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, '1')
+          router.replace({ name: 'm-loan-offer', params: { id: latest.id } })
+        }
+      }
     } else {
       application.value = null
     }
