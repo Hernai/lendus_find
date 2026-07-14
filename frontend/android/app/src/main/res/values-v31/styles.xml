@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+      Android 12+ ignora el drawable de splash a pantalla completa: el splash
+      de arranque lo pinta el sistema con el icono de la app sobre
+      windowSplashScreenBackground. Lo único personalizable además del color
+      es la imagen de marca inferior (windowSplashScreenBrandingImage).
+    -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@drawable/splash</item>
+        <item name="android:windowSplashScreenBackground">#FFFFFF</item>
+        <item name="android:windowSplashScreenBrandingImage">@drawable/splash_branding</item>
+    </style>
+</resources>

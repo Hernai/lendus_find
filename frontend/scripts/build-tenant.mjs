@@ -120,7 +120,18 @@ if (hasIos || hasAndroid) {
     ...(hasAndroid ? ['--android'] : []),
     ...(hasIos ? ['--ios'] : []),
   ]
-  await runCommand('npx', ['@capacitor/assets', 'generate', ...platforms], { env })
+  // Los PNG del tenant traen transparencia, pero los launchers no admiten
+  // iconos ni splash transparentes: @capacitor/assets rellena la
+  // transparencia con blanco salvo que se le pase un color explícito.
+  const splashBg = tenant.assets.splashBackgroundColor ?? '#FFFFFF'
+  const iconBg = tenant.assets.iconBackgroundColor ?? splashBg
+  const colorFlags = [
+    '--iconBackgroundColor', iconBg,
+    '--iconBackgroundColorDark', iconBg,
+    '--splashBackgroundColor', splashBg,
+    '--splashBackgroundColorDark', splashBg,
+  ]
+  await runCommand('npx', ['@capacitor/assets', 'generate', ...platforms, ...colorFlags], { env })
 
   console.log('▶ Capacitor sync...')
   await runCommand('npx', ['cap', 'sync'], { env })

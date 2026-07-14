@@ -17,7 +17,12 @@ const config: TenantConfig = {
   assets: {
     icon: 'tenants/moneycapital/icon.png',
     splash: 'tenants/moneycapital/splash.png',
-    splashBackgroundColor: '#5B21B6',
+    // El splash trae el wordmark morado de MoneyCapital: fondo blanco
+    // para que sea legible (sobre morado desaparecería).
+    splashBackgroundColor: '#FFFFFF',
+    // El logo ya es un círculo morado: fondo blanco para que se distinga
+    // en el launcher (los iconos transparentes no existen en Android/iOS).
+    iconBackgroundColor: '#FFFFFF',
   },
   nativeTheme: {
     primary: '#5B21B6',
