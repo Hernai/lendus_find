@@ -38,5 +38,5 @@
 
 - [x] 6.1 `npm run type-check` + `php artisan test --filter=CounterOffer` en verde
 - [x] 6.2 Flujo manual MoneyCapital: admin envía contraoferta (días) → push/estado → solicitante aterriza en oferta → acepta → `APPROVED` con `approved_term_days`; repetir con rechazo → `CANCELLED`
-- [ ] 6.3 Flujo manual demo (meses): contraoferta desde admin → sección en vista de estado → aceptar/rechazar
-- [ ] 6.4 Expiración: enviar oferta con vigencia 1 min, verificar countdown, bloqueo client-side y auto-cancelación por el comando
+- [x] 6.3 Flujo manual demo (meses): contraoferta desde admin → sección en vista de estado → aceptar/rechazar
+- [x] 6.4 Expiración: enviar oferta con vigencia 1 min, verificar countdown, bloqueo client-side y auto-cancelación por el comando
