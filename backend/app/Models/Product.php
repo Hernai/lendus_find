@@ -184,6 +184,30 @@ class Product extends Model
     }
 
     /**
+     * Whether the product term is measured in days (BULLET products like MoneyCapital).
+     */
+    public function getTermInDaysAttribute(): bool
+    {
+        return (bool) ($this->rules['term_in_days'] ?? false);
+    }
+
+    /**
+     * Get minimum term in days (only meaningful when term_in_days).
+     */
+    public function getMinTermDaysAttribute(): int
+    {
+        return $this->rules['min_term_days'] ?? 1;
+    }
+
+    /**
+     * Get maximum term in days (only meaningful when term_in_days).
+     */
+    public function getMaxTermDaysAttribute(): int
+    {
+        return $this->rules['max_term_days'] ?? 30;
+    }
+
+    /**
      * Get opening commission rate.
      */
     public function getOpeningCommissionRateAttribute(): float

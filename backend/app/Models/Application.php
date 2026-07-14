@@ -48,6 +48,7 @@ class Application extends Model
         'cat',
         'approved_amount',
         'approved_term_months',
+        'approved_term_days',
         'approved_interest_rate',
         'approved_monthly_payment',
         'status',
@@ -95,6 +96,7 @@ class Application extends Model
         'total_amount' => 'decimal:2',
         'cat' => 'decimal:4',
         'approved_amount' => 'decimal:2',
+        'approved_term_days' => 'integer',
         'approved_interest_rate' => 'decimal:4',
         'approved_monthly_payment' => 'decimal:2',
         'status_changed_at' => 'datetime',
@@ -140,6 +142,7 @@ class Application extends Model
     public const STATUS_CORRECTIONS_PENDING = 'CORRECTIONS_PENDING';
     public const STATUS_ANALYST_REVIEW = 'ANALYST_REVIEW';
     public const STATUS_SUPERVISOR_REVIEW = 'SUPERVISOR_REVIEW';
+    public const STATUS_COUNTER_OFFERED = 'COUNTER_OFFERED';
     public const STATUS_APPROVED = 'APPROVED';
     public const STATUS_REJECTED = 'REJECTED';
     public const STATUS_CANCELLED = 'CANCELLED';
@@ -155,6 +158,7 @@ class Application extends Model
             self::STATUS_CORRECTIONS_PENDING => 'Correcciones pendientes',
             self::STATUS_ANALYST_REVIEW => 'Revisión de analista',
             self::STATUS_SUPERVISOR_REVIEW => 'Revisión de supervisor',
+            self::STATUS_COUNTER_OFFERED => 'Contraoferta',
             self::STATUS_APPROVED => 'Aprobada',
             self::STATUS_REJECTED => 'Rechazada',
             self::STATUS_CANCELLED => 'Cancelada',
@@ -200,11 +204,12 @@ class Application extends Model
     private const STATUS_TRANSITIONS = [
         self::STATUS_DRAFT => [self::STATUS_SUBMITTED, self::STATUS_CANCELLED],
         self::STATUS_SUBMITTED => [self::STATUS_IN_REVIEW, self::STATUS_DOCS_PENDING, self::STATUS_CORRECTIONS_PENDING, self::STATUS_CANCELLED],
-        self::STATUS_IN_REVIEW => [self::STATUS_DOCS_PENDING, self::STATUS_CORRECTIONS_PENDING, self::STATUS_ANALYST_REVIEW, self::STATUS_APPROVED, self::STATUS_REJECTED, self::STATUS_CANCELLED],
-        self::STATUS_DOCS_PENDING => [self::STATUS_IN_REVIEW, self::STATUS_SUBMITTED, self::STATUS_CANCELLED],
+        self::STATUS_IN_REVIEW => [self::STATUS_DOCS_PENDING, self::STATUS_CORRECTIONS_PENDING, self::STATUS_ANALYST_REVIEW, self::STATUS_COUNTER_OFFERED, self::STATUS_APPROVED, self::STATUS_REJECTED, self::STATUS_CANCELLED],
+        self::STATUS_DOCS_PENDING => [self::STATUS_IN_REVIEW, self::STATUS_SUBMITTED, self::STATUS_COUNTER_OFFERED, self::STATUS_CANCELLED],
         self::STATUS_CORRECTIONS_PENDING => [self::STATUS_IN_REVIEW, self::STATUS_SUBMITTED, self::STATUS_CANCELLED],
         self::STATUS_ANALYST_REVIEW => [self::STATUS_SUPERVISOR_REVIEW, self::STATUS_DOCS_PENDING, self::STATUS_CORRECTIONS_PENDING, self::STATUS_APPROVED, self::STATUS_REJECTED, self::STATUS_CANCELLED],
         self::STATUS_SUPERVISOR_REVIEW => [self::STATUS_APPROVED, self::STATUS_REJECTED, self::STATUS_CANCELLED],
+        self::STATUS_COUNTER_OFFERED => [self::STATUS_APPROVED, self::STATUS_CANCELLED],
         self::STATUS_APPROVED => [self::STATUS_SYNCED, self::STATUS_CANCELLED],
         self::STATUS_REJECTED => [], // Terminal state
         self::STATUS_CANCELLED => [], // Terminal state
@@ -626,31 +631,60 @@ class Application extends Model
 
     /**
      * Send counter offer.
+     *
+     * Transiciona a COUNTER_OFFERED y guarda el snapshot completo de la oferta.
+     * Reenviar estando ya en COUNTER_OFFERED sobreescribe el snapshot (y renueva
+     * su vigencia) sin registrar una transición duplicada en el historial.
      */
     public function sendCounterOffer(string $staffId, array $offer, ?string $reason = null): void
     {
+        $oldStatus = $this->status;
+        $isResend = $oldStatus === self::STATUS_COUNTER_OFFERED;
+
+        if (!$isResend) {
+            $this->validateTransition(self::STATUS_COUNTER_OFFERED);
+        }
+
         $this->update([
             'decision' => self::DECISION_COUNTER_OFFER,
             'decision_at' => now(),
             'decision_by' => $staffId,
             'counter_offer' => array_merge($offer, [
                 'reason' => $reason,
+                'offered_by' => $staffId,
                 'offered_at' => now()->toIso8601String(),
+                'responded_at' => null,
+                'accepted' => null,
             ]),
+            'counter_offer_accepted' => null,
+            'counter_offer_responded_at' => null,
+            'status' => self::STATUS_COUNTER_OFFERED,
+            'status_changed_at' => now(),
+            'status_changed_by' => $staffId,
+            'status_changed_by_type' => StaffAccount::class,
         ]);
 
+        if (!$isResend) {
+            $this->recordStatusChange($oldStatus, self::STATUS_COUNTER_OFFERED, $staffId, StaffAccount::class, $reason);
+        }
+
         $formattedAmount = number_format($offer['amount'], 2);
+        $termLabel = isset($offer['term_days'])
+            ? "{$offer['term_days']} días"
+            : "{$offer['term_months']} meses";
         \App\Services\ActivityRecorder::recordApplicationEvent($this, 'APPLICATION_UPDATED', [
             'from_status' => 'COUNTER_OFFER',
             'to_status' => 'COUNTER_OFFER',
-            'notes' => "Contraoferta enviada: \${$formattedAmount} a {$offer['term_months']} meses" . ($reason ? " - {$reason}" : ''),
+            'notes' => ($isResend ? 'Contraoferta reenviada' : 'Contraoferta enviada') . ": \${$formattedAmount} a {$termLabel}" . ($reason ? " - {$reason}" : ''),
             'new_values' => ['counter_offer' => $offer],
             'metadata' => [
                 'kind' => 'counter_offer_sent',
                 'amount' => $offer['amount'],
-                'term_months' => $offer['term_months'],
+                'term_months' => $offer['term_months'] ?? null,
+                'term_days' => $offer['term_days'] ?? null,
                 'interest_rate' => $offer['interest_rate'] ?? null,
                 'monthly_payment' => $offer['monthly_payment'] ?? null,
+                'expires_at' => $offer['expires_at'] ?? null,
                 'reason' => $reason,
             ],
         ]);
@@ -658,32 +692,54 @@ class Application extends Model
 
     /**
      * Respond to counter offer.
+     *
+     * Aceptar transiciona a APPROVED copiando los términos del snapshot a los
+     * campos approved_*; rechazar transiciona a CANCELLED (decisión del cliente).
      */
     public function respondToCounterOffer(bool $accepted, string $accountId): void
     {
-        $this->update([
-            'counter_offer_accepted' => $accepted,
-            'counter_offer_responded_at' => now(),
+        $oldStatus = $this->status;
+        $newStatus = $accepted ? self::STATUS_APPROVED : self::STATUS_CANCELLED;
+        $this->validateTransition($newStatus);
+
+        $respondedAt = now();
+        $snapshot = array_merge($this->counter_offer ?? [], [
+            'responded_at' => $respondedAt->toIso8601String(),
+            'accepted' => $accepted,
         ]);
 
+        $attributes = [
+            'counter_offer' => $snapshot,
+            'counter_offer_accepted' => $accepted,
+            'counter_offer_responded_at' => $respondedAt,
+            'status' => $newStatus,
+            'status_changed_at' => $respondedAt,
+            'status_changed_by' => $accountId,
+            'status_changed_by_type' => ApplicantAccount::class,
+        ];
+
         if ($accepted) {
-            $this->update([
+            $attributes += [
                 'approved_amount' => $this->counter_offer['amount'] ?? $this->requested_amount,
-                'approved_term_months' => $this->counter_offer['term_months'] ?? $this->requested_term_months,
+                'approved_term_months' => $this->counter_offer['term_months'] ?? null,
+                'approved_term_days' => $this->counter_offer['term_days'] ?? null,
                 'approved_interest_rate' => $this->counter_offer['interest_rate'] ?? $this->interest_rate,
                 'approved_monthly_payment' => $this->counter_offer['monthly_payment'] ?? null,
-                'status' => self::STATUS_APPROVED,
-                'status_changed_at' => now(),
-                'status_changed_by' => $accountId,
-                'status_changed_by_type' => ApplicantAccount::class,
-            ]);
+            ];
         }
+
+        $this->update($attributes);
+
+        $notes = $accepted
+            ? 'El cliente aceptó la contraoferta'
+            : 'El cliente rechazó la contraoferta';
+        $this->recordStatusChange($oldStatus, $newStatus, $accountId, ApplicantAccount::class, $notes);
     }
 
     /**
      * Cancel the application.
      */
-    public function cancel(string $cancelledById, string $cancelledByType, ?string $reason = null): void
+    public function cancel(?string $cancelledById, string $cancelledByType, ?string $reason = null): void
     {
         $oldStatus = $this->status;
 

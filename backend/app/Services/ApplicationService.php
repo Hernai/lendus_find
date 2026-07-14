@@ -328,40 +328,67 @@ class ApplicationService
 
     /**
      * Send counter offer.
+     *
+     * El snapshot guarda tasa y comisión del producto al momento de ofertar,
+     * para que la pantalla del solicitante no dependa de la config pública ni
+     * de cambios futuros del producto. El plazo va en días (term_days) para
+     * productos con rules.term_in_days, o en meses (term_months) para el resto.
      */
     public function sendCounterOffer(
         Application $application,
         StaffAccount $staff,
         array $offer,
-        ?string $reason = null
+        ?string $reason = null,
+        int $expiresInMinutes = 30
     ): Application {
-        // Validate offer has required fields
-        if (!isset($offer['amount']) || !isset($offer['term_months'])) {
-            throw new \InvalidArgumentException('Counter offer must include amount and term_months');
+        $product = $application->product;
+
+        if (!isset($offer['amount'])) {
+            throw new \InvalidArgumentException('La contraoferta debe incluir el monto.');
         }
 
-        // Calculate payment for counter offer
-        $product = $application->product;
-        $interestRate = $offer['interest_rate'] ?? $product->annual_rate;
+        if ($product->term_in_days) {
+            if (!isset($offer['term_days'])) {
+                throw new \InvalidArgumentException('La contraoferta debe incluir el plazo en días para este producto.');
+            }
+            // BULLET de pago único: tasa y comisión fijas del producto, sin amortización.
+            $offer['term_months'] = null;
+            $offer['interest_rate'] = $product->annual_rate;
+            $offer['opening_commission'] = $product->opening_commission_rate;
+        } else {
+            if (!isset($offer['term_months'])) {
+                throw new \InvalidArgumentException('La contraoferta debe incluir el plazo en meses.');
+            }
+            $offer['term_days'] = null;
+            $interestRate = $offer['interest_rate'] ?? $product->annual_rate;
 
-        $calculation = $this->loanCalculator->calculateSimulation(
-            $offer['amount'],
-            $offer['term_months'],
-            'MONTHLY',
-            $interestRate,
-            $product->opening_commission_rate ?? 0
-        );
+            $calculation = $this->loanCalculator->calculateSimulation(
+                $offer['amount'],
+                $offer['term_months'],
+                'MONTHLY',
+                $interestRate,
+                $product->opening_commission_rate ?? 0
+            );
 
-        $offer['monthly_payment'] = $calculation['payment_amount'];
-        $offer['total_amount'] = $calculation['total_to_pay'];
-        $offer['interest_rate'] = $interestRate;
+            $offer['monthly_payment'] = $calculation['payment_amount'];
+            $offer['total_amount'] = $calculation['total_to_pay'];
+            $offer['interest_rate'] = $interestRate;
+            $offer['opening_commission'] = $product->opening_commission_rate;
+        }
+
+        $offer['expires_at'] = now()->addMinutes($expiresInMinutes)->toIso8601String();
 
         $application->sendCounterOffer($staff->id, $offer, $reason);
 
+        $termLabel = $offer['term_days']
+            ? "{$offer['term_days']} días"
+            : "{$offer['term_months']} meses";
         $this->sendNotification(NotificationEvent::APPLICATION_COUNTER_OFFERED->value, $application, [
             'counter_offer' => [
                 'amount' => '$' . number_format($offer['amount'], 2),
-                'term_months' => $offer['term_months'],
+                'term' => $termLabel,
+                'term_months' => $offer['term_months'] ?? '',
+                'term_days' => $offer['term_days'] ?? '',
                 'monthly_payment' => '$' . number_format($offer['monthly_payment'] ?? 0, 2),
                 'total_amount' => '$' . number_format($offer['total_amount'] ?? 0, 2),
                 'reason' => $reason ?? '',
@@ -380,10 +407,31 @@ class ApplicationService
         bool $accepted
     ): Application {
         if (!$application->has_counter_offer) {
-            throw new \InvalidArgumentException('No counter offer to respond to');
+            throw new \InvalidArgumentException('No hay una contraoferta pendiente.');
+        }
+
+        if ($application->counter_offer_responded_at !== null) {
+            throw new \InvalidArgumentException('La contraoferta ya fue respondida.');
+        }
+
+        // Cinturón server-side: no se puede aceptar una oferta vencida (el
+        // comando counter-offers:expire puede tardar hasta 1 min en cancelarla).
+        $expiresAt = $application->counter_offer['expires_at'] ?? null;
+        if ($accepted && $expiresAt && now()->greaterThan($expiresAt)) {
+            throw new \InvalidArgumentException('La contraoferta ya expiró.');
         }
 
         $application->respondToCounterOffer($accepted, $account->id);
+
+        $event = $accepted
+            ? NotificationEvent::COUNTER_OFFER_ACCEPTED
+            : NotificationEvent::COUNTER_OFFER_REJECTED;
+        $this->sendNotification($event->value, $application, [
+            'counter_offer' => [
+                'amount' => '$' . number_format($application->counter_offer['amount'] ?? 0, 2),
+                'reason' => $application->counter_offer['reason'] ?? '',
+            ],
+        ]);
 
         return $application->fresh();
     }
@@ -397,7 +445,7 @@ class ApplicationService
      */
     public function cancel(
         Application $application,
-        string $cancelledById,
+        ?string $cancelledById,
         string $cancelledByType,
         ?string $reason = null
     ): Application {

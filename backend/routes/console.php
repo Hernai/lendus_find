@@ -15,6 +15,14 @@ Artisan::command('inspire', function () {
 // que invoque `php artisan schedule:run` cada minuto. Documentado en
 // deploy-ops skill.
 
+// Contraofertas — cancelar las expiradas sin respuesta (ExpireCounterOffers).
+// El barrido es barato (query indexable por status) y da granularidad de 1 min
+// al countdown que ve el solicitante.
+Schedule::command('counter-offers:expire')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // MaxMind GeoLite2-City — actualizar la DB cada miercoles 03:00 America/Mexico_City.
 // MaxMind libera nueva version los martes; corremos miercoles para asegurar
 // que la version mas reciente este disponible.

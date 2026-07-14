@@ -560,9 +560,14 @@ class ApplicationController extends Controller
     {
         $validated = $request->validate([
             'amount' => 'required|numeric|min:1',
-            'term_months' => 'required|integer|min:1|max:120',
+            'term_months' => 'required_without:term_days|prohibits:term_days|integer|min:1|max:120',
+            'term_days' => 'required_without:term_months|integer|min:1|max:365',
             'interest_rate' => 'nullable|numeric|min:0|max:100',
             'reason' => 'nullable|string|max:500',
+            'expires_in_minutes' => 'nullable|integer|min:5|max:10080',
+        ], [], [
+            'term_months' => 'plazo en meses',
+            'term_days' => 'plazo en días',
         ]);
 
         /** @var StaffAccount $staff */
@@ -576,16 +581,39 @@ class ApplicationController extends Controller
             return $this->notFound('Solicitud no encontrada.');
         }
 
-        $application = $this->service->sendCounterOffer(
-            $application,
-            $staff,
-            [
-                'amount' => $validated['amount'],
-                'term_months' => $validated['term_months'],
-                'interest_rate' => $validated['interest_rate'] ?? null,
-            ],
-            $validated['reason'] ?? null
-        );
+        // La unidad del plazo debe ser coherente con el producto y sus rangos.
+        $product = $application->product;
+        if ($product->term_in_days) {
+            if (!isset($validated['term_days'])) {
+                return $this->badRequest('TERM_UNIT_MISMATCH', 'Este producto maneja el plazo en días (term_days).');
+            }
+            if ($validated['term_days'] < $product->min_term_days || $validated['term_days'] > $product->max_term_days) {
+                return $this->badRequest('TERM_OUT_OF_RANGE', "El plazo debe estar entre {$product->min_term_days} y {$product->max_term_days} días.");
+            }
+        } elseif (!isset($validated['term_months'])) {
+            return $this->badRequest('TERM_UNIT_MISMATCH', 'Este producto maneja el plazo en meses (term_months).');
+        }
+
+        if (!$product->isAmountValid((float) $validated['amount'])) {
+            return $this->badRequest('AMOUNT_OUT_OF_RANGE', 'El monto está fuera del rango permitido por el producto.');
+        }
+
+        try {
+            $application = $this->service->sendCounterOffer(
+                $application,
+                $staff,
+                [
+                    'amount' => $validated['amount'],
+                    'term_months' => $validated['term_months'] ?? null,
+                    'term_days' => $validated['term_days'] ?? null,
+                    'interest_rate' => $validated['interest_rate'] ?? null,
+                ],
+                $validated['reason'] ?? null,
+                $validated['expires_in_minutes'] ?? 30
+            );
+        } catch (\InvalidArgumentException $e) {
+            return $this->badRequest('COUNTER_OFFER_FAILED', $e->getMessage());
+        }
 
         return $this->success([
             'application' => $this->formatApplication($application),
@@ -816,7 +844,20 @@ class ApplicationController extends Controller
             // Approved values (set when approved)
             'approved_amount' => $app->approved_amount,
             'approved_term_months' => $app->approved_term_months,
+            'approved_term_days' => $app->approved_term_days,
             'approved_interest_rate' => $app->approved_interest_rate,
+
+            // Límites del producto para validar contraofertas en el modal admin
+            'product_limits' => [
+                'min_amount' => $app->product?->min_amount,
+                'max_amount' => $app->product?->max_amount,
+                'min_term_months' => $app->product?->min_term_months,
+                'max_term_months' => $app->product?->max_term_months,
+                'min_term_days' => $app->product?->min_term_days,
+                'max_term_days' => $app->product?->max_term_days,
+                'annual_rate' => $app->product?->annual_rate,
+                'opening_commission' => $app->product?->opening_commission_rate,
+            ],
 
             // Counter offer
             'has_counter_offer' => $app->has_counter_offer ?? false,

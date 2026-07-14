@@ -427,15 +427,20 @@ class ApplicationController extends Controller
             return $this->notFound('Solicitud no encontrada.');
         }
 
-        if (!$application->has_counter_offer) {
+        if (!$application->has_counter_offer || $application->status !== Application::STATUS_COUNTER_OFFERED) {
             return $this->badRequest('NO_COUNTER_OFFER', 'No hay una contraoferta pendiente.');
         }
 
-        $application = $this->service->respondToCounterOffer(
-            $application,
-            $account,
-            $validated['accepted']
-        );
+        try {
+            $application = $this->service->respondToCounterOffer(
+                $application,
+                $account,
+                $validated['accepted']
+            );
+        } catch (\InvalidArgumentException $e) {
+            // Oferta expirada, ya respondida o transición inválida → 422
+            return $this->validationError($e->getMessage(), ['counter_offer' => [$e->getMessage()]]);
+        }
 
         $message = $validated['accepted']
             ? 'Contraoferta aceptada. Tu crédito ha sido aprobado.'
@@ -536,6 +541,7 @@ class ApplicationController extends Controller
             ],
             'requested_amount' => $app->requested_amount,
             'requested_term_months' => $app->requested_term_months,
+            'requested_term_days' => $app->requested_term_days,
             'payment_frequency' => $defaultFrequency,
             'monthly_payment' => $app->monthly_payment,
             'interest_rate' => $app->interest_rate,
@@ -548,6 +554,7 @@ class ApplicationController extends Controller
             'counter_offer' => $app->counter_offer,
             'approved_amount' => $app->approved_amount,
             'approved_term_months' => $app->approved_term_months,
+            'approved_term_days' => $app->approved_term_days,
             'lease_info' => $leaseInfo,
             'created_at' => $app->created_at?->toIso8601String(),
             'submitted_at' => $app->submitted_at?->toIso8601String(),
