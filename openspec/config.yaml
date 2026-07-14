@@ -29,9 +29,19 @@ context: |
     api-design, database-patterns, multitenancy, application-lifecycle,
     kyc-integration, notification-system, ui-components).
 
-# Per-artifact rules (opcional) — reglas por tipo de artefacto. Ejemplo:
-#   rules:
-#     proposal:
-#       - Mantener proposals concisos, con sección "Non-goals"
-#     tasks:
-#       - Dividir tareas en chunks de máx 2 horas
+# Per-artifact rules — reglas por tipo de artefacto.
+rules:
+  proposal:
+    - >-
+      Antes de redactar el proposal debe existir una sesión de grilling (skill
+      `grilling` de .claude/skills/) sobre la idea: entrevista al usuario una
+      pregunta a la vez, con respuesta recomendada, hasta resolver todas las
+      decisiones. Si no la hubo en esta conversación, córrela primero. El
+      proposal se redacta a partir de las decisiones de esa entrevista.
+    - Mantener proposals concisos, con sección "Non-goals".
+  design:
+    - >-
+      Las decisiones documentadas en design deben venir de la sesión de
+      grilling. Si aparece una decisión nueva no discutida, preguntarla al
+      usuario (una pregunta a la vez, con recomendación) antes de decidir por
+      él.

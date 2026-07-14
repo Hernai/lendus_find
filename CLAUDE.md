@@ -105,6 +105,23 @@ npm run type-check           # vue-tsc --noEmit
 - **Frontend**: `<script setup lang="ts">`, Composition API, `V2ApiResponse<T>`, `isAxiosError()`
 - **Mobile-first**: Tailwind responsive, `primary-*` color system mapped to tenant CSS vars
 
+## Workflow de cambios: Grilling + OpenSpec
+
+Todo cambio no trivial (feature, rediseño, decisión de arquitectura) sigue este flujo:
+
+1. **Grilling primero**: correr una sesión con la skill `grilling` (o cuando el usuario
+   invoque `/grill-me`) — entrevista implacable, una pregunta a la vez con respuesta
+   recomendada, hasta resolver todas las ramas del árbol de decisión. Los *hechos* se
+   investigan en el código; las *decisiones* se le preguntan al usuario.
+2. **OpenSpec después**: con las decisiones de la entrevista, crear el cambio con
+   `/opsx:new` o `/opsx:propose` y seguir el flujo spec-driven (proposal → design →
+   specs → tasks → apply → verify → archive). Las reglas per-artifact en
+   `openspec/config.yaml` exigen la sesión de grilling antes de redactar proposals.
+3. No escribir código ni artefactos hasta confirmar entendimiento compartido.
+
+Excepción: fixes triviales/mecánicos (typos, un bug puntual con causa clara) no requieren
+grilling ni OpenSpec.
+
 ## Roles & Permissions
 
 | Role | Admin Access | Key Permissions |
@@ -145,3 +162,6 @@ Detailed conventions are in `.claude/skills/`. Use when working on specific area
 | `mobile-deploy` | Releases móviles white-label per-tenant: agregar SOFOMs, build iOS/Android, push APNs/FCM |
 | `deploy-ops` | Runbook de deploy en producción AlmaLinux 9 bare-metal (nginx + php-fpm + Reverb + queue) — env vars, SELinux, firewalld, script de deploy, troubleshooting |
 | `git-workflow` | Git commits, branches, PRs, tags, versionado — Conventional Commits en español |
+| `grilling` | Entrevista implacable para afinar un plan/idea antes de implementar; obligatoria antes de crear cambios OpenSpec |
+| `grill-me` | Wrapper invocable por el usuario (`/grill-me`) que corre una sesión de `grilling` |
+| `ui-smoke` | Smoke interactivo en navegador real (Playwright MCP) contra stack desechable (DB `lendusfind_e2e`, puertos 8010/5175); no es para regresión |
