@@ -157,7 +157,8 @@ function useMyLocation() {
       form.value.longitude = longitude
       try {
         const res = await reverseGeocode(latitude, longitude)
-        if (res && res.source === 'google') {
+        // Autollena con cualquier proveedor que devuelva dirección (Google u OSM).
+        if (res && res.source !== 'coords_only') {
           if (res.state) form.value.state = matchStateValue(res.state)
           if (res.municipality) form.value.municipality = res.municipality
           if (res.city) form.value.city = res.city

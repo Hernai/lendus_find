@@ -2,12 +2,13 @@ import { api } from '../api'
 
 /**
  * Geocodificación inversa (lat/lng → dirección) para "Estoy en mi domicilio".
- * Si el tenant tiene Google Maps configurado, devuelve la dirección; si no,
- * source = 'coords_only' (solo coordenadas; el CP autollena vía SEPOMEX).
+ * El backend resuelve por cadena Google → Nominatim (OSM) → coords_only:
+ * `source` = 'google' | 'osm' cuando trae dirección, o 'coords_only' (solo
+ * coordenadas; el CP autollena la colonia vía SEPOMEX).
  */
 
 export interface ReverseGeocodeResult {
-  source: 'google' | 'coords_only'
+  source: 'google' | 'osm' | 'coords_only'
   lat: number
   lng: number
   formatted_address?: string | null

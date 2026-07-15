@@ -74,6 +74,7 @@ class TenantApiConfig extends Model
         'conekta' => 'Conekta — Cobranza',
         'openpay' => 'OpenPay — Cobranza',
         'google_maps' => 'Google Maps',
+        'nominatim' => 'OpenStreetMap / Nominatim',
     ];
 
     /**
@@ -138,6 +139,7 @@ class TenantApiConfig extends Model
         'conekta' => 'beta',
         'openpay' => 'beta',
         'google_maps' => 'available',
+        'nominatim' => 'available',
         'messagebird' => 'coming_soon',
         'vonage' => 'coming_soon',
         'mailgun' => 'coming_soon',
@@ -182,6 +184,7 @@ class TenantApiConfig extends Model
         'conekta' => ['payment_collection'],
         'openpay' => ['payment_collection'],
         'google_maps' => ['geocoding'],
+        'nominatim' => ['geocoding'],
     ];
 
     /**

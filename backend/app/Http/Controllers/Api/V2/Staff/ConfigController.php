@@ -10,6 +10,7 @@ use App\Models\TenantBranding;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Validation\Rule;
 
 /**
  * Staff Config Controller (v2).
@@ -185,8 +186,8 @@ class ConfigController extends Controller
         $tenant = app('tenant');
 
         $validated = $request->validate([
-            'provider' => 'required|string|max:50',
-            'service_type' => 'required|string|max:50',
+            'provider' => ['required', 'string', Rule::in(array_keys(TenantApiConfig::PROVIDERS))],
+            'service_type' => ['required', 'string', Rule::in(array_keys(TenantApiConfig::SERVICE_TYPES))],
             'api_key' => 'nullable|string|max:500',
             'api_secret' => 'nullable|string|max:500',
             'account_sid' => 'nullable|string|max:100',
@@ -197,6 +198,8 @@ class ConfigController extends Controller
             'webhook_url' => 'nullable|url|max:500',
             'webhook_secret' => 'nullable|string|max:100',
             'extra_config' => 'nullable|array',
+            // Nominatim/LocationIQ: endpoint base del proveedor de geocoding.
+            'extra_config.base_url' => 'nullable|url|max:500',
             'is_active' => 'boolean',
             'is_sandbox' => 'boolean',
         ]);

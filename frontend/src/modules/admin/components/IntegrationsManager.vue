@@ -489,6 +489,36 @@
             </div>
           </div>
 
+          <!-- Nominatim / LocationIQ (geocoding) -->
+          <div v-else-if="form.provider === 'nominatim'" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">URL base (opcional)</label>
+              <input
+                v-model="form.base_url"
+                type="url"
+                placeholder="https://nominatim.openstreetmap.org"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+              <p class="mt-1 text-xs text-gray-500">Déjalo vacío para usar el Nominatim público. Configura tu propia instancia o LocationIQ si tienes volumen.</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">API Key (opcional)</label>
+              <input
+                v-model="form.api_key"
+                type="text"
+                placeholder="Solo para LocationIQ u otro proveedor con key"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+              <p v-if="editingIntegration" class="mt-1 text-xs text-gray-500">Dejar vacío para mantener el valor actual</p>
+            </div>
+            <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p class="text-sm text-blue-800">
+                Geocodificación gratuita con OpenStreetMap: autollena el domicilio en el onboarding sin API key. Respeta la
+                <a href="https://operations.osmfoundation.org/policies/nominatim/" target="_blank" class="underline font-medium">política de uso</a> de Nominatim.
+              </p>
+            </div>
+          </div>
+
           <!-- SMTP Specific Fields -->
           <div v-if="form.provider === 'smtp'" class="space-y-4">
             <div class="grid grid-cols-2 gap-4">
@@ -894,6 +924,7 @@ const form = ref({
   from_number: '',
   from_email: '',
   domain: '',
+  base_url: '',
   smtp_host: '',
   smtp_port: '587',
   smtp_encryption: 'tls',
@@ -1044,6 +1075,7 @@ const openNewIntegrationModal = (provider = '') => {
     from_number: '',
     from_email: '',
     domain: '',
+    base_url: '',
     smtp_host: '',
     smtp_port: '587',
     smtp_encryption: 'tls',
@@ -1073,6 +1105,7 @@ const openEditModal = (integration: Integration) => {
     from_number: integration.from_number || '',
     from_email: integration.from_email || '',
     domain: integration.domain || '',
+    base_url: (extra.base_url as string) || '',
     smtp_host: (extra.host as string) || '',
     smtp_port: (extra.port as string) || '587',
     smtp_encryption: (extra.encryption as string) || 'tls',
@@ -1123,6 +1156,11 @@ const saveIntegration = async () => {
           encryption: form.value.smtp_encryption,
           from_name: form.value.smtp_from_name,
         }
+      }
+
+      // Nominatim/LocationIQ: endpoint base (opcional) en extra_config.
+      if (form.value.provider === 'nominatim' && form.value.base_url) {
+        payload.extra_config = { base_url: form.value.base_url }
       }
 
       await props.adapter.save(payload)
