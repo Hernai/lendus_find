@@ -191,6 +191,20 @@ const termMonths = computed(() => {
   return Math.round(selectedPayments.value / multiplier)
 })
 
+// Paso del slider de monto: proporcional al rango del producto y SIEMPRE
+// divisor exacto del rango — el input range solo alcanza min + n*step, así
+// que un step que no divide el rango deja el máximo anunciado inalcanzable
+// (ej. MoneyCapital $300-$15,000 con step 1000 topaba en $14,300).
+const amountStep = computed(() => {
+  const range = maxAmount.value - minAmount.value
+  if (range <= 0) return 1
+  const base = range >= 200000 ? 5000 : range >= 50000 ? 1000 : range >= 5000 ? 100 : 50
+  for (let step = base; step >= 10; step = Math.floor(step / 10)) {
+    if (range % step === 0) return step
+  }
+  return 1
+})
+
 // Track if component is initialized
 const isInitialized = ref(false)
 
@@ -221,8 +235,10 @@ const simulate = async () => {
 
 // Initialize values based on product
 onMounted(async () => {
-  // Set initial amount to middle of range
-  amount.value = Math.round((minAmount.value + maxAmount.value) / 2 / 1000) * 1000
+  // Monto inicial: punto medio del rango, alineado a min + n*step para que
+  // el slider no arranque en un valor inalcanzable con las flechas.
+  const mid = (minAmount.value + maxAmount.value) / 2
+  amount.value = minAmount.value + Math.round((mid - minAmount.value) / amountStep.value) * amountStep.value
   // Set initial frequency to first available
   paymentFrequency.value = (availableFrequencies.value[0] as PaymentFrequency) || 'MONTHLY'
 
@@ -248,13 +264,13 @@ onMounted(async () => {
 // When frequency changes, adjust selected payments to closest valid option
 watch(paymentFrequency, () => {
   const options = paymentCountOptions.value
-  if (!options.includes(selectedPayments.value)) {
-    // Find closest option
-    const closest = options.reduce((prev, curr) =>
-      Math.abs(curr - selectedPayments.value) < Math.abs(prev - selectedPayments.value) ? curr : prev
-    )
-    selectedPayments.value = closest
-  }
+  // Lista vacía (productos aún sin cargar / pago único): no hay nada que
+  // ajustar y reduce() sin valor inicial truena sobre [].
+  if (!options.length || options.includes(selectedPayments.value)) return
+  const closest = options.reduce((prev, curr) =>
+    Math.abs(curr - selectedPayments.value) < Math.abs(prev - selectedPayments.value) ? curr : prev
+  )
+  selectedPayments.value = closest
 })
 
 // Simulation result
@@ -458,7 +474,7 @@ const paymentLabel = computed(() => {
         v-model="amount"
         :min="minAmount"
         :max="maxAmount"
-        :step="1000"
+        :step="amountStep"
         :label="isLease ? '¿Cuál es el valor del bien?' : '¿Cuánto necesitas?'"
         :format-value="formatMoney"
       />
