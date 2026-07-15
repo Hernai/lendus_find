@@ -8,9 +8,24 @@ import { logger } from '@/utils/logger'
 import { storage, STORAGE_KEYS } from '@/utils/storage'
 import { detectTenantSlug } from '@/utils/tenant'
 
-const connectRealtime = (token: string) =>
-  platform.realtime.connect(token, { tenantSlug: detectTenantSlug() })
-const disconnectRealtime = () => platform.realtime.disconnect()
+// Realtime es un extra (notificaciones en vivo), NO parte de la autenticación:
+// una falla de Echo/Reverb (env faltante, Pusher no cargable, red) no debe
+// romper el login ni el arranque. Sin este guard, el throw caía en el catch de
+// verifyOtp y se reportaba como "código incorrecto" con el token ya emitido.
+const connectRealtime = (token: string) => {
+  try {
+    platform.realtime.connect(token, { tenantSlug: detectTenantSlug() })
+  } catch (error) {
+    authLogger.warn('Realtime no disponible; la app continúa sin WebSocket', { error })
+  }
+}
+const disconnectRealtime = () => {
+  try {
+    platform.realtime.disconnect()
+  } catch {
+    // Desconectar un Echo que nunca conectó no debe romper el logout.
+  }
+}
 
 const authLogger = logger.child('Auth')
 
