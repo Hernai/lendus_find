@@ -42,6 +42,82 @@ class DecisionPolicyController extends Controller
     }
 
     /**
+     * Catálogo de variables de scoring: llaves conocidas por el motor con sus
+     * valores válidos y etiquetas en español (fuente de verdad = los enums del
+     * backend). El editor del configurador arma selects con esto — el admin
+     * nunca teclea llaves ni valores a mano.
+     *
+     * GET /v2/staff/decision-policies/catalog
+     */
+    public function catalog(): JsonResponse
+    {
+        return $this->success([
+            'variables' => [
+                [
+                    'key' => 'salary_range',
+                    'label' => 'Rango salarial mensual',
+                    'description' => 'Declarado en el onboarding (paso de rango salarial)',
+                    'values' => \App\Enums\SalaryRange::toOptions(),
+                ],
+                [
+                    'key' => 'employment_type',
+                    'label' => 'Actividad laboral',
+                    'description' => 'Declarada en el onboarding (tipo de actividad o trabajo)',
+                    'values' => \App\Enums\EmploymentType::toOptions(),
+                ],
+                [
+                    'key' => 'education_level',
+                    'label' => 'Nivel educativo',
+                    'description' => 'Declarado en el onboarding',
+                    'values' => \App\Enums\EducationLevel::toOptions(),
+                ],
+                [
+                    'key' => 'marital_status',
+                    'label' => 'Estado civil',
+                    'description' => 'Declarado en el onboarding',
+                    'values' => \App\Enums\MaritalStatus::toOptions(),
+                ],
+                [
+                    'key' => 'online_loans_count',
+                    'label' => 'Créditos en línea declarados',
+                    'description' => '¿Cuántas veces ha solicitado préstamos en línea? (declarado)',
+                    'values' => [
+                        ['value' => '0', 'label' => 'Ninguno'],
+                        ['value' => '1', 'label' => '1 crédito'],
+                        ['value' => '2', 'label' => '2 créditos'],
+                        ['value' => '3', 'label' => '3 créditos'],
+                        ['value' => '4', 'label' => '4 créditos'],
+                        ['value' => '5+', 'label' => '5 o más'],
+                    ],
+                ],
+                [
+                    'key' => 'phone_risk_level',
+                    'label' => 'Riesgo telefónico (Nubarium)',
+                    'description' => 'Nivel del Phone Risk Score consultado tras el OTP (verificable)',
+                    'values' => [
+                        ['value' => 'very-low', 'label' => 'Muy bajo'],
+                        ['value' => 'low', 'label' => 'Bajo'],
+                        ['value' => 'moderate', 'label' => 'Moderado'],
+                        ['value' => 'high', 'label' => 'Alto'],
+                    ],
+                ],
+                [
+                    'key' => 'state',
+                    'label' => 'Estado (domicilio)',
+                    'description' => 'Estado capturado en el domicilio — valor libre, ej. "Sinaloa"',
+                    'values' => null,
+                ],
+                [
+                    'key' => 'city',
+                    'label' => 'Ciudad (domicilio)',
+                    'description' => 'Ciudad capturada en el domicilio — valor libre, ej. "Culiacán"',
+                    'values' => null,
+                ],
+            ],
+        ]);
+    }
+
+    /**
      * Listado de políticas del tenant (todas las versiones, agrupables por
      * alcance en el frontend).
      *
@@ -201,15 +277,18 @@ class DecisionPolicyController extends Controller
     }
 
     /**
-     * Probador (dry-run): evalúa un perfil hipotético contra una versión de
-     * política — activa o borrador — sin tocar solicitudes reales.
+     * Probador (dry-run): evalúa un perfil hipotético sin tocar solicitudes
+     * reales, contra una versión guardada (`policy_id`) O contra las reglas en
+     * edición (`rules` + `product_id`, sin persistir) — "probar sin guardar".
      *
      * POST /v2/staff/decision-policies/dry-run
      */
     public function dryRun(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'policy_id' => 'required|uuid',
+            'policy_id' => 'nullable|uuid|required_without:rules',
+            'rules' => 'nullable|array|required_without:policy_id',
+            'product_id' => 'nullable|uuid|required_with:rules',
             'profile' => 'required|array',
             'profile.requested_amount' => 'nullable|numeric|min:1',
             'profile.requested_term_days' => 'nullable|integer|min:1',
@@ -225,6 +304,32 @@ class DecisionPolicyController extends Controller
         $staff = $request->user();
         $tenantId = $this->scopedTenantId($staff);
 
+        if (!empty($validated['rules'])) {
+            // Reglas en edición: validar coherencia y evaluar con una política
+            // efímera (no se persiste ninguna versión).
+            $product = Product::withoutGlobalScope('tenant')
+                ->where('tenant_id', $tenantId)
+                ->find($validated['product_id']);
+            if (!$product) {
+                return $this->notFound('El producto no pertenece a este tenant.');
+            }
+
+            $errors = $this->validateRulesCoherence($validated['rules'], $product, false);
+            if (!empty($errors)) {
+                return $this->validationError('La política tiene incoherencias.', ['rules' => $errors]);
+            }
+
+            $policy = new DecisionPolicy([
+                'product_id' => $product->id,
+                'version' => 0, // 0 = configuración en edición, sin versión
+                'mode' => 'SHADOW',
+                'rules' => $validated['rules'],
+            ]);
+            $policy->tenant_id = $tenantId;
+
+            return $this->runDryEvaluation($policy, $validated['profile'], $tenantId, persist: false);
+        }
+
         $policy = DecisionPolicy::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->whereNull('deleted_at')
@@ -239,7 +344,16 @@ class DecisionPolicyController extends Controller
             );
         }
 
-        $profile = $validated['profile'];
+        return $this->runDryEvaluation($policy, $validated['profile'], $tenantId, persist: true);
+    }
+
+    /**
+     * Evalúa el perfil contra la política (guardada o efímera) y devuelve la
+     * decisión. Solo persiste la corrida en application_decisions cuando la
+     * política existe en BD ($persist) — las reglas en edición no dejan rastro.
+     */
+    private function runDryEvaluation(DecisionPolicy $policy, array $profile, string $tenantId, bool $persist): JsonResponse
+    {
         $product = Product::withoutGlobalScope('tenant')->find($policy->product_id);
 
         // Renovación hipotética: historial de pagos → graduación.
@@ -265,20 +379,22 @@ class DecisionPolicyController extends Controller
             ]);
         }
 
-        ApplicationDecision::create([
-            'tenant_id' => $tenantId,
-            'decision_policy_id' => $policy->id,
-            'policy_version' => $policy->version,
-            'trigger' => DecisionTrigger::DRY_RUN->value,
-            'mode' => $policy->mode,
-            'inputs' => $profile,
-            'rule_hits' => $result['rule_hits'],
-            'score' => $result['score'],
-            'band' => $result['band'],
-            'outcome' => $result['outcome'],
-            'outcome_detail' => ['range' => $result['range'], 'reasons' => $result['reasons']],
-            'executed' => false,
-        ]);
+        if ($persist) {
+            ApplicationDecision::create([
+                'tenant_id' => $tenantId,
+                'decision_policy_id' => $policy->id,
+                'policy_version' => $policy->version,
+                'trigger' => DecisionTrigger::DRY_RUN->value,
+                'mode' => $policy->mode,
+                'inputs' => $profile,
+                'rule_hits' => $result['rule_hits'],
+                'score' => $result['score'],
+                'band' => $result['band'],
+                'outcome' => $result['outcome'],
+                'outcome_detail' => ['range' => $result['range'], 'reasons' => $result['reasons']],
+                'executed' => false,
+            ]);
+        }
 
         return $this->success([
             'policy_version' => $policy->version,

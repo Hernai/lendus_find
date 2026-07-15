@@ -257,6 +257,66 @@ class DecisionPolicyApiTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_catalogo_de_variables_con_etiquetas(): void
+    {
+        $response = $this->authAs($this->adminStaff)
+            ->getJson('/api/v2/staff/decision-policies/catalog');
+
+        $response->assertOk();
+        $variables = collect($response->json('data.variables'));
+        $salary = $variables->firstWhere('key', 'salary_range');
+        $this->assertNotNull($salary);
+        $this->assertNotEmpty($salary['label']);
+        $this->assertNotEmpty($salary['values']); // valores con etiqueta desde el enum
+        $this->assertArrayHasKey('label', $salary['values'][0]);
+        // Estado/ciudad son de valor libre (sin catálogo de valores)
+        $this->assertNull($variables->firstWhere('key', 'state')['values']);
+
+        $this->authAs($this->analyst)
+            ->getJson('/api/v2/staff/decision-policies/catalog')
+            ->assertForbidden();
+    }
+
+    public function test_dry_run_con_reglas_en_edicion_sin_persistir(): void
+    {
+        $policiesBefore = DecisionPolicy::withoutGlobalScopes()->count();
+        $decisionsBefore = ApplicationDecision::withoutGlobalScopes()->count();
+
+        $response = $this->authAs($this->adminStaff)
+            ->postJson('/api/v2/staff/decision-policies/dry-run', [
+                'rules' => $this->validProductRules(),
+                'product_id' => $this->product->id,
+                'profile' => [
+                    'requested_amount' => 900,
+                    'variables' => ['salary_range' => 'GT_15000'],
+                ],
+            ]);
+
+        $response->assertOk();
+        $this->assertSame('OFFER', $response->json('data.result.outcome'));
+        $this->assertSame(0, $response->json('data.policy_version')); // 0 = en edición
+        // Probar sin guardar: ni versiones ni corridas persistidas
+        $this->assertSame($policiesBefore, DecisionPolicy::withoutGlobalScopes()->count());
+        $this->assertSame($decisionsBefore, ApplicationDecision::withoutGlobalScopes()->count());
+    }
+
+    public function test_dry_run_inline_valida_coherencia(): void
+    {
+        $rules = $this->validProductRules();
+        $rules['bands'] = [
+            ['key' => 'BASE', 'min_amount' => 300, 'max_amount' => 500],
+            ['key' => 'INTERMEDIA', 'min_amount' => 450, 'max_amount' => 600], // traslape
+        ];
+
+        $this->authAs($this->adminStaff)
+            ->postJson('/api/v2/staff/decision-policies/dry-run', [
+                'rules' => $rules,
+                'product_id' => $this->product->id,
+                'profile' => ['requested_amount' => 500],
+            ])
+            ->assertStatus(422);
+    }
+
     public function test_dry_run_evalua_sin_tocar_solicitudes(): void
     {
         $auth = fn () => $this->authAs($this->superAdmin);

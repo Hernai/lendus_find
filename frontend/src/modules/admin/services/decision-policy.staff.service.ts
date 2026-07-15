@@ -121,12 +121,35 @@ export interface V2DryRunResult {
   }
 }
 
+/** Valor válido de una variable del catálogo (etiqueta en español). */
+export interface CatalogValue {
+  value: string
+  label: string
+}
+
+/**
+ * Variable de scoring conocida por el motor. `values: null` = valor libre
+ * (ej. estado/ciudad); con catálogo, el editor lista TODOS los valores y el
+ * admin solo captura puntos.
+ */
+export interface CatalogVariable {
+  key: string
+  label: string
+  description: string
+  values: CatalogValue[] | null
+}
+
 // =====================================================
 // API Functions
 // =====================================================
 
 export async function list(): Promise<V2ApiResponse<{ policies: V2DecisionPolicy[] }>> {
   const response = await api.get<V2ApiResponse<{ policies: V2DecisionPolicy[] }>>(BASE_PATH)
+  return response.data
+}
+
+export async function getCatalog(): Promise<V2ApiResponse<{ variables: CatalogVariable[] }>> {
+  const response = await api.get<V2ApiResponse<{ variables: CatalogVariable[] }>>(`${BASE_PATH}/catalog`)
   return response.data
 }
 
@@ -157,12 +180,19 @@ export async function activate(id: string, mode?: DecisionMode): Promise<V2ApiRe
   return response.data
 }
 
-export async function dryRun(policyId: string, profile: V2DryRunProfile): Promise<V2ApiResponse<V2DryRunResult>> {
+/**
+ * Dry-run contra una versión guardada (`policy_id`) o contra las reglas en
+ * edición (`rules` + `product_id`, sin persistir) — "probar sin guardar".
+ */
+export async function dryRun(
+  target: { policy_id?: string; rules?: DecisionPolicyRules; product_id?: string },
+  profile: V2DryRunProfile
+): Promise<V2ApiResponse<V2DryRunResult>> {
   const response = await api.post<V2ApiResponse<V2DryRunResult>>(`${BASE_PATH}/dry-run`, {
-    policy_id: policyId,
+    ...target,
     profile,
   })
   return response.data
 }
 
-export default { list, createDraft, updateDraft, activate, dryRun }
+export default { list, getCatalog, createDraft, updateDraft, activate, dryRun }

@@ -465,6 +465,8 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
         // Motor de decisión — políticas versionadas (configurador). El ADMIN
         // del tenant configura sus propias políticas (canManageProducts =
         // ADMIN y SUPER_ADMIN); el scoping por tenant lo pone scopedTenantId.
+        Route::get('/decision-policies/catalog', [StaffDecisionPolicyController::class, 'catalog'])
+            ->middleware('permission:canManageProducts');
         Route::get('/decision-policies', [StaffDecisionPolicyController::class, 'index'])
             ->middleware('permission:canManageProducts');
         Route::post('/decision-policies', [StaffDecisionPolicyController::class, 'store'])

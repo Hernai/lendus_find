@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores'
 import { getErrorMessage, isAxiosError } from '@/types/api'
 import AppButton from '@/components/common/AppButton.vue'
 import decisionPolicyService, {
+  type CatalogVariable,
   type DecisionMode,
   type DecisionPolicyRules,
   type V2DecisionPolicy,
@@ -29,6 +30,9 @@ const canEdit = computed(() => authStore.permissions?.canManageProducts ?? authS
 
 const loading = ref(true)
 const policies = ref<V2DecisionPolicy[]>([])
+// Catálogo de variables del motor (llaves + valores válidos con etiqueta,
+// fuente de verdad = enums del backend). El editor arma selects con esto.
+const catalogVariables = ref<CatalogVariable[]>([])
 
 // =====================================================
 // Agrupación por alcance
@@ -95,7 +99,20 @@ async function load() {
   }
 }
 
-onMounted(load)
+async function loadCatalog() {
+  try {
+    const res = await decisionPolicyService.getCatalog()
+    catalogVariables.value = res.data?.variables ?? []
+  } catch {
+    // Sin catálogo el editor degrada a captura libre (no bloquea la vista).
+    catalogVariables.value = []
+  }
+}
+
+onMounted(() => {
+  load()
+  loadCatalog()
+})
 
 // =====================================================
 // Versiones expandibles
@@ -240,6 +257,36 @@ function removeLevel(i: number) {
   editorRules.value.graduation!.levels.splice(i, 1)
 }
 
+// --- Catálogo en el editor: el admin elige la variable de una lista y los
+// valores válidos se listan completos (solo captura puntos). Sin catálogo
+// para esa llave (state/city) degrada a filas de captura libre. ---
+
+const catalogFor = (key: string) => catalogVariables.value.find((c) => c.key === key)
+
+/** Variables disponibles para la fila i (sin duplicar las ya usadas). */
+const availableCatalog = (i: number) => {
+  const used = new Set(
+    (editorRules.value.scoring?.variables ?? [])
+      .map((v, idx) => (idx === i ? '' : v.key))
+      .filter(Boolean)
+  )
+  return catalogVariables.value.filter((c) => !used.has(c.key))
+}
+
+/** Al elegir variable: fija la llave y pre-llena TODOS sus valores en 0 puntos. */
+function onVariableKeyChange(i: number, key: string) {
+  const variable = variableAt(i)
+  if (!variable) return
+  variable.key = key
+  const catalog = catalogFor(key)
+  variable.label = catalog?.label
+  if (catalog?.values) {
+    variable.points = Object.fromEntries(
+      catalog.values.map((v) => [v.value, variable.points[v.value] ?? 0])
+    )
+  }
+}
+
 // Puntos por variable: se editan como filas (valor → puntos) sobre un Map
 // derivado, sin colgar props sintéticas en los objetos del backend.
 const variableAt = (i: number) => editorRules.value.scoring?.variables[i]
@@ -308,6 +355,8 @@ const testerRunning = ref(false)
 const testerPolicyId = ref('')
 const testerResult = ref<V2DryRunResult | null>(null)
 const testerMode = ref<'first_credit' | 'renewal'>('first_credit')
+// "Probar sin guardar": reglas en edición del editor (null = probar versión guardada)
+const testerInline = ref<{ rules: DecisionPolicyRules; productId: string; productName: string } | null>(null)
 
 const testerProfile = reactive({
   requested_amount: 900,
@@ -327,8 +376,21 @@ const testablePolicies = computed(() =>
   policies.value.filter((p) => p.product_id !== null))
 
 function openTester(policy?: V2DecisionPolicy) {
+  testerInline.value = null
   testerResult.value = null
   testerPolicyId.value = policy?.id ?? (testablePolicies.value[0]?.id ?? '')
+  testerOpen.value = true
+}
+
+/** Probar la configuración en edición del editor, sin guardar versión. */
+function openTesterFromEditor() {
+  if (!editorProductId.value) return
+  testerInline.value = {
+    rules: JSON.parse(JSON.stringify(editorRules.value)),
+    productId: editorProductId.value,
+    productName: editorProductName.value,
+  }
+  testerResult.value = null
   testerOpen.value = true
 }
 
@@ -340,7 +402,7 @@ function removeRenewalLoan(i: number) {
 }
 
 async function runTester() {
-  if (!testerPolicyId.value) return
+  if (!testerInline.value && !testerPolicyId.value) return
   testerRunning.value = true
   testerResult.value = null
   try {
@@ -357,7 +419,10 @@ async function runTester() {
             online_loans_count: testerProfile.online_loans_count,
           },
         }
-    const res = await decisionPolicyService.dryRun(testerPolicyId.value, profile)
+    const target = testerInline.value
+      ? { rules: testerInline.value.rules, product_id: testerInline.value.productId }
+      : { policy_id: testerPolicyId.value }
+    const res = await decisionPolicyService.dryRun(target, profile)
     testerResult.value = res.data ?? null
   } catch (error) {
     toast.error(getErrorMessage(error, 'No se pudo correr la prueba'))
@@ -605,6 +670,11 @@ const formatMoney = (n: number) =>
         <template v-if="editorIsTenant">
           <fieldset class="border border-gray-200 rounded-xl p-4 space-y-3">
             <legend class="text-sm font-semibold text-gray-700 px-1">Gate telefónico (Regla 21)</legend>
+            <p class="text-xs text-gray-500">
+              Nubarium califica el teléfono de 0 (confiable) a 1000 (riesgoso). Con score en zona de
+              <b>alerta</b> el cliente continúa pero su solicitud va a revisión manual; en zona de
+              <b>bloqueo</b> el onboarding se detiene antes de gastar validaciones de INE/biometría.
+            </p>
             <label class="flex items-center gap-2 text-sm text-gray-700">
               <input v-model="editorRules.phone_risk_gate!.enabled" type="checkbox" class="w-4 h-4 rounded text-primary-600" />
               Encendido (evalúa el Phone Risk Score antes del paso de INE)
@@ -622,8 +692,13 @@ const formatMoney = (n: number) =>
             <p class="text-xs text-gray-400">Fail-open: si Nubarium falla, el cliente continúa marcado a revisión — nunca se bloquea por falla técnica.</p>
           </fieldset>
 
-          <fieldset class="border border-gray-200 rounded-xl p-4">
+          <fieldset class="border border-gray-200 rounded-xl p-4 space-y-2">
             <legend class="text-sm font-semibold text-gray-700 px-1">Cooldown post-rechazo (Regla 01)</legend>
+            <p class="text-xs text-gray-500">
+              Tras un rechazo (del motor o de un analista), la persona no puede volver a solicitar
+              hasta cumplir estos días. Solo cuenta el rechazo real — ofertas expiradas o canceladas
+              no bloquean. Un supervisor puede levantar el bloqueo con motivo auditado.
+            </p>
             <label class="text-sm text-gray-600 block max-w-xs">
               Días de bloqueo tras un rechazo
               <input v-model.number="editorRules.cooldown!.days" type="number" min="0" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
@@ -633,8 +708,23 @@ const formatMoney = (n: number) =>
 
         <!-- ------- Política de producto ------- -->
         <template v-else>
+          <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-sm text-indigo-900 space-y-1">
+            <p class="font-semibold">¿Cómo decide el motor?</p>
+            <ol class="list-decimal list-inside space-y-0.5 text-indigo-800">
+              <li><b>Suma puntos</b> según el valor del solicitante en cada variable de scoring.</li>
+              <li>Con el puntaje total elige la <b>banda</b> (cortes de puntaje) — la banda define el <b>cupo máximo</b>.</li>
+              <li>Genera la <b>oferta con rango</b>: del mínimo del producto al cupo de la banda, al plazo del primer crédito.</li>
+              <li>Si algo falla o hay alertas (KYC, score telefónico, CLABE), la solicitud va a <b>revisión manual</b>; las validaciones fuertes fallidas la <b>rechazan</b>.</li>
+            </ol>
+            <p class="text-xs text-indigo-700 pt-1">Consejo: usa el botón "Probar un perfil" para ver el efecto de esta configuración antes de activarla.</p>
+          </div>
+
           <fieldset class="border border-gray-200 rounded-xl p-4 space-y-3">
             <legend class="text-sm font-semibold text-gray-700 px-1">Bandas de oferta inicial</legend>
+            <p class="text-xs text-gray-500">
+              Cada banda es un rango de cupo (ej. BASE $300–$400). El <b>monto máximo es el cupo</b> que el
+              cliente puede recibir si cae en esa banda.
+            </p>
             <div v-for="(band, i) in editorRules.bands" :key="i" class="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-2 items-end">
               <label class="text-xs text-gray-500">Clave
                 <input v-model="band.key" type="text" class="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
@@ -656,6 +746,10 @@ const formatMoney = (n: number) =>
 
           <fieldset class="border border-gray-200 rounded-xl p-4 space-y-3">
             <legend class="text-sm font-semibold text-gray-700 px-1">Cortes de puntaje → banda</legend>
+            <p class="text-xs text-gray-500">
+              Con puntaje ≥ al corte se asigna esa banda; <b>gana el corte más alto alcanzado</b>.
+              Ej.: cortes 0→BASE y 35→INTERMEDIA: un perfil con 40 puntos cae en INTERMEDIA.
+            </p>
             <div v-for="(cutoff, i) in editorRules.scoring!.band_cutoffs" :key="i" class="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
               <label class="text-xs text-gray-500">Puntaje mínimo
                 <input v-model.number="cutoff.min_score" type="number" class="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
@@ -672,34 +766,74 @@ const formatMoney = (n: number) =>
 
           <fieldset class="border border-gray-200 rounded-xl p-4 space-y-4">
             <legend class="text-sm font-semibold text-gray-700 px-1">Variables de scoring</legend>
+            <p class="text-xs text-gray-500">
+              Por cada variable, el solicitante recibe los puntos del valor que declaró o se verificó.
+              <b>Se suman todas las variables</b>; sin dato = 0 puntos. Elige la variable de la lista —
+              los valores válidos se llenan solos y solo capturas los puntos.
+            </p>
             <div v-for="(variable, i) in editorRules.scoring!.variables" :key="i" class="border border-gray-100 rounded-lg p-3 space-y-2">
               <div class="flex items-end gap-2">
-                <label class="text-xs text-gray-500 flex-1">Variable (llave del insumo)
-                  <input v-model="variable.key" type="text" placeholder="salary_range" class="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+                <label class="text-xs text-gray-500 flex-1">Variable
+                  <select
+                    :value="variable.key"
+                    class="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                    @change="onVariableKeyChange(i, ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option value="" disabled>Selecciona una variable…</option>
+                    <option v-for="cv in availableCatalog(i)" :key="cv.key" :value="cv.key">{{ cv.label }}</option>
+                    <!-- Llave fuera del catálogo (política vieja): se conserva editable -->
+                    <option v-if="variable.key && !catalogFor(variable.key)" :value="variable.key">
+                      {{ variable.key }} (fuera del catálogo)
+                    </option>
+                  </select>
                 </label>
                 <button type="button" class="text-red-500 text-sm pb-2" @click="removeVariable(i)">Quitar variable</button>
               </div>
-              <div
-                v-for="row in variablePointRows(i)"
-                :key="row.value"
-                class="grid grid-cols-[2fr_1fr_auto] gap-2 items-center"
-              >
-                <input
-                  :value="row.value"
-                  type="text"
-                  placeholder="Valor (ej. GT_15000)"
-                  class="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-                  @change="setVariablePoint(i, row.value, ($event.target as HTMLInputElement).value, row.points)"
-                />
-                <input
-                  :value="row.points"
-                  type="number"
-                  class="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-                  @change="setVariablePoint(i, row.value, row.value, Number(($event.target as HTMLInputElement).value))"
-                />
-                <button type="button" class="text-red-500 text-xs" @click="removeVariablePoint(i, row.value)">Quitar</button>
-              </div>
-              <button type="button" class="text-xs text-primary-600 font-medium" @click="addVariablePoint(i)">+ Valor</button>
+              <p v-if="catalogFor(variable.key)?.description" class="text-xs text-gray-400">
+                {{ catalogFor(variable.key)?.description }}
+              </p>
+
+              <!-- Con catálogo: valores fijos con etiqueta, solo se capturan puntos -->
+              <template v-if="catalogFor(variable.key)?.values">
+                <div
+                  v-for="cv in catalogFor(variable.key)!.values!"
+                  :key="cv.value"
+                  class="grid grid-cols-[2fr_1fr] gap-2 items-center"
+                >
+                  <span class="text-sm text-gray-700">{{ cv.label }}</span>
+                  <input
+                    :value="variable.points[cv.value] ?? 0"
+                    type="number"
+                    class="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                    @change="setVariablePoint(i, cv.value, cv.value, Number(($event.target as HTMLInputElement).value))"
+                  />
+                </div>
+              </template>
+
+              <!-- Sin catálogo (estado/ciudad o llave vieja): captura libre de valor + puntos -->
+              <template v-else-if="variable.key">
+                <div
+                  v-for="row in variablePointRows(i)"
+                  :key="row.value"
+                  class="grid grid-cols-[2fr_1fr_auto] gap-2 items-center"
+                >
+                  <input
+                    :value="row.value"
+                    type="text"
+                    placeholder="Valor (ej. Sinaloa)"
+                    class="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                    @change="setVariablePoint(i, row.value, ($event.target as HTMLInputElement).value, row.points)"
+                  />
+                  <input
+                    :value="row.points"
+                    type="number"
+                    class="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                    @change="setVariablePoint(i, row.value, row.value, Number(($event.target as HTMLInputElement).value))"
+                  />
+                  <button type="button" class="text-red-500 text-xs" @click="removeVariablePoint(i, row.value)">Quitar</button>
+                </div>
+                <button type="button" class="text-xs text-primary-600 font-medium" @click="addVariablePoint(i)">+ Valor</button>
+              </template>
             </div>
             <button type="button" class="text-sm text-primary-600 font-medium" @click="addVariable">+ Agregar variable</button>
           </fieldset>
@@ -722,6 +856,11 @@ const formatMoney = (n: number) =>
 
           <fieldset class="border border-gray-200 rounded-xl p-4 space-y-3">
             <legend class="text-sm font-semibold text-gray-700 px-1">Graduación de renovaciones (Regla 20)</legend>
+            <p class="text-xs text-gray-500">
+              Al liquidar un crédito, el cliente sube de nivel si pagó puntual (se mantiene si pagó
+              tarde o usó prórroga) y su siguiente oferta usa el cupo y plazo máximo del nivel.
+              Con atraso mayor al límite no hay oferta automática.
+            </p>
             <div v-for="(level, i) in editorRules.graduation!.levels" :key="i" class="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
               <label class="text-xs text-gray-500">Nivel
                 <input v-model.number="level.level" type="number" min="0" class="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
@@ -755,6 +894,13 @@ const formatMoney = (n: number) =>
         </label>
 
         <div class="flex justify-end gap-2 pt-2">
+          <AppButton
+            v-if="!editorIsTenant"
+            variant="secondary"
+            @click="openTesterFromEditor"
+          >
+            Probar esta configuración
+          </AppButton>
           <AppButton variant="secondary" @click="editorOpen = false">Cancelar</AppButton>
           <AppButton variant="primary" :loading="editorSaving" @click="saveEditor">
             Guardar como borrador
@@ -775,7 +921,10 @@ const formatMoney = (n: number) =>
         </p>
 
         <div class="grid grid-cols-2 gap-3">
-          <label class="text-sm text-gray-600 col-span-2">
+          <div v-if="testerInline" class="col-span-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-amber-800">
+            Probando la <b>configuración en edición</b> de {{ testerInline.productName }} (sin guardar).
+          </div>
+          <label v-else class="text-sm text-gray-600 col-span-2">
             Versión de política
             <select v-model="testerPolicyId" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
               <option v-for="p in testablePolicies" :key="p.id" :value="p.id">
