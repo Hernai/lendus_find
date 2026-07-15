@@ -59,6 +59,7 @@ coverage/
 __screenshots__/
 /cypress/videos/
 /cypress/screenshots/
+.playwright-mcp/
 
 # Temporal
 *.local
