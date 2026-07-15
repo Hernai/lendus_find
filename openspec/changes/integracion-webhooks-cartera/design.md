@@ -39,9 +39,11 @@ ingesta); documentación que desbloquee al desarrollador externo.
 | 3 | Seguridad | HMAC-SHA256 + timestamp anti-replay | Bearer token; mTLS |
 | 4 | Suscripciones | Tabla `webhook_endpoints`; `webhooks`=log | `tenant.webhook_config`; TenantApiConfig |
 | 5 | Eventos v1 | Originación + cartera (5 eventos) | Todo el ciclo; mínimo |
-| 6 | Entrante | Pago + acuse de ingesta, idempotente | Solo pago; genérico de estado |
+| 6 | Entrante | Pago + acuse de ingesta + confirmación de dispersión, idempotente | Solo pago; genérico de estado |
 | 7 | Admin UI | Gestión + log + reenviar + probar | Solo alta; sin UI |
 | 8 | Docs | Guía Markdown en repo | OpenAPI; Artifact |
+| 9 | Dispersión | La cartera externa dispersa; Loan queda pendiente hasta confirmación entrante | Dentro del acuse; optimista al aprobar |
+| — | CLABE | **Completa** en el payload (la cartera la necesita para dispersar) | Enmascarada |
 | — | Reintentos | Backoff exponencial, 5 intentos, luego FAILED + `WEBHOOK_FAILED` + reenvío manual | — |
 | — | Idempotencia | `event_id` UUID por evento (saliente) y `Idempotency-Key`/id externo (entrante) | — |
 
@@ -101,11 +103,33 @@ dispersión, producto). El esquema exacto y ejemplos por evento viven en
 - El receptor recomputa y compara en tiempo constante; rechaza si el timestamp está fuera
   de una ventana (±5 min) → anti-replay. Doc con ejemplo en 3 lenguajes.
 
+### Flujo de dispersión externa (cartera dispersa, no LendusFind)
+
+Para tenants con cartera externa, **el dispersador es la cartera**, no el STP interno de
+LendusFind (`auto_disbursement` queda apagado para ellos). El handoff:
+
+1. El cliente acepta la oferta → LendusFind crea el `Loan` en estado
+   **`PENDING_DISBURSEMENT`** (nuevo estado de `LoanStatus`; no cuenta interés ni saldo
+   aún) y emite `application.approved` con el **payload completo incluyendo la CLABE
+   completa** — es la señal de "autorizado, dispersa".
+2. La cartera dispersa a la CLABE y **confirma de vuelta** con
+   `POST …/disbursement` (referencia, `disbursed_at`, su `external_id`).
+3. LendusFind marca el `Loan` **`ACTIVE`** (fija `disbursed_at`, `due_date`,
+   `disbursement_reference`), marca la `Application` **`SYNCED`** con el `external_id`, y
+   **reemite `loan.disbursed`** a los demás endpoints suscritos (p. ej. BI). Así
+   `loan.disbursed` sigue siendo un evento saliente, pero lo dispara la confirmación
+   entrante, no una dispersión interna.
+4. Los pagos fluyen entrantes como en el diseño general.
+
+Tenants sin cartera externa conservan el camino interno (`auto_disbursement` por STP);
+la rama la decide el flag del tenant, no este diseño.
+
 ### Emisión
 
-- Hooks: `Application::approve/reject`, `LoanService::createFromApplication` (dispersión),
-  `recordPayment` (pago + posible liquidación → `loan.completed`). Cada hook llama
-  `WebhookService::emit($event, $model)`.
+- Hooks: `Application::approve/reject`, la confirmación entrante de dispersión
+  (`loan.disbursed`), `recordPayment` (pago + posible liquidación → `loan.completed`).
+  Cada hook llama `WebhookService::emit($event, $model)`. (En tenants con dispersión
+  interna, `loan.disbursed` se emite desde `LoanService` como antes.)
 - `emit` genera `event_id`, construye el payload con `WebhookPayloadBuilder`, y crea **una
   fila `webhooks` por endpoint activo suscrito** (estado PENDING); despacha
   `DeliverWebhookJob` por cada una. Sin endpoints suscritos → no-op (no rompe el flujo).
@@ -126,11 +150,16 @@ Prefijo `POST /api/webhooks/inbound/{endpoint}/…` (público, autenticado por H
 endpoint; el `{endpoint}` en la URL localiza el secreto). Verificación de firma +
 ventana de timestamp + idempotencia por `external_event_id` (tabla `inbound_events`).
 
+- `POST …/disbursement` → confirma la dispersión hecha por la cartera: pasa el `Loan` de
+  `PENDING_DISBURSEMENT` a `ACTIVE` (fija `disbursed_at`, `due_date`,
+  `disbursement_reference`), marca la `Application` `SYNCED` con el `external_id`, y emite
+  `loan.disbursed` a los demás suscritos. Idempotente por `external_event_id`.
 - `POST …/payments` → registra el pago (`LoanService::recordPayment` con canal del
   proveedor y `provider_reference`); devuelve el saldo resultante. Reejecución con el
   mismo `external_event_id` → `duplicate` sin doble cargo.
-- `POST …/ingest-ack` → marca la `Application` `SYNCED` (`markSynced($external_id,
-  $external_system, $sync_data)`); idempotente.
+- `POST …/ingest-ack` → (opcional, cuando la ingesta y la dispersión son pasos separados)
+  marca la `Application` `SYNCED` sin tocar el crédito. Si la cartera ingiere y dispersa
+  en un solo paso, `…/disbursement` ya cierra el handoff.
 
 ### API de re-consulta (lectura)
 

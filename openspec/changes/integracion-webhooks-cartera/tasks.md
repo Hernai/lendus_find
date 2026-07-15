@@ -13,7 +13,8 @@
 - [ ] 2.1 `WebhookPayloadBuilder`: sobre versionado + recurso estandarizado `application`/`loan` (folio, persona/KYC, montos, condiciones aprobadas, CLABE, producto) — mismo builder que la API de lectura
 - [ ] 2.2 `WebhookSigner`: HMAC-SHA256 de `timestamp.body`, cabeceras X-LendusFind-*
 - [ ] 2.3 `WebhookService::emit($event, $model)`: event_id, resuelve endpoints activos suscritos, crea entregas PENDING, despacha job; best-effort (no revierte negocio)
-- [ ] 2.4 Hooks de emisión: `Application::approve/reject`, `LoanService::createFromApplication` (disbursed), `recordPayment` (payment.received + loan.completed al liquidar)
+- [ ] 2.4 Hooks de emisión: `Application::approve/reject`, `recordPayment` (payment.received + loan.completed al liquidar). `loan.disbursed` se emite desde la confirmación entrante (cartera externa) o desde `LoanService` (dispersión interna)
+- [ ] 2.5 Estado `PENDING_DISBURSEMENT` en `LoanStatus`; para tenants con cartera externa `createFromApplication` crea el Loan pendiente (sin STP interno) — el `auto_disbursement` interno se gatea por tenant
 
 ## 3. Entrega y reintentos
 
@@ -24,9 +25,10 @@
 ## 4. API entrante (cartera → LendusFind)
 
 - [ ] 4.1 Middleware/verificación HMAC de endpoint entrante + ventana de timestamp + dedupe por `external_event_id` (InboundEvent)
-- [ ] 4.2 `POST /api/webhooks/inbound/{endpoint}/payments` → recordPayment; idempotente; devuelve saldo
-- [ ] 4.3 `POST /api/webhooks/inbound/{endpoint}/ingest-ack` → markSynced(external_id); idempotente
-- [ ] 4.4 Tests: pago aplicado, reintento duplicado, firma inválida (401), acuse→SYNCED
+- [ ] 4.2 `POST /api/webhooks/inbound/{endpoint}/disbursement` → Loan PENDING_DISBURSEMENT→ACTIVE + Application→SYNCED + emite loan.disbursed; idempotente
+- [ ] 4.3 `POST /api/webhooks/inbound/{endpoint}/payments` → recordPayment; idempotente; devuelve saldo
+- [ ] 4.4 `POST /api/webhooks/inbound/{endpoint}/ingest-ack` → markSynced(external_id); idempotente
+- [ ] 4.5 Tests: dispersión→ACTIVE+SYNCED+emite, pago aplicado, reintento duplicado, firma inválida (401), estado inválido
 
 ## 5. API de re-consulta
 

@@ -23,10 +23,15 @@ del core que los administra.
   pasa a ser el **log de entregas** (FK al endpoint). Varios endpoints por tenant.
 - **Catálogo de eventos v1** (originación + cartera): `application.approved`,
   `application.rejected`, `loan.disbursed`, `loan.completed`, `payment.received`.
+- **Dispersión externa**: la cartera externa dispersa (no el STP interno; `auto_disbursement`
+  queda apagado para esos tenants). Al aceptar la oferta, LendusFind crea el `Loan` en
+  `PENDING_DISBURSEMENT` y emite `application.approved` con la **CLABE completa** (señal de
+  "dispersa"). La cartera confirma de vuelta y LendusFind activa el crédito.
 - **API entrante** (cartera → LendusFind), HMAC verificado e idempotente por id externo:
-  (1) **confirmación de pago** → `LoanService::recordPayment` (actualiza saldo, dispara
-  liquidación/renovación); (2) **acuse de ingesta** → marca la solicitud `SYNCED` con el
-  `external_id` del sistema de cartera (cierra el handoff).
+  (1) **confirmación de dispersión** → `Loan` a `ACTIVE` + `Application` a `SYNCED` +
+  reemite `loan.disbursed`; (2) **confirmación de pago** → `LoanService::recordPayment`
+  (actualiza saldo, dispara liquidación/renovación); (3) **acuse de ingesta** (opcional,
+  si ingesta y dispersión son pasos separados) → marca `SYNCED`.
 - **API de re-consulta** (lectura): `GET` del expediente/crédito estandarizado para que
   el externo reconcilie o recupere un evento perdido, con el mismo esquema del payload.
 - **Panel admin "Integraciones / Webhooks"**: alta/edición de endpoints (ver/rotar

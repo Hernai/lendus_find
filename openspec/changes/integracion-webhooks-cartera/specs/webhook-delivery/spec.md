@@ -29,7 +29,7 @@ una versión los cambios solo agregan campos.
 
 #### Scenario: Payload de crédito autorizado
 - **WHEN** se entrega `application.approved`
-- **THEN** el sobre incluye `event="application.approved"`, `version`, `occurred_at`, `tenant` y `data` con folio, persona/KYC, montos y condiciones aprobadas y cuenta de dispersión
+- **THEN** el sobre incluye `event="application.approved"`, `version`, `occurred_at`, `tenant` y `data` con folio, persona/KYC, montos y condiciones aprobadas y la **cuenta de dispersión con la CLABE completa** (la cartera externa la necesita para dispersar)
 
 ### Requirement: Firma HMAC-SHA256 con anti-replay
 Cada request DEBE (MUST) incluir `X-LendusFind-Signature: sha256=<hex>` (HMAC-SHA256 de

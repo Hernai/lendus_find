@@ -36,14 +36,19 @@ BI) y marcar uno como **sandbox** para pruebas.
 
 | Evento | Cuándo se dispara | Recurso en `data` |
 |--------|-------------------|-------------------|
-| `application.approved` | El crédito fue autorizado (oferta aceptada / aprobación) | `application` |
+| `application.approved` | El crédito fue autorizado. **Es la señal de "dispersa"**: trae la CLABE completa y el monto para que tu cartera disperse. | `application` |
 | `application.rejected` | La solicitud fue rechazada | `application` |
-| `loan.disbursed` | El crédito se dispersó al cliente | `loan` |
+| `loan.disbursed` | Se confirmó la dispersión (tú la confirmas por la API entrante, §7.1) y LendusFind activó el crédito | `loan` |
 | `payment.received` | Se registró un pago sobre el crédito | `loan` (con `last_payment`) |
 | `loan.completed` | El crédito quedó liquidado | `loan` |
 
 El catálogo es configurable por endpoint: suscribes solo los que te interesan (o `*`).
 Se agregarán más eventos en versiones futuras sin romper el contrato existente.
+
+> **Dispersión:** tu cartera es la que dispersa. LendusFind autoriza y te entrega el
+> crédito con la CLABE (`application.approved`); tú dispersas y **confirmas de vuelta**
+> (§7.1). Entonces LendusFind activa el crédito y emite `loan.disbursed`. El ciclo de
+> dispersión de LendusFind (STP interno) queda apagado para tu tenant.
 
 ---
 
@@ -107,7 +112,8 @@ Todos los webhooks comparten esta estructura. Solo cambia `data` según el recur
       },
       "disbursement_account": {
         "bank_name": "STP",
-        "clabe": "6461801570******93"
+        "clabe": "646180157099999993",
+        "holder_name": "Juan Pérez López"
       },
       "approved_at": "2026-07-15T18:04:22Z"
     }
@@ -115,8 +121,8 @@ Todos los webhooks comparten esta estructura. Solo cambia `data` según el recur
 }
 ```
 
-> **CLABE enmascarada:** por defecto viaja parcial. Si tu cartera necesita la CLABE
-> completa para dispersar, se habilita por endpoint bajo acuerdo (dato sensible).
+> **CLABE completa:** viaja completa porque tu cartera la necesita para dispersar. Es un
+> dato sensible: recíbela solo por HTTPS con firma verificada y trátala como PII.
 
 ### 4.2 `application.rejected`
 
@@ -137,7 +143,10 @@ Todos los webhooks comparten esta estructura. Solo cambia `data` según el recur
 }
 ```
 
-### 4.3 `loan.disbursed` — crédito dispersado
+### 4.3 `loan.disbursed` — dispersión confirmada
+
+Se emite **después de que tú confirmas la dispersión** (§7.1); LendusFind entonces activa
+el crédito. Útil para otros suscriptores (BI, conciliación).
 
 ```json
 {
@@ -295,7 +304,36 @@ Tu plataforma le confirma cosas a LendusFind. Ambos endpoints usan la **misma fi
 
 `{endpoint}` en la URL identifica tu endpoint registrado (LendusFind resuelve el secreto).
 
-### 7.1 Confirmar un pago aplicado
+### 7.1 Confirmar la dispersión (cierra el handoff)
+
+Cuando tu cartera dispersó el crédito a la CLABE, confírmalo. LendusFind activa el crédito
+(lo pasa de "pendiente de dispersión" a **activo**), guarda tu `external_id` (la solicitud
+queda `SYNCED`) y emite `loan.disbursed` a los demás suscriptores.
+
+`POST /api/webhooks/inbound/{endpoint}/disbursement`
+
+```json
+{
+  "external_event_id": "cartera-disb-000123",
+  "loan_id": "019f6404-9a8b-7c6d-5e4f-3a2b1c0d9e8f",
+  "external_id": "CARTERA-CTO-556677",
+  "external_system": "CORE_CARTERA",
+  "disbursement_reference": "STP-2026071500012345",
+  "disbursed_at": "2026-07-15T18:05:10Z"
+}
+```
+
+Respuesta (200):
+
+```json
+{ "success": true, "data": { "status": "processed", "loan_status": "ACTIVE", "application_status": "SYNCED" } }
+```
+
+> Hasta que confirmes la dispersión, el crédito NO está activo en LendusFind (no genera
+> interés ni saldo). Si tu cartera ingiere y dispersa en un solo paso, este endpoint cierra
+> todo el handoff; el `ingest-ack` (§7.3) solo hace falta si son pasos separados.
+
+### 7.2 Confirmar un pago aplicado
 
 `POST /api/webhooks/inbound/{endpoint}/payments`
 
@@ -322,10 +360,11 @@ Reintento con el mismo `external_event_id`:
 { "success": true, "data": { "status": "duplicate", "outstanding_balance": 205.59 } }
 ```
 
-### 7.2 Acuse de ingesta a cartera (cierra el handoff)
+### 7.3 Acuse de ingesta (solo si es paso separado de la dispersión)
 
-Cuando tu cartera terminó de ingerir el crédito, confírmalo para que LendusFind marque la
-solicitud como `SYNCED` con tu identificador.
+Si en tu operación la **ingesta a cartera** y la **dispersión** son pasos distintos, usa
+este endpoint para marcar la solicitud `SYNCED` sin activar el crédito. Si dispersas e
+ingieres a la vez, no lo necesitas — `…/disbursement` (§7.1) ya cierra el handoff.
 
 `POST /api/webhooks/inbound/{endpoint}/ingest-ack`
 
@@ -371,9 +410,10 @@ curl -H "Authorization: Bearer <TOKEN_INTEGRACION>" \
 
 - [ ] Registrar el endpoint en **sandbox** desde el panel (Admin → Webhooks) y guardar el secreto.
 - [ ] Implementar la **verificación de firma** (§5) y probarla con "Enviar evento de prueba".
-- [ ] Suscribir los eventos que necesitas (§2).
+- [ ] Suscribir los eventos que necesitas (§2). Como mínimo `application.approved` (para dispersar).
 - [ ] Procesar **idempotente por `event_id`** y responder 2xx rápido (§6).
-- [ ] Implementar la **API entrante** de pagos y acuse (§7), firmando tus requests.
+- [ ] Al recibir `application.approved`: **dispersar a la CLABE** y **confirmar la dispersión** (§7.1).
+- [ ] Implementar la **API entrante** de pagos (§7.2), firmando tus requests.
 - [ ] Manejar reintentos y el estado `FAILED` (reenvío desde el panel).
 - [ ] Implementar la **re-consulta** para reconciliación (§8).
 - [ ] Pasar el endpoint a **producción/activo** cuando todo valide en sandbox.
