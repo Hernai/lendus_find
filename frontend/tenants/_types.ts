@@ -72,6 +72,12 @@ export interface TenantConfig {
     splashDark?: string
     /** Color de fondo del splash (HEX). */
     splashBackgroundColor: string
+    /**
+     * Color de fondo del icono adaptativo (HEX). Android/iOS no permiten
+     * iconos con transparencia: el launcher siempre rellena el fondo con
+     * un color sólido. Si se omite, usa `splashBackgroundColor`.
+     */
+    iconBackgroundColor?: string
   }
 
   /**
