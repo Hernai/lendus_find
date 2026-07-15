@@ -63,5 +63,5 @@
 ## 9. Verificación integral
 
 - [x] 9.1 `php artisan test` de los grupos nuevos + `npm run type-check` y lint
-- [ ] 9.2 Smoke E2E manual (ui-smoke): onboarding MoneyCapital completo con política ACTIVE — solicitud → oferta de rango → ajustar slider → aceptar → APPROVED; y caso shadow (no actúa)
+- [x] 9.2 Smoke E2E manual (ui-smoke): onboarding MoneyCapital completo con política ACTIVE — solicitud → oferta de rango → ajustar slider → aceptar → APPROVED; y caso shadow (no actúa)
 - [x] 9.3 Verificar aislamiento multi-tenant: demo/finatea sin política operan exactamente como hoy (regresión de submit y contraoferta manual)
