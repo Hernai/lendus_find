@@ -587,6 +587,8 @@ class ApplicationController extends Controller
 
         return [
             'id' => $app->id,
+            // Mismo formato de folio que el panel staff (formatApplicationDetail).
+            'folio' => $app->created_at?->format('Ymd') . '-' . strtoupper(substr($app->id, 0, 4)),
             'status' => $app->status,
             'status_label' => $app->status_label,
             'product' => [

@@ -66,7 +66,12 @@ const timeline = computed<TimelineStep[]>(() => {
     { id: 'decision', title: 'Decisión', description: 'Resultado de tu solicitud', statusWhen: ['APPROVED', 'REJECTED', 'SYNCED'] }
   ]
 
-  const statusIndex = steps.findIndex(s => s.statusWhen.includes(status)) + 1
+  // Última etapa ALCANZADA por el estado (findIndex tomaba la primera
+  // coincidencia y una solicitud APPROVED se quedaba "En revisión").
+  let statusIndex = 0
+  steps.forEach((step, index) => {
+    if (step.statusWhen.includes(status)) statusIndex = index + 1
+  })
 
   return steps.map((step, index) => ({
     id: step.id,
@@ -133,6 +138,60 @@ const goToAction = () => {
 // ==========================================================
 const toast = useToast()
 const respondingOffer = ref(false)
+
+// ==========================================================
+// Resumen del crédito: si ya hay términos APROBADOS (oferta
+// aceptada) se muestran esos, no lo solicitado; productos en
+// días muestran días y "Pago único" (sin duplicar la palabra).
+// ==========================================================
+interface AppTerms {
+  requested_amount?: number | string | null
+  requested_term_months?: number | null
+  requested_term_days?: number | null
+  approved_amount?: number | string | null
+  approved_term_months?: number | null
+  approved_term_days?: number | null
+  monthly_payment?: number | string | null
+  total_amount?: number | string | null
+  interest_rate?: number | string | null
+  payment_frequency?: string | null
+  counter_offer?: V2CounterOffer | null
+}
+
+const loanSummary = computed(() => {
+  const app = application.value as AppTerms | null
+  if (!app && !simulation.value) return null
+
+  const amount = Number(app?.approved_amount ?? app?.requested_amount ?? simulation.value?.requested_amount ?? 0)
+  const termDays = app?.approved_term_days ?? app?.requested_term_days ?? null
+  const termMonths = app?.approved_term_months ?? app?.requested_term_months ?? simulation.value?.term_months ?? null
+  const frequency = app?.payment_frequency ?? simulation.value?.payment_frequency ?? null
+  const isSingle = termDays != null || frequency === 'SINGLE'
+
+  let payment: number | null
+  if (!isSingle) {
+    payment = Number(app?.monthly_payment ?? simulation.value?.periodic_payment ?? 0) || null
+  } else if (app?.approved_amount != null && app?.counter_offer) {
+    // Términos aceptados de una oferta: recalcular el total bullet con las
+    // tasas congeladas del snapshot (el total_amount persistido es el de la
+    // solicitud original, no el del monto aceptado).
+    const co = app.counter_offer
+    const days = Number(termDays ?? co.term_days ?? 0)
+    const rate = Number(co.interest_rate ?? app.interest_rate ?? 0)
+    const commissionRate = Number(co.opening_commission ?? 0)
+    const interest = amount * (rate / 100) * (days / 365)
+    payment = +(amount + interest * 1.16 + amount * (commissionRate / 100) * 1.16).toFixed(2)
+  } else {
+    payment = Number(app?.total_amount ?? simulation.value?.total_amount ?? 0) || null
+  }
+
+  return {
+    amount,
+    termLabel: termDays != null ? `${termDays} días` : `${termMonths ?? '—'} meses`,
+    paymentLabel: isSingle ? 'Pago único' : `Pago ${formatFrequency(frequency)}`,
+    payment,
+  }
+})
 
 const counterOffer = computed<V2CounterOffer | null>(() => {
   const app = application.value as { status?: string; counter_offer?: V2CounterOffer | null } | null
@@ -294,18 +353,18 @@ onMounted(async () => {
             </div>
           </div>
         </template>
-        <div v-else-if="simulation" class="grid grid-cols-3 gap-4 pt-4 border-t border-gray-100">
+        <div v-else-if="loanSummary" class="grid grid-cols-3 gap-4 pt-4 border-t border-gray-100">
           <div>
             <p class="text-xs text-gray-500">Monto</p>
-            <p class="font-semibold text-gray-900">{{ formatMoney(simulation.requested_amount) }}</p>
+            <p class="font-semibold text-gray-900">{{ formatMoney(loanSummary.amount) }}</p>
           </div>
           <div>
             <p class="text-xs text-gray-500">Plazo</p>
-            <p class="font-semibold text-gray-900">{{ simulation.term_months }} meses</p>
+            <p class="font-semibold text-gray-900">{{ loanSummary.termLabel }}</p>
           </div>
           <div>
-            <p class="text-xs text-gray-500">Pago {{ formatFrequency(simulation.payment_frequency) }}</p>
-            <p class="font-semibold text-gray-900">{{ formatMoney(simulation.periodic_payment) }}</p>
+            <p class="text-xs text-gray-500">{{ loanSummary.paymentLabel }}</p>
+            <p class="font-semibold text-gray-900">{{ loanSummary.payment != null ? formatMoney(loanSummary.payment) : '—' }}</p>
           </div>
         </div>
       </div>
