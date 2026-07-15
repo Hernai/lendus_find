@@ -690,6 +690,7 @@ class ApplicationService
             case DecisionOutcome::REJECT->value:
                 $application->reject(null, 'MOTOR_DECISION', $reason ?: 'Rechazo del motor de decisión');
                 $this->sendNotification(NotificationEvent::APPLICATION_REJECTED->value, $application);
+                $this->emitWebhook(\App\Services\Webhook\WebhookEvent::APPLICATION_REJECTED, $application->fresh());
                 break;
         }
     }
