@@ -38,9 +38,9 @@
 ## 6. API staff + panel admin
 
 - [x] 6.1 `Staff\WebhookEndpointController` (CRUD, rotar secreto, activar/sandbox) + `WebhookDeliveryController` (index/retry) + test-event — permiso canManageProducts; rutas
-- [ ] 6.2 Módulo admin "Webhooks": lista de endpoints, alta/edición (URL HTTPS, checklist de eventos, ver/rotar secreto, sandbox), log de entregas con filtros, reenviar, enviar prueba
-- [ ] 6.3 Service + tipos V2 frontend; registro en el sistema de módulos (visibilidad por rol)
-- [ ] 6.4 Tests de permisos (ADMIN gestiona, ANALYST 403, aislamiento por tenant)
+- [x] 6.2 Módulo admin "Webhooks": lista de endpoints, alta/edición (URL HTTPS, checklist de eventos, ver/rotar secreto, sandbox), log de entregas con filtros, reenviar, enviar prueba
+- [x] 6.3 Service + tipos V2 frontend; registro en el sistema de módulos (visibilidad por rol)
+- [x] 6.4 Tests de permisos (ADMIN gestiona, ANALYST 403, aislamiento por tenant)
 
 ## 7. Documentación del integrador
 

@@ -114,6 +114,13 @@ export const adminRoutes: RouteRecordRaw[] = [
         component: () => import('@/modules/admin/views/panel/AdminDecisionEngine.vue'),
       },
       {
+        // Webhooks / integraciones salientes. Gestiona el ADMIN del tenant
+        // (la API valida canManageProducts).
+        path: 'webhooks',
+        name: 'admin-webhooks',
+        component: () => import('@/modules/admin/views/panel/AdminWebhooks.vue'),
+      },
+      {
         path: 'prestamos',
         name: 'admin-loans',
         component: () => import('@/modules/admin/views/panel/AdminLoans.vue')
