@@ -314,6 +314,7 @@ class ApplicationService
         $application->approve($approvedBy->id, $amount, $termMonths, $interestRate, $notes);
 
         $this->sendNotification(NotificationEvent::APPLICATION_APPROVED->value, $application);
+        $this->emitWebhook(\App\Services\Webhook\WebhookEvent::APPLICATION_APPROVED, $application->fresh());
 
         return $application->fresh();
     }
@@ -330,8 +331,19 @@ class ApplicationService
         $application->reject($rejectedBy->id, $reason, $notes);
 
         $this->sendNotification(NotificationEvent::APPLICATION_REJECTED->value, $application);
+        $this->emitWebhook(\App\Services\Webhook\WebhookEvent::APPLICATION_REJECTED, $application->fresh());
 
         return $application->fresh();
+    }
+
+    /**
+     * Emite un webhook del ciclo hacia los endpoints suscritos (best-effort:
+     * nunca revierte el negocio). Resuelve el service por el contenedor para no
+     * engordar el constructor.
+     */
+    protected function emitWebhook(string $event, Application $application): void
+    {
+        app(\App\Services\Webhook\WebhookService::class)->emit($event, $application);
     }
 
     // =====================================================
@@ -531,6 +543,8 @@ class ApplicationService
         // aceptados (era la intención documentada del módulo, sin cablear).
         if ($accepted) {
             $this->createLoanFromAcceptance($application->fresh());
+            // Crédito autorizado → webhook a la cartera (señal de 'dispersa').
+            $this->emitWebhook(\App\Services\Webhook\WebhookEvent::APPLICATION_APPROVED, $application->fresh());
         }
 
         $event = $accepted

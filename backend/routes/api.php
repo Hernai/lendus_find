@@ -50,6 +50,7 @@ use App\Http\Controllers\Api\V2\Applicant\NotificationController as ApplicantNot
 use App\Http\Controllers\Api\V2\Staff\NotificationPreferenceController as StaffNotificationPreferenceController;
 use App\Http\Controllers\Api\V2\Applicant\LoanController as ApplicantLoanController;
 use App\Http\Controllers\Api\V2\Staff\LoanController as StaffLoanController;
+use App\Http\Controllers\Api\V2\Staff\WebhookController as StaffWebhookController;
 
 // =============================================
 // BROADCASTING AUTH (for WebSocket channel authorization)
@@ -109,6 +110,22 @@ Route::get('ops/warmup', \App\Http\Controllers\Ops\WarmupController::class);
 Route::post('webhooks/nubarium/{type}/{token}', [\App\Http\Controllers\Api\Webhooks\NubariumWebhookController::class, 'handle'])
     ->where('type', 'clabe|debit_card|imss_nss|imss_employment|issste')
     ->where('token', '[A-Za-z0-9]+');
+
+// Webhooks ENTRANTES de integración (cartera externa → LendusFind). PÚBLICO:
+// autenticado por la firma HMAC del endpoint (no por auth/tenant). Idempotente
+// por external_event_id. Ver docs/integracion/webhooks.md §7.
+Route::prefix('webhooks/inbound/{endpoint}')->group(function () {
+    Route::post('/disbursement', [\App\Http\Controllers\Api\Webhooks\InboundIntegrationController::class, 'disbursement']);
+    Route::post('/payments', [\App\Http\Controllers\Api\Webhooks\InboundIntegrationController::class, 'payments']);
+    Route::post('/ingest-ack', [\App\Http\Controllers\Api\Webhooks\InboundIntegrationController::class, 'ingestAck']);
+});
+
+// API de re-consulta para el sistema externo (mismo esquema que el webhook).
+// Requiere token con ability `integration`. Ver docs/integracion/webhooks.md §8.
+Route::middleware(['tenant', 'auth:sanctum'])->prefix('v2/integration')->group(function () {
+    Route::get('/applications/{id}', [\App\Http\Controllers\Api\V2\Integration\IntegrationReadController::class, 'application']);
+    Route::get('/loans/{id}', [\App\Http\Controllers\Api\V2\Integration\IntegrationReadController::class, 'loan']);
+});
 
 // =============================================
 // V2: PUBLIC SIMULATOR (no authentication required)
@@ -477,6 +494,20 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
             ->middleware('permission:canManageProducts');
         Route::post('/decision-policies/{id}/activate', [StaffDecisionPolicyController::class, 'activate'])
             ->middleware('permission:canManageProducts');
+
+        // Webhooks / integraciones — el ADMIN gestiona los endpoints de su tenant
+        // (canManageProducts), scoping por tenant. Ver integracion-webhooks-cartera.
+        Route::middleware('permission:canManageProducts')->prefix('webhooks')->group(function () {
+            Route::get('/events', [StaffWebhookController::class, 'events']);
+            Route::get('/endpoints', [StaffWebhookController::class, 'index']);
+            Route::post('/endpoints', [StaffWebhookController::class, 'store']);
+            Route::put('/endpoints/{id}', [StaffWebhookController::class, 'update']);
+            Route::delete('/endpoints/{id}', [StaffWebhookController::class, 'destroy']);
+            Route::post('/endpoints/{id}/rotate-secret', [StaffWebhookController::class, 'rotateSecret']);
+            Route::post('/endpoints/{id}/test', [StaffWebhookController::class, 'test']);
+            Route::get('/deliveries', [StaffWebhookController::class, 'deliveries']);
+            Route::post('/deliveries/{id}/retry', [StaffWebhookController::class, 'retry']);
+        });
 
         // Application Notes
         Route::post('/applications/{id}/notes', [StaffAppController::class, 'addNote']);

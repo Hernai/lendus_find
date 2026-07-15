@@ -12,6 +12,7 @@ enum LoanStatus: string
 {
     use HasOptions;
 
+    case PENDING_DISBURSEMENT = 'PENDING_DISBURSEMENT'; // Autorizado, esperando que la cartera externa disperse
     case DISBURSED = 'DISBURSED';     // Recién dispersado
     case ACTIVE = 'ACTIVE';            // En curso, esperando pago
     case COMPLETED = 'COMPLETED';      // Pagado completamente
@@ -21,6 +22,7 @@ enum LoanStatus: string
     public function label(): string
     {
         return match ($this) {
+            self::PENDING_DISBURSEMENT => 'Pendiente de dispersión',
             self::DISBURSED => 'Desembolsado',
             self::ACTIVE => 'Activo',
             self::COMPLETED => 'Completado',

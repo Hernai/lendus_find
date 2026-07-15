@@ -58,6 +58,11 @@ class LoanService
                     ?? BankAccount::findPrimaryForPerson($app->person_id);
             }
 
+            // Dispersión externa (cartera): el crédito queda PENDIENTE hasta que
+            // la cartera confirme la dispersión (webhook entrante). No se
+            // dispersa por STP interno ni se fija disbursed_at/due_date todavía.
+            $externalDisbursement = (bool) $app->tenant?->hasFeature('external_disbursement');
+
             $loan = Loan::create([
                 'tenant_id' => $app->tenant_id,
                 'application_id' => $app->id,
@@ -72,13 +77,15 @@ class LoanService
                 'outstanding_balance' => $totalToPay,
                 'paid_amount' => 0,
                 'late_fee_accrued' => 0,
-                'status' => LoanStatus::DISBURSED->value,
-                'disbursed_at' => now(),
-                'due_date' => Carbon::today()->addDays($termDays),
+                'status' => $externalDisbursement
+                    ? LoanStatus::PENDING_DISBURSEMENT->value
+                    : LoanStatus::DISBURSED->value,
+                'disbursed_at' => $externalDisbursement ? null : now(),
+                'due_date' => $externalDisbursement ? null : Carbon::today()->addDays($termDays),
             ]);
 
-            // Si auto_disbursement está activo en el tenant, intentar dispersar via STP.
-            if ($app->tenant?->hasFeature('auto_disbursement') && $bankAccount) {
+            // Si auto_disbursement está activo (y no es cartera externa), dispersar via STP.
+            if (! $externalDisbursement && $app->tenant?->hasFeature('auto_disbursement') && $bankAccount) {
                 try {
                     $result = $this->stp->disburse($loan, $bankAccount);
                     $loan->update([
@@ -149,6 +156,47 @@ class LoanService
         });
     }
 
+    /**
+     * Confirma la dispersión hecha por la cartera externa: pasa el Loan de
+     * PENDING_DISBURSEMENT a ACTIVE (fija disbursed_at/due_date/referencia),
+     * marca la Application SYNCED con el external_id, y emite loan.disbursed.
+     *
+     * @param  array{external_id?:string,external_system?:string,disbursement_reference?:string,disbursed_at?:string}  $payload
+     */
+    public function confirmDisbursement(Loan $loan, array $payload): Loan
+    {
+        if ($loan->status !== LoanStatus::PENDING_DISBURSEMENT) {
+            throw new \InvalidArgumentException('El crédito no está pendiente de dispersión.');
+        }
+
+        $disbursedAt = isset($payload['disbursed_at']) ? Carbon::parse($payload['disbursed_at']) : now();
+
+        DB::transaction(function () use ($loan, $payload, $disbursedAt) {
+            $loan->update([
+                'status' => LoanStatus::ACTIVE->value,
+                'disbursed_at' => $disbursedAt,
+                'due_date' => $disbursedAt->copy()->addDays((int) $loan->term_days),
+                'disbursement_provider' => $payload['external_system'] ?? 'CARTERA',
+                'disbursement_reference' => $payload['disbursement_reference'] ?? null,
+            ]);
+
+            // Cierra el handoff: la solicitud queda SYNCED con el id de la cartera.
+            $app = $loan->application;
+            if ($app && $app->status === \App\Models\Application::STATUS_APPROVED) {
+                $app->markSynced(
+                    $payload['external_id'] ?? $loan->id,
+                    $payload['external_system'] ?? 'CARTERA',
+                    ['disbursement_reference' => $payload['disbursement_reference'] ?? null]
+                );
+            }
+        });
+
+        $loan->refresh();
+        $this->emitWebhook(\App\Services\Webhook\WebhookEvent::LOAN_DISBURSED, $loan);
+
+        return $loan;
+    }
+
     public function recordPayment(Loan $loan, array $payload): LoanPayment
     {
         $wasCompleted = $loan->status === LoanStatus::COMPLETED;
@@ -185,14 +233,38 @@ class LoanService
             return $payment;
         });
 
+        $loan->refresh();
+
+        // Webhook: pago aplicado (con el último pago en el sobre).
+        $this->emitWebhook(\App\Services\Webhook\WebhookEvent::PAYMENT_RECEIVED, $loan, [
+            'last_payment' => [
+                'amount' => (float) $payment->amount,
+                'channel' => $payment->channel,
+                'provider_reference' => $payment->provider_reference,
+                'paid_at' => Carbon::parse($payment->paid_at)->format(\DateTimeInterface::ATOM),
+            ],
+        ]);
+
         // Renovación (Regla 05): recién liquidado → el motor evalúa la
         // graduación y, si procede, genera la oferta de renovación. Fuera de
         // la transacción: el pago nunca depende del motor.
         if (!$wasCompleted && $loan->status === LoanStatus::COMPLETED) {
+            $this->emitWebhook(\App\Services\Webhook\WebhookEvent::LOAN_COMPLETED, $loan);
             EvaluateRenewalJob::dispatch($loan->id);
         }
 
         return $payment;
+    }
+
+    /**
+     * Emite un webhook del ciclo del crédito (best-effort). Resuelve el service
+     * por el contenedor.
+     *
+     * @param  array<string, mixed>  $extra
+     */
+    protected function emitWebhook(string $event, Loan $loan, array $extra = []): void
+    {
+        app(\App\Services\Webhook\WebhookService::class)->emit($event, $loan, $extra);
     }
 
     /**

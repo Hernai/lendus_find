@@ -23,6 +23,12 @@ Schedule::command('counter-offers:expire')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Re-encola entregas de webhook en reintento cuyo backoff ya venció.
+Schedule::command('webhooks:dispatch-retries')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // MaxMind GeoLite2-City — actualizar la DB cada miercoles 03:00 America/Mexico_City.
 // MaxMind libera nueva version los martes; corremos miercoles para asegurar
 // que la version mas reciente este disponible.
