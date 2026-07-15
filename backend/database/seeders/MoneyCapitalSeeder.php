@@ -346,8 +346,14 @@ class MoneyCapitalSeeder extends Seeder
                             'points' => ['0' => 5, '1' => 10, '2' => 10, '3' => 5, '4' => 0, '5+' => 0],
                         ],
                     ],
+                    // Piso de puntaje: un perfil por debajo del corte más bajo
+                    // (declarativas muy flacas) NO recibe oferta automática —
+                    // cae a revisión manual para que un analista decida. Los
+                    // filtros de identidad (KYC/INE) y el gate telefónico ya
+                    // gatean aprobación/rechazo; esto solo evita auto-ofertar el
+                    // piso a perfiles en blanco durante la calibración del piloto.
                     'band_cutoffs' => [
-                        ['min_score' => 0, 'band' => 'BASE'],
+                        ['min_score' => 15, 'band' => 'BASE'],
                         ['min_score' => 35, 'band' => 'INTERMEDIA'],
                         ['min_score' => 50, 'band' => 'CONTROLADA'],
                         ['min_score' => 65, 'band' => 'EXCEPCIONAL'],
