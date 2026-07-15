@@ -28,6 +28,7 @@ enum NotificationEvent: string
     case APPLICATION_COUNTER_OFFERED = 'application.counter_offered';
     case COUNTER_OFFER_ACCEPTED = 'counter_offer.accepted';
     case COUNTER_OFFER_REJECTED = 'counter_offer.rejected';
+    case COUNTER_OFFER_EXPIRING = 'counter_offer.expiring';
     case APPLICATION_SYNCED = 'application.synced';
 
     // Documents
@@ -84,6 +85,7 @@ enum NotificationEvent: string
             self::APPLICATION_COUNTER_OFFERED => 'Contraoferta Enviada',
             self::COUNTER_OFFER_ACCEPTED => 'Contraoferta Aceptada',
             self::COUNTER_OFFER_REJECTED => 'Contraoferta Rechazada',
+            self::COUNTER_OFFER_EXPIRING => 'Oferta por Vencer',
             self::APPLICATION_SYNCED => 'Solicitud Sincronizada',
 
             self::DOCUMENT_UPLOADED => 'Documento Subido',
@@ -166,6 +168,7 @@ enum NotificationEvent: string
 
             self::APPLICATION_COUNTER_OFFERED,
             self::COUNTER_OFFER_ACCEPTED,
+            self::COUNTER_OFFER_EXPIRING,
             self::COUNTER_OFFER_REJECTED => [
                 'application.id' => 'ID de la solicitud',
                 'application.folio' => 'Folio de la solicitud',
@@ -293,6 +296,7 @@ enum NotificationEvent: string
             ],
             self::APPLICATION_COUNTER_OFFERED,
             self::COUNTER_OFFER_ACCEPTED,
+            self::COUNTER_OFFER_EXPIRING,
             self::LOAN_DISBURSED,
             self::PAYMENT_RECEIVED,
             self::LOAN_COMPLETED => [

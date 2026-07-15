@@ -2,9 +2,13 @@
 
 namespace App\Services;
 
+use App\Enums\DecisionOutcome;
 use App\Enums\NotificationEvent;
+use App\Jobs\DecideApplicationJob;
 use App\Models\ApplicantAccount;
 use App\Models\Application;
+use App\Models\DecisionPolicy;
+use App\Models\Loan;
 use App\Models\Person;
 use App\Models\Product;
 use App\Models\StaffAccount;
@@ -23,7 +27,8 @@ class ApplicationService
     public function __construct(
         protected LoanCalculationService $loanCalculator,
         protected DocumentService $documentService,
-        protected NotificationService $notificationService
+        protected NotificationService $notificationService,
+        protected LoanService $loanService
     ) {}
 
     // =====================================================
@@ -182,6 +187,13 @@ class ApplicationService
         });
 
         $this->sendNotification(NotificationEvent::APPLICATION_SUBMITTED->value, $application);
+
+        // Motor de decisión: si el producto tiene política activa (shadow o
+        // active) se evalúa async. Sin política, el flujo sigue 100% manual.
+        $policy = DecisionPolicy::activeFor($application->product_id);
+        if ($policy && $policy->modeEnum()->evaluates()) {
+            DecideApplicationJob::dispatch($application->id);
+        }
 
         return $application->fresh();
     }
@@ -377,6 +389,7 @@ class ApplicationService
         }
 
         $offer['expires_at'] = now()->addMinutes($expiresInMinutes)->toIso8601String();
+        $offer['source'] = 'STAFF';
 
         $application->sendCounterOffer($staff->id, $offer, $reason);
 
@@ -399,12 +412,96 @@ class ApplicationService
     }
 
     /**
+     * Oferta generada por el motor de decisión (sin actor staff).
+     *
+     * A diferencia de la contraoferta manual, la del motor lleva RANGO
+     * autorizado (min/max de monto y plazo) con el valor pre-seleccionado en
+     * `amount`/`term_days`, `source: ENGINE` y vigencia en horas.
+     */
+    public function sendEngineOffer(
+        Application $application,
+        array $range,
+        ?string $reason = null,
+        int $validityHours = 72,
+        ?int $reminderHoursBefore = 24,
+        ?string $appliedByStaffId = null
+    ): Application {
+        $product = $application->product;
+
+        $offer = [
+            'amount' => $range['amount'],
+            'min_amount' => $range['min_amount'],
+            'max_amount' => $range['max_amount'],
+            'source' => 'ENGINE',
+        ];
+
+        if ($product->term_in_days) {
+            $offer['term_days'] = $range['term_days'];
+            $offer['min_term_days'] = $range['min_term_days'] ?? $range['term_days'];
+            $offer['max_term_days'] = $range['max_term_days'] ?? $range['term_days'];
+            $offer['term_months'] = null;
+            $offer['interest_rate'] = $product->annual_rate;
+            $offer['opening_commission'] = $product->opening_commission_rate;
+        } else {
+            $offer['term_months'] = $range['term_months'];
+            $offer['term_days'] = null;
+            $offer['interest_rate'] = $product->annual_rate;
+            $offer['opening_commission'] = $product->opening_commission_rate;
+
+            $calculation = $this->loanCalculator->calculateSimulation(
+                $offer['amount'],
+                $offer['term_months'],
+                'MONTHLY',
+                $offer['interest_rate'],
+                $offer['opening_commission'] ?? 0
+            );
+            $offer['monthly_payment'] = $calculation['payment_amount'];
+            $offer['total_amount'] = $calculation['total_to_pay'];
+        }
+
+        $offer['expires_at'] = now()->addHours($validityHours)->toIso8601String();
+
+        // Recordatorio único antes del vencimiento (barrido en counter-offers:expire).
+        if ($reminderHoursBefore !== null && $reminderHoursBefore > 0 && $reminderHoursBefore < $validityHours) {
+            $offer['reminder_at'] = now()->addHours($validityHours - $reminderHoursBefore)->toIso8601String();
+            $offer['reminder_sent_at'] = null;
+        }
+
+        // $appliedByStaffId: el atajo "aplicar oferta sugerida" registra al
+        // staff como actor, manteniendo source ENGINE (el rango es del motor).
+        $application->sendCounterOffer($appliedByStaffId, $offer, $reason);
+
+        $termLabel = $offer['term_days']
+            ? "{$offer['term_days']} días"
+            : "{$offer['term_months']} meses";
+        $this->sendNotification(NotificationEvent::APPLICATION_COUNTER_OFFERED->value, $application, [
+            'counter_offer' => [
+                'amount' => '$' . number_format($offer['max_amount'], 2),
+                'term' => $termLabel,
+                'term_months' => $offer['term_months'] ?? '',
+                'term_days' => $offer['term_days'] ?? '',
+                'monthly_payment' => '$' . number_format($offer['monthly_payment'] ?? 0, 2),
+                'total_amount' => '$' . number_format($offer['total_amount'] ?? 0, 2),
+                'reason' => $reason ?? '',
+            ],
+        ]);
+
+        return $application->fresh();
+    }
+
+    /**
      * Respond to counter offer.
+     *
+     * En ofertas de rango, $chosen trae monto/plazo elegidos por el cliente
+     * (validados aquí contra el rango del snapshot) y $evidence la evidencia
+     * de aceptación (ip, user_agent). En ofertas fijas ambos se ignoran.
      */
     public function respondToCounterOffer(
         Application $application,
         ApplicantAccount $account,
-        bool $accepted
+        bool $accepted,
+        array $chosen = [],
+        array $evidence = []
     ): Application {
         if (!$application->has_counter_offer) {
             throw new \InvalidArgumentException('No hay una contraoferta pendiente.');
@@ -421,7 +518,20 @@ class ApplicationService
             throw new \InvalidArgumentException('La contraoferta ya expiró.');
         }
 
-        $application->respondToCounterOffer($accepted, $account->id);
+        $acceptance = [];
+        if ($accepted) {
+            $acceptance = $this->resolveAcceptedTerms($application->counter_offer ?? [], $chosen);
+            $acceptance['ip'] = $evidence['ip'] ?? null;
+            $acceptance['user_agent'] = $evidence['user_agent'] ?? null;
+        }
+
+        $application->respondToCounterOffer($accepted, $account->id, $acceptance);
+
+        // Aceptación en tenant con portafolio: crear el Loan con los términos
+        // aceptados (era la intención documentada del módulo, sin cablear).
+        if ($accepted) {
+            $this->createLoanFromAcceptance($application->fresh());
+        }
 
         $event = $accepted
             ? NotificationEvent::COUNTER_OFFER_ACCEPTED
@@ -434,6 +544,209 @@ class ApplicationService
         ]);
 
         return $application->fresh();
+    }
+
+    /**
+     * Resuelve los términos aceptados de una oferta. En ofertas fijas devuelve
+     * vacío (el modelo copia el snapshot); en ofertas de rango valida lo
+     * elegido contra el rango autorizado y recalcula el pago en modo meses.
+     */
+    protected function resolveAcceptedTerms(array $snapshot, array $chosen): array
+    {
+        $isRange = isset($snapshot['max_amount']);
+        if (!$isRange) {
+            return [];
+        }
+
+        $amount = (float) ($chosen['amount'] ?? $snapshot['amount']);
+        $minAmount = (float) ($snapshot['min_amount'] ?? $amount);
+        $maxAmount = (float) $snapshot['max_amount'];
+        if ($amount < $minAmount || $amount > $maxAmount) {
+            throw new \InvalidArgumentException('El monto elegido está fuera del rango autorizado.');
+        }
+
+        $terms = ['amount' => $amount];
+
+        if (!empty($snapshot['term_days']) || !empty($snapshot['max_term_days'])) {
+            $termDays = (int) ($chosen['term_days'] ?? $snapshot['term_days']);
+            $minDays = (int) ($snapshot['min_term_days'] ?? $termDays);
+            $maxDays = (int) ($snapshot['max_term_days'] ?? $termDays);
+            if ($termDays < $minDays || $termDays > $maxDays) {
+                throw new \InvalidArgumentException('El plazo elegido está fuera del rango autorizado.');
+            }
+            $terms['term_days'] = $termDays;
+        } elseif (!empty($snapshot['term_months'])) {
+            $termMonths = (int) ($chosen['term_months'] ?? $snapshot['term_months']);
+            $terms['term_months'] = $termMonths;
+
+            $calculation = $this->loanCalculator->calculateSimulation(
+                $amount,
+                $termMonths,
+                'MONTHLY',
+                (float) ($snapshot['interest_rate'] ?? 0),
+                (float) ($snapshot['opening_commission'] ?? 0)
+            );
+            $terms['monthly_payment'] = $calculation['payment_amount'];
+        }
+
+        return $terms;
+    }
+
+    /**
+     * Crea el Loan al aceptarse una oferta (productos en días, tenants con
+     * feature loan_portfolio). Idempotente por application_id. Un fallo aquí no
+     * revierte la aceptación: queda APPROVED sin loan y el staff lo resuelve.
+     */
+    protected function createLoanFromAcceptance(Application $application): void
+    {
+        $tenant = $application->tenant;
+        $product = $application->product;
+
+        if (!$tenant?->hasFeature('loan_portfolio') || !$product?->term_in_days) {
+            return;
+        }
+
+        if (!$application->approved_amount || !$application->approved_term_days) {
+            return;
+        }
+
+        $exists = Loan::withoutGlobalScopes()
+            ->where('application_id', $application->id)
+            ->exists();
+        if ($exists) {
+            return;
+        }
+
+        try {
+            $this->loanService->createFromApplication($application, [
+                'amount' => (float) $application->approved_amount,
+                'term_days' => (int) $application->approved_term_days,
+                'interest_rate' => (float) $application->approved_interest_rate,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('No se pudo crear el Loan tras aceptar la oferta', [
+                'application_id' => $application->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    // =====================================================
+    // Motor de decisión — ejecución de salidas
+    // =====================================================
+
+    /**
+     * Ejecuta la salida del motor de decisión sobre una solicitud (solo en modo
+     * ACTIVE; en sombra el job registra la evaluación sin llamar aquí).
+     *
+     * OFFER: SUBMITTED → IN_REVIEW → COUNTER_OFFERED con oferta de rango.
+     * REVIEW: → IN_REVIEW (bandeja de no-asignadas existente).
+     * REJECT: rechazo con motivo del motor (inicia el cooldown).
+     */
+    public function applyEngineOutcome(Application $application, array $result, DecisionPolicy $policy): void
+    {
+        $reason = implode('; ', $result['reasons'] ?? []);
+
+        switch ($result['outcome']) {
+            case DecisionOutcome::OFFER->value:
+                $application->changeStatus(
+                    Application::STATUS_IN_REVIEW,
+                    null,
+                    'system',
+                    'Motor de decisión: evaluación completada'
+                );
+                $this->sendEngineOffer(
+                    $application->fresh(),
+                    $result['range'],
+                    $reason ?: null,
+                    (int) $policy->rule('offer.validity_hours', 72),
+                    (int) $policy->rule('offer.reminder_hours_before', 24)
+                );
+                break;
+
+            case DecisionOutcome::REVIEW->value:
+                $application->changeStatus(
+                    Application::STATUS_IN_REVIEW,
+                    null,
+                    'system',
+                    'Motor de decisión: revisión manual — ' . ($reason ?: 'alertas parciales')
+                );
+                break;
+
+            case DecisionOutcome::REJECT->value:
+                $application->reject(null, 'MOTOR_DECISION', $reason ?: 'Rechazo del motor de decisión');
+                $this->sendNotification(NotificationEvent::APPLICATION_REJECTED->value, $application);
+                break;
+        }
+    }
+
+    /**
+     * Crea la solicitud de renovación al liquidarse un préstamo (Regla 05):
+     * sin re-onboarding, reutilizando los datos vigentes de la persona, con la
+     * oferta de rango del nivel de graduación ya calculada por el motor.
+     */
+    public function createRenewal(Loan $loan, DecisionPolicy $policy, array $result): Application
+    {
+        $origin = $loan->application;
+        $product = $origin->product;
+        $range = $result['range'];
+
+        $application = Application::create([
+            'tenant_id' => $loan->tenant_id,
+            'product_id' => $product->id,
+            'applicant_type' => Application::TYPE_INDIVIDUAL,
+            'person_id' => $loan->person_id,
+            'submitted_by_account_id' => $loan->applicant_account_id,
+            'requested_amount' => $range['amount'],
+            'requested_term_months' => $product->term_in_days ? 1 : ($range['term_months'] ?? 1),
+            'requested_term_days' => $product->term_in_days ? $range['term_days'] : null,
+            'interest_rate' => $product->annual_rate,
+            'status' => Application::STATUS_DRAFT,
+            'renewal_of_loan_id' => $loan->id,
+            'metadata' => ['renewal' => true, 'renewal_of_loan_id' => $loan->id],
+            'expires_at' => now()->addDays(30),
+        ]);
+
+        $application->update([
+            'snapshot_data' => $this->createSnapshot($application),
+            'submitted_at' => now(),
+        ]);
+
+        // Riel normal de estados con actor 'system' (sin re-onboarding).
+        $application->changeStatus(Application::STATUS_SUBMITTED, null, 'system', 'Renovación automática al liquidar el crédito anterior');
+        $application->changeStatus(Application::STATUS_IN_REVIEW, null, 'system', 'Motor de decisión: graduación de renovación');
+
+        $this->sendEngineOffer(
+            $application->fresh(),
+            $range,
+            'Oferta de renovación',
+            (int) $policy->rule('offer.validity_hours', 72),
+            (int) $policy->rule('offer.reminder_hours_before', 24)
+        );
+
+        return $application->fresh();
+    }
+
+    /**
+     * Recordatorio único de oferta por vencer (lo dispara el barrido del
+     * comando counter-offers:expire al cruzar reminder_at).
+     */
+    public function sendCounterOfferExpiringReminder(Application $application): void
+    {
+        $snapshot = $application->counter_offer ?? [];
+        $snapshot['reminder_sent_at'] = now()->toIso8601String();
+        $application->update(['counter_offer' => $snapshot]);
+
+        $termLabel = !empty($snapshot['term_days'])
+            ? "{$snapshot['term_days']} días"
+            : (($snapshot['term_months'] ?? '') . ' meses');
+        $this->sendNotification(NotificationEvent::COUNTER_OFFER_EXPIRING->value, $application, [
+            'counter_offer' => [
+                'amount' => '$' . number_format($snapshot['max_amount'] ?? $snapshot['amount'] ?? 0, 2),
+                'term' => $termLabel,
+                'reason' => $snapshot['reason'] ?? '',
+            ],
+        ]);
     }
 
     // =====================================================

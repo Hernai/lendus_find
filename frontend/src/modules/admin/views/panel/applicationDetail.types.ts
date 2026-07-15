@@ -261,12 +261,18 @@ export interface Application {
     requested_term_days?: number
     requested_term_months?: number
     approved_term_days?: number | null
-    // Contraoferta vigente (snapshot completo) y su estado de respuesta
+    // Contraoferta vigente (snapshot completo) y su estado de respuesta.
+    // Con max_amount presente la oferta es de RANGO (motor de decisión).
     has_counter_offer?: boolean
     counter_offer?: {
       amount: number
       term_days?: number | null
       term_months?: number | null
+      min_amount?: number | null
+      max_amount?: number | null
+      min_term_days?: number | null
+      max_term_days?: number | null
+      source?: 'ENGINE' | 'STAFF' | null
       interest_rate?: number | null
       opening_commission?: number | null
       reason?: string | null
@@ -276,6 +282,8 @@ export interface Application {
       accepted?: boolean | null
     } | null
     counter_offer_accepted?: boolean | null
+    // Última evaluación del motor de decisión (tarjeta del panel)
+    engine_decision?: import('@/types/v2').V2EngineDecision | null
     // Límites del producto para validar contraofertas
     product_limits?: {
       min_amount?: number | null

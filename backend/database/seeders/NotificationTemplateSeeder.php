@@ -703,6 +703,34 @@ Saludos,
             ],
 
             // ==========================================
+            // OFERTA POR VENCER (recordatorio del motor de decisión)
+            // ==========================================
+            [
+                'name' => 'Oferta por Vencer - WhatsApp',
+                'event' => NotificationEvent::COUNTER_OFFER_EXPIRING,
+                'channel' => NotificationChannel::WHATSAPP,
+                'priority' => 2,
+                'subject' => null,
+                'body' => '⏰ *Tu oferta está por vencer - {{tenant.name}}*
+
+Hola *{{user.first_name}}*,
+
+Tu oferta de crédito de hasta *{{counter_offer.amount}}* a *{{counter_offer.term}}* vence pronto.
+
+Ingresa a tu cuenta para aceptarla antes de que expire.
+
+{{tenant.name}}',
+            ],
+            [
+                'name' => 'Oferta por Vencer - In-App',
+                'event' => NotificationEvent::COUNTER_OFFER_EXPIRING,
+                'channel' => NotificationChannel::IN_APP,
+                'priority' => 2,
+                'subject' => 'Tu oferta está por vencer',
+                'body' => 'Tu oferta de hasta {{counter_offer.amount}} a {{counter_offer.term}} vence pronto. Ingresa para aceptarla antes de que expire.',
+            ],
+
+            // ==========================================
             // SOLICITUD CANCELADA
             // ==========================================
             [

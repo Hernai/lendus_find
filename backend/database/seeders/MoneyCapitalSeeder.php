@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\DecisionPolicy;
 use App\Models\Product;
 use App\Models\StaffAccount;
 use App\Models\StaffProfile;
@@ -41,6 +42,7 @@ class MoneyCapitalSeeder extends Seeder
         $this->createProduct($tenant);
         $this->deactivateForeignProducts($tenant);
         $this->createStaff($tenant);
+        $this->seedDecisionPolicies($tenant);
 
         $this->command->info("✓ Tenant MoneyCapital seedeado (slug={$tenant->slug})");
     }
@@ -250,6 +252,140 @@ class MoneyCapitalSeeder extends Seeder
                 'display_order' => 1,
             ],
         );
+    }
+
+    /**
+     * Siembra las políticas v1 del motor de decisión (Matriz Maestra) en modo
+     * SHADOW, SOLO si no existe ninguna política para ese alcance. Prod
+     * re-siembra tenants en cada deploy: nunca sobrescribir ediciones del
+     * admin (las políticas se versionan desde el configurador).
+     */
+    private function seedDecisionPolicies(Tenant $tenant): void
+    {
+        $hasTenantPolicy = DecisionPolicy::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->whereNull('product_id')
+            ->exists();
+
+        if (! $hasTenantPolicy) {
+            DecisionPolicy::create([
+                'tenant_id' => $tenant->id,
+                'product_id' => null,
+                'version' => 1,
+                'mode' => 'SHADOW',
+                'is_active' => true,
+                'activated_at' => now(),
+                'notes' => 'Política inicial de la Matriz Maestra (filtros de entrada)',
+                'rules' => [
+                    // Escala de referencia Nubarium: 0-400 permitir, 401-600
+                    // alerta, 601+ bloquear. Fail-open: una falla técnica del
+                    // proveedor nunca detiene al cliente (Regla 21).
+                    'phone_risk_gate' => [
+                        'enabled' => true,
+                        'flag_from' => 401,
+                        'block_from' => 601,
+                        'fail_mode' => 'open',
+                    ],
+                    'cooldown' => ['days' => 30],
+                ],
+            ]);
+        }
+
+        $product = Product::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->where('code', 'MC-SIN-BURO')
+            ->first();
+
+        if (! $product) {
+            return;
+        }
+
+        $hasProductPolicy = DecisionPolicy::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->where('product_id', $product->id)
+            ->exists();
+
+        if ($hasProductPolicy) {
+            return;
+        }
+
+        DecisionPolicy::create([
+            'tenant_id' => $tenant->id,
+            'product_id' => $product->id,
+            'version' => 1,
+            'mode' => 'SHADOW',
+            'is_active' => true,
+            'activated_at' => now(),
+            'notes' => 'Política inicial de la Matriz Maestra (piloto $300-$1,000 a 7 días)',
+            'rules' => [
+                'scoring' => [
+                    'variables' => [
+                        [
+                            'key' => 'salary_range',
+                            'label' => 'Rango salarial',
+                            'points' => ['LT_3000' => 0, 'R_3001_6000' => 5, 'R_6001_9000' => 10, 'R_9001_12000' => 15, 'R_12001_15000' => 20, 'GT_15000' => 25],
+                        ],
+                        [
+                            'key' => 'employment_type',
+                            'label' => 'Actividad laboral',
+                            'points' => ['EMPLOYEE' => 15, 'BUSINESS_OWNER' => 15, 'SELF_EMPLOYED' => 10, 'RETIRED' => 5, 'HOMEMAKER' => 5, 'STUDENT' => 0, 'UNEMPLOYED' => 0, 'OTHER' => 0],
+                        ],
+                        [
+                            'key' => 'education_level',
+                            'label' => 'Nivel educativo',
+                            'points' => ['PRIMARY' => 0, 'SECONDARY' => 2, 'HIGH_SCHOOL' => 5, 'TECHNICAL' => 8, 'BACHELOR' => 10, 'MASTER' => 10, 'DOCTORATE' => 10],
+                        ],
+                        [
+                            'key' => 'phone_risk_level',
+                            'label' => 'Riesgo telefónico',
+                            'points' => ['very-low' => 15, 'low' => 10, 'moderate' => 0, 'high' => 0],
+                        ],
+                        [
+                            'key' => 'online_loans_count',
+                            'label' => 'Créditos en línea declarados',
+                            'points' => ['0' => 5, '1' => 10, '2' => 10, '3' => 5, '4' => 0, '5+' => 0],
+                        ],
+                    ],
+                    'band_cutoffs' => [
+                        ['min_score' => 0, 'band' => 'BASE'],
+                        ['min_score' => 35, 'band' => 'INTERMEDIA'],
+                        ['min_score' => 50, 'band' => 'CONTROLADA'],
+                        ['min_score' => 65, 'band' => 'EXCEPCIONAL'],
+                    ],
+                ],
+                // Bandas de la matriz: los target_share_pct son metas de
+                // monitoreo, NUNCA mecanismo de asignación.
+                'bands' => [
+                    ['key' => 'BASE', 'min_amount' => 300, 'max_amount' => 400, 'target_share_pct' => 85],
+                    ['key' => 'INTERMEDIA', 'min_amount' => 500, 'max_amount' => 600, 'target_share_pct' => 13],
+                    ['key' => 'CONTROLADA', 'min_amount' => 700, 'max_amount' => 800, 'target_share_pct' => 5],
+                    ['key' => 'EXCEPCIONAL', 'min_amount' => 900, 'max_amount' => 1000, 'target_share_pct' => 2],
+                ],
+                'first_credit' => ['term_days' => 7],
+                'offer' => ['validity_hours' => 72, 'reminder_hours_before' => 24],
+                'review' => ['input_timeout_minutes' => 30],
+                'reject' => [
+                    ['rule' => 'kyc_failed'],
+                    ['rule' => 'identity_mismatch'],
+                ],
+                'graduation' => [
+                    'levels' => [
+                        ['level' => 0, 'max_amount' => 1000, 'max_term_days' => 7],
+                        ['level' => 1, 'max_amount' => 2000, 'max_term_days' => 10],
+                        ['level' => 2, 'max_amount' => 4000, 'max_term_days' => 15],
+                        ['level' => 3, 'max_amount' => 8000, 'max_term_days' => 20],
+                        ['level' => 4, 'max_amount' => 15000, 'max_term_days' => 30],
+                    ],
+                    'advance' => [
+                        'on_time' => 1,
+                        'late_or_extension' => 0,
+                        'max_late_days_for_auto' => 5,
+                    ],
+                ],
+            ],
+        ]);
+
+        $this->command->info('  ✓ Políticas de decisión v1 (SHADOW) sembradas');
     }
 
     /**

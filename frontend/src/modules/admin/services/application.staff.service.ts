@@ -203,6 +203,19 @@ export async function createCounterOffer(
   return response.data
 }
 
+/**
+ * Aplicar la oferta sugerida por el motor de decisión (rango calculado) en un
+ * clic. Requires: canApproveRejectApplications permission.
+ */
+export async function applySuggestedOffer(
+  id: string
+): Promise<V2ApiResponse<{ counter_offer: Record<string, unknown>; status: string }>> {
+  const response = await api.post<V2ApiResponse<{ counter_offer: Record<string, unknown>; status: string }>>(
+    `${BASE_PATH}/${id}/apply-suggested-offer`
+  )
+  return response.data
+}
+
 /** Resultado de re-verificar el INE desde el panel de staff. */
 export interface V2IneReverifyResult {
   fields: { nombres: string; apellido_paterno: string; apellido_materno: string; curp: string }
@@ -586,6 +599,7 @@ export default {
   approve,
   reject,
   createCounterOffer,
+  applySuggestedOffer,
   reverifyIne,
   updateVerification,
   setRiskAssessment,

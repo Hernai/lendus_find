@@ -14,6 +14,8 @@ import { logger } from '@/utils/logger'
 import { formatCurrency } from '@/utils/formatters'
 import { bankName } from '@/utils/banks'
 import { useIneVerification, type IneVerifiedFields } from '@/composables/useIneVerification'
+import { isAxiosError } from '@/types/api'
+import { useToast } from '@/composables/useToast'
 import { platform } from '@/platform'
 
 /**
@@ -448,6 +450,14 @@ async function runIneOcr() {
     ineDiffs.value = res.diffs
     showIneConfirm.value = true
   } catch (e) {
+    // Gate telefónico (Regla 21): el motor detuvo el onboarding ANTES de
+    // consumir validaciones — mensaje neutro y de regreso al home. Distinto
+    // de una falla técnica de Nubarium (abajo), que sí permite continuar.
+    if (isAxiosError(e) && e.response?.data?.error === 'ONBOARDING_BLOCKED') {
+      useToast().error('Por el momento no podemos continuar tu solicitud.')
+      router.replace({ name: 'm-home' })
+      return
+    }
     // Nubarium falló (caído, timeout, error): NO bloqueamos. Mostramos la misma
     // pantalla pero para captura MANUAL (campos vacíos, editables). Al confirmar
     // se marca ine_ocr_failed para que el admin lo revise.

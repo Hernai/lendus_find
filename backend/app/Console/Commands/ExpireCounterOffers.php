@@ -52,7 +52,29 @@ class ExpireCounterOffers extends Command
             }
         }
 
-        $this->info("Procesadas: {$expired->count()}");
+        // Recordatorio único antes del vencimiento (solo ofertas con
+        // reminder_at en el snapshot — las genera el motor de decisión).
+        $expiring = Application::withoutTenant()
+            ->where('status', Application::STATUS_COUNTER_OFFERED)
+            ->whereNull('counter_offer_responded_at')
+            ->whereRaw("(counter_offer->>'reminder_at')::timestamptz < now()")
+            ->whereRaw("counter_offer->>'reminder_sent_at' IS NULL")
+            ->whereRaw("(counter_offer->>'expires_at')::timestamptz > now()")
+            ->get();
+
+        foreach ($expiring as $application) {
+            try {
+                $this->service->sendCounterOfferExpiringReminder($application);
+                $this->info("Recordatorio de vencimiento enviado: {$application->id}");
+            } catch (\Throwable $e) {
+                Log::error('No se pudo enviar el recordatorio de oferta por vencer', [
+                    'application_id' => $application->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $this->info("Procesadas: {$expired->count()} expiradas, {$expiring->count()} recordatorios");
 
         return self::SUCCESS;
     }

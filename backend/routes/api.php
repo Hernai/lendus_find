@@ -36,6 +36,7 @@ use App\Http\Controllers\Api\V2\Applicant\ProfileController as ApplicantProfileC
 use App\Http\Controllers\Api\V2\Applicant\GeoController as ApplicantGeoController;
 use App\Http\Controllers\Api\V2\Applicant\KycController as ApplicantKycController;
 use App\Http\Controllers\Api\V2\Staff\ApplicationController as StaffAppController;
+use App\Http\Controllers\Api\V2\Staff\DecisionPolicyController as StaffDecisionPolicyController;
 use App\Http\Controllers\Api\V2\Staff\DocumentController as StaffDocController;
 use App\Http\Controllers\Api\V2\Staff\UserController as StaffUserController;
 use App\Http\Controllers\Api\V2\Staff\ProductController as StaffProductController;
@@ -210,6 +211,8 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'log.request'])
         // =============================================
         Route::get('/applications', [ApplicantAppController::class, 'index']);
         Route::post('/applications', [ApplicantAppController::class, 'store']);
+        // Cooldown post-rechazo — antes de {id} para no ser capturada por esa ruta.
+        Route::get('/applications/cooldown', [ApplicantAppController::class, 'cooldownStatus']);
         Route::get('/applications/{id}', [ApplicantAppController::class, 'show']);
         Route::patch('/applications/{id}', [ApplicantAppController::class, 'update']);
         Route::post('/applications/{id}/submit', [ApplicantAppController::class, 'submit']);
@@ -451,6 +454,25 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
         // Re-ejecutar la verificación de INE (si Nubarium estaba caído en el onboarding)
         Route::post('/applications/{id}/kyc/verify-ine', [StaffAppController::class, 'reverifyIne'])
             ->middleware(['permission:canReviewDocuments', 'throttle:20,1']);
+
+        // Motor de decisión — panel de evaluación, atajo y exención de cooldown
+        Route::get('/applications/{id}/decision', [StaffAppController::class, 'decision']);
+        Route::post('/applications/{id}/apply-suggested-offer', [StaffAppController::class, 'applySuggestedOffer'])
+            ->middleware(['permission:canApproveRejectApplications', 'throttle:30,1']);
+        Route::post('/applications/{id}/lift-cooldown', [StaffAppController::class, 'liftCooldown'])
+            ->middleware('permission:canApproveRejectApplications');
+
+        // Motor de decisión — políticas versionadas (configurador)
+        Route::get('/decision-policies', [StaffDecisionPolicyController::class, 'index'])
+            ->middleware('permission:canManageProducts');
+        Route::post('/decision-policies', [StaffDecisionPolicyController::class, 'store'])
+            ->middleware('permission:canConfigureTenant');
+        Route::put('/decision-policies/{id}', [StaffDecisionPolicyController::class, 'update'])
+            ->middleware('permission:canConfigureTenant');
+        Route::post('/decision-policies/dry-run', [StaffDecisionPolicyController::class, 'dryRun'])
+            ->middleware('permission:canConfigureTenant');
+        Route::post('/decision-policies/{id}/activate', [StaffDecisionPolicyController::class, 'activate'])
+            ->middleware('permission:canConfigureTenant');
 
         // Application Notes
         Route::post('/applications/{id}/notes', [StaffAppController::class, 'addNote']);

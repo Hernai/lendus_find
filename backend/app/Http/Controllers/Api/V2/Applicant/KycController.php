@@ -58,17 +58,46 @@ class KycController extends Controller
     protected KycServiceFactory $kycFactory;
     protected ApplicationEventService $eventService;
     protected IneVerificationService $ineVerificationService;
+    protected \App\Services\Decision\PhoneRiskGateService $phoneRiskGate;
 
     public function __construct(
         VerificationService $verificationService,
         KycServiceFactory $kycFactory,
         ApplicationEventService $eventService,
-        IneVerificationService $ineVerificationService
+        IneVerificationService $ineVerificationService,
+        \App\Services\Decision\PhoneRiskGateService $phoneRiskGate
     ) {
         $this->verificationService = $verificationService;
         $this->kycFactory = $kycFactory;
         $this->eventService = $eventService;
         $this->ineVerificationService = $ineVerificationService;
+        $this->phoneRiskGate = $phoneRiskGate;
+    }
+
+    /**
+     * Gate telefónico temprano (Regla 21): antes de consumir validaciones
+     * caras (INE, biometría), el score del teléfono puede detener el
+     * onboarding. Fail-open: sin política, gate apagado, modo sombra o falla
+     * del proveedor → null (continuar). Devuelve la respuesta de bloqueo con
+     * mensaje neutro cuando el gate está en ACTIVE y el score es de bloqueo.
+     */
+    private function phoneGateBlockResponse(Request $request): ?JsonResponse
+    {
+        $account = $request->user();
+        if (!$account instanceof ApplicantAccount) {
+            return null;
+        }
+
+        $outcome = $this->phoneRiskGate->check($account);
+        if ($outcome !== \App\Enums\DecisionOutcome::BLOCK->value) {
+            return null;
+        }
+
+        return $this->error(
+            'ONBOARDING_BLOCKED',
+            'Por el momento no podemos continuar con tu solicitud.',
+            403
+        );
     }
 
     /**
@@ -517,6 +546,10 @@ class KycController extends Controller
      */
     public function validateIne(ValidateIneRequest $request): JsonResponse
     {
+        if ($blocked = $this->phoneGateBlockResponse($request)) {
+            return $blocked;
+        }
+
         $service = $this->getKycService($request);
 
         if ($error = $this->ensureServiceConfigured($service)) {
@@ -602,6 +635,10 @@ class KycController extends Controller
      */
     public function verifyIne(ValidateIneRequest $request): JsonResponse
     {
+        if ($blocked = $this->phoneGateBlockResponse($request)) {
+            return $blocked;
+        }
+
         $service = $this->getKycService($request);
         if ($error = $this->ensureServiceConfigured($service)) {
             return $error;
@@ -640,6 +677,10 @@ class KycController extends Controller
      */
     public function validateFaceMatch(ValidateFaceMatchRequest $request): JsonResponse
     {
+        if ($blocked = $this->phoneGateBlockResponse($request)) {
+            return $blocked;
+        }
+
         $service = $this->getKycService($request);
 
         if ($error = $this->ensureServiceConfigured($service)) {
@@ -714,6 +755,10 @@ class KycController extends Controller
      */
     public function validateLiveness(ValidateLivenessRequest $request): JsonResponse
     {
+        if ($blocked = $this->phoneGateBlockResponse($request)) {
+            return $blocked;
+        }
+
         $service = $this->getKycService($request);
 
         if ($error = $this->ensureServiceConfigured($service)) {
@@ -759,6 +804,10 @@ class KycController extends Controller
      */
     public function getBiometricToken(Request $request): JsonResponse
     {
+        if ($blocked = $this->phoneGateBlockResponse($request)) {
+            return $blocked;
+        }
+
         $service = $this->getKycService($request);
 
         if ($error = $this->ensureServiceConfigured($service)) {

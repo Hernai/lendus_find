@@ -89,6 +89,27 @@ export async function respondToCounterOffer(
 // historial; lo que ve en su dashboard sale del feed unificado del staff
 // cuando hace falta exponerlo.
 
+/** Estado del cooldown post-rechazo (Regla 01 de la Matriz MoneyCapital). */
+export interface V2CooldownStatus {
+  blocked: boolean
+  cooldown: {
+    application_id: string
+    rejected_at: string
+    blocked_until: string
+    days_left: number
+    enforced: boolean
+  } | null
+}
+
+/**
+ * Consulta el cooldown post-rechazo al arrancar el flujo, para informar el
+ * bloqueo ANTES de capturar datos (no al final).
+ */
+export async function getCooldownStatus(): Promise<V2ApiResponse<V2CooldownStatus>> {
+  const response = await api.get<V2ApiResponse<V2CooldownStatus>>(`${BASE_PATH}/cooldown`)
+  return response.data
+}
+
 export default {
   list,
   create,
@@ -97,4 +118,5 @@ export default {
   submit,
   cancel,
   respondToCounterOffer,
+  getCooldownStatus,
 }

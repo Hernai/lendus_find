@@ -867,6 +867,14 @@ class ApplicationController extends Controller
             // Risk assessment
             'risk_level' => $app->risk_level,
             'risk_data' => $app->risk_data,
+
+            // Motor de decisión: última evaluación (tarjeta del panel; el
+            // detalle completo vive en GET /applications/{id}/decision)
+            'engine_decision' => \App\Models\ApplicationDecision::withoutGlobalScopes()
+                ->where('tenant_id', $app->tenant_id)
+                ->where('application_id', $app->id)
+                ->orderByDesc('created_at')
+                ->first()?->toApiArray(),
         ];
 
         // Required documents from product (for document checklist)
@@ -1991,6 +1999,157 @@ class ApplicationController extends Controller
         ];
 
         return $labels[strtoupper($method)] ?? $method;
+    }
+
+    // =========================================================================
+    // Motor de decisión — panel, atajo y cooldown
+    // =========================================================================
+
+    /**
+     * Última evaluación del motor para la solicitud (tarjeta "Evaluación del
+     * motor" en el detalle; visible desde ANALYST).
+     *
+     * GET /v2/staff/applications/{id}/decision
+     */
+    public function decision(Request $request, string $id): JsonResponse
+    {
+        /** @var StaffAccount $staff */
+        $staff = $request->user();
+
+        $app = Application::where('id', $id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
+            ->first();
+        if (!$app) {
+            return $this->notFound('Solicitud no encontrada.');
+        }
+
+        $decision = \App\Models\ApplicationDecision::withoutGlobalScopes()
+            ->where('tenant_id', $app->tenant_id)
+            ->where('application_id', $app->id)
+            ->orderByDesc('created_at')
+            ->first();
+
+        return $this->success([
+            'decision' => $decision?->toApiArray(),
+        ]);
+    }
+
+    /**
+     * Atajo "aplicar oferta sugerida": crea en un clic la oferta con el rango
+     * que calculó el motor, registrando al staff como quien la aplicó.
+     *
+     * POST /v2/staff/applications/{id}/apply-suggested-offer
+     */
+    public function applySuggestedOffer(Request $request, string $id): JsonResponse
+    {
+        /** @var StaffAccount $staff */
+        $staff = $request->user();
+
+        $app = Application::where('id', $id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
+            ->first();
+        if (!$app) {
+            return $this->notFound('Solicitud no encontrada.');
+        }
+
+        if (!in_array($app->status, [Application::STATUS_IN_REVIEW, Application::STATUS_DOCS_PENDING], true)) {
+            return $this->validationError(
+                'La oferta sugerida solo puede aplicarse en revisión o con documentos pendientes.',
+                ['status' => ['Estado no elegible']]
+            );
+        }
+
+        $decision = \App\Models\ApplicationDecision::withoutGlobalScopes()
+            ->where('tenant_id', $app->tenant_id)
+            ->where('application_id', $app->id)
+            ->orderByDesc('created_at')
+            ->first();
+
+        $range = $decision?->outcome_detail['range'] ?? null;
+        if (!$range || empty($range['max_amount'])) {
+            return $this->validationError(
+                'La solicitud no tiene una oferta sugerida por el motor.',
+                ['decision' => ['Sin rango sugerido']]
+            );
+        }
+
+        $policy = \App\Models\DecisionPolicy::withoutGlobalScopes()
+            ->where('tenant_id', $app->tenant_id)
+            ->where('product_id', $app->product_id)
+            ->where('is_active', true)
+            ->first();
+
+        $application = $this->service->sendEngineOffer(
+            $app,
+            $range,
+            'Oferta sugerida por el motor de decisión (aplicada por staff)',
+            (int) ($policy?->rule('offer.validity_hours', 72) ?? 72),
+            (int) ($policy?->rule('offer.reminder_hours_before', 24) ?? 24),
+            $staff->id
+        );
+
+        return $this->success(
+            ['counter_offer' => $application->counter_offer, 'status' => $application->status],
+            'Oferta sugerida aplicada.'
+        );
+    }
+
+    /**
+     * Levanta el cooldown post-rechazo de esta solicitud con motivo auditado
+     * (Regla 01: "casos que soporte podrá desbloquear de manera controlada").
+     *
+     * POST /v2/staff/applications/{id}/lift-cooldown
+     */
+    public function liftCooldown(Request $request, string $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'reason' => 'required|string|min:5|max:500',
+        ], [
+            'reason.required' => 'El motivo del desbloqueo es obligatorio.',
+            'reason.min' => 'El motivo debe tener al menos 5 caracteres.',
+        ]);
+
+        /** @var StaffAccount $staff */
+        $staff = $request->user();
+
+        $app = Application::where('id', $id)
+            ->where('tenant_id', $this->scopedTenantId($staff))
+            ->first();
+        if (!$app) {
+            return $this->notFound('Solicitud no encontrada.');
+        }
+
+        if ($app->status !== Application::STATUS_REJECTED) {
+            return $this->validationError(
+                'Solo las solicitudes rechazadas generan cooldown.',
+                ['status' => ['Estado no elegible']]
+            );
+        }
+
+        if ($app->cooldown_waived_at !== null) {
+            return $this->validationError(
+                'El cooldown de esta solicitud ya fue levantado.',
+                ['cooldown' => ['Ya exento']]
+            );
+        }
+
+        $app->update([
+            'cooldown_waived_at' => now(),
+            'cooldown_waived_by' => $staff->id,
+            'cooldown_waived_reason' => $validated['reason'],
+        ]);
+
+        \App\Services\ActivityRecorder::recordApplicationEvent($app, 'APPLICATION_UPDATED', [
+            'from_status' => $app->status,
+            'to_status' => $app->status,
+            'notes' => "Cooldown levantado por {$staff->full_name}: {$validated['reason']}",
+            'metadata' => [
+                'kind' => 'cooldown_waived',
+                'reason' => $validated['reason'],
+            ],
+        ]);
+
+        return $this->success(null, 'Cooldown levantado. La persona puede volver a solicitar.');
     }
 
     // =========================================================================

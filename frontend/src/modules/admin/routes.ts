@@ -107,6 +107,13 @@ export const adminRoutes: RouteRecordRaw[] = [
         component: () => import('@/modules/admin/views/panel/AdminModulesConfig.vue'),
       },
       {
+        // Motor de decisión: políticas versionadas + probador. Escritura solo
+        // SUPER_ADMIN (la API valida canConfigureTenant); ADMIN consulta.
+        path: 'motor-decision',
+        name: 'admin-decision-engine',
+        component: () => import('@/modules/admin/views/panel/AdminDecisionEngine.vue'),
+      },
+      {
         path: 'prestamos',
         name: 'admin-loans',
         component: () => import('@/modules/admin/views/panel/AdminLoans.vue')

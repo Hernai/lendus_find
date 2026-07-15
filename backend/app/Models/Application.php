@@ -80,6 +80,10 @@ class Application extends Model
         'expiration_notified',
         'notes',
         'metadata',
+        'renewal_of_loan_id',
+        'cooldown_waived_at',
+        'cooldown_waived_by',
+        'cooldown_waived_reason',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -114,6 +118,7 @@ class Application extends Model
         'expiration_notified' => 'boolean',
         'notes' => 'array',
         'metadata' => 'array',
+        'cooldown_waived_at' => 'datetime',
     ];
 
     // =====================================================
@@ -532,7 +537,7 @@ class Application extends Model
      *
      * @throws \InvalidArgumentException if transition is not allowed
      */
-    public function changeStatus(string $newStatus, string $changedById, string $changedByType, ?string $notes = null): void
+    public function changeStatus(string $newStatus, ?string $changedById, string $changedByType, ?string $notes = null): void
     {
         // Validate transition is allowed
         $this->validateTransition($newStatus);
@@ -609,10 +614,13 @@ class Application extends Model
 
     /**
      * Reject the application.
+     *
+     * $staffId null = rechazo automático del motor de decisión (actor 'system').
      */
-    public function reject(string $staffId, string $reason, ?string $notes = null): void
+    public function reject(?string $staffId, string $reason, ?string $notes = null): void
     {
         $oldStatus = $this->status;
+        $actorType = $staffId ? StaffAccount::class : 'system';
 
         $this->update([
             'decision' => self::DECISION_REJECTED,
@@ -623,10 +631,10 @@ class Application extends Model
             'status' => self::STATUS_REJECTED,
             'status_changed_at' => now(),
             'status_changed_by' => $staffId,
-            'status_changed_by_type' => StaffAccount::class,
+            'status_changed_by_type' => $actorType,
         ]);
 
-        $this->recordStatusChange($oldStatus, self::STATUS_REJECTED, $staffId, StaffAccount::class, $reason);
+        $this->recordStatusChange($oldStatus, self::STATUS_REJECTED, $staffId, $actorType, $reason);
     }
 
     /**
@@ -635,8 +643,12 @@ class Application extends Model
      * Transiciona a COUNTER_OFFERED y guarda el snapshot completo de la oferta.
      * Reenviar estando ya en COUNTER_OFFERED sobreescribe el snapshot (y renueva
      * su vigencia) sin registrar una transición duplicada en el historial.
+     *
+     * $staffId null = oferta generada por el motor de decisión (actor 'system';
+     * decision_by queda null por su FK a staff_accounts). El modo rango viaja en
+     * el snapshot ($offer con min/max_amount) — el modelo no lo interpreta.
      */
-    public function sendCounterOffer(string $staffId, array $offer, ?string $reason = null): void
+    public function sendCounterOffer(?string $staffId, array $offer, ?string $reason = null): void
     {
         $oldStatus = $this->status;
         $isResend = $oldStatus === self::STATUS_COUNTER_OFFERED;
@@ -645,43 +657,56 @@ class Application extends Model
             $this->validateTransition(self::STATUS_COUNTER_OFFERED);
         }
 
+        $actorType = $staffId ? StaffAccount::class : 'system';
+
         $this->update([
             'decision' => self::DECISION_COUNTER_OFFER,
             'decision_at' => now(),
             'decision_by' => $staffId,
             'counter_offer' => array_merge($offer, [
                 'reason' => $reason,
-                'offered_by' => $staffId,
+                'offered_by' => $staffId ?? 'system',
                 'offered_at' => now()->toIso8601String(),
                 'responded_at' => null,
                 'accepted' => null,
+                'acceptance' => null,
             ]),
             'counter_offer_accepted' => null,
             'counter_offer_responded_at' => null,
             'status' => self::STATUS_COUNTER_OFFERED,
             'status_changed_at' => now(),
             'status_changed_by' => $staffId,
-            'status_changed_by_type' => StaffAccount::class,
+            'status_changed_by_type' => $actorType,
         ]);
 
         if (!$isResend) {
-            $this->recordStatusChange($oldStatus, self::STATUS_COUNTER_OFFERED, $staffId, StaffAccount::class, $reason);
+            $this->recordStatusChange($oldStatus, self::STATUS_COUNTER_OFFERED, $staffId, $actorType, $reason);
         }
 
         $formattedAmount = number_format($offer['amount'], 2);
+        $amountLabel = isset($offer['max_amount'])
+            ? '$' . number_format($offer['min_amount'] ?? 0, 2) . " - \${$formattedAmount}"
+            : "\${$formattedAmount}";
         $termLabel = isset($offer['term_days'])
             ? "{$offer['term_days']} días"
             : "{$offer['term_months']} meses";
+        $prefix = $staffId
+            ? ($isResend ? 'Contraoferta reenviada' : 'Contraoferta enviada')
+            : 'Oferta generada por el motor de decisión';
         \App\Services\ActivityRecorder::recordApplicationEvent($this, 'APPLICATION_UPDATED', [
             'from_status' => 'COUNTER_OFFER',
             'to_status' => 'COUNTER_OFFER',
-            'notes' => ($isResend ? 'Contraoferta reenviada' : 'Contraoferta enviada') . ": \${$formattedAmount} a {$termLabel}" . ($reason ? " - {$reason}" : ''),
+            'notes' => "{$prefix}: {$amountLabel} a {$termLabel}" . ($reason ? " - {$reason}" : ''),
             'new_values' => ['counter_offer' => $offer],
             'metadata' => [
                 'kind' => 'counter_offer_sent',
+                'source' => $offer['source'] ?? ($staffId ? 'STAFF' : 'ENGINE'),
                 'amount' => $offer['amount'],
+                'min_amount' => $offer['min_amount'] ?? null,
+                'max_amount' => $offer['max_amount'] ?? null,
                 'term_months' => $offer['term_months'] ?? null,
                 'term_days' => $offer['term_days'] ?? null,
+                'max_term_days' => $offer['max_term_days'] ?? null,
                 'interest_rate' => $offer['interest_rate'] ?? null,
                 'monthly_payment' => $offer['monthly_payment'] ?? null,
                 'expires_at' => $offer['expires_at'] ?? null,
@@ -693,10 +718,15 @@ class Application extends Model
     /**
      * Respond to counter offer.
      *
-     * Aceptar transiciona a APPROVED copiando los términos del snapshot a los
+     * Aceptar transiciona a APPROVED copiando los términos aceptados a los
      * campos approved_*; rechazar transiciona a CANCELLED (decisión del cliente).
+     *
+     * En ofertas de rango, $acceptance trae el monto/plazo elegidos (ya
+     * validados contra el rango por el service) con su pricing recalculado y la
+     * evidencia de aceptación (ip, user_agent). En ofertas fijas llega vacío y
+     * se usan los términos del snapshot.
      */
-    public function respondToCounterOffer(bool $accepted, string $accountId): void
+    public function respondToCounterOffer(bool $accepted, string $accountId, array $acceptance = []): void
     {
         $oldStatus = $this->status;
         $newStatus = $accepted ? self::STATUS_APPROVED : self::STATUS_CANCELLED;
@@ -707,6 +737,17 @@ class Application extends Model
             'responded_at' => $respondedAt->toIso8601String(),
             'accepted' => $accepted,
         ]);
+
+        if ($accepted) {
+            $snapshot['acceptance'] = [
+                'chosen_amount' => $acceptance['amount'] ?? ($this->counter_offer['amount'] ?? null),
+                'chosen_term_days' => $acceptance['term_days'] ?? ($this->counter_offer['term_days'] ?? null),
+                'chosen_term_months' => $acceptance['term_months'] ?? ($this->counter_offer['term_months'] ?? null),
+                'ip' => $acceptance['ip'] ?? null,
+                'user_agent' => $acceptance['user_agent'] ?? null,
+                'accepted_at' => $respondedAt->toIso8601String(),
+            ];
+        }
 
         $attributes = [
             'counter_offer' => $snapshot,
@@ -720,11 +761,11 @@ class Application extends Model
 
         if ($accepted) {
             $attributes += [
-                'approved_amount' => $this->counter_offer['amount'] ?? $this->requested_amount,
-                'approved_term_months' => $this->counter_offer['term_months'] ?? null,
-                'approved_term_days' => $this->counter_offer['term_days'] ?? null,
+                'approved_amount' => $acceptance['amount'] ?? ($this->counter_offer['amount'] ?? $this->requested_amount),
+                'approved_term_months' => $acceptance['term_months'] ?? ($this->counter_offer['term_months'] ?? null),
+                'approved_term_days' => $acceptance['term_days'] ?? ($this->counter_offer['term_days'] ?? null),
                 'approved_interest_rate' => $this->counter_offer['interest_rate'] ?? $this->interest_rate,
-                'approved_monthly_payment' => $this->counter_offer['monthly_payment'] ?? null,
+                'approved_monthly_payment' => $acceptance['monthly_payment'] ?? ($this->counter_offer['monthly_payment'] ?? null),
             ];
         }
 

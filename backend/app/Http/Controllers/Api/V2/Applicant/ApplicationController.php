@@ -121,6 +121,21 @@ class ApplicationController extends Controller
             );
         }
 
+        // Cooldown post-rechazo (Regla 01): rechazo reciente sin exención →
+        // bloqueo temporal con fecha de reintento. En modo sombra solo se
+        // consulta (enforced=false) y no bloquea.
+        $cooldown = app(\App\Services\Decision\CooldownService::class)
+            ->status($person, $account->tenant_id);
+        if ($cooldown && $cooldown['enforced']) {
+            $retryAt = \Carbon\Carbon::parse($cooldown['blocked_until'])->format('d/m/Y');
+            return $this->error(
+                'APPLICATION_COOLDOWN',
+                "Tu solicitud anterior fue rechazada. Podrás intentar de nuevo a partir del {$retryAt}.",
+                409,
+                ['cooldown' => $cooldown]
+            );
+        }
+
         $tenant = $account->tenant;
         $product = Product::findOrFail($validated['product_id']);
 
@@ -399,14 +414,45 @@ class ApplicationController extends Controller
     }
 
     /**
+     * Estado del cooldown post-rechazo (Regla 01) — el flujo mobile lo
+     * consulta al arrancar para informar el bloqueo ANTES de capturar datos.
+     *
+     * GET /v2/applicant/applications/cooldown
+     */
+    public function cooldownStatus(Request $request): JsonResponse
+    {
+        /** @var ApplicantAccount $account */
+        $account = $request->user();
+        $person = $account->getPersonOrFind();
+
+        if (!$person) {
+            return $this->success(['blocked' => false, 'cooldown' => null]);
+        }
+
+        $cooldown = app(\App\Services\Decision\CooldownService::class)
+            ->status($person, $account->tenant_id);
+
+        return $this->success([
+            'blocked' => (bool) ($cooldown['enforced'] ?? false),
+            'cooldown' => $cooldown,
+        ]);
+    }
+
+    /**
      * Respond to counter offer.
      *
      * POST /v2/applicant/applications/{id}/counter-offer/respond
      */
     public function respondToCounterOffer(Request $request, string $id): JsonResponse
     {
+        // amount/term_days solo aplican en ofertas de RANGO (motor de
+        // decisión): el service los valida contra el rango del snapshot. En
+        // ofertas fijas se ignoran (compatibilidad con clientes viejos).
         $validated = $request->validate([
             'accepted' => 'required|boolean',
+            'amount' => 'nullable|numeric|min:1',
+            'term_days' => 'nullable|integer|min:1',
+            'term_months' => 'nullable|integer|min:1',
         ]);
 
         /** @var ApplicantAccount $account */
@@ -435,10 +481,19 @@ class ApplicationController extends Controller
             $application = $this->service->respondToCounterOffer(
                 $application,
                 $account,
-                $validated['accepted']
+                $validated['accepted'],
+                [
+                    'amount' => $validated['amount'] ?? null,
+                    'term_days' => $validated['term_days'] ?? null,
+                    'term_months' => $validated['term_months'] ?? null,
+                ],
+                [
+                    'ip' => $request->ip(),
+                    'user_agent' => substr((string) $request->userAgent(), 0, 500),
+                ]
             );
         } catch (\InvalidArgumentException $e) {
-            // Oferta expirada, ya respondida o transición inválida → 422
+            // Oferta expirada, ya respondida, fuera de rango o transición inválida → 422
             return $this->validationError($e->getMessage(), ['counter_offer' => [$e->getMessage()]]);
         }
 

@@ -29,6 +29,8 @@ const application = ref<{ id: string; status: string } | null>(null)
 const isLoading = ref(true)
 const loadError = ref(false)
 const hasLoadedOnce = ref(false)
+// Cooldown post-rechazo (Regla 01): se informa al ENTRAR, no al final del flujo.
+const cooldown = ref<{ blocked: boolean; blocked_until?: string | null } | null>(null)
 const progress = ref(29)
 const tab = ref<'all' | 'active' | 'completed'>('active')
 const extensionDays = ref<7 | 15>(7)
@@ -159,10 +161,23 @@ function onVisibility() {
   else { refresh(); startPolling() }
 }
 
+async function loadCooldown() {
+  try {
+    const res = await v2.applicant.application.getCooldownStatus()
+    cooldown.value = res.data?.blocked
+      ? { blocked: true, blocked_until: res.data.cooldown?.blocked_until ?? null }
+      : { blocked: false }
+  } catch {
+    // Sin dato de cooldown no se bloquea nada: el backend lo re-valida al crear.
+    cooldown.value = { blocked: false }
+  }
+}
+
 onMounted(async () => {
   if (!tenantStore.isLoaded) await tenantStore.loadConfig()
   tenantStore.applyTheme()
   await refresh()
+  loadCooldown()
   startPolling()
   document.addEventListener('visibilitychange', onVisibility)
 })
@@ -175,7 +190,15 @@ onUnmounted(() => {
 function goToOffer() {
   if (application.value?.id) router.push({ name: 'm-loan-offer', params: { id: application.value.id } })
 }
+const cooldownUntilLabel = computed(() => {
+  if (!cooldown.value?.blocked_until) return ''
+  return new Date(cooldown.value.blocked_until).toLocaleDateString('es-MX', {
+    day: '2-digit', month: 'long', year: 'numeric',
+  })
+})
+
 function startApplication() {
+  if (cooldown.value?.blocked) return
   router.push({ name: 'm-onboarding-step' })
 }
 function goToLoanDetail(id: string) {
@@ -296,15 +319,29 @@ function logout() {
       <!-- RECHAZADO -->
       <section v-else-if="isRejected" class="card card--rejected">
         <h2 class="card-title">Solicitud no aprobada</h2>
-        <p class="card-sub">Por el momento no podemos otorgar el préstamo. Puedes intentar de nuevo más adelante.</p>
-        <button type="button" class="btn-secondary" @click="startApplication">Iniciar nueva solicitud</button>
+        <p v-if="cooldown?.blocked" class="card-sub">
+          Por el momento no podemos otorgar el préstamo. Podrás intentar de nuevo a partir del {{ cooldownUntilLabel }}.
+        </p>
+        <p v-else class="card-sub">Por el momento no podemos otorgar el préstamo. Puedes intentar de nuevo más adelante.</p>
+        <button
+          v-if="!cooldown?.blocked"
+          type="button"
+          class="btn-secondary"
+          @click="startApplication"
+        >Iniciar nueva solicitud</button>
       </section>
 
       <!-- SIN SOLICITUD -->
       <section v-else-if="hasNoApplication" class="card card--empty">
-        <h2 class="card-title">¿Listo para tu préstamo?</h2>
-        <p class="card-sub">Inicia tu solicitud en pocos minutos y recibe tu oferta personalizada.</p>
-        <button type="button" class="btn-primary" @click="startApplication">Iniciar solicitud</button>
+        <template v-if="cooldown?.blocked">
+          <h2 class="card-title">Aún no puedes solicitar</h2>
+          <p class="card-sub">Tu solicitud anterior fue rechazada. Podrás intentar de nuevo a partir del {{ cooldownUntilLabel }}.</p>
+        </template>
+        <template v-else>
+          <h2 class="card-title">¿Listo para tu préstamo?</h2>
+          <p class="card-sub">Inicia tu solicitud en pocos minutos y recibe tu oferta personalizada.</p>
+          <button type="button" class="btn-primary" @click="startApplication">Iniciar solicitud</button>
+        </template>
       </section>
 
       <!-- PRÉSTAMO ACTIVO -->

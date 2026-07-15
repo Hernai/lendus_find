@@ -494,6 +494,41 @@ export interface V2ApplicationLoan {
   } | null
   risk_level: string | null
   risk_data: Record<string, unknown> | null
+  /** Última evaluación del motor de decisión (tarjeta del panel staff). */
+  engine_decision?: V2EngineDecision | null
+}
+
+/**
+ * Última evaluación del motor de decisión sobre una solicitud
+ * (application_decisions del backend, formateada por toApiArray).
+ */
+export interface V2EngineDecision {
+  id: string
+  application_id: string | null
+  trigger: 'SUBMIT' | 'RENEWAL' | 'PHONE_GATE' | 'DRY_RUN'
+  mode: 'SHADOW' | 'ACTIVE'
+  policy_version: number
+  inputs: Record<string, unknown> | null
+  rule_hits: Array<{ rule: string; effect: string; detail?: Record<string, unknown> }> | null
+  score: number | null
+  band: string | null
+  outcome: 'OFFER' | 'REVIEW' | 'REJECT' | 'NO_OFFER' | 'ALLOW' | 'FLAG' | 'BLOCK'
+  outcome_label: string | null
+  outcome_color: string | null
+  outcome_detail: {
+    range?: {
+      min_amount: number
+      max_amount: number
+      amount: number
+      term_days: number
+      min_term_days: number
+      max_term_days: number
+    } | null
+    reasons?: string[]
+    missing?: string[]
+  } | null
+  executed: boolean
+  created_at: string | null
 }
 
 /**
@@ -832,11 +867,21 @@ export interface V2PendingDocument {
  * Snapshot completo de la contraoferta (JSONB counter_offer del backend).
  * Plazo en term_days (productos en días, ej. MoneyCapital) O term_months.
  * Tasa y comisión se congelan del producto al momento de ofertar.
+ *
+ * Modo RANGO (ofertas del motor de decisión): cuando `max_amount` está
+ * presente, el cliente puede elegir monto/plazo dentro de
+ * [min_amount→max_amount] × [min_term_days→max_term_days] y `amount` es la
+ * pre-selección. Sin `max_amount` la oferta es de monto fijo (staff).
  */
 export interface V2CounterOffer {
   amount: number
   term_months: number | null
   term_days: number | null
+  min_amount?: number | null
+  max_amount?: number | null
+  min_term_days?: number | null
+  max_term_days?: number | null
+  source?: 'ENGINE' | 'STAFF' | null
   interest_rate: number | null
   opening_commission: number | null
   monthly_payment?: number | null
@@ -847,6 +892,14 @@ export interface V2CounterOffer {
   expires_at: string | null
   responded_at: string | null
   accepted: boolean | null
+  acceptance?: {
+    chosen_amount: number | null
+    chosen_term_days: number | null
+    chosen_term_months: number | null
+    ip: string | null
+    user_agent: string | null
+    accepted_at: string | null
+  } | null
 }
 
 // V2StatusHistoryEntry removido: el feed unificado expone `ActivityItem`
@@ -873,11 +926,15 @@ export interface V2ApplicationUpdatePayload {
 }
 
 /**
- * Respuesta del solicitante a la contraoferta. El backend valida `accepted`
- * (los valores son fijos: monto y plazo salen del snapshot en el servidor).
+ * Respuesta del solicitante a la contraoferta. En ofertas de RANGO (motor de
+ * decisión) van además el monto/plazo elegidos, validados server-side contra
+ * el rango del snapshot; en ofertas fijas se omiten (el backend usa el snapshot).
  */
 export interface V2CounterOfferResponsePayload {
   accepted: boolean
+  amount?: number
+  term_days?: number
+  term_months?: number
 }
 
 // =====================================================

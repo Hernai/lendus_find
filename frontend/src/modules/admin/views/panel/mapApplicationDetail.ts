@@ -240,7 +240,8 @@ export function mapApplicationDetail(
       has_counter_offer: loan?.has_counter_offer ?? false,
       counter_offer: loan?.counter_offer ?? null,
       counter_offer_accepted: loan?.counter_offer_accepted ?? null,
-      product_limits: loan?.product_limits ?? null
+      product_limits: loan?.product_limits ?? null,
+      engine_decision: loan?.engine_decision ?? null
     },
     documents: docs.map(d => ({
       id: d.id,

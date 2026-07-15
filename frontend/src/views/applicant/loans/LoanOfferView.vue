@@ -5,12 +5,19 @@ import { useToast } from '@/composables/useToast'
 import { v2 } from '@/services/v2'
 import AppButton from '@/components/common/AppButton.vue'
 
-// Snapshot de la contraoferta (JSONB counter_offer del backend). Valores FIJOS:
-// el admin dicta monto y días exactos; los sliders quedan bloqueados (min=max).
+// Snapshot de la contraoferta (JSONB counter_offer del backend). Dos modos:
+// - FIJO (staff): sin max_amount; sliders bloqueados (min=max).
+// - RANGO (motor de decisión): con max_amount; el cliente ajusta monto/plazo
+//   dentro del rango autorizado y `amount` es la pre-selección.
 interface CounterOffer {
   amount?: number | null
   term_days?: number | null
   term_months?: number | null
+  min_amount?: number | null
+  max_amount?: number | null
+  min_term_days?: number | null
+  max_term_days?: number | null
+  source?: 'ENGINE' | 'STAFF' | null
   interest_rate?: number | null
   opening_commission?: number | null
   reason?: string | null
@@ -47,11 +54,17 @@ const remainingLabel = computed(() => {
 })
 const expired = computed(() => remainingMs.value != null && remainingMs.value === 0)
 
-// Valores fijos: min = max = lo ofertado, así los sliders se deshabilitan solos.
-const minAmount = computed(() => Number(offer.value?.amount ?? 0))
-const maxAmount = computed(() => Number(offer.value?.amount ?? 0))
-const minTerm = computed(() => Number(offer.value?.term_days ?? 0))
-const maxTerm = computed(() => Number(offer.value?.term_days ?? 0))
+// Modo rango (motor): límites del snapshot; modo fijo: min = max = lo
+// ofertado, así los sliders se deshabilitan solos.
+const isRangeOffer = computed(() => offer.value?.max_amount != null)
+const minAmount = computed(() =>
+  Number((isRangeOffer.value ? offer.value?.min_amount : offer.value?.amount) ?? 0))
+const maxAmount = computed(() =>
+  Number((isRangeOffer.value ? offer.value?.max_amount : offer.value?.amount) ?? 0))
+const minTerm = computed(() =>
+  Number((isRangeOffer.value ? offer.value?.min_term_days ?? offer.value?.term_days : offer.value?.term_days) ?? 0))
+const maxTerm = computed(() =>
+  Number((isRangeOffer.value ? offer.value?.max_term_days ?? offer.value?.term_days : offer.value?.term_days) ?? 0))
 
 const interestRate = computed(() => Number(offer.value?.interest_rate ?? 0))
 const commissionRate = computed(() => Number(offer.value?.opening_commission ?? 0))
@@ -121,9 +134,13 @@ const loadOffer = async () => {
 const respond = async (accept: boolean) => {
   submitting.value = true
   try {
-    // Valores fijos: el backend toma monto/plazo del snapshot; solo va la decisión.
+    // Oferta de rango: van el monto/plazo elegidos (validados server-side).
+    // Oferta fija: solo la decisión — el backend toma el snapshot.
     await v2.applicant.application.respondToCounterOffer(applicationId.value, {
       accepted: accept,
+      ...(accept && isRangeOffer.value
+        ? { amount: amount.value, term_days: termDays.value }
+        : {}),
     })
     if (accept) {
       accepted.value = true
@@ -165,7 +182,12 @@ onUnmounted(() => {
         <p class="text-sm opacity-90">¡Buenas noticias!</p>
         <h2 class="text-xl font-bold mt-1">Tenemos una oferta para ti</h2>
         <p class="text-sm opacity-90 mt-2">
-          Ajustamos las condiciones de tu préstamo según tu perfil. Paga puntual y podrás acceder a un monto mayor.
+          <template v-if="isRangeOffer">
+            Elige el monto y plazo que mejor se ajusten a tu capacidad de pago, dentro de tu cupo autorizado.
+          </template>
+          <template v-else>
+            Ajustamos las condiciones de tu préstamo según tu perfil. Paga puntual y podrás acceder a un monto mayor.
+          </template>
         </p>
         <p v-if="offer?.reason" class="text-xs opacity-80 mt-2 italic">
           {{ offer.reason }}
@@ -190,7 +212,7 @@ onUnmounted(() => {
           type="range"
           :min="minAmount"
           :max="maxAmount"
-          step="100"
+          :step="isRangeOffer ? 50 : 100"
           v-model.number="amount"
           class="w-full mt-3 accent-primary-600"
           :disabled="minAmount === maxAmount"

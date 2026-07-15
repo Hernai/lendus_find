@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\LoanStatus;
+use App\Jobs\EvaluateRenewalJob;
 use App\Models\Application;
 use App\Models\BankAccount;
 use App\Models\Loan;
@@ -48,10 +49,13 @@ class LoanService
             if (!empty($offer['bank_account_id'])) {
                 $bankAccount = BankAccount::find($offer['bank_account_id']);
             } else {
-                // Tomar la cuenta primaria del applicant para dispersión.
-                $bankAccount = BankAccount::where('person_id', $app->person_id)
+                // Cuenta de dispersión del applicant. BankAccount es polimórfica:
+                // entity_type/entity_id (no existe columna person_id).
+                $bankAccount = BankAccount::where('entity_type', 'persons')
+                    ->where('entity_id', $app->person_id)
                     ->where('is_for_disbursement', true)
-                    ->first();
+                    ->first()
+                    ?? BankAccount::findPrimaryForPerson($app->person_id);
             }
 
             $loan = Loan::create([
@@ -147,7 +151,9 @@ class LoanService
 
     public function recordPayment(Loan $loan, array $payload): LoanPayment
     {
-        return DB::transaction(function () use ($loan, $payload) {
+        $wasCompleted = $loan->status === LoanStatus::COMPLETED;
+
+        $payment = DB::transaction(function () use ($loan, $payload) {
             $payment = LoanPayment::create([
                 'tenant_id' => $loan->tenant_id,
                 'loan_id' => $loan->id,
@@ -178,6 +184,15 @@ class LoanService
 
             return $payment;
         });
+
+        // Renovación (Regla 05): recién liquidado → el motor evalúa la
+        // graduación y, si procede, genera la oferta de renovación. Fuera de
+        // la transacción: el pago nunca depende del motor.
+        if (!$wasCompleted && $loan->status === LoanStatus::COMPLETED) {
+            EvaluateRenewalJob::dispatch($loan->id);
+        }
+
+        return $payment;
     }
 
     /**

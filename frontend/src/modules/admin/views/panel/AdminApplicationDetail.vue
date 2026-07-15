@@ -1043,7 +1043,7 @@ const openCounterOfferModal = () => {
   }
 }
 
-// Tarjeta de contraoferta vigente: estado legible + vigencia
+// Tarjeta de contraoferta vigente: estado legible + vigencia + rango/origen
 const counterOfferCard = computed(() => {
   const co = application.value?.loan.counter_offer
   if (!co || !application.value) return null
@@ -1054,14 +1054,68 @@ const counterOfferCard = computed(() => {
     : expired
       ? { label: 'Expirada', cls: 'text-red-700 bg-red-50' }
       : { label: 'Esperando respuesta', cls: 'text-amber-700 bg-amber-50' }
+  const money = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n)
+  const isRange = co.max_amount != null
   return {
     amount: co.amount,
-    termLabel: co.term_days ? `${co.term_days} días` : `${co.term_months} meses`,
+    // Oferta de rango (motor): "Rango $300–$400"; fija: monto exacto
+    amountLabel: isRange
+      ? `Rango ${money(co.min_amount ?? 0)} – ${money(co.max_amount ?? 0)}`
+      : money(co.amount),
+    termLabel: co.term_days
+      ? (isRange && co.max_term_days && co.max_term_days !== (co.min_term_days ?? co.max_term_days)
+          ? `${co.min_term_days ?? co.term_days}–${co.max_term_days} días`
+          : `${co.term_days} días`)
+      : `${co.term_months} meses`,
+    sourceLabel: co.source === 'ENGINE' ? 'Motor de decisión' : 'Staff',
     expiresAt: co.expires_at,
     reason: co.reason,
     state
   }
 })
+
+// =====================================================
+// Motor de decisión: tarjeta de evaluación + atajo
+// =====================================================
+
+const engineDecision = computed(() => application.value?.loan.engine_decision ?? null)
+
+const engineOutcomeBadge = computed(() => {
+  const d = engineDecision.value
+  if (!d) return null
+  const cls = {
+    green: 'bg-green-50 text-green-700',
+    yellow: 'bg-amber-50 text-amber-700',
+    red: 'bg-red-50 text-red-700',
+    gray: 'bg-gray-100 text-gray-600',
+  }[d.outcome_color ?? 'gray'] ?? 'bg-gray-100 text-gray-600'
+  return { label: d.outcome_label ?? d.outcome, cls }
+})
+
+const engineSuggestedRange = computed(() => engineDecision.value?.outcome_detail?.range ?? null)
+
+// El atajo aplica solo en estados elegibles para contraoferta y con rango sugerido.
+const canApplySuggestedOffer = computed(() =>
+  canApproveReject.value &&
+  !!engineSuggestedRange.value &&
+  ['IN_REVIEW', 'DOCS_PENDING'].includes(application.value?.status ?? ''))
+
+const isApplyingSuggested = ref(false)
+
+const applySuggestedOffer = async () => {
+  if (!application.value) return
+  isApplyingSuggested.value = true
+  try {
+    await staff.application.applySuggestedOffer(application.value.id)
+    await fetchApplication()
+    toast.success('Oferta sugerida aplicada')
+  } catch (e) {
+    log.error('Error al aplicar la oferta sugerida', { error: e })
+    toast.error('No se pudo aplicar la oferta sugerida')
+  } finally {
+    isApplyingSuggested.value = false
+  }
+}
 
 const submitCounterOffer = async (payload: { amount: number; term_months?: number; term_days?: number; interest_rate?: number; reason: string; expires_in_minutes: number }) => {
   if (!application.value) return
@@ -1175,15 +1229,67 @@ onUnmounted(() => {
         @unreject-selfie="showSelfieUnrejectModal = true"
       />
 
+      <!-- Evaluación del motor de decisión -->
+      <div
+        v-if="engineDecision"
+        class="bg-white rounded-xl shadow-sm p-4 mb-4 border-l-4 border-indigo-400"
+      >
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div>
+            <p class="text-xs text-gray-500">
+              Evaluación del motor · v{{ engineDecision.policy_version }}
+              <span v-if="engineDecision.mode === 'SHADOW'" class="ml-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
+                Sombra — el motor habría decidido
+              </span>
+            </p>
+            <p class="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <span v-if="engineOutcomeBadge" :class="['px-2.5 py-0.5 text-sm font-semibold rounded-full', engineOutcomeBadge.cls]">
+                {{ engineOutcomeBadge.label }}
+              </span>
+              <span v-if="engineDecision.score != null" class="text-sm font-medium text-gray-600">
+                {{ engineDecision.score }} pts
+              </span>
+              <span v-if="engineDecision.band" class="text-sm font-medium text-gray-600">
+                · Banda {{ engineDecision.band }}
+              </span>
+            </p>
+          </div>
+          <p v-if="engineSuggestedRange" class="text-sm text-gray-700">
+            Sugerencia:
+            <span class="font-semibold">
+              {{ new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(engineSuggestedRange.min_amount) }}
+              –
+              {{ new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(engineSuggestedRange.max_amount) }}
+              × {{ engineSuggestedRange.max_term_days }} días
+            </span>
+          </p>
+          <button
+            v-if="canApplySuggestedOffer"
+            type="button"
+            class="ml-auto px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="isApplyingSuggested"
+            @click="applySuggestedOffer"
+          >
+            {{ isApplyingSuggested ? 'Aplicando…' : 'Aplicar oferta sugerida' }}
+          </button>
+        </div>
+        <ul v-if="engineDecision.outcome_detail?.reasons?.length" class="mt-2 text-xs text-gray-600 list-disc list-inside">
+          <li v-for="(reason, i) in engineDecision.outcome_detail.reasons" :key="i">{{ reason }}</li>
+        </ul>
+        <p v-if="engineDecision.outcome_detail?.missing?.length" class="mt-1 text-xs text-amber-700">
+          Insumos faltantes: {{ engineDecision.outcome_detail.missing.join(', ') }}
+        </p>
+      </div>
+
       <!-- Contraoferta vigente -->
       <div
         v-if="counterOfferCard"
         class="bg-white rounded-xl shadow-sm p-4 mb-4 border-l-4 border-purple-400 flex flex-wrap items-center gap-x-6 gap-y-2"
       >
         <div>
-          <p class="text-xs text-gray-500">Contraoferta</p>
+          <p class="text-xs text-gray-500">Oferta vigente · Origen: {{ counterOfferCard.sourceLabel }}</p>
           <p class="text-lg font-bold text-gray-900">
-            {{ new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(counterOfferCard.amount) }}
+            {{ counterOfferCard.amountLabel }}
             <span class="text-sm font-medium text-gray-600">a {{ counterOfferCard.termLabel }}</span>
           </p>
         </div>
