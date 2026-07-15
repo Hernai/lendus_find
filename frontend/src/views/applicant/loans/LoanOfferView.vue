@@ -48,8 +48,15 @@ const expiresMs = computed(() => offer.value?.expires_at ? new Date(offer.value.
 const remainingMs = computed(() => expiresMs.value ? Math.max(0, expiresMs.value - now.value) : null)
 const remainingLabel = computed(() => {
   if (remainingMs.value == null) return null
-  const mins = Math.floor(remainingMs.value / 60000)
-  const secs = Math.floor((remainingMs.value % 60000) / 1000)
+  const totalSecs = Math.floor(remainingMs.value / 1000)
+  const days = Math.floor(totalSecs / 86400)
+  const hours = Math.floor((totalSecs % 86400) / 3600)
+  const mins = Math.floor((totalSecs % 3600) / 60)
+  const secs = totalSecs % 60
+  // Vigencias largas (ofertas del motor, ej. 72h): formato humano legible.
+  if (days > 0) return `${days} ${days === 1 ? 'día' : 'días'} ${hours} h`
+  if (hours > 0) return `${hours} h ${mins} min`
+  // Última hora: countdown MM:SS (urgencia — ofertas manuales cortas).
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
 })
 const expired = computed(() => remainingMs.value != null && remainingMs.value === 0)
