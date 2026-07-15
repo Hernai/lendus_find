@@ -197,6 +197,13 @@ if [[ "$SKIP_RESTART" != "1" ]]; then
     [[ "$fpm_ok" == "1" ]] || log "  WARN: no se pudo reiniciar php-fpm — OPcache puede quedar VIEJO. Revisa el nombre del servicio y el sudoers."
     sudo systemctl reload httpd 2>&1 || sudo systemctl restart httpd
     sudo systemctl restart lendusfind-reverb 2>&1 || log "WARN: reverb no se reinició (puede no estar instalado)"
+
+    # CRÍTICO tras desplegar Jobs nuevos (p.ej. DeliverWebhookJob): los workers
+    # de cola cargan el código en memoria y NO lo refrescan. queue:restart les
+    # envía la señal de reciclarse graciosamente tras el job en curso; el gestor
+    # (supervisor/cron/systemd) los relanza ya con el código nuevo. Portable e
+    # idempotente: si no hay workers activos, es un no-op inofensivo.
+    "$PHP_BIN" artisan queue:restart 2>&1 || log "WARN: queue:restart falló (revisa la conexión de cola)"
 else
     log "SKIP_RESTART=1, salto reload"
 fi
