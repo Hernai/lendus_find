@@ -17,8 +17,9 @@ use Illuminate\Http\Request;
  * Configurador del motor de decisión: políticas versionadas por tenant y por
  * producto, con activación/rollback y probador (dry-run).
  *
- * Lectura: canManageProducts (ADMIN+). Escritura/activación/probador:
- * canConfigureTenant (SUPER_ADMIN). Ver rutas en routes/api.php.
+ * Todo el módulo requiere canManageProducts (ADMIN del tenant y SUPER_ADMIN):
+ * cada admin configura las políticas de SU tenant (scopedTenantId; el super
+ * admin cruza tenants vía TenantSwitcher). Ver rutas en routes/api.php.
  */
 class DecisionPolicyController extends Controller
 {

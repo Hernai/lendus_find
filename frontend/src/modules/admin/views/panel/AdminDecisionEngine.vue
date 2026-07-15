@@ -18,12 +18,14 @@ import decisionPolicyService, {
  * Política de TENANT (filtros de entrada: gate telefónico + cooldown) y
  * políticas por PRODUCTO (scoring, bandas, oferta, graduación), versionadas
  * con activar/rollback, modos off/shadow/active y probador de perfiles.
- * Edita SUPER_ADMIN (la API valida canConfigureTenant); ADMIN consulta.
+ * El ADMIN del tenant configura sus propias políticas (canManageProducts,
+ * enforced por la API con scoping por tenant); el SUPER_ADMIN global puede
+ * configurar cualquier tenant vía TenantSwitcher.
  */
 
 const toast = useToast()
 const authStore = useAuthStore()
-const canEdit = computed(() => authStore.isSuperAdmin)
+const canEdit = computed(() => authStore.permissions?.canManageProducts ?? authStore.isAdmin)
 
 const loading = ref(true)
 const policies = ref<V2DecisionPolicy[]>([])

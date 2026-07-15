@@ -6,17 +6,23 @@
 El admin DEBE (MUST) incluir un módulo dedicado "Motor de decisión" (integrado al
 sistema de módulos con visibilidad por rol / `TenantRoleModuleOverride`) que muestre la
 política de tenant y la lista de políticas por producto con su versión activa y modo.
-Editar, activar y cambiar de modo requiere `canConfigureTenant` (SUPER_ADMIN); ADMIN
-consulta en solo lectura; ANALYST/SUPERVISOR no ven el módulo (su vista es el panel de
-evaluación en el detalle).
+Editar, activar y cambiar de modo requiere `canManageProducts`: el **ADMIN del tenant
+configura las políticas de su propio tenant** y el SUPER_ADMIN global puede configurar
+cualquier tenant (vía TenantSwitcher); el scoping por tenant DEBE aplicarse en todos
+los endpoints. ANALYST/SUPERVISOR no ven el módulo (su vista es el panel de evaluación
+en el detalle).
 
-#### Scenario: Super admin edita
-- **WHEN** un SUPER_ADMIN entra al módulo
-- **THEN** puede editar borradores, activar versiones y cambiar el modo
-
-#### Scenario: Admin consulta
+#### Scenario: Admin configura su tenant
 - **WHEN** un ADMIN entra al módulo
-- **THEN** ve las políticas y su historial sin acciones de escritura
+- **THEN** puede editar borradores, activar versiones y cambiar el modo de las políticas de su tenant
+
+#### Scenario: Super admin configura cualquier tenant
+- **WHEN** un SUPER_ADMIN se para en un tenant vía TenantSwitcher y entra al módulo
+- **THEN** puede configurar las políticas de ese tenant
+
+#### Scenario: Aislamiento entre tenants
+- **WHEN** un ADMIN intenta operar una política de otro tenant
+- **THEN** el backend responde no encontrado (scoping por tenant)
 
 #### Scenario: Analista no ve el módulo
 - **WHEN** un ANALYST navega el admin

@@ -462,17 +462,19 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
         Route::post('/applications/{id}/lift-cooldown', [StaffAppController::class, 'liftCooldown'])
             ->middleware('permission:canApproveRejectApplications');
 
-        // Motor de decisión — políticas versionadas (configurador)
+        // Motor de decisión — políticas versionadas (configurador). El ADMIN
+        // del tenant configura sus propias políticas (canManageProducts =
+        // ADMIN y SUPER_ADMIN); el scoping por tenant lo pone scopedTenantId.
         Route::get('/decision-policies', [StaffDecisionPolicyController::class, 'index'])
             ->middleware('permission:canManageProducts');
         Route::post('/decision-policies', [StaffDecisionPolicyController::class, 'store'])
-            ->middleware('permission:canConfigureTenant');
+            ->middleware('permission:canManageProducts');
         Route::put('/decision-policies/{id}', [StaffDecisionPolicyController::class, 'update'])
-            ->middleware('permission:canConfigureTenant');
+            ->middleware('permission:canManageProducts');
         Route::post('/decision-policies/dry-run', [StaffDecisionPolicyController::class, 'dryRun'])
-            ->middleware('permission:canConfigureTenant');
+            ->middleware('permission:canManageProducts');
         Route::post('/decision-policies/{id}/activate', [StaffDecisionPolicyController::class, 'activate'])
-            ->middleware('permission:canConfigureTenant');
+            ->middleware('permission:canManageProducts');
 
         // Application Notes
         Route::post('/applications/{id}/notes', [StaffAppController::class, 'addNote']);

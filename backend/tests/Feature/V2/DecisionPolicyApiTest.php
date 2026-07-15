@@ -128,18 +128,49 @@ class DecisionPolicyApiTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_admin_consulta_pero_no_edita(): void
+    public function test_admin_configura_las_politicas_de_su_tenant(): void
     {
         $this->authAs($this->adminStaff)
             ->getJson('/api/v2/staff/decision-policies')
             ->assertOk();
 
+        $create = $this->authAs($this->adminStaff)
+            ->postJson('/api/v2/staff/decision-policies', [
+                'product_id' => $this->product->id,
+                'rules' => $this->validProductRules(),
+            ]);
+        $create->assertCreated();
+
         $this->authAs($this->adminStaff)
+            ->postJson("/api/v2/staff/decision-policies/{$create->json('data.id')}/activate", ['mode' => 'SHADOW'])
+            ->assertOk();
+    }
+
+    public function test_supervisor_no_puede_configurar_politicas(): void
+    {
+        $this->authAs($this->supervisor)
             ->postJson('/api/v2/staff/decision-policies', [
                 'product_id' => $this->product->id,
                 'rules' => $this->validProductRules(),
             ])
             ->assertForbidden();
+    }
+
+    public function test_admin_no_toca_politicas_de_otro_tenant(): void
+    {
+        $otherTenant = Tenant::factory()->create(['slug' => 'otro-tenant', 'is_active' => true]);
+        $foreignPolicy = DecisionPolicy::create([
+            'tenant_id' => $otherTenant->id,
+            'product_id' => null,
+            'version' => 1,
+            'mode' => 'SHADOW',
+            'is_active' => true,
+            'rules' => ['cooldown' => ['days' => 30]],
+        ]);
+
+        $this->authAs($this->adminStaff)
+            ->postJson("/api/v2/staff/decision-policies/{$foreignPolicy->id}/activate")
+            ->assertNotFound();
     }
 
     public function test_super_admin_crea_borrador_y_activa(): void
