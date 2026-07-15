@@ -125,6 +125,8 @@ Route::prefix('webhooks/inbound/{endpoint}')->group(function () {
 Route::middleware(['tenant', 'auth:sanctum'])->prefix('v2/integration')->group(function () {
     Route::get('/applications/{id}', [\App\Http\Controllers\Api\V2\Integration\IntegrationReadController::class, 'application']);
     Route::get('/loans/{id}', [\App\Http\Controllers\Api\V2\Integration\IntegrationReadController::class, 'loan']);
+    // Descarga estable de documentos del expediente (INE, selfie, comprobante).
+    Route::get('/documents/{id}/download', [\App\Http\Controllers\Api\V2\Integration\IntegrationDocumentController::class, 'download']);
 });
 
 // =============================================

@@ -326,4 +326,71 @@ class WebhookIntegrationTest extends TestCase
         $this->assertSame(WebhookDelivery::STATUS_PENDING, $delivery->fresh()->status);
         Queue::assertPushed(DeliverWebhookJob::class);
     }
+
+    private function makeDocument(Application $app): \App\Models\Document
+    {
+        return $app->documents()->create([
+            'tenant_id' => $this->tenant->id,
+            'type' => \App\Models\Document::TYPE_INE_FRONT,
+            'category' => 'IDENTITY',
+            'file_name' => 'ine-frente.jpg',
+            'file_path' => 'docs/ine-frente.jpg',
+            'mime_type' => 'image/jpeg',
+            'file_size' => 100,
+            'storage_disk' => 'local',
+        ]);
+    }
+
+    public function test_payload_incluye_documentos_e_identificaciones(): void
+    {
+        \App\Models\PersonIdentification::create([
+            'tenant_id' => $this->tenant->id,
+            'person_id' => $this->person->id,
+            'type' => 'INE',
+            'identifier_value' => '1234567890123',
+            'is_current' => true,
+            'status' => 'VERIFIED',
+            'document_data' => ['clave_elector' => 'ABCD123456'],
+        ]);
+
+        $app = $this->makeApp();
+        $this->makeDocument($app);
+
+        $data = app(\App\Services\Webhook\WebhookPayloadBuilder::class)->application($app)['application'];
+
+        $this->assertNotEmpty($data['documents']);
+        $this->assertSame('INE_FRONT', $data['documents'][0]['type']);
+        $this->assertStringContainsString('/api/v2/integration/documents/', $data['documents'][0]['download_url']);
+        $this->assertNotEmpty($data['person']['identifications']);
+        $this->assertSame('INE', $data['person']['identifications'][0]['type']);
+        $this->assertSame('1234567890123', $data['person']['identifications'][0]['value']);
+    }
+
+    public function test_descarga_documento_requiere_ability_y_tenant(): void
+    {
+        $doc = $this->makeDocument($this->makeApp());
+        $staffTok = $this->adminStaff->createToken('s', ['staff'])->plainTextToken;
+        $intTok = $this->adminStaff->createToken('i', ['integration'])->plainTextToken;
+        $slug = $this->tenant->slug;
+
+        // Token sin ability `integration` -> 403.
+        $this->app['auth']->forgetGuards();
+        $this->flushHeaders()->withHeaders(['X-Tenant-ID' => $slug, 'Authorization' => "Bearer {$staffTok}"])
+            ->get("/api/v2/integration/documents/{$doc->id}/download")
+            ->assertForbidden();
+
+        // Con ability pero documento inexistente -> 404.
+        $this->app['auth']->forgetGuards();
+        $this->flushHeaders()->withHeaders(['X-Tenant-ID' => $slug, 'Authorization' => "Bearer {$intTok}"])
+            ->get('/api/v2/integration/documents/' . \Illuminate\Support\Str::uuid() . '/download')
+            ->assertNotFound();
+
+        // Con ability + archivo presente -> descarga (200).
+        \Illuminate\Support\Facades\Storage::fake('local');
+        \Illuminate\Support\Facades\Storage::disk('local')->put('docs/ine-frente.jpg', 'bytes');
+        $this->app['auth']->forgetGuards();
+        $this->flushHeaders()->withHeaders(['X-Tenant-ID' => $slug, 'Authorization' => "Bearer {$intTok}"])
+            ->get("/api/v2/integration/documents/{$doc->id}/download")
+            ->assertOk();
+    }
 }

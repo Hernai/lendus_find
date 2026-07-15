@@ -50,6 +50,13 @@ Se agregarán más eventos en versiones futuras sin romper el contrato existente
 > (§7.1). Entonces LendusFind activa el crédito y emite `loan.disbursed`. El ciclo de
 > dispersión de LendusFind (STP interno) queda apagado para tu tenant.
 
+> **Contraoferta:** la negociación de términos entre el analista y el solicitante
+> (contraoferta y su aceptación/rechazo) es **interna a LendusFind y no emite webhook**.
+> No la esperes en el catálogo: su desenlace te llega ya resuelto. Si el solicitante
+> acepta, recibes `application.approved` con los **términos finales** en `data.application.approved`
+> (monto, plazo, tasa aceptados); si la rechaza o expira sin respuesta, recibes
+> `application.rejected`. Así integras solo el resultado, no el ida y vuelta.
+
 ---
 
 ## 3. El sobre (envelope)
@@ -104,17 +111,34 @@ Todos los webhooks comparten esta estructura. Solo cambia `data` según el recur
       },
       "person": {
         "id": "019f6404-2b3c-7d4e-9f5a-6b7c8d9e0f1a",
+        "first_name": "Juan",
+        "last_name_1": "Pérez",
+        "last_name_2": "López",
         "full_name": "Juan Pérez López",
         "curp": "PELJ950115HSLRPN01",
         "rfc": "PELJ950115AB1",
         "birth_date": "1995-01-15",
-        "kyc_status": "VERIFIED"
+        "kyc_status": "VERIFIED",
+        "identifications": [
+          {
+            "type": "INE",
+            "value": "PRLPJN95011509H100",
+            "status": "VERIFIED",
+            "expires_at": "2030-12-31",
+            "ocr": { "clave_elector": "PRLPJN95011509H100", "vigencia": "2030" }
+          }
+        ]
       },
       "disbursement_account": {
         "bank_name": "STP",
         "clabe": "646180157099999993",
         "holder_name": "Juan Pérez López"
       },
+      "documents": [
+        { "id": "019f6404-a1", "type": "INE_FRONT", "category": "IDENTITY", "mime_type": "image/jpeg", "download_url": "https://api.lendus.app/api/v2/integration/documents/019f6404-a1/download" },
+        { "id": "019f6404-a2", "type": "INE_BACK", "category": "IDENTITY", "mime_type": "image/jpeg", "download_url": "https://api.lendus.app/api/v2/integration/documents/019f6404-a2/download" },
+        { "id": "019f6404-a3", "type": "PROOF_OF_ADDRESS", "category": "ADDRESS", "mime_type": "application/pdf", "download_url": "https://api.lendus.app/api/v2/integration/documents/019f6404-a3/download" }
+      ],
       "approved_at": "2026-07-15T18:04:22Z"
     }
   }
@@ -394,6 +418,10 @@ Si perdiste un webhook o necesitas reconciliar, relee el recurso. Devuelve **el 
 
 - `GET /api/v2/integration/applications/{id}`
 - `GET /api/v2/integration/loans/{id}`
+- `GET /api/v2/integration/documents/{id}/download` — descarga el archivo del documento
+  (INE, selfie, comprobante). Los `download_url` de `documents[]` apuntan aquí: con tu
+  token de integración recibes el archivo con una URL firmada **fresca**, sin arriesgar
+  URLs vencidas en el payload o el log.
 
 Autenticación: token de integración de tu tenant (`Authorization: Bearer <token>`, ability
 `integration`). Scoped por tenant — solo ves tus recursos.

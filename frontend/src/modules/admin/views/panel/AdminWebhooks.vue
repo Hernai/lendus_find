@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useToast } from '@/composables/useToast'
 import { getErrorMessage } from '@/types/api'
 import AppButton from '@/components/common/AppButton.vue'
@@ -16,6 +17,7 @@ import webhookService, {
  */
 
 const toast = useToast()
+const router = useRouter()
 const loading = ref(true)
 const endpoints = ref<V2WebhookEndpoint[]>([])
 const eventOptions = ref<WebhookEventOption[]>([])
@@ -180,7 +182,10 @@ const endpointName = (id: string) => endpoints.value.find((e) => e.id === id)?.n
           Consulta la guía del integrador para el catálogo de eventos, los payloads y la verificación de firma.
         </p>
       </div>
-      <AppButton variant="primary" @click="openCreate">Nuevo endpoint</AppButton>
+      <div class="flex gap-2 flex-wrap">
+        <AppButton variant="outline" @click="router.push({ name: 'admin-webhooks-docs' })">Documentación</AppButton>
+        <AppButton variant="primary" @click="openCreate">Nuevo endpoint</AppButton>
+      </div>
     </div>
 
     <div v-if="loading" class="flex justify-center py-16">

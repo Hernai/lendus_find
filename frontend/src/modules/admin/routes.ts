@@ -121,6 +121,13 @@ export const adminRoutes: RouteRecordRaw[] = [
         component: () => import('@/modules/admin/views/panel/AdminWebhooks.vue'),
       },
       {
+        // Guía del integrador (webhooks + API de cartera): eventos, payloads,
+        // firma HMAC y ejemplos de código. Solo lectura.
+        path: 'integraciones/docs',
+        name: 'admin-webhooks-docs',
+        component: () => import('@/modules/admin/views/panel/AdminIntegrationDocs.vue'),
+      },
+      {
         path: 'prestamos',
         name: 'admin-loans',
         component: () => import('@/modules/admin/views/panel/AdminLoans.vue')

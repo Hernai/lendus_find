@@ -37,7 +37,8 @@ trait ApiResponses
             $response['message'] = $message;
         }
 
-        return response()->json($response, $status);
+        // UTF-8 sin escapar (acentos y ñ tal cual, no é) y sin \/ en slashes.
+        return response()->json($response, $status, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     /**
@@ -71,7 +72,8 @@ trait ApiResponses
             $response['errors'] = $errors;
         }
 
-        return response()->json($response, $status);
+        // UTF-8 sin escapar (acentos y ñ tal cual, no é) y sin \/ en slashes.
+        return response()->json($response, $status, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     /**

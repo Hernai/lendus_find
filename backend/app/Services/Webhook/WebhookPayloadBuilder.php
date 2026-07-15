@@ -64,9 +64,39 @@ class WebhookPayloadBuilder
                 ] : null,
                 'person' => $person ? $this->person($person) : null,
                 'disbursement_account' => $person ? $this->disbursementAccount($person) : null,
+                // Documentos vigentes con URL de descarga estable (endpoint de
+                // integración): INE frente/reverso, selfie, comprobante, etc.
+                'documents' => $this->documents($app),
                 'approved_at' => $app->decision_at?->format(\DateTimeInterface::ATOM),
             ],
         ];
+    }
+
+    /**
+     * Documentos vigentes del expediente (de la solicitud y de la persona), cada
+     * uno con una URL de descarga ESTABLE. El sistema externo pega en esa URL con
+     * su token de integración y recibe el archivo (URL firmada fresca), sin
+     * arriesgar URLs firmadas vencidas en el payload/log.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function documents(Application $app): array
+    {
+        $docs = $app->documents()->get();
+        if ($app->person) {
+            $docs = $docs->concat($app->person->documents()->get());
+        }
+
+        return $docs->unique('id')
+            ->map(fn ($d) => [
+                'id' => $d->id,
+                'type' => $d->type,
+                'category' => $d->category,
+                'mime_type' => $d->mime_type,
+                'download_url' => url('/api/v2/integration/documents/' . $d->id . '/download'),
+            ])
+            ->values()
+            ->all();
     }
 
     /** Recurso `loan` estandarizado (loan.disbursed / payment.received / .completed). */
@@ -111,12 +141,46 @@ class WebhookPayloadBuilder
     {
         return [
             'id' => $person->id,
+            // Nombre desglosado para que la cartera lo mapee campo a campo
+            // (apellido paterno/materno por separado). `full_name` se conserva
+            // por compatibilidad — el contrato v1 solo agrega campos.
+            'first_name' => $person->first_name,
+            'last_name_1' => $person->last_name_1,
+            'last_name_2' => $person->last_name_2,
             'full_name' => $person->full_name,
             'curp' => $person->curp,
             'rfc' => $person->rfc,
             'birth_date' => $person->birth_date?->format('Y-m-d'),
             'kyc_status' => $person->kyc_status,
+            // Identificaciones vigentes (INE/CURP/RFC) con su valor y datos OCR.
+            'identifications' => $this->identifications($person),
         ];
+    }
+
+    /**
+     * Identificaciones vigentes de la persona (INE, CURP, RFC) con el valor y
+     * los datos OCR capturados. La cartera recibe el dato estructurado, no solo
+     * la imagen.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function identifications(Person $person): array
+    {
+        return \App\Models\PersonIdentification::query()
+            ->where('person_id', $person->id)
+            ->where('is_current', true)
+            ->whereNull('deleted_at')
+            ->get()
+            ->map(fn ($i) => array_filter([
+                'type' => $i->type,
+                'value' => $i->identifier_value,
+                'status' => $i->status,
+                'issued_at' => $i->issued_at?->format('Y-m-d'),
+                'expires_at' => $i->expires_at?->format('Y-m-d'),
+                'ocr' => ! empty($i->document_data) ? $i->document_data : null,
+            ], fn ($v) => $v !== null))
+            ->values()
+            ->all();
     }
 
     /** Cuenta de dispersión con CLABE COMPLETA (la cartera dispersa). */
