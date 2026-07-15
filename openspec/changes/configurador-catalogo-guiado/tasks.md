@@ -16,4 +16,4 @@
 ## 3. Verificación
 
 - [x] 3.1 `php artisan test` grupos del motor + `vue-tsc` + lint de archivos tocados
-- [ ] 3.2 Verificación en navegador en el stack de dev (:5176): editor con catálogo, probar sin guardar
+- [x] 3.2 Verificación en navegador en el stack de dev (:5176): editor con catálogo, probar sin guardar

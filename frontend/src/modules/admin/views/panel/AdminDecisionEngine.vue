@@ -1014,7 +1014,13 @@ const formatMoney = (n: number) =>
           </div>
         </template>
 
-        <AppButton variant="primary" class="w-full" :loading="testerRunning" :disabled="!testerPolicyId" @click="runTester">
+        <AppButton
+          variant="primary"
+          class="w-full"
+          :loading="testerRunning"
+          :disabled="!testerInline && !testerPolicyId"
+          @click="runTester"
+        >
           Evaluar perfil
         </AppButton>
 
