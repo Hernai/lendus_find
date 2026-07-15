@@ -152,9 +152,12 @@ class MoneyCapitalSeeder extends Seeder
                     'loan_portfolio' => true,
                     'unified_consent_screen' => true,
                     'unified_auth_screen' => true,
-                    // primary morado extraído del mock oficial: #371F91
                     'phone_score_enabled' => true,
-                    'auto_disbursement' => true,
+                    // MoneyCapital dispersa desde su cartera externa: el crédito
+                    // queda PENDING_DISBURSEMENT hasta la confirmación entrante
+                    // (webhook inbound/disbursement). Ver design.md #9. El STP
+                    // interno (auto_disbursement) queda OFF a propósito.
+                    'external_disbursement' => true,
                 ],
                 'email' => 'contacto@moneycapital.lendus.app',
                 'phone' => '5555550000',
