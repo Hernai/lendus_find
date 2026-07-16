@@ -28,10 +28,10 @@ Análogo a `runIneOcr`/`confirmIne` en `DynamicOnboardingView`: al confirmar la 
 - **Alternativa (backend, al persistir el paso)**: el frontend solo sube la selfie y el backend corre el facematch en el job de persistencia. Descartada: rompe el patrón existente del INE, y el frontend ya tiene ambas imágenes en memoria (evita releer documentos).
 - **Rationale**: reutiliza el patrón probado del INE, endpoint ya existente, cero dependencias nuevas.
 
-### 2. El resultado se persiste SIEMPRE como verificación `face_match`
-Hoy `KycController::validateFaceMatch` solo registra la verificación cuando `match=true` (el `if ($result['match'])` no tiene rama para el no-match). Se agrega el registro del **no-match**: `verificationService->verify('face_match', 'failed', ...)` con `is_verified=false` y el `score` en metadata. Falla técnica (Nubarium error/timeout) NO registra pass ni fail (queda ausente = "no concluido").
-- **Alternativa (guardar en `person.kyc_data`)**: descartada por consistencia — el pass ya usa `DataVerification` field `face_match`; el collector lee de un solo lugar.
-- **Rationale**: sin registrar el fallo, el motor no puede verlo y no queda en el expediente.
+### 2. El resultado se persiste SIEMPRE en `person.kyc_data['face_match']`
+`KycController::validateFaceMatch` persiste el resultado en `person.kyc_data['face_match'] = { passed: bool, score: int, at: iso8601 }`, tanto cuando coincide como cuando no. Falla técnica (Nubarium error/timeout) NO escribe la llave (queda ausente = "no concluido"). El `verify('face_match','passed')` actual (para el expediente/staff) se mantiene cuando coincide.
+- **Por qué no `VerificationService::verify()` para el fallo**: `verify()` SIEMPRE marca `is_verified=true` / `status=VERIFIED` (no soporta registrar un fallo); por eso hoy solo se llama cuando `match=true`. Forzar un `DataVerification` con `is_verified=false` a mano sería frágil (manejo de `is_locked`) y no aporta, ya que `hasCompletedKyc` no cuenta `face_match`.
+- **Rationale**: `kyc_data` es el MISMO mecanismo que el motor ya usa para `identity_mismatch` (`kyc_data.ine_verification.mismatch`); el collector lee de un solo lugar y soporta los tres estados (passed/failed/ausente).
 
 ### 3. El motor lee `face_match` como insumo y aplica `face_match_failed → REVIEW`
 `DecisionInputCollector` agrega `face_match` a `inputs` con tres estados: `passed` (verificación `face_match` con is_verified=true), `failed` (is_verified=false), `null`/missing (no concluyó → se suma a `missing` como `kyc`/`clabe`, para reintento+timeout). `DecisionEngineService` agrega la regla: `face_match` en estado `failed` ⇒ `ruleHit` efecto `REVIEW` (junto a `clabe_mismatch`/`phone_gate_flag`), con razón legible "La identidad facial no coincide con la INE".

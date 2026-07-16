@@ -4,7 +4,9 @@ import { useProfileStore } from './profile'
 import * as profileService from '@/services/v2/profile.service'
 import documentService from '@/services/v2/document.applicant.service'
 import * as applicationService from '@/services/v2/application.applicant.service'
+import { validateFaceMatch } from '@/services/v2/kyc.applicant.service'
 import { useApplicationStore } from './application'
+import { useTenantStore } from './tenant'
 import { logger } from '@/utils/logger'
 import { isValidRfc } from '@/utils/validators'
 
@@ -177,6 +179,7 @@ const getDefaultData = (): OnboardingData => ({
 
 export const useOnboardingStore = defineStore('onboarding', () => {
   const profileStore = useProfileStore()
+  const tenantStore = useTenantStore()
   const applicationStore = useApplicationStore()
 
   // State
@@ -1074,6 +1077,16 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           if (img?.startsWith('data:')) {
             try { await documentService.uploadBase64(img, 'SELFIE', { file_name: 'selfie.jpg' }) }
             catch (e) { stepHadError = true; onboardingLogger.warn('upload SELFIE failed', { error: e }) }
+
+            // Facematch (selfie vs INE) silencioso: solo con proveedor KYC. No
+            // bloquea (fail-open) ni se muestra al cliente; el backend registra el
+            // resultado en kyc_data para que el motor decida (no-match → REVIEW).
+            // El umbral lo resuelve el backend desde la política (no se manda).
+            const ineFront = (dynamicData.value.kyc_ine as { front_image?: string } | undefined)?.front_image
+            if (tenantStore.hasKycProvider && ineFront?.startsWith('data:')) {
+              try { await validateFaceMatch(img, ineFront) }
+              catch (e) { onboardingLogger.warn('facematch failed (fail-open)', { error: e }) }
+            }
           }
           break
         }

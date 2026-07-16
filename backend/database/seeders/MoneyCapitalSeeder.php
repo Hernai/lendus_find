@@ -373,6 +373,9 @@ class MoneyCapitalSeeder extends Seeder
                 'first_credit' => ['term_days' => 7],
                 'offer' => ['validity_hours' => 72, 'reminder_hours_before' => 24],
                 'review' => ['input_timeout_minutes' => 30],
+                // Facematch (selfie vs INE): score mínimo para considerar coincidencia.
+                // Su presencia ACTIVA la regla del motor (no-match/ausente → REVIEW).
+                'face_match' => ['min_score' => 80],
                 'reject' => [
                     ['rule' => 'kyc_failed'],
                     ['rule' => 'identity_mismatch'],

@@ -1,15 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Regla de facematch en la decisión
-El motor de decisión DEBE (MUST) recolectar el resultado del facematch (`face_match`) como insumo y aplicarlo así: si el facematch NO coincide, la salida DEBE ser `REVIEW` (nunca `REJECT`); si el facematch no concluyó (falla técnica o ausente), se trata como insumo faltante y se reintenta hasta el timeout, tras el cual la salida es `REVIEW` con motivo `inputs_incomplete`; si el facematch coincide, no aporta ningún motivo negativo. La regla SOLO aplica cuando la política del producto la incluye.
+El motor de decisión DEBE (MUST) recolectar el resultado del facematch (`face_match`) como insumo y, SOLO cuando la política del producto incluye la regla de facematch, aplicarlo así: si el facematch NO coincide (`passed=false`) o no concluyó (ausente), la salida DEBE ser `REVIEW` (nunca `REJECT`); si el facematch coincide (`passed=true`), no aporta ningún motivo negativo. Sin la regla en la política, el resultado del facematch NO altera la salida.
 
 #### Scenario: Facematch no coincide va a revisión
-- **WHEN** el motor evalúa una solicitud cuyo `face_match` quedó registrado como no-coincidente
+- **WHEN** el motor evalúa una solicitud cuyo `face_match` quedó registrado como no-coincidente y la política incluye la regla de facematch
 - **THEN** la salida es `REVIEW` con motivo "la identidad facial no coincide con la INE" y NO se genera oferta ni rechazo automático
 
-#### Scenario: Facematch sin concluir al agotar el timeout
-- **WHEN** el `face_match` no concluyó (falla técnica) y ya se agotó el timeout de insumos
-- **THEN** la salida es `REVIEW` con motivo `inputs_incomplete` y nunca rechazo
+#### Scenario: Facematch ausente o sin concluir
+- **WHEN** el `face_match` no concluyó o no se ejecutó, en un producto cuya política incluye la regla de facematch
+- **THEN** la salida es `REVIEW` (no se auto-oferta sin verificación facial) y nunca rechazo
 
 #### Scenario: Facematch coincide no penaliza
 - **WHEN** el `face_match` quedó registrado como coincidente
