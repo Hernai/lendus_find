@@ -179,7 +179,12 @@ class Person extends Model
      */
     public function references(): HasMany
     {
-        return $this->hasMany(PersonReference::class);
+        // Orden determinista: sin él, un UPDATE (verificar una referencia) cambia
+        // la posición física de la fila (MVCC de Postgres) y la lista "salta" en el
+        // panel del admin. created_at + id fija el orden entre re-fetches.
+        return $this->hasMany(PersonReference::class)
+            ->orderBy('created_at')
+            ->orderBy('id');
     }
 
     /**
