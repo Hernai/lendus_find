@@ -25,7 +25,7 @@ const config: TenantConfig = {
     branding: 'tenants/finatea/branding.png',
   },
   nativeTheme: {
-    primary: '#B91C1C',
+    primary: '#E02B20',
     statusBar: 'light',
   },
   deepLinkHost: 'finatea.lendus.app',

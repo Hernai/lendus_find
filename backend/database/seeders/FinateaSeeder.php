@@ -15,7 +15,7 @@ use Illuminate\Support\Str;
  * Seeder de tenant Finatea.
  *
  * Crea:
- *  - Tenant `finatea` con branding rojo (#B91C1C)
+ *  - Tenant `finatea` con branding rojo (#E02B20)
  *  - TenantBranding con colores y PWA settings
  *  - Producto base de crédito personal con onboarding estándar
  *  - Staff accounts (super admin, admin, supervisor, analyst)
@@ -69,8 +69,8 @@ class FinateaSeeder extends Seeder
                 'legal_name' => 'Finatea S.A. de C.V. SOFOM E.N.R.',
                 'rfc' => 'FIN260101AAA',
                 'branding' => [
-                    'primary_color' => '#B91C1C',
-                    'secondary_color' => '#991B1B',
+                    'primary_color' => '#E02B20',
+                    'secondary_color' => '#C4231A',
                 ],
                 'settings' => [
                     'otp_provider' => 'twilio',
@@ -102,18 +102,22 @@ class FinateaSeeder extends Seeder
             $tenant->id,
             [
                 'id' => TenantBranding::where('tenant_id', $tenant->id)->value('id') ?? Str::uuid(),
-                'primary_color' => '#B91C1C',
-                'secondary_color' => '#991B1B',
+                // Paleta oficial Finatea (actualizada 2026-07-16). accent_color
+                // se deja en ámbar: --verde-wa/--verde-wa-hover del brief son
+                // para un futuro CTA de WhatsApp específico, no para el accent
+                // genérico de badges/notificaciones.
+                'primary_color' => '#E02B20', // --rojo
+                'secondary_color' => '#C4231A', // --rojo-hover
                 'accent_color' => '#F59E0B',
-                'background_color' => '#FFFFFF',
-                'text_color' => '#1F2937',
+                'background_color' => '#FAF6F0', // --crema
+                'text_color' => '#222222', // --tinta
                 'font_family' => 'Inter, sans-serif',
                 'border_radius' => '12px',
                 'button_style' => 'rounded',
                 'pwa_name' => 'Finatea',
                 'pwa_short_name' => 'Finatea',
-                'pwa_theme_color' => '#B91C1C',
-                'pwa_background_color' => '#FFFFFF',
+                'pwa_theme_color' => '#E02B20',
+                'pwa_background_color' => '#FFFCF7', // --calido
             ],
         );
     }
