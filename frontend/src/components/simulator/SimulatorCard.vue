@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApplicationStore, useTenantStore, useAuthStore } from '@/stores'
 import { AppButton, AppSlider } from '@/components/common'
@@ -277,11 +277,20 @@ watch(paymentFrequency, () => {
 const simulation = computed(() => applicationStore.simulation)
 const isLoading = computed(() => applicationStore.isLoading)
 
-// Auto-run simulation on changes (only after initialization)
-watch([amount, selectedPayments, selectedDays, paymentFrequency, activeProduct, downPaymentPct], async () => {
+// Auto-run simulation on changes (only after initialization). Debounce: al
+// arrastrar el slider NO se dispara una simulación por cada punto que recorre;
+// se espera a que el usuario suelte / se detenga (~350ms) y se calcula UNA sola
+// vez. Evita la ráfaga de llamadas a runSimulation mientras se mueve el slider.
+let simulateTimer: ReturnType<typeof setTimeout> | null = null
+watch([amount, selectedPayments, selectedDays, paymentFrequency, activeProduct, downPaymentPct], () => {
   // Skip if not initialized yet (onMounted handles initial simulation)
   if (!isInitialized.value) return
-  await simulate()
+  if (simulateTimer) clearTimeout(simulateTimer)
+  simulateTimer = setTimeout(() => { simulate() }, 350)
+})
+
+onUnmounted(() => {
+  if (simulateTimer) clearTimeout(simulateTimer)
 })
 
 
