@@ -4,8 +4,6 @@ import type { TenantConfig } from './_types'
  * Tenant Finatea.
  *
  * Branding rojo (#B91C1C), bundle nativo `mx.finatea.app`.
- * Assets actuales (icon.png, splash.png) son placeholders copiados de demo
- * — reemplázalos cuando Finatea provea su branding oficial.
  *
  * Para activar push notifications, agregar config.push con FCM/APNs.
  */
@@ -18,7 +16,13 @@ const config: TenantConfig = {
   assets: {
     icon: 'tenants/finatea/icon.png',
     splash: 'tenants/finatea/splash.png',
-    splashBackgroundColor: '#B91C1C',
+    splashBackgroundColor: '#FFFFFF',
+    // El logo trae figuras a color sobre transparente: fondo blanco para
+    // que se distinga en el launcher (los iconos transparentes no existen
+    // en Android/iOS).
+    iconBackgroundColor: '#FFFFFF',
+    // Wordmark "finatea" para la franja inferior del splash Android 12+.
+    branding: 'tenants/finatea/branding.png',
   },
   nativeTheme: {
     primary: '#B91C1C',

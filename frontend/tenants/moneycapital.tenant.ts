@@ -23,6 +23,8 @@ const config: TenantConfig = {
     // El logo ya es un círculo morado: fondo blanco para que se distinga
     // en el launcher (los iconos transparentes no existen en Android/iOS).
     iconBackgroundColor: '#FFFFFF',
+    // Wordmark "MoneyCapital" para la franja inferior del splash Android 12+.
+    branding: 'tenants/moneycapital/branding.png',
   },
   nativeTheme: {
     primary: '#5B21B6',

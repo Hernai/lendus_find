@@ -1,14 +1,37 @@
+import groovy.json.JsonSlurper
+
 apply plugin: 'com.android.application'
 
+// Identidad per-tenant: scripts/build-tenant.mjs escribe capacitor.tenant.json
+// en la raíz de frontend/ con el appId y appName del tenant en turno.
+// Fallback a MoneyCapital para poder abrir el proyecto en Android Studio
+// sin haber corrido un build de tenant (el JSON es efímero, no va en git).
+def tenantSnapshot = [appId: 'io.money.capital', appName: 'MoneyCapital']
+def tenantFile = file('../../capacitor.tenant.json')
+if (tenantFile.exists()) {
+    def parsed = new JsonSlurper().parse(tenantFile)
+    if (parsed.appId) tenantSnapshot.appId = parsed.appId
+    if (parsed.appName) tenantSnapshot.appName = parsed.appName
+}
+
 android {
+    // Namespace fijo: es solo el paquete interno del código (MainActivity, R,
+    // BuildConfig) y lo comparten todos los tenants. La identidad del APK en
+    // el store la da applicationId, que sí es per-tenant.
     namespace = "io.money.capital"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "io.money.capital"
+        applicationId tenantSnapshot.appId
+        // Strings de identidad generadas per-tenant (antes vivían hardcodeadas
+        // en res/values/strings.xml).
+        resValue "string", "app_name", tenantSnapshot.appName
+        resValue "string", "title_activity_main", tenantSnapshot.appName
+        resValue "string", "package_name", tenantSnapshot.appId
+        resValue "string", "custom_url_scheme", tenantSnapshot.appId
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.2"
+        versionCode 3
+        versionName "1.3"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

@@ -78,6 +78,13 @@ export interface TenantConfig {
      * un color sólido. Si se omite, usa `splashBackgroundColor`.
      */
     iconBackgroundColor?: string
+    /**
+     * PNG opcional con el wordmark para el splash de Android 12+
+     * (windowSplashScreenBrandingImage, franja inferior de ~200×80dp).
+     * Ideal ~560px de ancho sobre fondo transparente. Si se omite se
+     * genera un placeholder transparente para que el recurso exista.
+     */
+    branding?: string
   }
 
   /**
