@@ -148,10 +148,11 @@ const submit = () => {
 </script>
 
 <template>
+<!-- Sin cierre por clic en el backdrop: evita perder monto/plazo/razón ya
+     capturados por un clic accidental. Se cierra solo con "Cancelar"/"✕". -->
 <div
   v-if="show"
   class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-  @click.self="emit('update:show', false)"
 >
   <div class="bg-white rounded-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
     <!-- Header -->
