@@ -14,7 +14,9 @@ export const useLoanStore = defineStore('loan', () => {
   const isSubmitting = ref(false)
 
   const activeLoan = computed(() =>
-    loans.value.find((l) => l.status === 'ACTIVE' || l.status === 'DISBURSED') ?? null,
+    loans.value.find(
+      (l) => l.status === 'ACTIVE' || l.status === 'DISBURSED' || l.status === 'PENDING_DISBURSEMENT',
+    ) ?? null,
   )
 
   const completedLoans = computed(() => loans.value.filter((l) => l.status === 'COMPLETED'))
@@ -33,7 +35,7 @@ export const useLoanStore = defineStore('loan', () => {
     isLoading.value = true
     try {
       const res = await v2.applicant.loan.get(id)
-      current.value = res.data ?? null
+      current.value = res.data?.loan ?? null
       if (current.value) {
         const idx = loans.value.findIndex((l) => l.id === id)
         if (idx >= 0) loans.value.splice(idx, 1, current.value)

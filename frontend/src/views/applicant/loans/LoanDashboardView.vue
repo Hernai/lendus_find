@@ -15,13 +15,29 @@ const tab = ref<'all' | 'active' | 'completed'>('active')
 const showExtension = ref(false)
 const showPay = ref(false)
 
+const ACTIVE_STATUSES = ['ACTIVE', 'DISBURSED', 'PENDING_DISBURSEMENT']
 const visibleLoans = computed(() => {
-  if (tab.value === 'active') return loanStore.loans.filter((l) => l.status === 'ACTIVE' || l.status === 'DISBURSED')
+  if (tab.value === 'active') return loanStore.loans.filter((l) => ACTIVE_STATUSES.includes(l.status))
   if (tab.value === 'completed') return loanStore.completedLoans
   return loanStore.loans
 })
 
 const active = computed(() => loanStore.activeLoan)
+
+// Autorizado: crédito aprobado esperando dispersión de la cartera externa. Aún
+// sin fecha de pago ni "Pagar" (no hay dinero dispersado todavía).
+const isPendingDisbursement = computed(() => active.value?.status === 'PENDING_DISBURSEMENT')
+const isDisbursed = computed(() => active.value != null && !isPendingDisbursement.value)
+
+const STATUS_LABELS: Record<string, string> = {
+  PENDING_DISBURSEMENT: 'Autorizado',
+  DISBURSED: 'Activo',
+  ACTIVE: 'Activo',
+  COMPLETED: 'Finalizado',
+  DEFAULT: 'En mora',
+  RESTRUCTURED: 'Reestructurado',
+}
+const statusLabel = (s: string) => STATUS_LABELS[s] ?? s
 
 const daysLeft = computed(() => {
   const l = active.value
@@ -86,26 +102,35 @@ const goToDetail = (id: string) => {
             <p class="text-sm text-gray-500">{{ productLabel }}</p>
             <p class="text-lg font-bold text-gray-900">{{ formatMoney(active.principal_amount) }}</p>
           </div>
-          <span class="px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">Activo</span>
+          <span
+            class="px-2.5 py-1 rounded-full text-xs font-semibold"
+            :class="isPendingDisbursement ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'"
+          >{{ statusLabel(active.status) }}</span>
         </div>
 
         <div class="grid grid-cols-2 gap-3 text-sm pt-2 border-t border-gray-100">
           <div>
             <p class="text-xs text-gray-500">Total a pagar</p>
-            <p class="font-semibold text-gray-900">{{ formatMoney(active.outstanding_balance) }}</p>
+            <p class="font-semibold text-gray-900">{{ formatMoney(active.total_to_pay) }}</p>
           </div>
-          <div>
+          <div v-if="isDisbursed">
             <p class="text-xs text-gray-500">Vence</p>
             <p class="font-semibold text-gray-900">{{ formatDate(active.due_date) }}</p>
           </div>
-          <div class="col-span-2">
+          <div v-if="isDisbursed" class="col-span-2">
             <p class="text-xs text-gray-500">
               Restan <span class="font-semibold text-primary-700">{{ daysLeft }}</span> días
             </p>
           </div>
         </div>
 
+        <!-- Autorizado: esperando que la cartera externa disperse; aún no se paga. -->
+        <p v-if="isPendingDisbursement" class="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+          Tu crédito fue autorizado. En cuanto se disperse el dinero a tu cuenta verás aquí tu fecha de pago.
+        </p>
+
         <button
+          v-if="isDisbursed"
           type="button"
           class="w-full py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 active:bg-primary-800"
           @click="showPay = true"
@@ -114,8 +139,8 @@ const goToDetail = (id: string) => {
         </button>
       </div>
 
-      <!-- Card prórroga -->
-      <div v-if="active" class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-2">
+      <!-- Card prórroga (solo con crédito dispersado) -->
+      <div v-if="isDisbursed" class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-2">
         <p class="text-sm font-semibold text-gray-900">Prórroga / Extensión de fecha</p>
         <p class="text-xs text-gray-500">
           Aplaza tu fecha de pago 7 o 15 días pagando una pequeña comisión.
@@ -131,7 +156,10 @@ const goToDetail = (id: string) => {
 
       <!-- Card recompensas -->
       <div v-if="active" class="bg-gradient-to-br from-amber-50 to-amber-100 rounded-2xl p-5 border border-amber-200">
-        <p class="text-sm font-semibold text-amber-900">Recompensas {{ tenantStore.tenant?.name || '' }}</p>
+        <div class="flex items-center justify-between">
+          <p class="text-sm font-semibold text-amber-900">Recompensas {{ tenantStore.tenant?.name || '' }}</p>
+          <span v-if="active.reward_points" class="text-sm font-bold text-amber-900">{{ active.reward_points }} pts</span>
+        </div>
         <p class="text-xs text-amber-800 mt-1">
           Paga puntual y gana puntos. Invita amigos y obtén bonificaciones.
         </p>
@@ -177,11 +205,12 @@ const goToDetail = (id: string) => {
             <span
               class="text-xs px-2 py-0.5 rounded-full font-medium"
               :class="{
+                'bg-amber-100 text-amber-700': l.status === 'PENDING_DISBURSEMENT',
                 'bg-green-100 text-green-700': l.status === 'ACTIVE' || l.status === 'DISBURSED',
                 'bg-gray-100 text-gray-700': l.status === 'COMPLETED',
                 'bg-red-100 text-red-700': l.status === 'DEFAULT',
               }"
-            >{{ l.status }}</span>
+            >{{ statusLabel(l.status) }}</span>
           </li>
         </ul>
       </div>

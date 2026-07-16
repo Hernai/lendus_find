@@ -3,7 +3,13 @@
  * Espejo de Loan, LoanPayment, LoanExtension y LoanReward del backend.
  */
 
-export type V2LoanStatus = 'DISBURSED' | 'ACTIVE' | 'COMPLETED' | 'DEFAULT' | 'RESTRUCTURED'
+export type V2LoanStatus =
+  | 'PENDING_DISBURSEMENT'
+  | 'DISBURSED'
+  | 'ACTIVE'
+  | 'COMPLETED'
+  | 'DEFAULT'
+  | 'RESTRUCTURED'
 
 export interface V2LoanPayment {
   id: string
@@ -51,11 +57,12 @@ export interface V2Loan {
   interest_rate: number
   term_days: number
   disbursed_at: string | null
-  due_date: string
+  due_date: string | null
   outstanding_balance: number
   total_to_pay: number
   paid_amount: number
   late_fee_accrued: number
+  reward_points?: number
   status: V2LoanStatus
   disbursement_provider: string | null
   disbursement_reference: string | null

@@ -27,11 +27,12 @@ class LoanController extends Controller
         $loans = Loan::query()
             ->where('applicant_account_id', $user->id)
             ->with(['payments' => fn($q) => $q->where('status', 'COMPLETED')])
+            ->withSum('rewards as reward_points_sum', 'points')
             ->orderByDesc('disbursed_at')
             ->get()
             ->map(fn($l) => $this->serializeLoan($l));
 
-        return $this->success(['items' => $loans]);
+        return $this->success(['loans' => $loans]);
     }
 
     public function show(Request $request, string $id): JsonResponse
@@ -115,6 +116,10 @@ class LoanController extends Controller
             'days_until_due' => $loan->daysUntilDue(),
             'is_overdue' => $loan->isOverdue(),
             'completed_at' => $loan->completed_at?->toIso8601String(),
+            // Puntos de recompensa acumulados (suma de LoanReward) para el card del
+            // dashboard. En el index viene del withSum; en el detalle, de la relación.
+            'reward_points' => (int) round((float) ($loan->reward_points_sum
+                ?? ($loan->relationLoaded('rewards') ? $loan->rewards->sum('points') : 0))),
         ];
 
         if ($withDetails) {

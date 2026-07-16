@@ -14,8 +14,8 @@ export async function list(params?: { status?: string }): Promise<V2ApiResponse<
   return response.data
 }
 
-export async function get(id: string): Promise<V2ApiResponse<V2Loan>> {
-  const response = await api.get<V2ApiResponse<V2Loan>>(`${BASE_PATH}/${id}`)
+export async function get(id: string): Promise<V2ApiResponse<{ loan: V2Loan }>> {
+  const response = await api.get<V2ApiResponse<{ loan: V2Loan }>>(`${BASE_PATH}/${id}`)
   return response.data
 }
 
