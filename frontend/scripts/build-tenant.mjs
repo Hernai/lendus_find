@@ -21,9 +21,12 @@
 
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, copyFileSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createJiti } from 'jiti'
+
+const require = createRequire(import.meta.url)
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const frontendRoot = resolve(__dirname, '..')
@@ -114,6 +117,13 @@ if (tenant.assets.splashDark) {
 const hasIos = existsSync(join(frontendRoot, 'ios'))
 const hasAndroid = existsSync(join(frontendRoot, 'android'))
 
+if (hasAndroid) {
+  // Branding del splash de Android 12+ (windowSplashScreenBrandingImage,
+  // referenciado por res/values-v31/styles.xml). Siempre se escribe: con el
+  // wordmark del tenant si lo trae, o transparente para que el recurso exista.
+  await writeSplashBranding(tenant.assets.branding)
+}
+
 if (hasIos || hasAndroid) {
   console.log('▶ Generando iconos y splash con @capacitor/assets...')
   const platforms = [
@@ -140,6 +150,40 @@ if (hasIos || hasAndroid) {
 }
 
 console.log(`✓ Build de tenant ${slug} completado.`)
+
+async function writeSplashBranding(brandingSrc) {
+  const destDir = join(frontendRoot, 'android/app/src/main/res/drawable-xxhdpi')
+  const dest = join(destDir, 'splash_branding.png')
+  mkdirSync(destDir, { recursive: true })
+
+  // sharp llega como dependencia transitiva de @capacitor/assets.
+  const sharp = require('sharp')
+  const canvas = sharp({
+    create: { width: 600, height: 240, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  })
+
+  const full = brandingSrc ? resolve(frontendRoot, brandingSrc) : null
+  if (full && existsSync(full)) {
+    // Centrar el wordmark en el lienzo 600×240 (200×80dp @xxhdpi).
+    const logo = await sharp(full).resize(560, 200, { fit: 'inside' }).png().toBuffer()
+    const meta = await sharp(logo).metadata()
+    await canvas
+      .composite([
+        {
+          input: logo,
+          left: Math.round((600 - meta.width) / 2),
+          top: Math.round((240 - meta.height) / 2),
+        },
+      ])
+      .png()
+      .toFile(dest)
+    console.log(`  · branding → drawable-xxhdpi/splash_branding.png`)
+  } else {
+    if (brandingSrc) console.warn(`  · Branding faltante: ${brandingSrc} (usando placeholder transparente)`)
+    await canvas.png().toFile(dest)
+    console.log('  · splash_branding.png transparente (tenant sin branding)')
+  }
+}
 
 function copyIfExists(src, dest) {
   const full = resolve(frontendRoot, src)

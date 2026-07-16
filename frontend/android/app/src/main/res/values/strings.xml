@@ -1,7 +1,9 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">MoneyCapital</string>
-    <string name="title_activity_main">MoneyCapital</string>
-    <string name="package_name">io.money.capital</string>
-    <string name="custom_url_scheme">io.money.capital</string>
+    <!--
+      app_name, title_activity_main, package_name y custom_url_scheme se
+      generan per-tenant como resValue en app/build.gradle a partir de
+      capacitor.tenant.json. No las declares aquí: duplicarían el recurso
+      y el build fallaría.
+    -->
 </resources>
