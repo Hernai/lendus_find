@@ -67,3 +67,6 @@ __screenshots__/
 # Archivos PID del servidor de desarrollo
 .backend.pid
 .frontend.pid
+
+# Artefactos de build móvil (no versionar)
+*.zip
