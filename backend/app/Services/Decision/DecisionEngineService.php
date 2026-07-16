@@ -54,6 +54,16 @@ class DecisionEngineService
             $ruleHits[] = ['rule' => 'clabe_mismatch', 'effect' => 'REVIEW', 'detail' => ['clabe' => $clabeResult]];
         }
 
+        // Facematch (selfie vs INE): solo si la política incluye la regla. Un
+        // resultado distinto de true —no coincide (false) o no concluyó (null)—
+        // fuerza revisión manual; nunca rechazo automático.
+        if ($policy->rule('face_match') !== null) {
+            $faceMatch = $inputs['face_match'] ?? null;
+            if ($faceMatch !== true) {
+                $ruleHits[] = ['rule' => 'face_match_failed', 'effect' => 'REVIEW', 'detail' => ['passed' => $faceMatch]];
+            }
+        }
+
         // --- Scoring de bandas (siempre se calcula: alimenta panel y auditoría) ---
         [$score, $scoreDetail] = $this->score($policy, $inputs['variables'] ?? []);
         $band = $this->resolveBand($policy, $score);
@@ -278,6 +288,7 @@ class DecisionEngineService
             'out_of_coverage' => 'Fuera de la cobertura geográfica del piloto',
             'phone_gate_flag' => 'El score telefónico requiere revisión',
             'clabe_mismatch' => 'La cuenta CLABE no coincide con el titular',
+            'face_match_failed' => 'La identidad facial no coincide con la INE',
             'band_unresolved' => 'No se pudo resolver la banda de oferta',
             'counter_offer' => 'El monto solicitado excede el cupo autorizado (contraoferta)',
         ];

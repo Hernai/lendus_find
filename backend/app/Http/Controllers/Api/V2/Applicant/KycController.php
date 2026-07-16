@@ -687,7 +687,10 @@ class KycController extends Controller
             return $error;
         }
 
-        $threshold = $request->input('threshold', 80);
+        $applicant = $this->getApplicant($request);
+        // Umbral desde la política del producto (fuente de verdad, editable sin
+        // deploy); no se confía en un umbral enviado por el cliente. Default 80.
+        $threshold = $this->resolveFaceMatchThreshold($applicant);
 
         $result = $service->validateFaceMatch(
             $request->selfie_image,
@@ -705,13 +708,27 @@ class KycController extends Controller
             return $this->badRequest('FACE_MATCH_FAILED', $result['error'] ?? 'Error en comparación facial');
         }
 
-        // Auto-register face match verification if applicant exists
-        $applicant = $this->getApplicant($request);
+        // Registrar SIEMPRE el resultado (coincide o no) en kyc_data para que el
+        // motor de decisión lo lea y quede en el expediente. El motor manda la
+        // solicitud a REVIEW cuando passed=false (regla per-política). Una falla
+        // técnica (arriba, !success) NO llega aquí: el resultado queda sin concluir.
+        if ($applicant) {
+            $applicant->kyc_data = array_merge($applicant->kyc_data ?? [], [
+                'face_match' => [
+                    'passed' => (bool) $result['match'],
+                    'score' => $result['score'],
+                    'at' => now()->toIso8601String(),
+                ],
+            ]);
+            $applicant->save();
+        }
+
+        // Solo la coincidencia aprueba la selfie y avanza el KYC/expediente.
         if ($result['match'] && $applicant) {
             $this->verificationService->verify(
                 $applicant,
                 'face_match',
-                $result['match'] ? 'passed' : 'failed',
+                'passed',
                 VerificationMethod::KYC_FACE_MATCH,
                 [
                     'score' => $result['score'],
@@ -727,14 +744,16 @@ class KycController extends Controller
             ]);
 
             $this->verificationService->updateKycStatus($applicant);
+        }
 
-            // Record event for timeline
+        // Evento de timeline SIEMPRE, con el resultado real (coincide o no).
+        if ($applicant) {
             $application = $this->getCurrentApplication($applicant);
             if ($application) {
                 $user = $request->user();
                 $this->eventService->recordKycFaceMatch(
                     $application,
-                    true,
+                    (bool) $result['match'],
                     $result['score'],
                     $user?->id,
                     $request
@@ -748,6 +767,24 @@ class KycController extends Controller
             'threshold' => $result['threshold'],
             'validation_code' => $result['validation_code'] ?? null,
         ], $result['match'] ? 'Rostros coinciden' : 'Rostros no coinciden');
+    }
+
+    /**
+     * Umbral del facematch: se resuelve desde la política de producto de la
+     * solicitud del solicitante (fuente de verdad, editable sin deploy). Sin
+     * política aplica el default 80. No se confía en un umbral del cliente.
+     */
+    private function resolveFaceMatchThreshold(?Person $person): int
+    {
+        $default = 80;
+        $application = $person ? $this->getCurrentApplication($person) : null;
+        if (!$application) {
+            return $default;
+        }
+
+        $min = \App\Models\DecisionPolicy::activeFor($application->product_id)?->rule('face_match.min_score');
+
+        return $min !== null ? (int) $min : $default;
     }
 
     /**

@@ -90,10 +90,16 @@ class DecisionInputCollector
         // flujo la registró en kyc_data); ausencia = sin inconsistencia.
         $identityMismatch = (bool) data_get($person?->kyc_data, 'ine_verification.mismatch', false);
 
+        // Resultado del facematch (selfie vs INE) que el onboarding registra en
+        // kyc_data: true (coincide), false (no coincide) o null (no concluyó / no
+        // se ejecutó). El motor solo lo evalúa si la política incluye la regla.
+        $faceMatch = data_get($person?->kyc_data, 'face_match.passed', null);
+
         return [
             'inputs' => [
                 'kyc_status' => $kycStatus,
                 'identity_mismatch' => $identityMismatch,
+                'face_match' => $faceMatch,
                 'phone_risk' => $phoneRisk ? [
                     'status' => $phoneRisk->status,
                     'score' => $phoneRisk->score,

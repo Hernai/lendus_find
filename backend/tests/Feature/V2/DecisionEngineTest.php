@@ -538,4 +538,66 @@ class DecisionEngineTest extends TestCase
         $this->assertSame('OFFER', $decision->outcome);
         $this->assertFalse($decision->executed);
     }
+
+    // =====================================================
+    // Regla de facematch (cambio facematch-motor-decision)
+    // =====================================================
+
+    public function test_facematch_no_coincide_va_a_revision(): void
+    {
+        $this->productPolicy('ACTIVE', ['face_match' => ['min_score' => 80]]);
+        $this->person->update(['kyc_data' => ['face_match' => ['passed' => false, 'score' => 50]]]);
+        $app = $this->makeSubmitted();
+
+        $this->runDecisionJob($app);
+
+        $app->refresh();
+        $this->assertSame(Application::STATUS_IN_REVIEW, $app->status);
+        $this->assertNull($app->counter_offer);
+
+        $decision = ApplicationDecision::withoutGlobalScopes()->where('application_id', $app->id)->first();
+        $this->assertSame('REVIEW', $decision->outcome);
+        $this->assertContains('face_match_failed', array_column($decision->rule_hits, 'rule'));
+    }
+
+    public function test_facematch_ausente_va_a_revision(): void
+    {
+        $this->productPolicy('ACTIVE', ['face_match' => ['min_score' => 80]]);
+        // person sin kyc_data.face_match: el facematch no concluyó / no se ejecutó
+        $app = $this->makeSubmitted();
+
+        $this->runDecisionJob($app);
+
+        $app->refresh();
+        $this->assertSame(Application::STATUS_IN_REVIEW, $app->status);
+        $decision = ApplicationDecision::withoutGlobalScopes()->where('application_id', $app->id)->first();
+        $this->assertSame('REVIEW', $decision->outcome);
+        $this->assertContains('face_match_failed', array_column($decision->rule_hits, 'rule'));
+    }
+
+    public function test_facematch_coincide_no_penaliza(): void
+    {
+        $this->productPolicy('ACTIVE', ['face_match' => ['min_score' => 80]]);
+        $this->person->update(['kyc_data' => ['face_match' => ['passed' => true, 'score' => 95]]]);
+        $app = $this->makeSubmitted(['requested_amount' => 350]);
+
+        $this->runDecisionJob($app);
+
+        $app->refresh();
+        $this->assertSame(Application::STATUS_COUNTER_OFFERED, $app->status);
+        $decision = ApplicationDecision::withoutGlobalScopes()->where('application_id', $app->id)->first();
+        $this->assertNotContains('face_match_failed', array_column($decision->rule_hits, 'rule'));
+    }
+
+    public function test_facematch_sin_regla_en_politica_no_altera(): void
+    {
+        $this->productPolicy('ACTIVE'); // sin face_match en las reglas
+        $this->person->update(['kyc_data' => ['face_match' => ['passed' => false, 'score' => 10]]]);
+        $app = $this->makeSubmitted(['requested_amount' => 350]);
+
+        $this->runDecisionJob($app);
+
+        $app->refresh();
+        $this->assertSame(Application::STATUS_COUNTER_OFFERED, $app->status);
+    }
 }
