@@ -511,7 +511,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
             if (savedAppId && savedAppId !== 'null' && savedAppId !== 'undefined') {
               try {
                 await applicationStore.loadApplication(savedAppId)
-              } catch (e) {
+              } catch {
                 localStorage.removeItem('current_application_id')
               }
             }
@@ -936,33 +936,41 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           const ba = payload as { type?: string; bank_code?: string; account_number?: string } | null
           if (ba?.bank_code && ba?.account_number) {
             const num = ba.account_number.replace(/\D/g, '')
+            const isCard = ba.type === 'CARD'
             const pd = profileStore.profile?.personal_data
             // Nombre real del titular. Si el store aún no lo tiene, lo dejamos
             // vacío y el backend lo completa con el nombre de la persona (NUNCA
             // mandamos el literal "Titular", que se persistía como "TITULAR").
             const holder = [pd?.first_name, pd?.last_name_1, pd?.last_name_2]
               .filter(Boolean).join(' ').trim()
-            // Borrar cuentas existentes para no duplicar al reeditar/retroceder.
+            let list: Array<{ id: string; clabe?: string | null }> = []
             try {
               const existing = await profileService.listBankAccounts()
-              const list = existing.data?.bank_accounts ?? []
+              list = (existing.data?.bank_accounts ?? []) as Array<{ id: string; clabe?: string | null }>
+            } catch { stepHadError = true }
+            // Idempotencia: si YA existe una cuenta con la misma CLABE, no la borres
+            // ni la recrees — preserva su validación de Nubarium (en curso o hecha);
+            // recrearla la reiniciaría a is_verified=false y el admin la vería sin
+            // validar. Solo se reemplaza si la CLABE cambió (tarjeta: sin comparar).
+            const sameClabe = !isCard && list.some((b) => String(b.clabe ?? '') === num)
+            if (!sameClabe) {
+              // Borrar cuentas existentes para no duplicar al reeditar/retroceder.
               for (const b of list) {
                 try { await profileService.deleteBankAccount(b.id) } catch { stepHadError = true }
               }
-            } catch { stepHadError = true }
-            try {
-              // POST /profile/bank-accounts (plural). Para CLABE manda `clabe`;
-              // para tarjeta manda el número como `card_number`.
-              const isCard = ba.type === 'CARD'
-              await profileService.createBankAccount({
-                clabe: isCard ? '' : num,
-                card_number: isCard ? num : undefined,
-                holder_name: holder,
-                account_type: isCard ? 'TARJETA' : 'DEBITO',
-              } as never)
-            } catch (e) {
-              stepHadError = true
-              onboardingLogger.warn('createBankAccount failed', { error: e })
+              try {
+                // POST /profile/bank-accounts (plural). Para CLABE manda `clabe`;
+                // para tarjeta manda el número como `card_number`.
+                await profileService.createBankAccount({
+                  clabe: isCard ? '' : num,
+                  card_number: isCard ? num : undefined,
+                  holder_name: holder,
+                  account_type: isCard ? 'TARJETA' : 'DEBITO',
+                } as never)
+              } catch (e) {
+                stepHadError = true
+                onboardingLogger.warn('createBankAccount failed', { error: e })
+              }
             }
           }
           break
