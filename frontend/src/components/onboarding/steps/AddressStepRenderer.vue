@@ -102,9 +102,26 @@ const norm = (s: string) =>
 
 function matchStateValue(estado: string): string {
   const target = norm(estado)
-  const found = mexicanStates.value.find(
+  // 1. Match exacto por código (AGU, SIN…) o por nombre del catálogo.
+  let found = mexicanStates.value.find(
     (s) => norm(s.value) === target || norm(s.label) === target,
   )
+  // 2. "México" a secas (SEPOMEX/Nominatim) → Estado de México. "Ciudad de México"
+  //    y "Estado de México" ya matchean exacto arriba; esto solo resuelve la forma
+  //    corta ambigua sin colisionar con CDMX.
+  if (!found && target === 'MEXICO') {
+    found = mexicanStates.value.find((s) => s.value === 'MEX')
+  }
+  // 3. Nombres oficiales largos que los proveedores devuelven pero el catálogo
+  //    abrevia: "Coahuila de Zaragoza", "Michoacán de Ocampo", "Veracruz de Ignacio
+  //    de la Llave". El nombre del proveedor empieza con el label corto (≥5 chars
+  //    para no colisionar con abreviaturas cortas).
+  if (!found) {
+    found = mexicanStates.value.find((s) => {
+      const label = norm(s.label)
+      return label.length >= 5 && target.startsWith(label)
+    })
+  }
   return found?.value ?? form.value.state
 }
 
