@@ -33,6 +33,7 @@ const resolved = computed(() =>
        El cast a `any` en el template es intencional: el contrato de cada renderer valida su payload. -->
   <component
     :is="resolved"
+    :key="step.id"
     :step="(step as any)"
     :model-value="(modelValue as any)"
     :form-data="formData"

@@ -228,7 +228,10 @@ function editRow(stepId: string) {
   // móvil: m-onboarding-step) y el resto de params (ej. tenant), en vez de fijar
   // la ruta móvil — así el "editar" del review funciona también en la web.
   const name = (router.currentRoute.value.name as string) || 'm-onboarding-step'
-  router.push({ name, params: { ...router.currentRoute.value.params, stepId } })
+  // Recuerda el paso de resumen actual (?returnTo) para volver aquí tras editar,
+  // en vez de seguir avanzando por el flujo. Lo consume DynamicOnboardingView.
+  const returnTo = String(router.currentRoute.value.params.stepId ?? '')
+  router.push({ name, params: { ...router.currentRoute.value.params, stepId }, query: { returnTo } })
 }
 </script>
 

@@ -92,7 +92,25 @@ const rendererValid = ref(false)
 // (evita doble tap / re-habilitación en el gap async, sobre todo al enviar la
 // solicitud en el último paso). Se resetea cuando el paso cambia (navegó) abajo.
 const isAdvancing = ref(false)
-watch(currentStep, () => { rendererValid.value = false; isAdvancing.value = false })
+// Re-edición desde el resumen: el "editar" de una fila navega al paso con
+// ?returnTo=<review>. Presente ⇒ al guardar/elegir se vuelve al resumen en vez
+// de avanzar por el flujo. Ver editRow en ReviewStepRenderer.
+const editReturnTo = computed(() => (route.query.returnTo as string) || null)
+// Marca el primer cambio de valor tras navegar: al aterrizar en un paso que YA
+// trae valor (re-edición), NO debe auto-avanzar; solo la elección real del
+// usuario avanza. Lo consume watch(currentValue).
+let justNavigated = false
+watch(currentStep, (_step, prevStep) => {
+  rendererValid.value = false
+  isAdvancing.value = false
+  // Solo marca "recién navegado" si venimos de OTRO paso (re-edición / navegación).
+  // En el montaje inicial (prevStep null/undefined) NO se marca: un paso vacío que
+  // arranca null→null nunca dispara watch(currentValue) para consumir la bandera, y
+  // se tragaría la primera elección. Ver watch(currentValue).
+  justNavigated = prevStep != null
+  // Un auto-avance pendiente del paso anterior no debe dispararse ya navegado.
+  if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer)
+})
 
 // Tipos cuyo renderer es dueño de su validación (contrato update:valid). Los 11
 // tipos base están migrados; un tipo fuera de este set (p.ej. un paso CUSTOM de
@@ -363,12 +381,19 @@ async function finishOnboarding() {
 
 // Auto-avance para single-select cuando v cambia
 watch(currentValue, async (v, prev) => {
+  // Consume la marca de navegación: si el valor apareció por navegar (no por
+  // elección del usuario), no auto-avanzar — clave para re-editar sin rebotar.
+  const wasNavigation = justNavigated
+  justNavigated = false
   if (!isAutoAdvanceStep.value) return
   if (v === null || v === undefined || v === '') return
   if (v === prev) return
+  if (wasNavigation) return
   if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer)
   autoAdvanceTimer = setTimeout(async () => {
     if (!canContinue.value) return
+    // Re-edición desde el resumen: al elegir, volver al resumen, no avanzar.
+    if (editReturnTo.value) { await returnToReview(); return }
     const nextIdx = currentIndex.value + 1
     if (nextIdx >= steps.value.length) {
       await finishOnboarding()
@@ -507,6 +532,8 @@ function confirmIne() {
 async function next() {
   if (!canContinue.value || !currentStep.value || isAdvancing.value) return
   isAdvancing.value = true
+  // Re-edición desde el resumen: guardar el cambio y volver al resumen.
+  if (editReturnTo.value) { await returnToReview(); return }
   const nextIdx = currentIndex.value + 1
   if (nextIdx >= steps.value.length) {
     // finishOnboarding SIEMPRE navega (su finally); dejamos isAdvancing en true
@@ -519,6 +546,17 @@ async function next() {
   saveInBackground()
   const nextId = steps.value[nextIdx]!.id
   await router.push({ name: stepRouteName.value, params: { ...route.params, stepId: nextId } })
+}
+
+// Vuelve al resumen (review) tras editar una fila desde ahí: guarda el cambio y
+// limpia el ?returnTo para salir del modo edición. Único punto de retorno usado
+// por next(), el auto-avance y closeSheet.
+async function returnToReview() {
+  const target = editReturnTo.value
+  if (!target) return
+  saveInBackground()
+  sheetOpen.value = false
+  await router.push({ name: stepRouteName.value, params: { ...route.params, stepId: target }, query: {} })
 }
 
 async function prev() {
@@ -534,6 +572,8 @@ async function prev() {
 
 function closeSheet() {
   sheetOpen.value = false
+  // Cerrar el sheet en modo edición equivale a volver al resumen sin cambios.
+  if (editReturnTo.value) returnToReview()
 }
 
 onMounted(async () => {
@@ -671,14 +711,14 @@ onUnmounted(() => {
     </main>
 
     <!-- Footer Continuar: solo para steps que NO auto-avanzan ni usan sheet -->
-    <footer v-if="!isAutoAdvanceStep && !useSheet" class="dyn-footer">
+    <footer v-if="(!isAutoAdvanceStep || editReturnTo) && !useSheet" class="dyn-footer">
       <button
         type="button"
         class="btn-continue"
         :disabled="!canContinue || ineValidating || isAdvancing"
         @click="handleContinue"
       >
-        {{ ineValidating ? 'Validando tu INE…' : 'Continuar' }}
+        {{ ineValidating ? 'Validando tu INE…' : (editReturnTo ? 'Guardar y volver' : 'Continuar') }}
       </button>
     </footer>
 
@@ -804,7 +844,7 @@ onUnmounted(() => {
               :disabled="!canContinue || isAdvancing"
               @click="next"
             >
-              Continuar
+              {{ editReturnTo ? 'Guardar y volver' : 'Continuar' }}
             </button>
           </div>
         </div>
