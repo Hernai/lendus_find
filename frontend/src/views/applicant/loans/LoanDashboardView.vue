@@ -158,7 +158,7 @@ const goToDetail = (id: string) => {
       <div v-if="active" class="bg-gradient-to-br from-amber-50 to-amber-100 rounded-2xl p-5 border border-amber-200">
         <div class="flex items-center justify-between">
           <p class="text-sm font-semibold text-amber-900">Recompensas {{ tenantStore.tenant?.name || '' }}</p>
-          <span v-if="active.reward_points" class="text-sm font-bold text-amber-900">{{ active.reward_points }} pts</span>
+          <span v-if="loanStore.rewardPoints" class="text-sm font-bold text-amber-900">{{ loanStore.rewardPoints }} pts</span>
         </div>
         <p class="text-xs text-amber-800 mt-1">
           Paga puntual y gana puntos. Invita amigos y obtén bonificaciones.

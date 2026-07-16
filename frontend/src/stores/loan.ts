@@ -13,10 +13,20 @@ export const useLoanStore = defineStore('loan', () => {
   const isLoading = ref(false)
   const isSubmitting = ref(false)
 
-  const activeLoan = computed(() =>
-    loans.value.find(
-      (l) => l.status === 'ACTIVE' || l.status === 'DISBURSED' || l.status === 'PENDING_DISBURSEMENT',
-    ) ?? null,
+  // Destaca el crédito dispersado (con acción de pago) antes que el autorizado
+  // esperando dispersión: si hay uno ACTIVE/DISBURSED se muestra ese, y solo a
+  // falta de él se destaca el PENDING_DISBURSEMENT.
+  const activeLoan = computed(
+    () =>
+      loans.value.find((l) => l.status === 'ACTIVE' || l.status === 'DISBURSED') ??
+      loans.value.find((l) => l.status === 'PENDING_DISBURSEMENT') ??
+      null,
+  )
+
+  // Puntos de recompensa del cliente: suma de todos sus créditos (el card de
+  // recompensas es a nivel cliente, no del crédito destacado).
+  const rewardPoints = computed(() =>
+    loans.value.reduce((sum, l) => sum + (l.reward_points ?? 0), 0),
   )
 
   const completedLoans = computed(() => loans.value.filter((l) => l.status === 'COMPLETED'))
@@ -80,6 +90,7 @@ export const useLoanStore = defineStore('loan', () => {
     isLoading,
     isSubmitting,
     activeLoan,
+    rewardPoints,
     completedLoans,
     fetchAll,
     fetchOne,
