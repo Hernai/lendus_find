@@ -237,6 +237,28 @@ class PersonIdentificationService
     ): PersonIdentification {
         $existing = $this->getCurrentByType($person->id, 'INE');
 
+        // Guard como setCurp/setRfc: si ya existe un INE con el MISMO CIC, no lo
+        // reemplaces — replace() crearía una versión nueva en STATUS_PENDING y
+        // perdería el VERIFIED tras editar/corregir el perfil. Solo fusiona el
+        // document_data. Un CIC vacío NUNCA reemplaza (una corrección parcial no
+        // debe borrar la clave ni la verificación existentes).
+        if ($existing && ($cic === '' || $existing->identifier_value === $cic)) {
+            $merged = array_merge($existing->document_data ?? [], $documentData ?? []);
+            if ($cic !== '') {
+                $merged['cic'] = $cic;
+            }
+            if ($ocr !== '') {
+                $merged['ocr'] = $ocr;
+            }
+            $existing->document_data = $merged;
+            if ($expiresAt) {
+                $existing->expires_at = $expiresAt;
+            }
+            $existing->save();
+
+            return $existing;
+        }
+
         $data = [
             'type' => 'INE',
             'identifier_value' => $cic,

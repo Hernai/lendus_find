@@ -151,4 +151,54 @@ class PersonIdentificationServiceTest extends TestCase
 
         $this->assertCount(1, $pending);
     }
+
+    public function test_set_ine_preserves_verified_when_same_cic(): void
+    {
+        $ine = PersonIdentification::factory()->ine()->verified()->current()->create([
+            'tenant_id' => $this->tenant->id,
+            'person_id' => $this->person->id,
+            'identifier_value' => 'CIC123456789',
+            'document_data' => ['cic' => 'CIC123456789', 'ocr' => 'OCR123'],
+        ]);
+
+        // Re-guardar el MISMO INE (p.ej. al re-editar el perfil) no debe crear una
+        // versión nueva en PENDING ni perder el VERIFIED.
+        $result = $this->service->setIne($this->person, 'CIC123456789', 'OCR123');
+
+        $this->assertEquals($ine->id, $result->id);
+        $this->assertEquals(PersonIdentification::STATUS_VERIFIED, $result->fresh()->status);
+        $this->assertEquals('CIC123456789', $result->fresh()->identifier_value);
+    }
+
+    public function test_set_ine_empty_cic_does_not_replace_or_wipe(): void
+    {
+        $ine = PersonIdentification::factory()->ine()->verified()->current()->create([
+            'tenant_id' => $this->tenant->id,
+            'person_id' => $this->person->id,
+            'identifier_value' => 'CIC123456789',
+        ]);
+
+        // Una corrección parcial (CIC vacío) no debe vaciar la clave ni tirar el VERIFIED.
+        $result = $this->service->setIne($this->person, '', '');
+
+        $this->assertEquals($ine->id, $result->id);
+        $this->assertEquals(PersonIdentification::STATUS_VERIFIED, $result->fresh()->status);
+        $this->assertEquals('CIC123456789', $result->fresh()->identifier_value);
+    }
+
+    public function test_set_ine_replaces_when_cic_changes(): void
+    {
+        $ine = PersonIdentification::factory()->ine()->verified()->current()->create([
+            'tenant_id' => $this->tenant->id,
+            'person_id' => $this->person->id,
+            'identifier_value' => 'CIC_OLD',
+        ]);
+
+        // Un INE realmente distinto sí genera versión nueva (la anterior queda histórica).
+        $result = $this->service->setIne($this->person, 'CIC_NEW', 'OCR_NEW');
+
+        $this->assertNotEquals($ine->id, $result->id);
+        $this->assertEquals('CIC_NEW', $result->identifier_value);
+        $this->assertFalse($ine->fresh()->is_current);
+    }
 }
