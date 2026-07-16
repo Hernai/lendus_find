@@ -205,7 +205,48 @@ class PersonEmploymentService
         $employmentData['is_current'] = true;
         $employmentData['start_date'] = $employmentData['start_date'] ?? now();
 
+        // Guard como AddressService::setHomeAddress: si el empleo current es "el
+        // mismo" (mismo tipo, empleador e ingreso), no lo recrees — create() lo
+        // terminaría y crearía uno nuevo en PENDING, perdiendo income_verified al
+        // editar un campo no relacionado. Solo actualiza los demás campos in-place.
+        // Un cambio real de empleo/ingreso sí crea registro nuevo (re-verificación).
+        $existing = PersonEmployment::where('person_id', $person->id)
+            ->where('is_current', true)
+            ->first();
+
+        if ($existing && $this->isSameEmployment($existing, $employmentData)) {
+            $fieldsToUpdate = array_diff_key($employmentData, array_flip([
+                'employment_type', 'employer_name', 'monthly_income', 'is_current', 'status',
+            ]));
+
+            return empty($fieldsToUpdate) ? $existing : $this->update($existing, $fieldsToUpdate);
+        }
+
         return $this->create($person, $employmentData);
+    }
+
+    /**
+     * ¿Es el mismo empleo? Compara identidad (tipo, empleador) e ingreso — la
+     * verificación de ingresos está atada al monto declarado, así que un cambio de
+     * ingreso re-verifica. Solo compara los campos PRESENTES en $new: una edición
+     * parcial no debe recrear por un campo que no se mandó.
+     */
+    protected function isSameEmployment(PersonEmployment $existing, array $new): bool
+    {
+        if (array_key_exists('employment_type', $new)
+            && (string) $existing->employment_type !== (string) $new['employment_type']) {
+            return false;
+        }
+        if (array_key_exists('employer_name', $new)
+            && strtolower(trim((string) $existing->employer_name)) !== strtolower(trim((string) $new['employer_name']))) {
+            return false;
+        }
+        if (array_key_exists('monthly_income', $new)
+            && (float) $existing->monthly_income !== (float) $new['monthly_income']) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

@@ -149,4 +149,55 @@ class PersonEmploymentServiceTest extends TestCase
         $this->assertEquals(35000.00, $summary['total_income']);
         $this->assertTrue($summary['is_verified']);
     }
+
+    public function test_set_current_employment_preserves_verified_income_when_same(): void
+    {
+        $emp = PersonEmployment::factory()->employee()->create([
+            'tenant_id' => $this->tenant->id,
+            'person_id' => $this->person->id,
+            'employer_name' => 'Empresa SA',
+            'monthly_income' => 30000.00,
+            'is_current' => true,
+            'income_verified' => true,
+            'status' => PersonEmployment::STATUS_VERIFIED,
+        ]);
+
+        // Editar un campo no relacionado (puesto) sin cambiar tipo/empleador/ingreso
+        // no debe recrear el registro ni perder income_verified.
+        $result = $this->service->setCurrentEmployment($this->person, [
+            'employment_type' => 'EMPLOYEE',
+            'employer_name' => 'Empresa SA',
+            'monthly_income' => 30000.00,
+            'job_title' => 'Subgerente',
+        ]);
+
+        $this->assertEquals($emp->id, $result->id);
+        $this->assertTrue($result->fresh()->income_verified);
+        $this->assertEquals('Subgerente', $result->fresh()->job_title);
+    }
+
+    public function test_set_current_employment_recreates_when_income_changes(): void
+    {
+        $emp = PersonEmployment::factory()->employee()->create([
+            'tenant_id' => $this->tenant->id,
+            'person_id' => $this->person->id,
+            'employer_name' => 'Empresa SA',
+            'monthly_income' => 30000.00,
+            'is_current' => true,
+            'income_verified' => true,
+            'status' => PersonEmployment::STATUS_VERIFIED,
+        ]);
+
+        // Cambiar el ingreso sí crea registro nuevo (re-verificación); el anterior
+        // queda histórico.
+        $result = $this->service->setCurrentEmployment($this->person, [
+            'employment_type' => 'EMPLOYEE',
+            'employer_name' => 'Empresa SA',
+            'monthly_income' => 45000.00,
+        ]);
+
+        $this->assertNotEquals($emp->id, $result->id);
+        $this->assertFalse((bool) $result->income_verified);
+        $this->assertFalse($emp->fresh()->is_current);
+    }
 }
