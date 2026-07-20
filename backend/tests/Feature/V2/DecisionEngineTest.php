@@ -5,6 +5,7 @@ namespace Tests\Feature\V2;
 use App\Enums\LoanStatus;
 use App\Jobs\DecideApplicationJob;
 use App\Jobs\EvaluateRenewalJob;
+use App\Models\Address;
 use App\Models\ApplicantAccount;
 use App\Models\Application;
 use App\Models\ApplicationDecision;
@@ -599,5 +600,113 @@ class DecisionEngineTest extends TestCase
 
         $app->refresh();
         $this->assertSame(Application::STATUS_COUNTER_OFFERED, $app->status);
+    }
+
+    // =====================================================
+    // Vivienda / ubicación (cambio motor-housing-ubicacion)
+    // =====================================================
+
+    private function makeHomeAddress(string $housingType): Address
+    {
+        return Address::create([
+            'tenant_id' => $this->tenant->id,
+            'entity_type' => 'persons',
+            'entity_id' => $this->person->id,
+            'type' => 'HOME',
+            'is_current' => true,
+            'street' => 'Calle Falsa',
+            'exterior_number' => '123',
+            'neighborhood' => 'Centro',
+            'municipality' => 'Cuauhtémoc',
+            'city' => 'Ciudad de México',
+            'state' => 'CDMX',
+            'postal_code' => '06000',
+            'housing_type' => $housingType,
+            'status' => 'PENDING',
+        ]);
+    }
+
+    public function test_recolecta_housing_type_del_domicilio_normalizado_al_canonico(): void
+    {
+        $collector = app(DecisionInputCollector::class);
+        $app = $this->makeSubmitted();
+
+        // Sin domicilio → null (el motor no suma puntos por esa variable).
+        $this->assertNull(
+            $collector->collect($app->fresh())['inputs']['variables']['housing_type']
+        );
+
+        // Valor legacy del store anterior se normaliza al canónico.
+        $this->makeHomeAddress('MORTGAGED');
+        $this->assertSame(
+            'OWNED_MORTGAGE',
+            $collector->collect($app->fresh())['inputs']['variables']['housing_type']
+        );
+
+        // Un valor ya canónico pasa sin cambios.
+        Address::withoutGlobalScopes()
+            ->where('entity_id', $this->person->id)
+            ->update(['housing_type' => 'OWNED_PAID']);
+        $this->assertSame(
+            'OWNED_PAID',
+            $collector->collect($app->fresh())['inputs']['variables']['housing_type']
+        );
+    }
+
+    public function test_housing_type_con_puntos_cero_no_altera_score_ni_decision(): void
+    {
+        $engine = app(DecisionEngineService::class);
+        $inputs = ['variables' => ['salary_range' => 'GT_15000', 'housing_type' => 'OWNED_PAID']];
+        $context = ['requested_amount' => 350, 'product_min_amount' => 300];
+
+        $bands = [
+            ['key' => 'BASE', 'min_amount' => 300, 'max_amount' => 400],
+            ['key' => 'INTERMEDIA', 'min_amount' => 500, 'max_amount' => 600],
+        ];
+        $cutoffs = [
+            ['min_score' => 0, 'band' => 'BASE'],
+            ['min_score' => 35, 'band' => 'INTERMEDIA'],
+        ];
+
+        $baseline = DecisionPolicy::make(['rules' => [
+            'scoring' => [
+                'variables' => [['key' => 'salary_range', 'points' => ['GT_15000' => 40]]],
+                'band_cutoffs' => $cutoffs,
+            ],
+            'bands' => $bands,
+            'first_credit' => ['term_days' => 7],
+        ]]);
+
+        // Igual que la sembrada por MoneyCapitalSeeder: housing_type con todos los
+        // valores en 0 (matriz sin calibrar).
+        $withHousing = DecisionPolicy::make(['rules' => [
+            'scoring' => [
+                'variables' => [
+                    ['key' => 'salary_range', 'points' => ['GT_15000' => 40]],
+                    ['key' => 'housing_type', 'points' => [
+                        'OWNED_PAID' => 0, 'OWNED_MORTGAGE' => 0, 'RENTED' => 0,
+                        'FAMILY' => 0, 'BORROWED' => 0, 'OTHER' => 0,
+                    ]],
+                ],
+                'band_cutoffs' => $cutoffs,
+            ],
+            'bands' => $bands,
+            'first_credit' => ['term_days' => 7],
+        ]]);
+
+        $base = $engine->evaluate($baseline, $inputs, $context);
+        $withH = $engine->evaluate($withHousing, $inputs, $context);
+
+        // Con points en 0 no cambia score, banda ni resultado.
+        $this->assertSame($base['score'], $withH['score']);
+        $this->assertSame($base['band'], $withH['band']);
+        $this->assertSame($base['outcome'], $withH['outcome']);
+
+        // Pero sí queda trazada en el desglose con points 0.
+        $scoring = collect($withH['rule_hits'])->firstWhere('rule', 'scoring');
+        $this->assertSame(
+            ['key' => 'housing_type', 'value' => 'OWNED_PAID', 'points' => 0],
+            collect($scoring['detail']['points'])->firstWhere('key', 'housing_type'),
+        );
     }
 }

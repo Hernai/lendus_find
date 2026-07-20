@@ -348,6 +348,34 @@ class MoneyCapitalSeeder extends Seeder
                             'label' => 'Créditos en línea declarados',
                             'points' => ['0' => 5, '1' => 10, '2' => 10, '3' => 5, '4' => 0, '5+' => 0],
                         ],
+                        // Variables nuevas (motor-housing-ubicacion): points maps en 0
+                        // (matriz sin calibrar). Se ajustan desde el configurador del
+                        // admin sin re-seed ni deploy; en 0 no alteran banda/decisión.
+                        [
+                            'key' => 'housing_type',
+                            'label' => 'Tipo de vivienda',
+                            'points' => [
+                                'OWNED_PAID' => 0,
+                                'OWNED_MORTGAGE' => 0,
+                                'RENTED' => 0,
+                                'FAMILY' => 0,
+                                'BORROWED' => 0,
+                                'OTHER' => 0,
+                            ],
+                        ],
+                        [
+                            'key' => 'state',
+                            'label' => 'Estado',
+                            'points' => [
+                                'AGU' => 0, 'BCN' => 0, 'BCS' => 0, 'CAM' => 0, 'CHP' => 0,
+                                'CHH' => 0, 'COA' => 0, 'COL' => 0, 'CDMX' => 0, 'DUR' => 0,
+                                'GUA' => 0, 'GRO' => 0, 'HID' => 0, 'JAL' => 0, 'MEX' => 0,
+                                'MIC' => 0, 'MOR' => 0, 'NAY' => 0, 'NLE' => 0, 'OAX' => 0,
+                                'PUE' => 0, 'QUE' => 0, 'ROO' => 0, 'SLP' => 0, 'SIN' => 0,
+                                'SON' => 0, 'TAB' => 0, 'TAM' => 0, 'TLA' => 0, 'VER' => 0,
+                                'YUC' => 0, 'ZAC' => 0,
+                            ],
+                        ],
                     ],
                     // Piso de puntaje: un perfil por debajo del corte más bajo
                     // (declarativas muy flacas) NO recibe oferta automática —

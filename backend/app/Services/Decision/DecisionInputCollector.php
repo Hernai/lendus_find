@@ -2,6 +2,7 @@
 
 namespace App\Services\Decision;
 
+use App\Enums\HousingType;
 use App\Enums\KycStatus;
 use App\Enums\SalaryRange;
 use App\Models\Application;
@@ -82,6 +83,12 @@ class DecisionInputCollector
                     ?? null
             ),
             'phone_risk_level' => $phoneRisk?->level,
+            // Tipo de vivienda del domicilio actual, normalizado al enum canónico
+            // (soporta valores legacy) para casar con la llave del points map. Sin
+            // domicilio o sin housing_type queda en null → el motor no suma puntos.
+            'housing_type' => $address?->housing_type !== null
+                ? HousingType::normalize($address->housing_type)?->value
+                : null,
             'state' => $address?->state,
             'city' => $address?->city,
         ];
