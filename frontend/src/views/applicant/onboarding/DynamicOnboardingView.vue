@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/auth'
 import OnboardingStepRenderer from '@/components/onboarding/OnboardingStepRenderer.vue'
 import { AppProgressBar } from '@/components/common'
 import type { OnboardingStep } from '@/types/v2/onboardingStep'
-import { legacyCanContinue } from './stepValidation'
+import { legacyCanContinue, firstIncompleteStepIndex, type StepValidationContext } from './stepValidation'
 import { useOnboardingSteps } from '@/composables/useOnboardingSteps'
 import { logger } from '@/utils/logger'
 import { formatCurrency } from '@/utils/formatters'
@@ -126,6 +126,14 @@ const MIGRATED_TYPES = new Set<OnboardingStep['type']>([
   'applicant_type_select', 'asset_type', 'company_data', 'company_docs', 'documents',
 ])
 
+// Contexto que necesita la validación canónica por tipo (legacyCanContinue).
+// Centralizado para que el gate "Continuar" y el cálculo de reanudación
+// (firstIncompleteStepIndex) usen EXACTAMENTE el mismo contexto y no diverjan.
+const validationContext = computed<StepValidationContext>(() => ({
+  hasKycProvider: tenantStore.hasKycProvider,
+  ownPhone: (authStore.user?.phone ?? '').replace(/\D/g, ''),
+}))
+
 // legacyCanContinue (validación por tipo) vive en ./stepValidation: función PURA
 // con test-oráculo (stepValidation.spec.ts). El runner le inyecta el contexto de stores.
 const canContinue = computed(() => {
@@ -134,10 +142,7 @@ const canContinue = computed(() => {
   // required === false ⇒ paso opcional (avanza siempre); cualquier otro ⇒ obligatorio.
   if (s.required === false) return true
   if (MIGRATED_TYPES.has(s.type)) return rendererValid.value
-  return legacyCanContinue(s, currentValue.value, {
-    hasKycProvider: tenantStore.hasKycProvider,
-    ownPhone: (authStore.user?.phone ?? '').replace(/\D/g, ''),
-  })
+  return legacyCanContinue(s, currentValue.value, validationContext.value)
 })
 
 const PERSONAL_STEP_TYPES = ['select', 'state_city']
@@ -589,8 +594,20 @@ onMounted(async () => {
   // momento de subir documentos y de hacer submit al final del flujo.
   await ensureApplication()
 
+  // Reanudar en el primer paso incompleto (capability reanudar-onboarding): al
+  // reabrir el flujo SIN stepId en la URL (home, relogin, recarga) saltamos a
+  // donde el cliente lo dejó, no siempre a steps[0]. Si todo está completo,
+  // aterriza en el resumen/envío (último paso). Los datos ya se prellenan desde el
+  // borrador local + perfil, así que reanudar NUNCA obliga a recapturar.
+  //
+  // Solo aplica cuando la URL NO trae stepId: un deep link, el botón atrás/adelante
+  // o la re-edición desde el resumen (?returnTo=) llegan CON stepId y no se recalculan.
+  // firstIncompleteStepIndex opera sobre `steps` (ya filtrada por `condition`), así
+  // que un paso excluido por la rama/integraciones del tenant nunca es candidato.
   if (!route.params.stepId && steps.value.length > 0) {
-    await router.replace({ name: stepRouteName.value, params: { ...route.params, stepId: steps.value[0]!.id } })
+    const resumeIdx = firstIncompleteStepIndex(steps.value, formData.value, validationContext.value)
+    const targetId = steps.value[Math.max(0, resumeIdx)]!.id
+    await router.replace({ name: stepRouteName.value, params: { ...route.params, stepId: targetId } })
   }
 
   isLoading.value = false

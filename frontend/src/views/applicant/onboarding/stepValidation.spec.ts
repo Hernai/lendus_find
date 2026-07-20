@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { OnboardingStep } from '@/types/v2/onboardingStep'
-import { legacyCanContinue, type StepValidationContext } from './stepValidation'
+import { legacyCanContinue, firstIncompleteStepIndex, type StepValidationContext } from './stepValidation'
 
 /**
  * ORÁCULO anti-regresión de la validación del onboarding dinámico.
@@ -140,5 +140,68 @@ describe('legacyCanContinue — oráculo', () => {
       expect(legacyCanContinue(step('select'), '', ctx())).toBe(false)
       expect(legacyCanContinue(step('select'), null, ctx())).toBe(false)
     })
+  })
+})
+
+/**
+ * Oráculo de la REANUDACIÓN (capability reanudar-onboarding): dado el flujo (ya
+ * filtrado por `condition`) y los valores persistidos, ¿a qué paso se reanuda?
+ */
+describe('firstIncompleteStepIndex — reanudar-onboarding', () => {
+  // Step tipado mínimo (solo `id`/`type`/`required` importan para el cálculo).
+  const s = (id: string, type: OnboardingStep['type'], required?: boolean): OnboardingStep =>
+    ({ id, type, required } as OnboardingStep)
+
+  // Flujo representativo: datos personales → domicilio → banco → resumen.
+  const flow: OnboardingStep[] = [
+    s('personal', 'personal_data'),
+    s('address', 'address'),
+    s('bank', 'bank_account'),
+    s('summary', 'review_full'),
+  ]
+  const validPersonal = { first_name: 'Ana', last_name: 'Pérez', birth_date: '1990-01-01', gender: 'F', is_mexican: 'NO', rfc: 'PEPA900101AB1' }
+  const validAddress = { postal_code: '44100', state: 'JAL', municipality: 'GDL', neighborhood: 'Centro', street: 'Juárez', ext_number: '100', housing_type: 'RENTED', years_at_address: 2, months_at_address: 0 }
+  const validBank = { type: 'CLABE', bank_code: '002', account_number: '0'.repeat(18) }
+
+  it('sin ningún dato → primer paso (0)', () => {
+    expect(firstIncompleteStepIndex(flow, {}, ctx())).toBe(0)
+  })
+
+  it('primeros pasos completos → primer paso incompleto', () => {
+    expect(firstIncompleteStepIndex(flow, { personal: validPersonal }, ctx())).toBe(1)
+    expect(firstIncompleteStepIndex(flow, { personal: validPersonal, address: validAddress }, ctx())).toBe(2)
+  })
+
+  it('todo completo → último paso (resumen/envío)', () => {
+    const all = { personal: validPersonal, address: validAddress, bank: validBank }
+    expect(firstIncompleteStepIndex(flow, all, ctx())).toBe(3)
+  })
+
+  it('paso obligatorio con datos parciales inválidos cuenta como incompleto', () => {
+    // CLABE incompleta ⇒ el paso de banco es el destino de la reanudación.
+    const partialBank = { type: 'CLABE', bank_code: '002', account_number: '123' }
+    expect(firstIncompleteStepIndex(flow, { personal: validPersonal, address: validAddress, bank: partialBank }, ctx())).toBe(2)
+  })
+
+  it('paso opcional vacío no detiene la reanudación', () => {
+    const withOptional: OnboardingStep[] = [
+      s('personal', 'personal_data'),
+      s('extra', 'select', false), // opcional, sin valor
+      s('bank', 'bank_account'),
+    ]
+    expect(firstIncompleteStepIndex(withOptional, { personal: validPersonal }, ctx())).toBe(2)
+  })
+
+  it('review/review_full intermedios nunca son el destino', () => {
+    const withReview: OnboardingStep[] = [
+      s('personal', 'personal_data'),
+      s('mid', 'review'),
+      s('bank', 'bank_account'),
+    ]
+    expect(firstIncompleteStepIndex(withReview, { personal: validPersonal }, ctx())).toBe(2)
+  })
+
+  it('flujo vacío → -1 (el llamador gatea por steps.length > 0)', () => {
+    expect(firstIncompleteStepIndex([], {}, ctx())).toBe(-1)
   })
 })

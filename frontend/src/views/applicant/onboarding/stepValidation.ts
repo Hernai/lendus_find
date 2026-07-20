@@ -95,3 +95,52 @@ export function legacyCanContinue(
   }
   return v !== null && v !== '' && v !== undefined
 }
+
+/**
+ * ¿El paso está COMPLETO frente a su valor persistido? Reproduce el gate
+ * "Continuar" (`canContinue` de DynamicOnboardingView) pero leyendo el valor de
+ * `dynamicData[step.id]` en lugar del renderer montado:
+ *  - `required === false` ⇒ paso opcional ⇒ SIEMPRE completo (nunca detiene la
+ *    reanudación).
+ *  - `review` / `review_full` ⇒ SIEMPRE completos (nunca detienen la reanudación).
+ *  - resto ⇒ la validación canónica del tipo (`legacyCanContinue`) sobre el valor
+ *    persistido leído por el `id` del paso.
+ */
+function isStepComplete(
+  s: OnboardingStep,
+  dynamicData: Record<string, unknown>,
+  ctx: StepValidationContext,
+): boolean {
+  if (s.required === false) return true
+  if (s.type === 'review' || s.type === 'review_full') return true
+  // Nullish coalescing (no ||) para preservar valores "falsy" válidos (p.ej. 0 en
+  // un number_select). Espeja `currentValue.get` de DynamicOnboardingView.
+  const value = dynamicData[s.id] ?? null
+  return legacyCanContinue(s, value, ctx)
+}
+
+/**
+ * Índice del primer paso INCOMPLETO del flujo, para REANUDAR el onboarding donde
+ * el cliente lo dejó (capability reanudar-onboarding). Recorre `steps` — que DEBE
+ * venir YA filtrada por `condition` — evaluando cada paso con `isStepComplete`
+ * contra su valor persistido en `dynamicData`, de modo que un paso excluido por la
+ * rama/integraciones del tenant nunca sea candidato.
+ *
+ * Devuelve:
+ *  - el índice del primer paso incompleto; o
+ *  - si TODOS están completos, el índice del ÚLTIMO paso (el resumen/envío), para
+ *    no obligar al cliente a recorrer el flujo de nuevo.
+ *
+ * Con `steps` vacío devuelve -1 (el llamador debe gatear por `steps.length > 0`).
+ */
+export function firstIncompleteStepIndex(
+  steps: OnboardingStep[],
+  dynamicData: Record<string, unknown>,
+  ctx: StepValidationContext,
+): number {
+  for (let i = 0; i < steps.length; i++) {
+    if (!isStepComplete(steps[i]!, dynamicData, ctx)) return i
+  }
+  // Todos completos ⇒ aterrizar en el último paso (resumen/envío).
+  return steps.length - 1
+}
