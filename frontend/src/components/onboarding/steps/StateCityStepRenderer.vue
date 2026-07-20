@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useTenantStore } from '@/stores/tenant'
+import { fetchMunicipalities } from '@/services/v2/postalCode.service'
 import type { StateCityStep } from '@/types/v2/onboardingStep'
 
 /**
  * Renderiza step `state_city`: combina selector de estado (bottom sheet)
- * + selector de ciudad (lista filtrable).
+ * + selector de municipio del catálogo SEPOMEX.
  *
  * Layout:
  *  - Fila "Estado" tipo dropdown → tap abre sheet con todos los estados
- *  - Lista de ciudades sugeridas para ese estado (radio rows)
- *  - "Otra ciudad" → input libre
+ *  - Lista de municipios del estado (radio rows), servida por el endpoint
+ *    público de municipios (postal_codes). Reemplaza la lista estática previa.
+ *  - Si el catálogo no tiene municipios para ese estado (sin datos/offline),
+ *    se degrada a captura manual — NUNCA como vía principal.
  *
  * Tenant-agnóstico.
  */
@@ -38,8 +41,7 @@ const tenantStore = useTenantStore()
 
 const state = ref<string>(props.modelValue?.state ?? '')
 const city = ref<string>(props.modelValue?.city ?? '')
-const customCity = ref<string>('')
-const useCustomCity = ref(false)
+const customCity = ref<string>(props.modelValue?.city ?? '')
 const stateSheetOpen = ref(false)
 
 const stateOptions = computed(() => tenantStore.options.mexicanState ?? [])
@@ -49,40 +51,47 @@ const stateLabel = computed(() => {
   return stateOptions.value.find((o) => o.value === state.value)?.label ?? state.value
 })
 
-// Ciudades sugeridas por estado — fallback estático mientras backend no las
-// expone vía catalogo. Si el tenant tiene `mexicanCities` en options, usar eso.
-const SUGGESTED_CITIES: Record<string, string[]> = {
-  SIN: ['Culiacán', 'Mazatlán', 'Los Mochis', 'Guamúchil', 'Navolato', 'Rosario'],
-  CHP: ['Tuxtla Gutiérrez', 'San Cristóbal de las Casas', 'Tapachula', 'Comitán', 'Palenque'],
-  CMX: ['Miguel Hidalgo', 'Cuauhtémoc', 'Benito Juárez', 'Coyoacán', 'Iztapalapa', 'Tlalpan'],
-  JAL: ['Guadalajara', 'Zapopan', 'Tlaquepaque', 'Tonalá', 'Puerto Vallarta'],
-  NLE: ['Monterrey', 'San Pedro Garza García', 'San Nicolás', 'Apodaca', 'Guadalupe'],
+// Municipios del estado seleccionado, servidos por el catálogo SEPOMEX
+// (postal_codes) vía endpoint público. El código de estado enviado es el valor
+// del enum MexicanState (p. ej. `CDMX`, `JAL`) — el mismo que emite el selector,
+// lo que corrige el bug histórico `CMX` (nunca empataba y dejaba CDMX vacío).
+const municipalities = ref<string[]>([])
+const loadingMunicipalities = ref(false)
+
+async function loadMunicipalities(stateCode: string) {
+  municipalities.value = []
+  if (!stateCode) return
+  loadingMunicipalities.value = true
+  try {
+    municipalities.value = await fetchMunicipalities(stateCode)
+  } finally {
+    loadingMunicipalities.value = false
+  }
 }
 
-const suggestedCities = computed<string[]>(() => {
-  return SUGGESTED_CITIES[state.value] ?? []
-})
+// Carga al elegir estado y al montar con estado prellenado (reanudar onboarding).
+watch(state, (s) => loadMunicipalities(s), { immediate: true })
+
+// El catálogo no trae municipios para el estado (sin datos/offline) → habilita
+// la captura manual como fallback, nunca como vía principal.
+const municipalitiesEmpty = computed(
+  () => !!state.value && !loadingMunicipalities.value && municipalities.value.length === 0,
+)
 
 function pickState(v: string) {
   state.value = v
   city.value = ''
   customCity.value = ''
-  useCustomCity.value = false
   stateSheetOpen.value = false
 }
 
 function pickCity(c: string) {
   city.value = c
-  useCustomCity.value = false
 }
 
-function toggleCustom() {
-  useCustomCity.value = true
-  city.value = customCity.value
-}
-
+// En modo fallback (sin catálogo), el texto libre es el municipio comprometido.
 watch(customCity, (v) => {
-  if (useCustomCity.value) city.value = v
+  if (municipalitiesEmpty.value) city.value = v
 })
 
 watch([state, city], () => {
@@ -115,20 +124,23 @@ watch([state, city], () => {
       </svg>
     </button>
 
-    <!-- Lista de ciudades sugeridas (visible solo cuando hay estado) -->
+    <!-- Lista de municipios del estado (visible solo cuando hay estado) -->
     <div v-if="state" class="city-block">
-      <span class="block-title">Ciudad / municipio</span>
-      <ul v-if="suggestedCities.length" class="city-list">
-        <li v-for="c in suggestedCities" :key="c">
+      <span class="block-title">Municipio</span>
+
+      <p v-if="loadingMunicipalities" class="city-hint">Cargando municipios…</p>
+
+      <ul v-else-if="municipalities.length" class="city-list">
+        <li v-for="c in municipalities" :key="c">
           <button
             type="button"
             class="city-row"
-            :class="{ 'city-row--active': city === c && !useCustomCity }"
+            :class="{ 'city-row--active': city === c }"
             @click="pickCity(c)"
           >
             <span class="city-label">{{ c }}</span>
-            <span class="city-radio" :class="{ 'city-radio--active': city === c && !useCustomCity }">
-              <svg v-if="city === c && !useCustomCity" viewBox="0 0 24 24" fill="none">
+            <span class="city-radio" :class="{ 'city-radio--active': city === c }">
+              <svg v-if="city === c" viewBox="0 0 24 24" fill="none">
                 <path d="M5 12l5 5L20 7" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
             </span>
@@ -136,16 +148,18 @@ watch([state, city], () => {
         </li>
       </ul>
 
-      <!-- Otra ciudad -->
-      <div class="custom-row" :class="{ 'custom-row--active': useCustomCity }">
-        <input
-          v-model="customCity"
-          type="text"
-          placeholder="Otra ciudad / municipio"
-          class="custom-input"
-          @focus="toggleCustom"
-        />
-      </div>
+      <!-- Fallback: sin municipios en el catálogo → captura manual (no es la vía principal) -->
+      <template v-else>
+        <p class="city-hint">No encontramos municipios de este estado en el catálogo. Escríbelo:</p>
+        <div class="custom-row custom-row--active">
+          <input
+            v-model="customCity"
+            type="text"
+            placeholder="Municipio"
+            class="custom-input"
+          />
+        </div>
+      </template>
     </div>
 
     <!-- Bottom sheet de estados -->
@@ -266,6 +280,11 @@ watch([state, city], () => {
   font-size: 13px;
   font-weight: 600;
   color: #475569;
+}
+.city-hint {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
 }
 .city-list {
   list-style: none;

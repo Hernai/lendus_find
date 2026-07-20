@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -25,6 +26,13 @@ class ImportPostalCodes extends Command
         {--chunk=1000 : Tamaño del lote de inserción}';
 
     protected $description = 'Importa el catálogo de códigos postales (SEPOMEX) a postal_codes.';
+
+    /**
+     * Clave de caché con la marca de última importación. `postal_codes` no tiene
+     * timestamps (catálogo estático), así que la vigencia se mide contra esta
+     * marca. La lee `postal-codes:check-freshness` para avisar si venció.
+     */
+    public const LAST_IMPORT_CACHE_KEY = 'postal_codes:last_import';
 
     /** Mapa columna destino => posibles nombres de encabezado (lowercase). */
     private const COLUMN_MAP = [
@@ -104,6 +112,13 @@ class ImportPostalCodes extends Command
         }
 
         fclose($handle);
+
+        // Marca de última importación (para medir vigencia del catálogo, ya que
+        // postal_codes no tiene timestamps). Persistente vía cache store.
+        Cache::forever(self::LAST_IMPORT_CACHE_KEY, [
+            'at' => now()->toIso8601String(),
+            'count' => $imported,
+        ]);
 
         $this->newLine();
         $this->info("Importados: {$imported}. Omitidos (CP inválido): {$skipped}.");

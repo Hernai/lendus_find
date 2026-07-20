@@ -82,4 +82,13 @@ return [
         'otp' => env('STORE_REVIEW_OTP', '321987'),
     ],
 
+    // Catálogo SEPOMEX (postal_codes). La descarga del archivo oficial de
+    // Correos de México es MANUAL (requiere registro) y se importa con
+    // `postal-codes:import`. El comando `postal-codes:check-freshness` avisa si
+    // la tabla está vacía o si la última importación superó esta ventana de
+    // vigencia (días). Ajustable por env sin re-desplegar.
+    'postal_codes' => [
+        'max_age_days' => (int) env('POSTAL_CODES_MAX_AGE_DAYS', 180),
+    ],
+
 ];

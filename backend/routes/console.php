@@ -47,3 +47,14 @@ Schedule::command('audit-logs:resolve-geo --limit=1000 --since="2 hours"')
     ->withoutOverlapping()
     ->onOneServer()
     ->runInBackground();
+
+// Catálogo SEPOMEX (postal_codes): avisar si esta vacio o si la ultima
+// importacion vencio la ventana de vigencia (services.postal_codes.max_age_days).
+// La descarga del archivo oficial de Correos y la re-importacion son MANUALES;
+// este chequeo solo dispara el aviso. Semanal (lunes 08:00) basta para un
+// catalogo que cambia poco.
+Schedule::command('postal-codes:check-freshness')
+    ->weeklyOn(1, '08:00') // 1 = lunes
+    ->timezone('America/Mexico_City')
+    ->withoutOverlapping()
+    ->onOneServer();

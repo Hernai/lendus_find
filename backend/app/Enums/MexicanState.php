@@ -90,6 +90,53 @@ enum MexicanState: string
     }
 
     /**
+     * Clave INEGI de 2 dígitos (01–32) de la entidad federativa.
+     *
+     * Es la nomenclatura que usa el catálogo SEPOMEX en la columna
+     * `estado_clave` (campo `c_estado` del archivo oficial), y NO coincide con
+     * el código de 3-5 letras del enum (p. ej. `CDMX` ↔ `09`, `JAL` ↔ `14`).
+     * El orden numérico sigue el nombre oficial del estado (Chiapas `07` va
+     * antes que Chihuahua `08`, etc.), como en el estándar INEGI.
+     */
+    public function inegiCode(): string
+    {
+        return match ($this) {
+            self::AGUASCALIENTES => '01',
+            self::BAJA_CALIFORNIA => '02',
+            self::BAJA_CALIFORNIA_SUR => '03',
+            self::CAMPECHE => '04',
+            self::COAHUILA => '05',
+            self::COLIMA => '06',
+            self::CHIAPAS => '07',
+            self::CHIHUAHUA => '08',
+            self::CIUDAD_DE_MEXICO => '09',
+            self::DURANGO => '10',
+            self::GUANAJUATO => '11',
+            self::GUERRERO => '12',
+            self::HIDALGO => '13',
+            self::JALISCO => '14',
+            self::ESTADO_DE_MEXICO => '15',
+            self::MICHOACAN => '16',
+            self::MORELOS => '17',
+            self::NAYARIT => '18',
+            self::NUEVO_LEON => '19',
+            self::OAXACA => '20',
+            self::PUEBLA => '21',
+            self::QUERETARO => '22',
+            self::QUINTANA_ROO => '23',
+            self::SAN_LUIS_POTOSI => '24',
+            self::SINALOA => '25',
+            self::SONORA => '26',
+            self::TABASCO => '27',
+            self::TAMAULIPAS => '28',
+            self::TLAXCALA => '29',
+            self::VERACRUZ => '30',
+            self::YUCATAN => '31',
+            self::ZACATECAS => '32',
+        };
+    }
+
+    /**
      * Deriva la entidad federativa desde la CURP.
      *
      * Las posiciones 12-13 de la CURP son la clave de entidad de nacimiento

@@ -87,6 +87,10 @@ Route::middleware(['tenant', 'metadata', 'etag'])->prefix('v2')->group(function 
     Route::get('/config', [V2ConfigController::class, 'index']);
     Route::get('/public/manifest', V2ManifestController::class);
     Route::get('/public/version', V2VersionController::class);
+    // Catálogo SEPOMEX: municipios (distintos) por estado, para el selector
+    // estado→municipio del onboarding. Va ANTES de la ruta `{cp}` para que el
+    // segmento literal `municipios` no lo capture el comodín del CP.
+    Route::get('/public/postal-codes/municipios/{estado}', [\App\Http\Controllers\Api\V2\Public\PostalCodeController::class, 'municipalities']);
     // Catálogo SEPOMEX: estado/municipio/colonias por CP (autollenado de domicilio).
     Route::get('/public/postal-codes/{cp}', [\App\Http\Controllers\Api\V2\Public\PostalCodeController::class, 'show']);
 });
