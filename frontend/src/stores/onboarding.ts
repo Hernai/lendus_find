@@ -12,6 +12,10 @@ import { isValidRfc } from '@/utils/validators'
 
 const onboardingLogger = logger.child('Onboarding')
 
+// Valores canónicos del enum backend `HousingType`, unificados en el onboarding
+// (reemplazan al set previo OWNED/RENTED/FAMILY/MORTGAGED/EMPLOYER del store).
+type CanonicalHousingType = 'OWNED_PAID' | 'OWNED_MORTGAGE' | 'RENTED' | 'FAMILY' | 'BORROWED' | 'OTHER'
+
 // Step data interfaces
 interface Step1Data {
   first_name: string
@@ -478,7 +482,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
             city: s3.city || s3.municipality,
             state: s3.state,
             municipality: s3.municipality || undefined,
-            housing_type: s3.housing_type as 'OWNED' | 'RENTED' | 'FAMILY' | 'MORTGAGED' | 'EMPLOYER',
+            housing_type: s3.housing_type as CanonicalHousingType,
             years_at_address: Number(s3.years_at_address) || 0,
             months_at_address: Number(s3.months_at_address) || 0
           })
@@ -738,12 +742,23 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     GT_15000: 20000,
   }
 
-  // Mapeo housing_type frontend → backend enum
-  const HOUSING_MAP: Record<string, 'OWNED' | 'RENTED' | 'FAMILY' | 'MORTGAGED' | 'EMPLOYER'> = {
-    OWN: 'OWNED',
-    RENT: 'RENTED',
+  // Mapeo housing_type frontend → enum canónico del backend (`HousingType`).
+  // Acepta tanto los valores canónicos que hoy emite AddressStepRenderer como los
+  // tokens legacy de borradores/domicilios previos, para no perder registros.
+  const HOUSING_MAP: Record<string, CanonicalHousingType> = {
+    // Canónicos (identidad).
+    OWNED_PAID: 'OWNED_PAID',
+    OWNED_MORTGAGE: 'OWNED_MORTGAGE',
+    RENTED: 'RENTED',
     FAMILY: 'FAMILY',
-    OTHER: 'EMPLOYER',
+    BORROWED: 'BORROWED',
+    OTHER: 'OTHER',
+    // Tokens legacy del front/store anterior.
+    OWN: 'OWNED_PAID',
+    RENT: 'RENTED',
+    OWNED: 'OWNED_PAID',
+    MORTGAGED: 'OWNED_MORTGAGE',
+    EMPLOYER: 'OTHER',
   }
 
   // Hash del último payload persistido por step, para no re-ejecutar (y no

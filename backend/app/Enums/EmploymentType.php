@@ -27,7 +27,7 @@ enum EmploymentType: string
         return match ($this) {
             self::EMPLOYEE => 'Empleado',
             self::SELF_EMPLOYED => 'Trabajador Independiente',
-            self::BUSINESS_OWNER => 'Empresario',
+            self::BUSINESS_OWNER => 'Comerciante',
             self::RETIRED => 'Pensionado',
             self::STUDENT => 'Estudiante',
             self::HOMEMAKER => 'Hogar',
@@ -83,7 +83,9 @@ enum EmploymentType: string
         return match ($normalized) {
             'EMPLEADO' => self::EMPLOYEE,
             'INDEPENDIENTE' => self::SELF_EMPLOYED,
-            'EMPRESARIO' => self::BUSINESS_OWNER,
+            // "Comerciante" es el nuevo label de BUSINESS_OWNER; "Empresario"
+            // se conserva por compatibilidad con datos legacy.
+            'EMPRESARIO', 'COMERCIANTE' => self::BUSINESS_OWNER,
             'PENSIONADO' => self::RETIRED,
             'ESTUDIANTE' => self::STUDENT,
             'HOGAR' => self::HOMEMAKER,

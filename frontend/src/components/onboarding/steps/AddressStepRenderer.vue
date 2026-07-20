@@ -18,7 +18,8 @@ interface AddressData {
   street: string
   ext_number: string
   int_number: string
-  housing_type: 'OWN' | 'RENT' | 'FAMILY' | 'OTHER' | ''
+  // Valores canónicos del enum backend `HousingType`.
+  housing_type: 'OWNED_PAID' | 'OWNED_MORTGAGE' | 'RENTED' | 'FAMILY' | 'BORROWED' | 'OTHER' | ''
   years_at_address: number
   months_at_address: number
   latitude?: number | null
@@ -78,11 +79,14 @@ const mexicanStates = computed(() => {
   return list
 })
 
+// Opciones canónicas del enum backend `HousingType`.
 const housingOptions = [
-  { value: 'OWN', label: 'Propia' },
-  { value: 'RENT', label: 'Rentada' },
+  { value: 'OWNED_PAID', label: 'Propia (pagada)' },
+  { value: 'OWNED_MORTGAGE', label: 'Propia (con hipoteca)' },
+  { value: 'RENTED', label: 'Rentada' },
   { value: 'FAMILY', label: 'Familiar' },
-  { value: 'OTHER', label: 'Otra' },
+  { value: 'BORROWED', label: 'Prestada' },
+  { value: 'OTHER', label: 'Otro' },
 ]
 
 const isCpValid = computed(() => /^\d{5}$/.test(form.value.postal_code))
@@ -327,7 +331,7 @@ watch(form, () => {
 
     <div class="field">
       <label>Tipo de vivienda</label>
-      <div class="seg-row seg-row--4">
+      <div class="seg-row seg-row--wrap">
         <button
           v-for="opt in housingOptions"
           :key="opt.value"
@@ -409,20 +413,24 @@ watch(form, () => {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 6px;
 }
-.seg-row--4 {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+/* Rejilla de 2 columnas para las 6 opciones canónicas de vivienda; los labels
+   largos ("Propia (con hipoteca)") pueden envolver en varias líneas. */
+.seg-row--wrap {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 .seg-btn {
-  padding: 11px 4px;
+  padding: 11px 8px;
   background: #ffffff;
   border: 1.5px solid #e5e7eb;
   border-radius: 12px;
   font-size: 12.5px; font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
   color: #475569;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   min-width: 0;
-  white-space: nowrap;
+  white-space: normal;
 }
 .seg-btn--active {
   background: var(--tenant-primary, #5B21B6);

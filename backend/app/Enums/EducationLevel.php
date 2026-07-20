@@ -13,6 +13,7 @@ use App\Enums\Traits\HasOptions;
 enum EducationLevel: string
 {
     use HasOptions;
+    case NONE = 'NONE';
     case PRIMARY = 'PRIMARY';
     case SECONDARY = 'SECONDARY';
     case HIGH_SCHOOL = 'HIGH_SCHOOL';
@@ -24,6 +25,7 @@ enum EducationLevel: string
     public function label(): string
     {
         return match ($this) {
+            self::NONE => 'Sin educación',
             self::PRIMARY => 'Primaria',
             self::SECONDARY => 'Secundaria',
             self::HIGH_SCHOOL => 'Preparatoria',
@@ -53,6 +55,8 @@ enum EducationLevel: string
         }
 
         return match ($normalized) {
+            // Valor legacy en español para "Sin educación".
+            'SIN EDUCACION' => self::NONE,
             'PRIMARIA' => self::PRIMARY,
             'SECUNDARIA' => self::SECONDARY,
             'PREPARATORIA' => self::HIGH_SCHOOL,

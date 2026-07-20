@@ -115,7 +115,8 @@ export interface UpdateAddressPayload {
   state: string
   postal_code: string
   country?: string
-  housing_type: 'OWNED' | 'RENTED' | 'FAMILY' | 'MORTGAGED' | 'EMPLOYER'
+  // Valores canónicos del enum backend `HousingType` (unificados en el onboarding).
+  housing_type: 'OWNED_PAID' | 'OWNED_MORTGAGE' | 'RENTED' | 'FAMILY' | 'BORROWED' | 'OTHER'
   years_at_address?: number
   months_at_address?: number
   monthly_rent?: number

@@ -51,12 +51,20 @@ enum HousingType: string
         }
 
         return match ($normalized) {
+            // Valores legacy en español.
             'PROPIA_PAGADA' => self::OWNED_PAID,
             'PROPIA_HIPOTECA' => self::OWNED_MORTGAGE,
             'RENTADA' => self::RENTED,
             'FAMILIAR' => self::FAMILY,
             'PRESTADA' => self::BORROWED,
             'OTRO' => self::OTHER,
+            // Tokens legacy del frontend/store anterior (AddressStepRenderer y
+            // HOUSING_MAP), unificados al enum canónico. RENTED/FAMILY ya se
+            // resuelven arriba vía tryFrom por ser casos canónicos.
+            'OWN', 'OWNED' => self::OWNED_PAID,
+            'RENT' => self::RENTED,
+            'MORTGAGED' => self::OWNED_MORTGAGE,
+            'EMPLOYER' => self::OTHER,
             default => null,
         };
     }
