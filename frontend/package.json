@@ -23,6 +23,7 @@
     "cap:add:android": "npx cap add android"
   },
   "dependencies": {
+    "@capacitor-community/contacts": "^8.0.0",
     "@capacitor/android": "^8.3.4",
     "@capacitor/app": "^8.1.0",
     "@capacitor/browser": "^8.0.3",

@@ -24,6 +24,7 @@ import { cameraWeb } from './web/camera.web'
 import { pushWeb } from './web/push.web'
 import { realtimeWeb } from './web/realtime.web'
 import { geolocationWeb } from './web/geolocation.web'
+import { contactsWeb } from './web/contacts.web'
 
 // --- Native adapters ---
 // Estos imports añaden ~50 KB al bundle web pero los plugins reales solo se
@@ -38,6 +39,7 @@ import { cameraNative } from './native/camera.native'
 import { pushNative } from './native/push.native'
 import { realtimeNative } from './native/realtime.native'
 import { geolocationNative } from './native/geolocation.native'
+import { contactsNative } from './native/contacts.native'
 
 import type { Router } from 'vue-router'
 
@@ -54,6 +56,7 @@ const webPlatform: Platforms = {
   push: pushWeb,
   realtime: realtimeWeb,
   geolocation: geolocationWeb,
+  contacts: contactsWeb,
 }
 
 const nativePlatform: Platforms = {
@@ -67,6 +70,7 @@ const nativePlatform: Platforms = {
   push: pushNative,
   realtime: realtimeNative,
   geolocation: geolocationNative,
+  contacts: contactsNative,
 }
 
 export const platform: Platforms = isNative ? nativePlatform : webPlatform

@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import type { ReferencesStep } from '@/types/v2/onboardingStep'
 import { formatPhoneInput } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/auth'
+import { platform } from '@/platform'
 
 /**
  * Renderiza step `references`: usuario agrega referencias familiar y personal.
@@ -85,6 +86,27 @@ const isValid = computed(() =>
 )
 watch(isValid, (v) => emit('update:valid', v), { immediate: true })
 
+// Solo en la app nativa ofrecemos el picker de la agenda; en web (PWA/navegador)
+// se conserva únicamente la captura manual (fallback).
+const isNative = platform.device.isNative()
+
+// Prellena una referencia desde la agenda del dispositivo. Si el usuario cancela
+// o niega el permiso, `pickContact()` devuelve null y no se modifica nada.
+async function pickFromContacts(target: Reference) {
+  const picked = await platform.contacts.pickContact()
+  if (!picked) return
+
+  if (picked.name) {
+    target.name = picked.name.trim()
+  }
+  if (picked.phone) {
+    // Normaliza a 10 dígitos: quita separadores y el prefijo +52 tomando los
+    // últimos 10 dígitos. El campo sigue editable y sujeto a validación.
+    const local = picked.phone.replace(/\D/g, '').slice(-10)
+    target.phone = formatPhoneInput(local)
+  }
+}
+
 function handlePhoneInput(ref: Reference, ev: Event) {
   const input = ev.target as HTMLInputElement
   const raw = input.value
@@ -133,6 +155,21 @@ watch(
         <h3>Referencia familiar</h3>
         <span class="ref-count">1 de 1</span>
       </header>
+
+      <button
+        v-if="isNative"
+        type="button"
+        class="contacts-btn"
+        @click="pickFromContacts(family)"
+      >
+        <svg class="contacts-btn-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="4" y="3" width="14" height="18" rx="2.5" stroke="currentColor" stroke-width="1.6" />
+          <path d="M20 7v10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+          <circle cx="11" cy="10" r="2.4" stroke="currentColor" stroke-width="1.6" />
+          <path d="M7.5 16c.5-1.7 2-2.6 3.5-2.6s3 .9 3.5 2.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+        </svg>
+        Elegir de mis contactos
+      </button>
 
       <label class="field-label">Nombre y apellido</label>
       <div class="field" :class="{ 'field--valid': validName(family.name) }">
@@ -186,6 +223,21 @@ watch(
         <h3>Referencia personal</h3>
         <span class="ref-count">1 de 1</span>
       </header>
+
+      <button
+        v-if="isNative"
+        type="button"
+        class="contacts-btn"
+        @click="pickFromContacts(personal)"
+      >
+        <svg class="contacts-btn-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="4" y="3" width="14" height="18" rx="2.5" stroke="currentColor" stroke-width="1.6" />
+          <path d="M20 7v10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+          <circle cx="11" cy="10" r="2.4" stroke="currentColor" stroke-width="1.6" />
+          <path d="M7.5 16c.5-1.7 2-2.6 3.5-2.6s3 .9 3.5 2.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+        </svg>
+        Elegir de mis contactos
+      </button>
 
       <label class="field-label">Nombre y apellido</label>
       <div class="field" :class="{ 'field--valid': validName(personal.name) }">
@@ -291,6 +343,32 @@ watch(
   background: #f3f4f6;
   padding: 2px 8px;
   border-radius: 999px;
+}
+
+/* Botón "Elegir de mis contactos" — solo visible en la app nativa. */
+.contacts-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 14px;
+  background: rgb(var(--surface-soft-rgb, 243 242 250) / 1);
+  color: var(--tenant-primary, #5b21b6);
+  border: 1.5px solid var(--tenant-primary, #5b21b6);
+  border-radius: 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 140ms ease;
+}
+.contacts-btn:active {
+  opacity: 0.7;
+}
+.contacts-btn-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .field-label {

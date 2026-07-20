@@ -142,6 +142,25 @@ export interface PlatformGeolocation {
   getCurrent(opts?: { cacheMs?: number; timeoutMs?: number }): Promise<GeoPosition | null>
 }
 
+/** Contacto elegido desde la agenda del dispositivo (datos crudos, sin normalizar). */
+export interface PickedContact {
+  /** Nombre para mostrar del contacto. Puede venir vacío. */
+  name: string
+  /** Primer teléfono del contacto tal como lo entrega el sistema (sin normalizar). */
+  phone: string
+}
+
+export interface PlatformContacts {
+  /** Indica si el selector de contactos del sistema está disponible (solo native). */
+  isSupported(): boolean
+  /**
+   * Abre el selector de contactos del sistema y devuelve el contacto elegido.
+   * Devuelve `null` si el usuario cancela, niega el permiso o corre en web.
+   * NUNCA lanza: el consumidor puede seguir con captura manual.
+   */
+  pickContact(): Promise<PickedContact | null>
+}
+
 export interface Platforms {
   storage: PlatformStorage
   navigator: PlatformNavigator
@@ -153,4 +172,5 @@ export interface Platforms {
   clipboard: PlatformClipboard
   realtime: PlatformRealtime
   geolocation: PlatformGeolocation
+  contacts: PlatformContacts
 }
