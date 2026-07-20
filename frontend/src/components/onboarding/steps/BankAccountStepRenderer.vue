@@ -39,16 +39,28 @@ const bankSheetOpen = ref(false)
 
 const BANKS = MEXICAN_BANKS
 
+const selectedBank = computed(() => BANKS.find((b) => b.code === bankCode.value) ?? null)
+
 const bankLabel = computed(() => {
   if (!bankCode.value) return ''
-  return BANKS.find((b) => b.code === bankCode.value)?.name ?? bankCode.value
+  return selectedBank.value?.name ?? bankCode.value
 })
 
-// Validez del paso (contrato): banco + número con la longitud correcta
-// (CLABE 18 / CARD 16). Reproduce legacyCanContinue('bank_account'), congelado en
-// stepValidation.spec.ts.
+// Acreditación inmediata: el banco elegido debe permitir transferencias con
+// acreditación inmediata (SPEI/CEP). Default conservador — un banco desconocido
+// o no confirmado (incluida la comodín "Otro") NO es apto.
+const bankAllowsTransfer = computed(() => selectedBank.value?.validForTransfer === true)
+
+// Aviso visible cuando el aplicante tiene seleccionado un banco no apto (p. ej.
+// de un borrador previo o derivado de CLABE): la cuenta no recibiría el préstamo.
+const showTransferWarning = computed(() => !!bankCode.value && !bankAllowsTransfer.value)
+
+// Validez del paso (contrato): banco apto para acreditación inmediata + número
+// con la longitud correcta (CLABE 18 / CARD 16). Reproduce
+// legacyCanContinue('bank_account') (congelado en stepValidation.spec.ts) y le
+// suma el requisito de banco válido para transferencia.
 const isValid = computed(() =>
-  !!bankCode.value && !!accountNumber.value &&
+  !!bankCode.value && bankAllowsTransfer.value && !!accountNumber.value &&
   accountNumber.value.replace(/\D/g, '').length === (type.value === 'CARD' ? 16 : 18),
 )
 watch(isValid, (v) => emit('update:valid', v), { immediate: true })
@@ -64,6 +76,10 @@ function pickType(t: BankAccount['type']) {
 }
 
 function pickBank(code: string) {
+  // Los bancos no aptos para acreditación inmediata están deshabilitados en el
+  // sheet; blindamos por si el evento llega igual.
+  const bank = BANKS.find((b) => b.code === code)
+  if (bank && !bank.validForTransfer) return
   bankCode.value = code
   bankSheetOpen.value = false
 }
@@ -158,6 +174,20 @@ watch([type, bankCode, accountNumber], () => {
       </svg>
     </button>
 
+    <!-- Aviso banco no apto para acreditación inmediata -->
+    <p v-if="showTransferWarning" class="bank-warning" role="alert">
+      <span class="bank-warning-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M12 3l9 16H3L12 3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+          <path d="M12 10v4M12 17h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </svg>
+      </span>
+      <span>
+        Esta cuenta debe permitir transferencias con acreditación inmediata. Elige un
+        banco disponible para recibir tu préstamo.
+      </span>
+    </p>
+
     <!-- Número de cuenta -->
     <label class="field-label">{{ type === 'CLABE' ? 'CLABE interbancaria' : 'Número de tarjeta' }}</label>
     <div class="field" :class="{ 'field--valid': isValidNumber }">
@@ -213,11 +243,25 @@ watch([type, bankCode, accountNumber], () => {
               <button
                 type="button"
                 class="sheet-row"
-                :class="{ 'sheet-row--active': bankCode === b.code }"
+                :class="{
+                  'sheet-row--active': bankCode === b.code,
+                  'sheet-row--disabled': !b.validForTransfer,
+                }"
+                :disabled="!b.validForTransfer"
+                :aria-disabled="!b.validForTransfer"
                 @click="pickBank(b.code)"
               >
-                <span>{{ b.name }}</span>
-                <span class="sheet-radio" :class="{ 'sheet-radio--active': bankCode === b.code }">
+                <span class="sheet-row-main">
+                  <span>{{ b.name }}</span>
+                  <span v-if="!b.validForTransfer" class="sheet-row-note">
+                    No disponible para recibir tu préstamo
+                  </span>
+                </span>
+                <span
+                  v-if="b.validForTransfer"
+                  class="sheet-radio"
+                  :class="{ 'sheet-radio--active': bankCode === b.code }"
+                >
                   <svg v-if="bankCode === b.code" viewBox="0 0 24 24" fill="none">
                     <path d="M5 12l5 5L20 7" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>
@@ -403,6 +447,31 @@ watch([type, bankCode, accountNumber], () => {
   margin: -4px 0 0;
 }
 
+.bank-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 12.5px;
+  line-height: 1.45;
+  margin: -2px 0 0;
+}
+.bank-warning-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: #dc2626;
+  margin-top: 1px;
+}
+.bank-warning-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
 .confirm-pill {
   display: flex;
   align-items: center;
@@ -510,6 +579,23 @@ watch([type, bankCode, accountNumber], () => {
   background: rgb(var(--surface-soft-rgb, 243 242 250) / 1);
   color: var(--tenant-primary, #5B21B6);
   font-weight: 600;
+}
+.sheet-row--disabled {
+  cursor: not-allowed;
+  color: #94a3b8;
+  background: #f8fafc;
+}
+.sheet-row-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+.sheet-row-note {
+  font-size: 11.5px;
+  color: #dc2626;
+  font-weight: 500;
 }
 .sheet-radio {
   width: 22px;
