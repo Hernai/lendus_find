@@ -35,6 +35,9 @@ const accepted = ref(false)
 const showPrivacy = ref(false)
 const showTerms = ref(false)
 const isRequestingPermissions = ref(false)
+// Geolocalización obligatoria (requisito MoneyCapital): si el permiso se niega,
+// se bloquea el avance y se muestra la guía para habilitarlo.
+const geoDenied = ref(false)
 const tenantSlug = ref<string>('')
 
 onMounted(async () => {
@@ -50,12 +53,19 @@ const brandLogoUrl = computed(() => tenantStore.tenant?.branding?.logo_url || ''
 async function handleContinue() {
   if (!accepted.value || isRequestingPermissions.value) return
   isRequestingPermissions.value = true
+  geoDenied.value = false
   try {
     if (platform.push.isSupported()) {
       await platform.push.requestPermission()
     }
+    // Geolocalización OBLIGATORIA: si el cliente niega el permiso, NO se puede
+    // continuar — se marca geoDenied (guía + reintentar) y se bloquea el avance.
     if (platform.geolocation.isSupported()) {
       const state = await platform.geolocation.requestPermission()
+      if (state === 'denied') {
+        geoDenied.value = true
+        return
+      }
       if (state === 'granted' || state === 'prompt') {
         await platform.geolocation.getCurrent({ cacheMs: 60_000, timeoutMs: 4_000 })
       }
@@ -74,6 +84,7 @@ async function handleContinue() {
     isRequestingPermissions.value = false
   }
 
+  if (geoDenied.value) return
   const slug = tenantSlug.value
   await router.replace(slug ? `/${slug}/auth` : '/auth')
 }
@@ -191,13 +202,17 @@ async function handleContinue() {
     </main>
 
     <footer class="wc-footer">
+      <p v-if="geoDenied" class="wc-geo-denied">
+        La ubicación es <strong>obligatoria</strong> para tu solicitud. Habilita el permiso
+        de ubicación en los ajustes de tu dispositivo y vuelve a intentar.
+      </p>
       <button
         type="button"
         class="btn-continue"
         :disabled="!accepted || isRequestingPermissions"
         @click="handleContinue"
       >
-        {{ isRequestingPermissions ? 'Solicitando permisos…' : 'Continuar' }}
+        {{ isRequestingPermissions ? 'Solicitando permisos…' : (geoDenied ? 'Reintentar' : 'Continuar') }}
       </button>
     </footer>
 
@@ -486,6 +501,16 @@ async function handleContinue() {
 /* Footer botón */
 .wc-footer {
   padding: 8px 20px 0;
+}
+.wc-geo-denied {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  background: #fef2f2;
+  border-radius: 10px;
+  color: #b91c1c;
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: center;
 }
 .btn-continue {
   width: 100%;
