@@ -128,6 +128,14 @@ export const adminRoutes: RouteRecordRaw[] = [
         component: () => import('@/modules/admin/views/panel/AdminIntegrationDocs.vue'),
       },
       {
+        // Catálogo GLOBAL de códigos postales (SEPOMEX). Solo SUPER_ADMIN. La
+        // validación efectiva la hace el endpoint backend (canConfigureTenant);
+        // aquí solo controlamos la visibilidad del sidebar vía admin-modules.
+        path: 'configuracion/codigos-postales',
+        name: 'admin-postal-codes',
+        component: () => import('@/modules/admin/views/panel/AdminPostalCodes.vue'),
+      },
+      {
         path: 'prestamos',
         name: 'admin-loans',
         component: () => import('@/modules/admin/views/panel/AdminLoans.vue')

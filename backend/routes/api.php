@@ -51,6 +51,7 @@ use App\Http\Controllers\Api\V2\Staff\NotificationPreferenceController as StaffN
 use App\Http\Controllers\Api\V2\Applicant\LoanController as ApplicantLoanController;
 use App\Http\Controllers\Api\V2\Staff\LoanController as StaffLoanController;
 use App\Http\Controllers\Api\V2\Staff\WebhookController as StaffWebhookController;
+use App\Http\Controllers\Api\V2\Staff\StaffPostalCatalogController;
 
 // =============================================
 // BROADCASTING AUTH (for WebSocket channel authorization)
@@ -398,6 +399,20 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'staff', 'log.request']
             Route::post('/{id}/test', [StaffIntegrationController::class, 'test']);
             Route::patch('/{id}/toggle', [StaffIntegrationController::class, 'toggle']);
             Route::delete('/{id}', [StaffIntegrationController::class, 'destroy']);
+        });
+
+        // =============================================
+        // Postal Codes Catalog - Super Admin only
+        // =============================================
+        // Catálogo GLOBAL de códigos postales (SEPOMEX). Carga en dos fases:
+        // upload (parseo a staging vía job + progreso Reverb) → apply (swap atómico).
+        Route::middleware('permission:canConfigureTenant')->prefix('catalogs/postal-codes')->group(function () {
+            Route::post('/upload', [StaffPostalCatalogController::class, 'upload']);
+            Route::get('/imports', [StaffPostalCatalogController::class, 'index']);
+            Route::get('/imports/{id}', [StaffPostalCatalogController::class, 'show']);
+            Route::post('/imports/{id}/apply', [StaffPostalCatalogController::class, 'apply']);
+            Route::post('/imports/{id}/discard', [StaffPostalCatalogController::class, 'discard']);
+            Route::get('/status', [StaffPostalCatalogController::class, 'status']);
         });
 
         // =============================================

@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\PostalCode;
+use App\Services\PostalCode\PostalCodeImporter;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
@@ -37,7 +38,7 @@ class CheckPostalCodesFreshness extends Command
             );
         }
 
-        $mark = Cache::get(ImportPostalCodes::LAST_IMPORT_CACHE_KEY);
+        $mark = Cache::get(PostalCodeImporter::LAST_IMPORT_CACHE_KEY);
         $rawAt = is_array($mark) ? ($mark['at'] ?? null) : null;
 
         // Poblado pero sin marca → vigencia indeterminada, alerta conservadora.

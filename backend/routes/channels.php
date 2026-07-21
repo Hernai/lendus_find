@@ -101,3 +101,11 @@ Broadcast::channel('tenant.{tenantId}.admin', function (Model $user, string $ten
 Broadcast::channel('tenant.{tenantId}.user.{userId}', function (Model $user, string $tenantId, string $userId) {
     return (string) $user->tenant_id === $tenantId && (string) $user->id === $userId;
 });
+
+// Progreso de la importación del catálogo global de códigos postales.
+// El catálogo es compartido por todos los tenants: solo cuentas staff con
+// canConfigureTenant (SUPER_ADMIN) pueden seguir el progreso, sin filtro de tenant.
+Broadcast::channel('postal-codes-import.{importId}', function (Model $user, string $importId) {
+    /** @var StaffAccount $user */
+    return broadcast_is_staff($user) && $user->canConfigureTenant();
+});
