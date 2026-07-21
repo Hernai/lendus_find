@@ -295,7 +295,11 @@ const handleLogout = async () => {
             </svg>
             Volver
           </button>
+          <!-- En canal móvil (MoneyCapital) NO se ofrece cerrar sesión: la sesión
+               persiste para evitar el re-login por OTP/SMS (MC no usa PIN). El
+               logout solo se muestra en web. -->
           <button
+            v-if="!isMobileContext"
             class="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/10 rounded-lg text-white text-xs hover:bg-white/20 transition-colors"
             @click="handleLogout"
           >
