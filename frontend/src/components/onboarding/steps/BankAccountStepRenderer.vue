@@ -2,21 +2,24 @@
 import { computed, ref, watch } from 'vue'
 import type { BankAccountStep } from '@/types/v2/onboardingStep'
 import { MEXICAN_BANKS } from '@/utils/banks'
+import { useProfileStore } from '@/stores'
 
 /**
  * Renderiza step `bank_account`: captura cuenta bancaria del aplicante.
  *
  * Layout:
- *  - Tipo de cuenta (CLABE / Tarjeta) — radio cards
- *  - Banco — selector tipo dropdown (sheet)
- *  - Número de cuenta — input con icono + validación
+ *  - Banco — inferido automáticamente desde la CLABE (readonly + check verde);
+ *    si no se detecta, selector tipo dropdown (sheet) como fallback manual.
+ *  - Número de cuenta (CLABE) — input con icono + validación
  *  - Aviso de confirmación lavanda
  *
- * CLABE: 18 dígitos. Tarjeta: 16. Detectamos por longitud + validación.
- * Tenant-agnóstico.
+ * La cuenta siempre es CLABE de 18 dígitos. Tenant-agnóstico.
  */
 
 interface BankAccount {
+  // Se mantiene la unión (en vez de un literal 'CLABE') por compatibilidad
+  // estructural con la interfaz homónima de StepBankAccount.vue (usada en el
+  // v-model). El valor emitido aquí siempre es 'CLABE'.
   type: 'CLABE' | 'CARD'
   bank_code: string
   account_number: string
@@ -32,12 +35,20 @@ const emit = defineEmits<{
   'update:valid': [valid: boolean]
 }>()
 
-const type = ref<BankAccount['type']>(props.modelValue?.type ?? 'CLABE')
+const profileStore = useProfileStore()
+
 const bankCode = ref<string>(props.modelValue?.bank_code ?? '')
 const accountNumber = ref<string>(props.modelValue?.account_number ?? '')
 const bankSheetOpen = ref(false)
+const detectingBank = ref(false)
+const bankAutoDetected = ref(false)
+// Última CLABE (18 díg. sin espacios) ya consultada al backend. Evita
+// re-validar la misma CLABE, pero SÍ re-valida ediciones in-situ (retipear un
+// dígito) y paste-over de otra CLABE de 18 dígitos.
+const lastValidatedClabe = ref('')
 
 const BANKS = MEXICAN_BANKS
+const CLABE_DIGITS = 18
 
 const selectedBank = computed(() => BANKS.find((b) => b.code === bankCode.value) ?? null)
 
@@ -55,25 +66,20 @@ const bankAllowsTransfer = computed(() => selectedBank.value?.validForTransfer =
 // de un borrador previo o derivado de CLABE): la cuenta no recibiría el préstamo.
 const showTransferWarning = computed(() => !!bankCode.value && !bankAllowsTransfer.value)
 
-// Validez del paso (contrato): banco apto para acreditación inmediata + número
-// con la longitud correcta (CLABE 18 / CARD 16). Reproduce
-// legacyCanContinue('bank_account') (congelado en stepValidation.spec.ts) y le
-// suma el requisito de banco válido para transferencia.
+// Validez del paso (contrato): banco apto para acreditación inmediata + CLABE
+// de 18 dígitos. Reproduce legacyCanContinue('bank_account') (congelado en
+// stepValidation.spec.ts) y le suma el requisito de banco válido para
+// transferencia.
 const isValid = computed(() =>
   !!bankCode.value && bankAllowsTransfer.value && !!accountNumber.value &&
-  accountNumber.value.replace(/\D/g, '').length === (type.value === 'CARD' ? 16 : 18),
+  accountNumber.value.replace(/\D/g, '').length === CLABE_DIGITS,
 )
 watch(isValid, (v) => emit('update:valid', v), { immediate: true })
 
-const maxDigits = computed(() => (type.value === 'CLABE' ? 18 : 16))
+const maxDigits = CLABE_DIGITS
 const digitCount = computed(() => accountNumber.value.replace(/\D/g, '').length)
-const isValidNumber = computed(() => digitCount.value === maxDigits.value)
+const isValidNumber = computed(() => digitCount.value === maxDigits)
 const isComplete = computed(() => !!bankCode.value && isValidNumber.value)
-
-function pickType(t: BankAccount['type']) {
-  type.value = t
-  accountNumber.value = ''
-}
 
 function pickBank(code: string) {
   // Los bancos no aptos para acreditación inmediata están deshabilitados en el
@@ -91,7 +97,7 @@ function handleAccountInput(ev: Event) {
   // Cuántos dígitos hay antes del caret (los espacios no cuentan).
   const digitsBeforeCaret = raw.slice(0, caretBefore).replace(/\D/g, '').length
   // Solo dígitos, agrupar de 4 en 4 con espacio.
-  const digits = raw.replace(/\D/g, '').slice(0, maxDigits.value)
+  const digits = raw.replace(/\D/g, '').slice(0, maxDigits)
   const grouped = digits.match(/.{1,4}/g)?.join(' ') ?? digits
   accountNumber.value = grouped
   if (input.value !== grouped) {
@@ -107,13 +113,51 @@ function handleAccountInput(ev: Event) {
   try { input.setSelectionRange(pos, pos) } catch { /* noop */ }
 }
 
-watch([type, bankCode, accountNumber], () => {
+watch([bankCode, accountNumber], () => {
   if (isComplete.value) {
     emit('update:modelValue', {
-      type: type.value,
+      type: 'CLABE',
       bank_code: bankCode.value,
       account_number: accountNumber.value.replace(/\s/g, ''),
     })
+  }
+})
+
+// Inferencia de banco: al completar los 18 dígitos de la CLABE, se consulta al
+// backend (misma fuente que el perfil) y se autocompleta `bankCode`. Se
+// re-valida siempre que la CLABE cambie respecto a la última consultada, lo que
+// cubre ediciones in-situ (retipear un dígito) y paste-over de otra CLABE de 18
+// dígitos — así el bank_code emitido nunca queda desfasado del account_number.
+watch(accountNumber, async (newVal) => {
+  const digits = newVal.replace(/\D/g, '')
+
+  if (digits.length < CLABE_DIGITS) {
+    bankCode.value = ''
+    bankAutoDetected.value = false
+    lastValidatedClabe.value = ''
+    return
+  }
+  if (digits === lastValidatedClabe.value) return // misma CLABE ya consultada
+
+  lastValidatedClabe.value = digits
+  detectingBank.value = true
+  try {
+    const result = await profileStore.validateClabe(digits)
+    // Guard de carrera: si la CLABE cambió mientras esperábamos la respuesta,
+    // descartamos este resultado (una respuesta tardía no debe pisar el estado).
+    if (accountNumber.value.replace(/\D/g, '') !== digits) return
+    if (result?.is_valid && result.bank_code && BANKS.some((b) => b.code === result.bank_code)) {
+      bankCode.value = result.bank_code
+      bankAutoDetected.value = true
+    } else {
+      // Sin detección: limpiamos para exponer el selector manual (fallback).
+      bankCode.value = ''
+      bankAutoDetected.value = false
+    }
+  } finally {
+    if (accountNumber.value.replace(/\D/g, '') === digits) {
+      detectingBank.value = false
+    }
   }
 })
 </script>
@@ -124,41 +168,34 @@ watch([type, bankCode, accountNumber], () => {
       Ingresa la cuenta bancaria donde quieres recibir tu préstamo. Debe estar a tu nombre.
     </p>
 
-    <!-- Tipo de cuenta -->
-    <div class="type-row">
-      <button
-        type="button"
-        class="type-card"
-        :class="{ 'type-card--active': type === 'CLABE' }"
-        @click="pickType('CLABE')"
-      >
-        <span class="type-radio" :class="{ 'type-radio--active': type === 'CLABE' }">
-          <span v-if="type === 'CLABE'" class="type-radio-inner" />
-        </span>
-        <span class="type-text">
-          <span class="type-title">CLABE</span>
-          <span class="type-sub">18 dígitos</span>
-        </span>
-      </button>
-      <button
-        type="button"
-        class="type-card"
-        :class="{ 'type-card--active': type === 'CARD' }"
-        @click="pickType('CARD')"
-      >
-        <span class="type-radio" :class="{ 'type-radio--active': type === 'CARD' }">
-          <span v-if="type === 'CARD'" class="type-radio-inner" />
-        </span>
-        <span class="type-text">
-          <span class="type-title">Tarjeta</span>
-          <span class="type-sub">16 dígitos</span>
-        </span>
-      </button>
-    </div>
-
     <!-- Banco -->
     <label class="field-label">Banco</label>
-    <button type="button" class="bank-dropdown" @click="bankSheetOpen = true">
+
+    <!-- Detectado automáticamente desde la CLABE: solo lectura. Check verde solo
+         si el banco es apto para acreditación inmediata; si no, estilo de
+         advertencia sin check (el .bank-warning explica y la CLABE sigue
+         editable para reingresar otra cuenta). -->
+    <div
+      v-if="bankAutoDetected && selectedBank"
+      class="bank-detected"
+      :class="{ 'bank-detected--warn': !bankAllowsTransfer }"
+    >
+      <span class="bank-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M4 10l8-5 8 5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+          <path d="M5 10h14v9H5z" stroke="currentColor" stroke-width="1.6" />
+          <path d="M8 14v3M12 14v3M16 14v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+        </svg>
+      </span>
+      <span class="bank-value">{{ selectedBank.name }}</span>
+      <svg v-if="bankAllowsTransfer" class="bank-check" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="10" fill="#10b981" />
+        <path d="M8 12l2.5 2.5L16 9" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </div>
+
+    <!-- Fallback: no se detectó banco automáticamente, selector manual -->
+    <button v-else type="button" class="bank-dropdown" :disabled="detectingBank" @click="bankSheetOpen = true">
       <span class="bank-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none">
           <path d="M4 10l8-5 8 5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
@@ -167,9 +204,10 @@ watch([type, bankCode, accountNumber], () => {
         </svg>
       </span>
       <span class="bank-value" :class="{ 'bank-value--placeholder': !bankCode }">
-        {{ bankLabel || 'Selecciona tu banco' }}
+        {{ detectingBank ? 'Detectando banco…' : (bankLabel || 'Selecciona tu banco') }}
       </span>
-      <svg class="bank-chevron" viewBox="0 0 24 24" fill="none">
+      <div v-if="detectingBank" class="bank-spinner" aria-hidden="true" />
+      <svg v-else class="bank-chevron" viewBox="0 0 24 24" fill="none">
         <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
     </button>
@@ -183,13 +221,12 @@ watch([type, bankCode, accountNumber], () => {
         </svg>
       </span>
       <span>
-        Esta cuenta debe permitir transferencias con acreditación inmediata. Elige un
-        banco disponible para recibir tu préstamo.
+        Esta cuenta no puede recibir tu préstamo. Ingresa la CLABE de otra cuenta apta.
       </span>
     </p>
 
     <!-- Número de cuenta -->
-    <label class="field-label">{{ type === 'CLABE' ? 'CLABE interbancaria' : 'Número de tarjeta' }}</label>
+    <label class="field-label">CLABE interbancaria</label>
     <div class="field" :class="{ 'field--valid': isValidNumber }">
       <span class="field-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none">
@@ -201,7 +238,7 @@ watch([type, bankCode, accountNumber], () => {
         :value="accountNumber"
         type="tel"
         inputmode="numeric"
-        :placeholder="type === 'CLABE' ? '18 dígitos' : '16 dígitos'"
+        placeholder="18 dígitos"
         class="field-input"
         @input="handleAccountInput"
       />
@@ -288,64 +325,6 @@ watch([type, bankCode, accountNumber], () => {
   line-height: 1.5;
 }
 
-.type-row {
-  display: flex;
-  gap: 10px;
-}
-.type-card {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  background: #ffffff;
-  border: 1.5px solid #e5e7eb;
-  border-radius: 14px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: border-color 140ms ease, background 140ms ease;
-}
-.type-card--active {
-  border-color: var(--tenant-primary, #5B21B6);
-  background: rgb(var(--surface-soft-rgb, 243 242 250) / 1);
-}
-.type-radio {
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  border: 2px solid #cbd5e1;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-}
-.type-radio--active {
-  border-color: var(--tenant-primary, #5B21B6);
-}
-.type-radio-inner {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--tenant-primary, #5B21B6);
-}
-.type-text {
-  display: flex;
-  flex-direction: column;
-  text-align: left;
-  gap: 2px;
-}
-.type-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #0f172a;
-}
-.type-card--active .type-title {
-  color: var(--tenant-primary, #5B21B6);
-}
-.type-sub {
-  font-size: 11.5px;
-  color: #64748b;
-}
-
 .field-label {
   font-size: 12.5px;
   color: #64748b;
@@ -395,6 +374,37 @@ watch([type, bankCode, accountNumber], () => {
   width: 18px;
   height: 18px;
   color: #94a3b8;
+  flex-shrink: 0;
+}
+.bank-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #cbd5e1;
+  border-top-color: var(--tenant-primary, #5B21B6);
+  border-radius: 999px;
+  flex-shrink: 0;
+  animation: spin 700ms linear infinite;
+}
+
+.bank-detected {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 14px;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 14px;
+  min-height: 56px;
+}
+/* Banco detectado pero NO apto para acreditación inmediata: estilo de
+   advertencia, sin check verde. */
+.bank-detected--warn {
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+.bank-check {
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
 }
 
@@ -616,4 +626,5 @@ watch([type, bankCode, accountNumber], () => {
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>

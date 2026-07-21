@@ -18,10 +18,7 @@ const isSubmitting = ref(false)
 const error = ref<string | null>(null)
 
 // Form state
-const inputMode = ref<'clabe' | 'card'>('clabe')
 const clabe = ref('')
-const cardNumberRaw = ref('') // 16 dígitos sin formato (lo que se envía al backend)
-const cardNumberDisplay = ref('') // con espacios para mostrar (4-4-4-4)
 const bankName = ref('')
 const holderName = ref('')
 const holderRfc = ref('')
@@ -33,10 +30,6 @@ const isValidatingClabe = ref(false)
 const clabeError = ref<string | null>(null)
 const clabeValid = ref(false)
 const bankNameAutoDetected = ref(false)
-
-// Card validation state (Luhn)
-const cardError = ref<string | null>(null)
-const cardValid = ref(false)
 
 // Modal de confirmación pre-submit
 const showConfirmation = ref(false)
@@ -55,10 +48,7 @@ const canSubmit = computed(() => {
   if (isSubmitting.value) return false
   if (holderName.value.trim().length === 0) return false
   if (bankName.value.trim().length === 0) return false
-  if (inputMode.value === 'clabe') {
-    return clabe.value.length === 18 && clabeValid.value
-  }
-  return cardNumberRaw.value.length === 16 && cardValid.value
+  return clabe.value.length === 18 && clabeValid.value
 })
 
 // Format CLABE input (only digits, max 18)
@@ -69,51 +59,6 @@ const formatClabe = (value: string) => {
 const handleClabeInput = (event: Event) => {
   const input = event.target as HTMLInputElement
   clabe.value = formatClabe(input.value)
-}
-
-// Algoritmo de Luhn (espejo del backend)
-const isValidLuhn = (digits: string): boolean => {
-  if (!/^\d{16}$/.test(digits)) return false
-  let sum = 0, alt = false
-  for (let i = digits.length - 1; i >= 0; i--) {
-    let n = parseInt(digits[i]!, 10)
-    if (alt) { n *= 2; if (n > 9) n -= 9 }
-    sum += n
-    alt = !alt
-  }
-  return sum % 10 === 0
-}
-
-const handleCardInput = (event: Event) => {
-  const input = event.target as HTMLInputElement
-  const digits = input.value.replace(/\D/g, '').slice(0, 16)
-  cardNumberRaw.value = digits
-  // Formato 4-4-4-4 para display
-  cardNumberDisplay.value = digits.match(/.{1,4}/g)?.join(' ') ?? digits
-  if (digits.length === 16) {
-    cardValid.value = isValidLuhn(digits)
-    cardError.value = cardValid.value ? null : 'Tarjeta inválida (Luhn fallido)'
-  } else {
-    cardValid.value = false
-    cardError.value = null
-  }
-}
-
-const switchMode = (mode: 'clabe' | 'card') => {
-  inputMode.value = mode
-  // Reset el otro campo y errores
-  if (mode === 'clabe') {
-    cardNumberRaw.value = ''
-    cardNumberDisplay.value = ''
-    cardError.value = null
-    cardValid.value = false
-  } else {
-    clabe.value = ''
-    clabeError.value = null
-    clabeValid.value = false
-    bankNameAutoDetected.value = false
-    if (!bankName.value || bankNameAutoDetected.value) bankName.value = ''
-  }
 }
 
 // Validate CLABE when it's 18 digits
@@ -172,11 +117,7 @@ const confirmAndSave = async () => {
       holder_rfc: holderRfc.value.toUpperCase() || undefined,
       is_own_account: isOwnAccount.value,
       is_primary: isPrimary.value,
-    }
-    if (inputMode.value === 'clabe') {
-      payload.clabe = clabe.value
-    } else {
-      payload.card_number = cardNumberRaw.value
+      clabe: clabe.value,
     }
     await applicantStore.createBankAccount(payload as Parameters<typeof applicantStore.createBankAccount>[0])
     emit('saved')
@@ -189,7 +130,6 @@ const confirmAndSave = async () => {
   }
 }
 
-const cardLast4 = computed(() => cardNumberRaw.value.slice(-4))
 const clabeMasked = computed(() =>
   clabe.value.length === 18 ? clabe.value.slice(0, 4) + ' ' + clabe.value.slice(4, 8) + ' ' + clabe.value.slice(8, 12) + ' ' + clabe.value.slice(12, 16) + ' ' + clabe.value.slice(16) : clabe.value,
 )
@@ -239,59 +179,8 @@ const clabeMasked = computed(() =>
               {{ error }}
             </div>
 
-            <!-- Toggle modo de captura: Tarjeta de débito vs CLABE -->
-            <div class="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl">
-              <button
-                type="button"
-                class="py-2.5 px-3 rounded-lg text-sm font-semibold transition-colors"
-                :class="inputMode === 'card' ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-600'"
-                @click="switchMode('card')"
-              >
-                Tarjeta de débito
-              </button>
-              <button
-                type="button"
-                class="py-2.5 px-3 rounded-lg text-sm font-semibold transition-colors"
-                :class="inputMode === 'clabe' ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-600'"
-                @click="switchMode('clabe')"
-              >
-                CLABE
-              </button>
-            </div>
-
-            <!-- Card number input (modo débito) -->
-            <div v-if="inputMode === 'card'">
-              <label class="block text-sm font-medium text-gray-700 mb-1">
-                Número de tarjeta *
-              </label>
-              <div class="relative">
-                <input
-                  type="text"
-                  :value="cardNumberDisplay"
-                  @input="handleCardInput"
-                  inputmode="numeric"
-                  autocomplete="cc-number"
-                  placeholder="0000 0000 0000 0000"
-                  class="w-full px-3 py-2 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-500 font-mono text-sm tracking-wide"
-                  :class="{
-                    'border-gray-300': !cardError && !cardValid,
-                    'border-red-500': cardError,
-                    'border-green-500': cardValid,
-                  }"
-                  maxlength="19"
-                />
-                <div v-if="cardValid" class="absolute right-3 top-1/2 -translate-y-1/2">
-                  <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                  </svg>
-                </div>
-              </div>
-              <p v-if="cardError" class="mt-1 text-sm text-red-500">{{ cardError }}</p>
-              <p v-else class="mt-1 text-xs text-gray-500">{{ cardNumberRaw.length }}/16 dígitos</p>
-            </div>
-
             <!-- CLABE input -->
-            <div v-else>
+            <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">
                 CLABE Interbancaria *
               </label>
@@ -325,7 +214,7 @@ const clabeMasked = computed(() =>
             </div>
 
             <!-- Bank Name -->
-            <div v-if="inputMode === 'card' ? cardValid : clabeValid">
+            <div v-if="clabeValid">
               <label class="block text-sm font-medium text-gray-700 mb-1">
                 Banco *
               </label>
@@ -465,14 +354,8 @@ const clabeMasked = computed(() =>
                 <span class="font-medium text-gray-900 text-right">{{ bankName || '—' }}</span>
               </div>
               <div class="flex justify-between px-3 py-2.5 text-sm">
-                <span class="text-gray-500">Método</span>
-                <span class="font-medium text-gray-900">{{ inputMode === 'card' ? 'Tarjeta de débito' : 'CLABE' }}</span>
-              </div>
-              <div class="flex justify-between px-3 py-2.5 text-sm">
-                <span class="text-gray-500">{{ inputMode === 'card' ? 'Tarjeta' : 'CLABE' }}</span>
-                <span class="font-mono text-gray-900">
-                  {{ inputMode === 'card' ? `**** **** **** ${cardLast4}` : clabeMasked }}
-                </span>
+                <span class="text-gray-500">CLABE</span>
+                <span class="font-mono text-gray-900">{{ clabeMasked }}</span>
               </div>
               <div class="flex justify-between px-3 py-2.5 text-sm">
                 <span class="text-gray-500">Titular</span>
