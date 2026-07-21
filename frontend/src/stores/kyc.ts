@@ -358,7 +358,6 @@ export const useKycStore = defineStore('kyc', () => {
     selfieImage.value = image
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const validateIne = async (_applicantId?: string) => {
     if (!ineFrontImage.value) {
       error.value = 'Se requiere la imagen frontal del INE'
@@ -458,7 +457,6 @@ export const useKycStore = defineStore('kyc', () => {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const validateCurp = async (curp?: string, _applicantId?: string) => {
     const curpToValidate = curp || lockedData.value.curp
     if (!curpToValidate) {
@@ -663,7 +661,6 @@ export const useKycStore = defineStore('kyc', () => {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const getBiometricToken = async (_applicationId?: string) => {
     isLoading.value = true
     error.value = null
@@ -683,7 +680,6 @@ export const useKycStore = defineStore('kyc', () => {
   /**
    * Validate face match between selfie and INE photo.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const validateFaceMatch = async (_applicantId?: string): Promise<boolean> => {
     kycLogger.debug('validateFaceMatch called')
 
@@ -721,7 +717,6 @@ export const useKycStore = defineStore('kyc', () => {
   /**
    * Validate liveness detection from selfie image.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const validateLiveness = async (_applicantId?: string): Promise<boolean> => {
     kycLogger.debug('validateLiveness called')
 
