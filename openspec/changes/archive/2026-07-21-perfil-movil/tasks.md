@@ -25,5 +25,7 @@
 
 - [x] 5.1 `npm run type-check` sin errores nuevos (re-corrido tras el ajuste de ingreso).
 - [x] 5.2 Revisar el diff con el agente `revisor-lendus` (aislamiento de tenant, sin regresión web, buckets del rango salarial correctos, convenciones). Sin hallazgos bloqueantes; se alineó el padding móvil a `pb-32`.
-- [x] 5.3 Smoke con `ui-smoke` (stack desechable, moneycapital): `/m/home` → tab "Perfil" → `/m/perfil` (nav visible), "Volver" → `/m/home`, "Salir" → `/m`. 6/6 ✅, 0 errores de consola relevantes. PENDIENTE-EMULADOR: el `<input type="file">` de foto en webview Capacitor; PENDIENTE-VISUAL: la línea de rango salarial (requiere un solicitante MC con empleo capturado).
+- [x] 5.3 Smoke con `ui-smoke` (stack desechable, moneycapital): `/m/home` → tab "Perfil" → `/m/perfil` (nav visible), "Volver" → `/m/home`, "Salir" → `/m`. 6/6 ✅, 0 errores de consola relevantes.
+- [x] 5.5 Verificación visual del ingreso (ui-smoke, solicitante MC con empleo sembrado, ingreso 7500): en pantalla se ve "Ingreso mensual: $7,500" + "Rango: $6,001 - $9,000" y NO se renderiza la fila "Antigüedad". 3/3 ✅.
+- [ ] 5.6 PENDIENTE-EMULADOR (fuera de ui-smoke, requiere emulador nativo): el `<input type="file">` de la foto en el webview de Capacitor.
 - [x] 5.4 Confirmado: perfil web (`/perfil` → `/moneycapital/perfil`) sigue igual — "Volver" → `/dashboard`, sin nav inferior móvil.
