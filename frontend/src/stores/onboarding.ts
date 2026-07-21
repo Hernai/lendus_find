@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useProfileStore } from './profile'
 import * as profileService from '@/services/v2/profile.service'
 import documentService from '@/services/v2/document.applicant.service'
@@ -9,6 +9,7 @@ import { useApplicationStore } from './application'
 import { useTenantStore } from './tenant'
 import { logger } from '@/utils/logger'
 import { isValidRfc } from '@/utils/validators'
+import { storage, STORAGE_KEYS } from '@/utils/storage'
 
 const onboardingLogger = logger.child('Onboarding')
 
@@ -207,12 +208,43 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     return completedSteps.value.includes(step - 1)
   }
 
+  // Identidad actual (tenant + usuario), usada para sellar el borrador al guardar
+  // y validarlo al cargar. Fallback a STORAGE_KEYS por si `tenantStore.tenant`
+  // aún no está hidratado (p. ej. al arrancar el store antes que el de tenant).
+  const getCurrentIdentity = () => ({
+    tenantId: tenantStore.tenant?.id ?? storage.get<string>(STORAGE_KEYS.CURRENT_TENANT_ID),
+    userId: storage.get<string>(STORAGE_KEYS.CURRENT_USER_ID)
+  })
+
   // Load from localStorage on init
   const loadFromStorage = () => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) {
         const parsed = JSON.parse(saved)
+
+        // Sello de tenant + usuario: solo se restaura si coincide con la sesión
+        // actual. Borradores sin sello (previos a este cambio) o de otra
+        // cuenta/tenant se descartan para no prefilar PII ajena.
+        const { tenantId: currentTenantId, userId: currentUserId } = getCurrentIdentity()
+        if (
+          !parsed.tenantId ||
+          !parsed.userId ||
+          parsed.tenantId !== currentTenantId ||
+          parsed.userId !== currentUserId
+        ) {
+          onboardingLogger.warn('Discarding onboarding draft: missing or mismatched tenant/user seal')
+          localStorage.removeItem(STORAGE_KEY)
+          // Resetear también el estado reactivo en memoria: el store es singleton
+          // durante toda la sesión SPA, así que limpiar solo localStorage dejaría el
+          // PII del tenant/usuario anterior en data.value. Paridad con
+          // pruneForeignTenantState (application.ts), que sí resetea las refs.
+          data.value = getDefaultData()
+          completedSteps.value = []
+          currentStep.value = 1
+          return
+        }
+
         data.value = { ...getDefaultData(), ...parsed.data }
         completedSteps.value = parsed.completedSteps || []
         currentStep.value = parsed.currentStep || 1
@@ -250,11 +282,14 @@ export const useOnboardingStore = defineStore('onboarding', () => {
         ...data.value,
         dynamic: stripDataUrls(data.value.dynamic ?? {}),
       }
+      const { tenantId, userId } = getCurrentIdentity()
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         data: lightData,
         completedSteps: completedSteps.value,
         currentStep: currentStep.value,
-        savedAt: new Date().toISOString()
+        savedAt: new Date().toISOString(),
+        tenantId,
+        userId
       }))
     } catch (e) {
       onboardingLogger.error('Failed to save onboarding data to storage', e)
@@ -695,6 +730,19 @@ export const useOnboardingStore = defineStore('onboarding', () => {
     localStorage.removeItem('current_application_id')
     profileStore.reset()
   }
+
+  // Cierra el caso same-session: si el usuario navega entre tenants en el mismo
+  // tab (sin reload), loadFromStorage NO se re-ejecuta y `data.value` (PII del
+  // tenant anterior) quedaría en memoria. El router ya poda el `application`
+  // store por tenant, pero no el onboarding — este watcher lo resetea.
+  watch(() => tenantStore.tenant?.id, (newId, oldId) => {
+    // Cambio real de tenant en la misma sesión SPA (no la hidratación inicial
+    // null→id): descartar el borrador/estado del onboarding para no cargar PII
+    // entre tenants.
+    if (oldId && newId && oldId !== newId) {
+      reset()
+    }
+  })
 
   // Handle application not found
   const handleApplicationNotFound = () => {
