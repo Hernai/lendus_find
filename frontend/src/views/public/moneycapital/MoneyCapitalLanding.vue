@@ -69,6 +69,11 @@ onMounted(async () => {
                 Calcular mi pago
               </button>
             </div>
+            <!-- Descarga de la app: la solicitud se completa en la app móvil. -->
+            <div class="store-row">
+              <a class="store-badge" href="https://play.google.com/store/apps/details?id=mx.moneycapital.app" target="_blank" rel="noopener">Descarga en Google Play</a>
+              <a class="store-badge" href="https://apps.apple.com/mx/app/moneycapital" target="_blank" rel="noopener">Descarga en App Store</a>
+            </div>
             <div class="trust-row">
               <span class="trust-item">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -292,7 +297,28 @@ main { flex: 1; }
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.store-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
   margin-bottom: 28px;
+}
+.store-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 16px;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 140ms ease;
+}
+.store-badge:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 .btn-primary {
   display: inline-flex;

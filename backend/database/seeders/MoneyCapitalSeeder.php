@@ -158,6 +158,10 @@ class MoneyCapitalSeeder extends Seeder
                     // (webhook inbound/disbursement). Ver design.md #9. El STP
                     // interno (auto_disbursement) queda OFF a propósito.
                     'external_disbursement' => true,
+                    // Canal exclusivo app (#8/#9): OFF por ahora — se mantiene el
+                    // acceso web para las pruebas. Al encenderlo, la solicitud web
+                    // se bloquea (el router redirige a la landing informativa).
+                    'app_only_channel' => false,
                 ],
                 'email' => 'contacto@moneycapital.lendus.app',
                 'phone' => '5555550000',

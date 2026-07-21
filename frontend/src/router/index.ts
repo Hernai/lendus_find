@@ -129,6 +129,26 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
+  // Canal exclusivo app (#8): con `app_only_channel` activo, la solicitud
+  // (auth/onboarding) NO es accesible desde web — se redirige a la landing
+  // informativa del tenant (que ofrece la descarga de la app). Flag OFF (default)
+  // = no-op: el acceso web sigue igual (pruebas). No aplica en la app nativa.
+  if (!isAdminRoute && !platform.device.isNative()) {
+    const feats = (tenantStore.tenant?.features ?? {}) as Record<string, boolean>
+    if (feats.app_only_channel) {
+      const slug = tenantStore.slug || detectTenantSlug()
+      const isSolicitud =
+        to.name === 'tenant-onboarding-dynamic' ||
+        (typeof to.name === 'string' && to.name.startsWith('m-onboarding')) ||
+        to.path.includes('/auth') ||
+        to.path.includes('/solicitud')
+      const isLanding = to.path === '/' || to.name === 'tenant-landing' || (!!slug && to.path === `/${slug}`)
+      if (isSolicitud && !isLanding && slug) {
+        return next({ path: `/${slug}`, replace: true })
+      }
+    }
+  }
+
   // Feature flag: loan_portfolio (módulo opt-in MoneyCapital)
   if (to.matched.some(record => record.meta.requiresLoanPortfolio)) {
     const features = (tenantStore.tenant?.features ?? {}) as Record<string, boolean>
