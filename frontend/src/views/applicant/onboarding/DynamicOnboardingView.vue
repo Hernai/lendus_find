@@ -112,14 +112,14 @@ watch(currentStep, (_step, prevStep) => {
   if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer)
 })
 
-// Tipos cuyo renderer es dueño de su validación (contrato update:valid). Los 11
+// Tipos cuyo renderer es dueño de su validación (contrato update:valid). Los 12
 // tipos base están migrados; un tipo fuera de este set (p.ej. un paso CUSTOM de
 // tenant que no implemente el contrato) cae a legacyCanContinue como fallback.
 const MIGRATED_TYPES = new Set<OnboardingStep['type']>([
   // Fase 1 (triviales).
   'select', 'number_select', 'state_city', 'kyc_selfie', 'review', 'review_full',
   // Fase 2 (formularios).
-  'address', 'personal_data',
+  'address', 'personal_data', 'email',
   // Fase 3 (complejos con contexto: ownPhone / hasKycProvider).
   'references', 'bank_account', 'kyc_ine',
   // Pasos custom del arrendamiento (tenant demo): cada renderer emite update:valid.

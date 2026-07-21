@@ -18,6 +18,7 @@ export type OnboardingStepType =
   | 'review_full'
   | 'personal_data'
   | 'address'
+  | 'email'
   // Pasos custom del flujo de arrendamiento (registrados por el tenant demo).
   | 'applicant_type_select'
   | 'asset_type'
@@ -115,6 +116,11 @@ export interface AddressStep extends OnboardingStepBase {
   type: 'address'
 }
 
+// Captura el correo de contacto (sin verificar) como ApplicantIdentity EMAIL.
+export interface EmailStep extends OnboardingStepBase {
+  type: 'email'
+}
+
 // --- Pasos custom del flujo de arrendamiento (tenant demo) ---
 export interface ApplicantTypeSelectStep extends OnboardingStepBase {
   type: 'applicant_type_select'
@@ -148,6 +154,7 @@ export type OnboardingStep =
   | ReviewFullStep
   | PersonalDataStep
   | AddressStep
+  | EmailStep
   | ApplicantTypeSelectStep
   | AssetTypeStep
   | CompanyDataStep

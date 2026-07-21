@@ -93,6 +93,11 @@ export function legacyCanContinue(
   if (s.type === 'kyc_selfie') {
     return typeof v === 'string' && v.length > 0
   }
+  if (s.type === 'email') {
+    // MISMO regex que EmailStepRenderer.isValid (paridad). Un correo mal formado
+    // cuenta como incompleto para la reanudación (firstIncompleteStepIndex).
+    return typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
+  }
   return v !== null && v !== '' && v !== undefined
 }
 

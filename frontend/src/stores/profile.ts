@@ -206,6 +206,29 @@ export const useProfileStore = defineStore('profile', () => {
   }
 
   // =====================================================
+  // Actions - Email (identidad de contacto, sin verificar)
+  // =====================================================
+
+  async function updateEmail(email: string): Promise<string | null> {
+    isSaving.value = true
+    error.value = null
+
+    try {
+      const response = await profileService.updateEmail(email)
+      if (response.success && response.data) {
+        return response.data.email
+      }
+      error.value = response.message ?? 'Error al actualizar correo'
+      return null
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Error desconocido'
+      throw e
+    } finally {
+      isSaving.value = false
+    }
+  }
+
+  // =====================================================
   // Actions - Address
   // =====================================================
 
@@ -547,6 +570,7 @@ export const useProfileStore = defineStore('profile', () => {
     invalidateProfileCache,
     updatePersonalData,
     updateIdentifications,
+    updateEmail,
     getAddress,
     updateAddress,
     getEmployment,

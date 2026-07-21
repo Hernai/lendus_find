@@ -206,6 +206,7 @@ Route::middleware(['tenant', 'metadata', 'auth:sanctum', 'log.request'])
             // Personal data
             Route::patch('/personal-data', [ApplicantProfileController::class, 'updatePersonalData']);
             Route::patch('/identifications', [ApplicantProfileController::class, 'updateIdentifications']);
+            Route::post('/email', [ApplicantProfileController::class, 'updateEmail']);
 
             // Address
             Route::get('/address', [ApplicantProfileController::class, 'getAddress']);

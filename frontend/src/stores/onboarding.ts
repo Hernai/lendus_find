@@ -1084,6 +1084,13 @@ export const useOnboardingStore = defineStore('onboarding', () => {
           } as never)
           break
         }
+        case 'email': {
+          const emailValue = String(payload || '').trim()
+          if (emailValue) {
+            await profileStore.updateEmail(emailValue)
+          }
+          break
+        }
         case 'kyc_selfie': {
           // El selfie llega como base64 (string) o { image } según el renderer.
           const img = typeof payload === 'string'

@@ -23,7 +23,7 @@ export interface StepEntry {
   variants?: Record<string, Component>
 }
 
-/** Renderers base (los 11 tipos declarativos). Envueltos en `{ default }`. */
+/** Renderers base (los 12 tipos declarativos). Envueltos en `{ default }`. */
 const baseRegistry: Record<string, StepEntry> = {
   select: { default: defineAsyncComponent(() => import('@/components/onboarding/steps/SelectStepRenderer.vue')) },
   state_city: { default: defineAsyncComponent(() => import('@/components/onboarding/steps/StateCityStepRenderer.vue')) },
@@ -36,6 +36,7 @@ const baseRegistry: Record<string, StepEntry> = {
   review_full: { default: defineAsyncComponent(() => import('@/components/onboarding/steps/ReviewStepRenderer.vue')) },
   personal_data: { default: defineAsyncComponent(() => import('@/components/onboarding/steps/PersonalDataStepRenderer.vue')) },
   address: { default: defineAsyncComponent(() => import('@/components/onboarding/steps/AddressStepRenderer.vue')) },
+  email: { default: defineAsyncComponent(() => import('@/components/onboarding/steps/EmailStepRenderer.vue')) },
 }
 
 /** Fallback para tipos/pasos no registrados (custom sin wiring, o typo en el seed). */

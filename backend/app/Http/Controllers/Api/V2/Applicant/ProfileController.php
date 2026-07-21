@@ -563,6 +563,50 @@ class ProfileController extends Controller
     }
 
     /**
+     * Update (or create) the applicant's EMAIL identity.
+     *
+     * POST /api/v2/applicant/profile/email
+     *
+     * Upsert idempotente: guarda el correo como ApplicantIdentity type=EMAIL sin
+     * verificar (verified_at=null). Si la cuenta ya tiene una identidad EMAIL, se
+     * actualiza el identifier (nunca se duplica). Este endpoint NO verifica el
+     * correo (no hay OTP aquí); solo captura el dato de contacto.
+     */
+    public function updateEmail(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => 'required|email',
+        ]);
+
+        $account = $request->user();
+
+        try {
+            $identity = $account->identities()->updateOrCreate(
+                ['type' => 'EMAIL'],
+                [
+                    'tenant_id' => $account->tenant_id,
+                    'identifier' => $validated['email'],
+                    'verified_at' => null,
+                ]
+            );
+        } catch (\Illuminate\Database\QueryException $e) {
+            // El índice único (tenant_id, type, identifier) —
+            // applicant_identities_tenant_type_identifier_unique — impide que dos
+            // cuentas del mismo tenant registren el MISMO correo. Sin capturar,
+            // esto sería un 500 crudo que bloquea el onboarding en un paso
+            // requerido; respondemos un 400 claro en español.
+            if ($e->getCode() === '23505') {
+                return $this->badRequest('DUPLICATE_EMAIL', 'Este correo ya está registrado en otra cuenta. Usa uno diferente.');
+            }
+            throw $e;
+        }
+
+        return $this->success([
+            'email' => $identity->identifier,
+        ], 'Correo actualizado');
+    }
+
+    /**
      * Calculate profile completeness percentage.
      */
     private function calculateCompleteness($person): int

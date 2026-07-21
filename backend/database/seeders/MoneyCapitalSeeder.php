@@ -433,13 +433,20 @@ class MoneyCapitalSeeder extends Seeder
     }
 
     /**
-     * Pipeline de onboarding MoneyCapital — 12 pasos según el PDF.
+     * Pipeline de onboarding MoneyCapital — 12 pasos según el PDF + `email`
+     * (dato de contacto sin verificar, agregado fuera del PDF original).
      * Cada paso es renderizado por OnboardingStepRenderer en el frontend.
      */
     private function onboardingSteps(): array
     {
         return [
             ['id' => 'education', 'type' => 'select', 'field' => 'education_level', 'enum' => 'EducationLevel', 'label' => 'Nivel educativo', 'required' => true],
+            // Correo de contacto: temprano en el flujo (2º paso), pero DESPUÉS de
+            // `education` para no tapar el hero card motivacional de la primera
+            // pantalla (solo aparece si el 1er step es de PERSONAL_STEP_TYPES:
+            // select/state_city). Se guarda como ApplicantIdentity type=EMAIL sin
+            // verificar (ver ProfileController::updateEmail).
+            ['id' => 'email', 'type' => 'email', 'label' => 'Correo electrónico', 'required' => true],
             ['id' => 'marital', 'type' => 'select', 'field' => 'marital_status', 'enum' => 'MaritalStatus', 'label' => 'Estado civil', 'required' => true],
             ['id' => 'location', 'type' => 'state_city', 'fields' => ['state', 'city'], 'label' => 'Estado y ciudad actual', 'required' => true],
             ['id' => 'employment', 'type' => 'select', 'field' => 'employment_type', 'enum' => 'EmploymentType', 'label' => 'Tipo de actividad o trabajo', 'required' => true],

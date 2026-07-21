@@ -102,6 +102,19 @@ export async function updateIdentifications(
 }
 
 // =====================================================
+// Email (identidad de contacto, sin verificar)
+// =====================================================
+
+/**
+ * Update (or create) the applicant's EMAIL identity.
+ * Upsert idempotente: nunca duplica; guarda `verified_at = null`.
+ */
+export async function updateEmail(email: string): Promise<V2ApiResponse<{ email: string }>> {
+  const response = await api.post<V2ApiResponse<{ email: string }>>(`${BASE_PATH}/email`, { email })
+  return response.data
+}
+
+// =====================================================
 // Address
 // =====================================================
 
@@ -394,6 +407,8 @@ export default {
   updatePersonalData,
   // Identifications
   updateIdentifications,
+  // Email
+  updateEmail,
   // Address
   getAddress,
   updateAddress,
