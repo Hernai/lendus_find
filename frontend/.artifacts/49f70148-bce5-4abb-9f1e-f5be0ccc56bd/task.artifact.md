@@ -1,0 +1,2 @@
+- [x] `[x]` Update `build.gradle` in `@capacitor-community/contacts`
+- [x] `[x]` Run Gradle Sync to verify the fix
