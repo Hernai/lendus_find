@@ -11,6 +11,7 @@ const MobileHomeView = () => import('@/views/mobile/MobileHomeView.vue')
 const LoanOfferView = () => import('@/views/applicant/loans/LoanOfferView.vue')
 const LoanDashboardView = () => import('@/views/applicant/loans/LoanDashboardView.vue')
 const LoanDetailView = () => import('@/views/applicant/loans/LoanDetailView.vue')
+const ProfileView = () => import('@/views/applicant/dashboard/ProfileView.vue')
 
 /**
  * Rutas del entry-point móvil nativo (Capacitor), prefijo `/m`.
@@ -45,6 +46,13 @@ export const mobileRoutes: RouteRecordRaw[] = [
     path: '/m/home',
     name: 'm-home',
     component: MobileHomeView,
+    meta: { requiresAuth: true, mobileEntry: true },
+  },
+  // Mi Perfil en el canal móvil: reutiliza ProfileView (misma vista que web).
+  {
+    path: '/m/perfil',
+    name: 'm-profile',
+    component: ProfileView,
     meta: { requiresAuth: true, mobileEntry: true },
   },
   {

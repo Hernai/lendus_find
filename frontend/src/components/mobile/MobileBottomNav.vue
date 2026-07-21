@@ -1,33 +1,23 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 
 /**
  * Bottom navigation reusable para vistas mobile.
  *
- * Tabs: Inicio (m-home), Préstamos (m-loan-dashboard), Notificaciones (placeholder), Perfil (placeholder).
+ * Tabs: Inicio (m-home), Pagos (m-loan-dashboard), Perfil (m-profile).
  * Resalta el tab actual según `route.name`.
  */
 
 const route = useRoute()
 const router = useRouter()
-const authStore = useAuthStore()
 
 const currentName = computed(() => String(route.name ?? ''))
 
-// "Mi cuenta" aún no tiene vista propia: por ahora ofrece cerrar sesión con
-// confirmación (evita el logout accidental que tenía el home).
-function openAccount() {
-  if (window.confirm('¿Deseas cerrar sesión?')) {
-    authStore.logout()
-  }
-}
-
 // Solo navegamos a rutas que existen; las demás se ignoran de forma segura
-// (evita promesas rechazadas y "tabs muertos"). Cuando se agreguen las vistas
-// de Pagos/Perfil, registrar sus rutas y se activarán automáticamente.
-const KNOWN_ROUTES = new Set(['m-home', 'm-loan-dashboard', 'm-loan-detail'])
+// (evita promesas rechazadas y "tabs muertos"). El logout ya no vive aquí: se
+// hace desde el botón "Salir" dentro de ProfileView (ruta m-profile).
+const KNOWN_ROUTES = new Set(['m-home', 'm-loan-dashboard', 'm-loan-detail', 'm-profile'])
 
 function go(name: string) {
   if (currentName.value === name) return
@@ -65,13 +55,15 @@ function go(name: string) {
     <button
       type="button"
       class="nav-item"
-      @click="openAccount"
+      :class="{ 'nav-item--active': currentName === 'm-profile' }"
+      :aria-current="currentName === 'm-profile' ? 'page' : undefined"
+      @click="go('m-profile')"
     >
       <svg viewBox="0 0 24 24" fill="none">
         <circle cx="12" cy="8.5" r="3.5" stroke="currentColor" stroke-width="1.8" />
         <path d="M4 21c.5-4 4-6 8-6s7.5 2 8 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
       </svg>
-      <span>Mi cuenta</span>
+      <span>Perfil</span>
     </button>
   </nav>
 </template>

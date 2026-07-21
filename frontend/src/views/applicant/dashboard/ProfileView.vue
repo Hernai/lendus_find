@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore, useTenantStore, useProfileStore, useApplicantStore } from '@/stores'
 import BankAccountCard from '@/components/BankAccountCard.vue'
 import AddBankAccountModal from '@/components/AddBankAccountModal.vue'
+import MobileBottomNav from '@/components/mobile/MobileBottomNav.vue'
 import { v2 } from '@/services/v2'
 import { logger } from '@/utils/logger'
 import {
@@ -18,8 +19,16 @@ import {
 } from '@/utils/formatters'
 
 const log = logger.child('Profile')
+const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+
+// Esta vista se reutiliza tal cual en el canal móvil (ruta /m/perfil). En ese
+// contexto la navegación cambia: "Volver" va al home móvil, "Salir" a /m, y se
+// muestra el nav inferior. En web (/perfil, /:tenant/perfil) todo se mantiene.
+const isMobileContext = computed(
+  () => route.meta?.mobileEntry === true || String(route.path).startsWith('/m/'),
+)
 const tenantStore = useTenantStore()
 const profileStore = useProfileStore()
 // Keep applicantStore for bank account CRUD and photo operations
@@ -92,6 +101,22 @@ const getEmploymentTypeLabel = (type: string | null | undefined) => {
   const option = tenantStore.options.employmentType.find(o => o.value === type)
   return option?.label || formatEmploymentType(type)
 }
+
+// MoneyCapital y Demo capturan un RANGO salarial (SalaryRange), no un monto: se
+// persiste el midpoint en `monthly_income` (el número exacto es sintético en esos
+// flujos). Reconstruimos la etiqueta del rango para mostrarla junto al monto,
+// espejando SalaryRange::fromIncome()/label() del backend. Devuelve null si no hay
+// ingreso, para no pintar la línea vacía.
+const salaryRangeLabel = computed(() => {
+  const income = profile.value?.employment?.monthly_income
+  if (income == null || income <= 0) return null
+  if (income <= 3000) return 'Menos de $3,000'
+  if (income <= 6000) return '$3,001 - $6,000'
+  if (income <= 9000) return '$6,001 - $9,000'
+  if (income <= 12000) return '$9,001 - $12,000'
+  if (income <= 15000) return '$12,001 - $15,000'
+  return 'Más de $15,000'
+})
 
 const getHousingTypeLabel = (type: string | null | undefined) => {
   if (!type) return '-'
@@ -246,12 +271,12 @@ const onAccountSaved = async () => {
 }
 
 const goBack = () => {
-  router.push('/dashboard')
+  router.push(isMobileContext.value ? '/m/home' : '/dashboard')
 }
 
 const handleLogout = async () => {
   await authStore.logout()
-  router.push('/')
+  router.push(isMobileContext.value ? '/m' : '/')
 }
 </script>
 
@@ -286,7 +311,7 @@ const handleLogout = async () => {
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-2xl mx-auto px-4 -mt-10 pb-8">
+    <main class="max-w-2xl mx-auto px-4 -mt-10" :class="isMobileContext ? 'pb-32' : 'pb-8'">
       <!-- Loading -->
       <div v-if="isLoading" class="bg-white rounded-2xl shadow-lg p-8 text-center">
         <div class="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto" />
@@ -467,13 +492,18 @@ const handleLogout = async () => {
               <span class="text-gray-500">Puesto</span>
               <span class="text-gray-900 font-medium">{{ profile.employment.position }}</span>
             </div>
-            <div class="flex justify-between py-2 border-b border-gray-100">
+            <!-- El endpoint colapsa antigüedad no capturada a 0 (no null): MC/Demo la dejan
+                 en 0, así que ocultamos con truthy para no mostrar "0 meses" fabricado. -->
+            <div v-if="profile.employment.seniority_months" class="flex justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">Antigüedad</span>
               <span class="text-gray-900 font-medium">{{ formatSeniority(profile.employment.seniority_months) }}</span>
             </div>
             <div class="flex justify-between py-2">
               <span class="text-gray-500">Ingreso mensual</span>
-              <span class="text-gray-900 font-medium">{{ formatMoney(profile.employment.monthly_income) }}</span>
+              <span class="text-right">
+                <span class="text-gray-900 font-medium">{{ formatMoney(profile.employment.monthly_income) }}</span>
+                <span v-if="salaryRangeLabel" class="block text-gray-400 text-xs">Rango: {{ salaryRangeLabel }}</span>
+              </span>
             </div>
           </div>
           <p v-else class="text-gray-500 text-sm">Sin información laboral registrada</p>
@@ -623,5 +653,8 @@ const handleLogout = async () => {
         </div>
       </Transition>
     </Teleport>
+
+    <!-- Nav inferior solo en contexto móvil (reuso en /m/perfil) -->
+    <MobileBottomNav v-if="isMobileContext" />
   </div>
 </template>
