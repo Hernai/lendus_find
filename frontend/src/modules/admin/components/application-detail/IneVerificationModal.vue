@@ -24,7 +24,6 @@ const emit = defineEmits<{
   <div
     v-if="comparison && show"
     class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-    @click.self="emit('update:show', false)"
   >
     <div
       class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col"

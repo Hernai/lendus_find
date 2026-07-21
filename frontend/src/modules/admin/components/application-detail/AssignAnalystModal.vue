@@ -35,7 +35,6 @@ watch(() => props.show, (v) => {
 <div
   v-if="show"
   class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-  @click.self="emit('update:show', false)"
 >
   <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
     <h3 class="text-lg font-semibold text-gray-900 mb-2">Asignar para Revisión</h3>

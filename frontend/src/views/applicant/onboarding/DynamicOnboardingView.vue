@@ -744,7 +744,6 @@ onUnmounted(() => {
       <div
         v-if="showBankConfirm && bankConfirm"
         class="bankc-overlay"
-        @click.self="showBankConfirm = false"
       >
         <div class="bankc">
           <button type="button" class="bankc-close" aria-label="Cerrar" @click="showBankConfirm = false">
@@ -779,7 +778,7 @@ onUnmounted(() => {
 
     <!-- Confirmación de INE: verificar datos extraídos por OCR antes de continuar -->
     <Teleport to="body">
-      <div v-if="showIneConfirm" class="bankc-overlay" @click.self="showIneConfirm = false">
+      <div v-if="showIneConfirm" class="bankc-overlay">
         <div class="bankc">
           <button type="button" class="bankc-close" aria-label="Cerrar" @click="showIneConfirm = false">
             <svg viewBox="0 0 24 24" fill="none">

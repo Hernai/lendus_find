@@ -45,7 +45,7 @@ const submit = async () => {
 <template>
   <Teleport to="body">
     <Transition name="fade">
-      <div v-if="open" class="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4" @click.self="emit('close')">
+      <div v-if="open" class="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
         <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 space-y-4 shadow-xl">
           <div class="flex items-center justify-between">
             <h3 class="text-lg font-semibold text-gray-900">Pagar préstamo</h3>

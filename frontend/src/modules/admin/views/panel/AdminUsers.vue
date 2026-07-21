@@ -759,7 +759,6 @@ const paginationRange = computed(() => {
       <div
         v-if="showUserModal"
         class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-        @click.self="showUserModal = false"
       >
         <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
         <h3 class="text-lg font-semibold text-gray-900 mb-4">
@@ -979,7 +978,6 @@ const paginationRange = computed(() => {
       <div
         v-if="showDeleteModal && userToDelete"
         class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-        @click.self="showDeleteModal = false"
       >
         <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
           <div class="flex items-center gap-4 mb-4">

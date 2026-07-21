@@ -972,7 +972,6 @@ const handleCancelApplication = async () => {
     <div
       v-if="showCancelConfirm"
       class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
-      @click.self="showCancelConfirm = false"
     >
       <div class="bg-white rounded-2xl max-w-sm w-full p-6">
         <div class="text-center mb-6">

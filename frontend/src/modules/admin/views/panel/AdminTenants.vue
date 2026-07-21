@@ -728,7 +728,6 @@ const saveTenantBranding = async () => {
       <div
         v-if="showTenantModal"
         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-        @click.self="showTenantModal = false"
       >
         <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
           <!-- Header -->
@@ -907,7 +906,6 @@ const saveTenantBranding = async () => {
       <div
         v-if="showConfigModal"
         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-        @click.self="showConfigModal = false"
       >
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
           <!-- Header -->

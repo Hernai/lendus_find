@@ -191,7 +191,6 @@ const confirm = () => {
       <div
         v-if="show"
         class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
-        @click.self="close"
       >
         <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
           <!-- Header with optional icon -->

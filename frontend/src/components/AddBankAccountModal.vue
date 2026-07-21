@@ -139,10 +139,10 @@ const clabeMasked = computed(() =>
   <Teleport to="body">
     <Transition name="modal">
       <div class="fixed inset-0 z-50">
-        <!-- Backdrop (only visible on desktop) -->
+        <!-- Backdrop (only visible on desktop). Sin cierre por clic: este modal
+             tiene formulario, el cierre es explícito (✕/Cancelar). -->
         <div
           class="absolute inset-0 bg-black/50 hidden sm:block"
-          @click="emit('close')"
         />
 
         <!-- Modal Content - Full screen on mobile, centered modal on desktop -->
@@ -340,7 +340,6 @@ const clabeMasked = computed(() =>
         <div
           v-if="showConfirmation"
           class="absolute inset-0 z-10 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4"
-          @click.self="showConfirmation = false"
         >
           <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 space-y-4 shadow-xl">
             <h3 class="text-lg font-semibold text-gray-900">Verifica cuidadosamente la información</h3>
